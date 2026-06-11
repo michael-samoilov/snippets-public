@@ -19,23 +19,20 @@ function joinText(a: string, b: string): string {
  * on paper. Nothing is asked of you at the moment of capture — filing
  * happens afterwards, quietly.
  */
+function autosize(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 export function Capture() {
-  const speech = useSpeech();
   const [text, setText] = useState("");
   const [voiceUsed, setVoiceUsed] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prompt = promptForDate(new Date());
 
-  const listening = speech.status === "listening";
-  const transcriptVisible =
-    listening || speech.segments.length > 0 || speech.interim.length > 0;
-
-  // After a session ends, fold the finalized transcript into the text.
-  useEffect(() => {
-    if (listening || speech.segments.length === 0) return;
-    const spoken = speech.segments.map((s) => s.text).join(" ");
+  // When a listening session settles, fold the transcript into the text.
+  const speech = useSpeech((spoken) => {
     setText((prev) => joinText(prev, spoken));
-    speech.reset();
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (el) {
@@ -44,7 +41,11 @@ export function Capture() {
         autosize(el);
       }
     });
-  }, [listening, speech.segments, speech]);
+  });
+
+  const listening = speech.status === "listening";
+  const transcriptVisible =
+    listening || speech.segments.length > 0 || speech.interim.length > 0;
 
   useEffect(() => {
     if (speech.status === "denied") {
@@ -53,11 +54,6 @@ export function Capture() {
       });
     }
   }, [speech.status]);
-
-  const autosize = (el: HTMLTextAreaElement) => {
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  };
 
   const toggleListening = useCallback(() => {
     if (listening) {

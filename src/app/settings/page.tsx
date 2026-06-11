@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import {
@@ -31,8 +31,12 @@ export default function SettingsPage() {
   const stats = useStats();
   const fileRef = useRef<HTMLInputElement>(null);
   const [eraseOpen, setEraseOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // theme is unknowable server-side; render the chips neutral until hydrated
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const onImport = async (file: File) => {
     try {

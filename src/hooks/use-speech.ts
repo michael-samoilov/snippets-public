@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 /* Web Speech API types are absent from lib.dom — declare what we use. */
 interface SRAlternative {
@@ -63,13 +69,20 @@ export interface UseSpeech {
   reset: () => void;
 }
 
+const noopSubscribe = () => () => {};
+
 /**
  * Listening sessions on mobile end themselves after pauses; while the
  * writer still wants to talk, we quietly start a new session and stitch
- * the segments together.
+ * the segments together. When the session fully settles after stop(),
+ * the complete transcript is delivered once via `onSettled`.
  */
-export function useSpeech(): UseSpeech {
-  const [supported, setSupported] = useState(false);
+export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
+  const supported = useSyncExternalStore(
+    noopSubscribe,
+    () => getRecognizer() !== null,
+    () => false,
+  );
   const [status, setStatus] = useState<SpeechStatus>("idle");
   const [segments, setSegments] = useState<SpeechSegment[]>([]);
   const [interim, setInterim] = useState("");
@@ -77,10 +90,14 @@ export function useSpeech(): UseSpeech {
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const wantedRef = useRef(false);
   const interimRef = useRef("");
+  const segmentsRef = useRef<string[]>([]);
   const nextIdRef = useRef(0);
+  const onSettledRef = useRef(onSettled);
+  useEffect(() => {
+    onSettledRef.current = onSettled;
+  });
 
   useEffect(() => {
-    setSupported(getRecognizer() !== null);
     return () => {
       wantedRef.current = false;
       recRef.current?.abort();
@@ -90,6 +107,7 @@ export function useSpeech(): UseSpeech {
   const pushSegment = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    segmentsRef.current.push(trimmed);
     setSegments((prev) => [...prev, { id: nextIdRef.current++, text: trimmed }]);
   }, []);
 
@@ -139,6 +157,15 @@ export function useSpeech(): UseSpeech {
         }
       } else {
         setStatus((s) => (s === "listening" ? "idle" : s));
+        const spoken = segmentsRef.current.join(" ").trim();
+        if (spoken) {
+          // hand the transcript over and clear the slate
+          segmentsRef.current = [];
+          nextIdRef.current = 0;
+          setSegments([]);
+          setInterim("");
+          onSettledRef.current?.(spoken);
+        }
       }
     };
 
@@ -171,6 +198,7 @@ export function useSpeech(): UseSpeech {
     setSegments([]);
     setInterim("");
     interimRef.current = "";
+    segmentsRef.current = [];
     nextIdRef.current = 0;
   }, []);
 
