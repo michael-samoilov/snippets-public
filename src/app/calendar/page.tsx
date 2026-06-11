@@ -795,16 +795,16 @@ function MonthBlock({
               >
                 {format(date, "d")}
               </span>
-              {count > 0 && (
-                <span className="relative flex gap-[3px]" aria-hidden="true">
-                  {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
-                    <span
-                      key={i}
-                      className="size-[3.5px] rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
-                    />
-                  ))}
-                </span>
-              )}
+              {/* the dot strip is always reserved so numbers sit at the
+                  same height whether or not a day has entries yet */}
+              <span className="relative flex h-[3.5px] gap-[3px]" aria-hidden="true">
+                {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
+                  <span
+                    key={i}
+                    className="size-[3.5px] rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
+                  />
+                ))}
+              </span>
             </motion.button>
           );
         })}

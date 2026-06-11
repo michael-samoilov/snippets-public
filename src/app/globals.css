@@ -306,49 +306,53 @@ textarea:focus-visible,
   box-shadow: var(--float-shadow);
 }
 
-/* ── typographic voices ────────────────────────────────────── */
+/* ── typographic voices ────────────────────────────────────────
+   Layered as components so their colors are defaults: an unlayered
+   rule beats every Tailwind utility, which silently ate text-wax &
+   co. on labels for weeks. */
+@layer components {
+  /* display: where Fraunces gets to be wonky; pressed into the paper.
+     The faint currentColor halo feathers the stroke edge — ink, not pixels. */
+  .voice-display {
+    font-family: var(--font-serif);
+    font-variation-settings: "SOFT" 0, "WONK" 1;
+    font-weight: 560;
+    letter-spacing: -0.01em;
+    text-shadow:
+      0 1px 0 var(--press-highlight),
+      0 0 0.6px currentColor;
+  }
 
-/* display: where Fraunces gets to be wonky; pressed into the paper.
-   The faint currentColor halo feathers the stroke edge — ink, not pixels. */
-.voice-display {
-  font-family: var(--font-serif);
-  font-variation-settings: "SOFT" 0, "WONK" 1;
-  font-weight: 560;
-  letter-spacing: -0.01em;
-  text-shadow:
-    0 1px 0 var(--press-highlight),
-    0 0 0.6px currentColor;
-}
+  /* labels: quiet small caps in the serif — never the terminal voice */
+  .voice-label {
+    font-family: var(--font-serif);
+    font-variant-caps: all-small-caps;
+    font-variant-numeric: oldstyle-nums;
+    font-weight: 540;
+    font-size: 0.86rem;
+    letter-spacing: 0.13em;
+    color: var(--ink-soft);
+  }
 
-/* labels: quiet small caps in the serif — never the terminal voice */
-.voice-label {
-  font-family: var(--font-serif);
-  font-variant-caps: all-small-caps;
-  font-variant-numeric: oldstyle-nums;
-  font-weight: 540;
-  font-size: 0.86rem;
-  letter-spacing: 0.13em;
-  color: var(--ink-soft);
-}
+  /* data: mono strictly for true data — times, counts. lowercase, tiny */
+  .voice-data {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 450;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink-faint);
+  }
 
-/* data: mono strictly for true data — times, counts. lowercase, tiny */
-.voice-data {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 450;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums lining-nums;
-  color: var(--ink-faint);
-}
-
-/* prose: snippet bodies */
-.voice-prose {
-  font-family: var(--font-serif);
-  font-weight: 420;
-  font-size: 1.0625rem;
-  line-height: 1.6;
-  letter-spacing: 0.001em;
-  text-shadow: 0 0 0.45px currentColor;
+  /* prose: snippet bodies */
+  .voice-prose {
+    font-family: var(--font-serif);
+    font-weight: 420;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    letter-spacing: 0.001em;
+    text-shadow: 0 0 0.45px currentColor;
+  }
 }
 
 /* ── ink on paper ──────────────────────────────────────────────
