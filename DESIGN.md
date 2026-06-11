@@ -97,8 +97,10 @@ inside `<MotionConfig reducedMotion="user">`.
 (⌘K palette: zoom neutralized, 100ms fade); tens-of-times actions get
 ≤120ms; occasional surfaces get standard motion; the one theatrical
 moment is the live transcription. **Springs:** magic-move indicators
-(`layoutId` nav underline, dock pill, calendar day ring) use
-`{ stiffness: 380, damping: 30 }`; list insertions
+(`layoutId` nav underline, dock pill) use
+`{ stiffness: 380, damping: 30 }`; the calendar day ring uses the same
+spring on arithmetic x/y, not `layoutId` (layout projection is
+hazardous across virtual block remounts); list insertions
 `{ type: "spring", duration: 0.5, bounce: 0.16 }`; selection pops
 `bounce: 0.4` keyframed `[1, 1.07, 1]`. **CSS transitions over
 keyframes** for anything rapidly re-triggered (interruptibility);
@@ -145,17 +147,25 @@ text-only stamps. The app's sole marks are the wordmark's wax dot and
 the "Kept." StampMark. Navigation is words — small-caps serif with a
 gliding ink underline (desktop) and a floating dock pill (mobile).
 
-The calendar is two views: a recessed ruled month grid (gap hairlines +
-inset shadow, wax ring **gliding** between selected days on z-10) and a
-**year at a glance** (3×4 mini-month dot constellations) — the tapped
-month and the full grid share a `layoutId` so one morphs into the other
-(spring 320/32). Wheel and vertical swipe travel through months/years
-(native non-passive wheel listener — React's synthetic can't
-preventDefault; 90px accumulation, 350ms lockout; PageUp/Down too);
-chevrons remain for discoverability; a wax "Today" affordance appears
-whenever the view has wandered. Past days grow a quiet backfill line in
-the day view ("Add something you remember from this day…", stamped at
-noon local). URL carries view state (`?d=`, `?q=`, `?kind=`, `?fav=`).
+The calendar is a camera over time. Month view and a **year at a
+glance** are two altitudes of the same world — always-mounted layers in
+a fixed stage; switching views zooms both layers about the active
+month's own slot (paired scales, factor ↔ 1/factor, spring 320/34)
+while they crossfade. Within a view, time is one continuous
+**virtualized feed**: ten years of months/years at precomputed offsets
+inside a fixed-height spacer (floored one viewport past the last offset
+so the current month lands flush at the top), a scroll-bucketed render
+window, and **zero scrollTop writes during gestures** — iOS kills fling
+momentum the instant a feed compensates scroll mid-flight — plus
+`overflow-anchor: none` so the browser never re-anchors across window
+remounts. The month grid is recessed (gap hairlines + inset shadow)
+with the wax ring springing between selected days on z-10; the year is
+3–4-column mini-month dot constellations. Native scrolling does the
+travel (the title follows the feed); PageUp/Down and chevrons remain
+for discoverability; a wax "Today" affordance appears whenever the view
+has wandered. Past days grow a quiet backfill line in the day view
+("Add something you remember from this day…", stamped at noon local).
+URL carries view state (`?d=`, `?q=`, `?kind=`, `?fav=`).
 
 ## Copy voice
 
