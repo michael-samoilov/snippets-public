@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   Suspense,
   useCallback,
   useEffect,
@@ -25,10 +26,17 @@ import { motion, animate, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { toast } from "sonner";
 import { MotionEntryList } from "@/components/snippet/motion-entry-list";
-import { useDayCounts, useDaySnippets, useStats } from "@/hooks/use-snippets";
+import { StampMark } from "@/components/stamp-mark";
+import {
+  groupByDay,
+  useAllSnippets,
+  useDayCounts,
+  useStats,
+} from "@/hooks/use-snippets";
 import { addSnippet } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
+import type { Snippet } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -114,8 +122,17 @@ export default function CalendarPage() {
   );
 }
 
+type View = "year" | "month" | "schedule";
+/** altitude order: a zoom to a deeper view dives in, shallower pulls back */
+const DEPTH: Record<View, number> = { year: 0, month: 1, schedule: 2 };
+
 interface MonthFeedHandle {
   goTo: (m: Date, smooth: boolean) => void;
+  /** center + width of a day's cell, relative to the layer viewport */
+  originFor: (day: string) => { x: number; y: number; w: number } | null;
+}
+interface ScheduleFeedHandle {
+  goTo: (day: string) => void;
 }
 interface YearFeedHandle {
   goTo: (y: number, smooth: boolean) => void;
@@ -138,9 +155,17 @@ function Calendar() {
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : dayKey();
   })();
 
-  const [view, setView] = useState<"month" | "year">("month");
-  /** during a zoom both layers render; `out` is the departing view */
-  const [zoom, setZoom] = useState<null | { out: "month" | "year"; ym: string }>(null);
+  // a valid ?d= deep-links straight into the book, open to that day
+  const [view, setView] = useState<View>(() => {
+    const d = params.get("d");
+    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? "schedule" : "month";
+  });
+  /** during a zoom both layers render; the camera moves `from` → `to` */
+  const [zoom, setZoom] = useState<null | {
+    from: View;
+    to: View;
+    anchor: string;
+  }>(null);
   const [selected, setSelected] = useState(initialDay);
   /** what the title shows — follows the feeds' scroll */
   const [visibleMonth, setVisibleMonth] = useState(() =>
@@ -150,71 +175,97 @@ function Calendar() {
 
   const counts = useDayCounts();
   const stats = useStats();
-  const daySnippets = useDaySnippets(selected);
   const reduceMotion = useReducedMotion();
 
   const today = new Date();
   const currentMonth = startOfMonth(today);
   const atToday =
-    view === "month" &&
-    isSameMonth(visibleMonth, today) &&
-    selected === dayKey();
+    (view === "month" &&
+      isSameMonth(visibleMonth, today) &&
+      selected === dayKey()) ||
+    (view === "schedule" && selected === dayKey());
 
   const stageRef = useRef<HTMLDivElement>(null);
   const monthLayerRef = useRef<HTMLDivElement>(null);
   const yearLayerRef = useRef<HTMLDivElement>(null);
+  const scheduleLayerRef = useRef<HTMLDivElement>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   const yearFeedRef = useRef<YearFeedHandle | null>(null);
+  const scheduleFeedRef = useRef<ScheduleFeedHandle | null>(null);
   const zooming = useRef(false);
+  const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (urlTimer.current) clearTimeout(urlTimer.current);
+    };
+  }, []);
 
+  /* ── the zoom: one camera move between altitudes ──────────────── */
+
+  const runZoom = useCallback((from: View, to: View, anchor: string) => {
+    if (zooming.current) return;
+    zooming.current = true;
+    setZoom({ from, to, anchor });
+    setView(to);
+  }, []);
+
+  /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
     (key: string) => {
       setSelected(key);
       navigator.vibrate?.(6);
-      window.history.replaceState(
-        null,
-        "",
-        key === dayKey() ? pathname : `${pathname}?d=${key}`,
-      );
+      if (urlTimer.current) clearTimeout(urlTimer.current);
+      window.history.replaceState(null, "", `${pathname}?d=${key}`);
+      scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
+      runZoom("month", "schedule", key);
+    },
+    [pathname, runZoom],
+  );
+
+  /** the reader's place in the book drives selection, title, and URL */
+  const onScheduleDay = useCallback(
+    (key: string) => {
+      setSelected(key);
+      const m = startOfMonth(dateFromDayKey(key));
+      setVisibleMonth((prev) => (isSameMonth(prev, m) ? prev : m));
+      setVisibleYear(m.getFullYear());
+      if (urlTimer.current) clearTimeout(urlTimer.current);
+      urlTimer.current = setTimeout(() => {
+        window.history.replaceState(null, "", `${pathname}?d=${key}`);
+      }, 250);
     },
     [pathname],
   );
 
-  /* ── the zoom: one camera move between altitudes ──────────────── */
-
-  const runZoom = useCallback((out: "month" | "year", anchor: string) => {
-    if (zooming.current) return;
-    zooming.current = true;
-    setZoom({ out, ym: anchor });
-    setView(out === "month" ? "year" : "month");
-  }, []);
-
   useLayoutEffect(() => {
     if (!zoom) return;
     const stage = stageRef.current;
-    const monthLayer = monthLayerRef.current;
-    const yearLayer = yearLayerRef.current;
-    if (!stage || !monthLayer || !yearLayer) {
+    const layers: Record<View, HTMLDivElement | null> = {
+      year: yearLayerRef.current,
+      month: monthLayerRef.current,
+      schedule: scheduleLayerRef.current,
+    };
+    const outgoing = layers[zoom.from];
+    const incoming = layers[zoom.to];
+    if (!stage || !outgoing || !incoming) {
       setZoom(null);
       zooming.current = false;
       return;
     }
 
-    const outgoing = zoom.out === "month" ? monthLayer : yearLayer;
-    const incoming = zoom.out === "month" ? yearLayer : monthLayer;
     // the previous finish left the departed layer inline-hidden
-    monthLayer.style.visibility = "";
-    yearLayer.style.visibility = "";
+    for (const el of Object.values(layers)) if (el) el.style.visibility = "";
 
     const finish = () => {
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
       outgoing.style.visibility = "hidden";
-      monthLayer.style.transform = "";
-      yearLayer.style.transform = "";
-      monthLayer.style.opacity = "";
-      yearLayer.style.opacity = "";
+      for (const el of Object.values(layers)) {
+        if (!el) continue;
+        el.style.transform = "";
+        el.style.opacity = "";
+      }
       setZoom(null);
       zooming.current = false;
     };
@@ -227,67 +278,96 @@ function Calendar() {
     // hold the arriving layer dark until the animation's first tick owns it
     incoming.style.opacity = "0";
 
-    // where the active month's mini sits — pure geometry, no DOM query
-    const o = yearFeedRef.current?.originFor(zoom.ym);
+    // where the chosen slot sits — pure geometry, no DOM query.
+    // year⇄month is a literal camera move (the mini becomes the canvas),
+    // so it uses the true slot ratio; month⇄schedule keeps the same
+    // grammar but the literal cell-to-stage ratio (~7×) is violent —
+    // a capped dive about the day's cell matches the reference feel.
+    const monthish = zoom.from === "year" || zoom.to === "year";
+    const o = monthish
+      ? yearFeedRef.current?.originFor(zoom.anchor)
+      : monthFeedRef.current?.originFor(zoom.anchor);
     const stageRect = stage.getBoundingClientRect();
-    const factor = o ? stageRect.width / o.w : 3.2;
+    const factor = monthish ? (o ? stageRect.width / o.w : 3.2) : 2.4;
     const origin = o
       ? `${(o.x / stageRect.width) * 100}% ${(o.y / stageRect.height) * 100}%`
       : "50% 30%";
-    monthLayer.style.transformOrigin = origin;
-    yearLayer.style.transformOrigin = origin;
+    outgoing.style.transformOrigin = origin;
+    incoming.style.transformOrigin = origin;
 
     const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
-    const moves: Promise<unknown>[] = [];
-    if (zoom.out === "month") {
-      // camera pulls back: the month shrinks toward its slot,
-      // the (blown-up) year settles to rest
-      moves.push(
-        animate(
-          monthLayer,
-          { scale: [1, 1 / factor], opacity: [1, 0] },
-          { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
-        ).finished,
-        animate(
-          yearLayer,
-          { scale: [factor, 1], opacity: [0, 1] },
-          { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
-        ).finished,
-      );
-    } else {
-      // camera dives in: the year blows up past its slot,
-      // the month resolves out of it
-      moves.push(
-        animate(
-          yearLayer,
-          { scale: [1, factor], opacity: [1, 0] },
-          { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
-        ).finished,
-        animate(
-          monthLayer,
-          { scale: [1 / factor, 1], opacity: [0, 1] },
-          { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
-        ).finished,
-      );
-    }
-    void Promise.all(moves).then(finish);
+    const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
+    void Promise.all([
+      // diving: the departing view blows up past its slot; pulling back:
+      // it shrinks toward it — and the arriving view does the inverse
+      animate(
+        outgoing,
+        { scale: [1, deeper ? factor : 1 / factor], opacity: [1, 0] },
+        { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
+      ).finished,
+      animate(
+        incoming,
+        { scale: [deeper ? 1 / factor : factor, 1], opacity: [0, 1] },
+        { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
+      ).finished,
+    ]).then(finish);
   }, [zoom, reduceMotion]);
 
   const openYear = () => {
     const y = visibleMonth.getFullYear();
     setVisibleYear(y);
     yearFeedRef.current?.goTo(y, false); // stand on the year before measuring
-    runZoom("month", ym(visibleMonth));
+    runZoom("month", "year", ym(visibleMonth));
   };
 
   const pickMonth = (m: Date) => {
     setVisibleMonth(m);
     monthFeedRef.current?.goTo(m, false); // land exactly, behind the zoom
-    runZoom("year", ym(m));
+    runZoom("year", "month", ym(m));
+  };
+
+  const closeSchedule = () => {
+    // stand the canvas on the month being read before pulling back
+    const m = startOfMonth(dateFromDayKey(selected));
+    setVisibleMonth(m);
+    setVisibleYear(m.getFullYear());
+    monthFeedRef.current?.goTo(m, false);
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    window.history.replaceState(null, "", pathname);
+    runZoom("schedule", "month", selected);
+  };
+
+  /** move the book to a day: selection, title, URL, scroll */
+  const jumpTo = (key: string) => {
+    setSelected(key);
+    const m = startOfMonth(dateFromDayKey(key));
+    setVisibleMonth(m);
+    setVisibleYear(m.getFullYear());
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    window.history.replaceState(null, "", `${pathname}?d=${key}`);
+    scheduleFeedRef.current?.goTo(key);
+  };
+
+  /** days that exist in the book, for stepping it by months */
+  const keptDays = useMemo(() => {
+    const days = new Set(counts ? [...counts.keys()] : []);
+    days.add(dayKey());
+    return [...days].sort();
+  }, [counts]);
+
+  const scheduleTarget = (delta: number): string | undefined => {
+    const cur = ym(visibleMonth);
+    return delta > 0
+      ? keptDays.find((d) => d.slice(0, 7) > cur)
+      : [...keptDays].reverse().find((d) => d.slice(0, 7) < cur);
   };
 
   const goToday = () => {
     setSelected(dayKey());
+    if (view === "schedule") {
+      jumpTo(dayKey());
+      return;
+    }
     window.history.replaceState(null, "", pathname);
     if (view === "year" && !zoom) {
       pickMonth(currentMonth);
@@ -298,7 +378,10 @@ function Calendar() {
   };
 
   const stepFeed = (delta: number) => {
-    if (view === "month") {
+    if (view === "schedule") {
+      const target = scheduleTarget(delta);
+      if (target) jumpTo(target);
+    } else if (view === "month") {
       const next = startOfMonth(addMonths(visibleMonth, delta));
       if (isAfter(next, currentMonth)) return;
       setVisibleMonth(next);
@@ -312,8 +395,9 @@ function Calendar() {
     }
   };
 
-  const showMonthLayer = view === "month" || zoom?.out === "month";
-  const showYearLayer = view === "year" || zoom?.out === "year";
+  const showMonthLayer = view === "month" || zoom?.from === "month";
+  const showYearLayer = view === "year" || zoom?.from === "year";
+  const showScheduleLayer = view === "schedule" || zoom?.from === "schedule";
 
   return (
     <div className="page-settle">
@@ -335,13 +419,20 @@ function Calendar() {
         )}
       </header>
 
-      {/* title row: the month opens the year; the title follows the scroll */}
+      {/* title row: the title always climbs one altitude; it follows
+          whichever feed is scrolling beneath it */}
       <div className="flex items-baseline justify-between">
-        {view === "month" ? (
+        {view === "year" ? (
+          <h2 className="voice-display text-[1.3rem]">{visibleYear}</h2>
+        ) : (
           <button
             type="button"
-            onClick={openYear}
-            aria-label={`Show ${visibleMonth.getFullYear()} at a glance`}
+            onClick={view === "month" ? openYear : closeSchedule}
+            aria-label={
+              view === "month"
+                ? `Show ${visibleMonth.getFullYear()} at a glance`
+                : `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
+            }
             className="voice-display pressable rounded-[5px] text-[1.3rem] hover:text-wax"
           >
             <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">
@@ -349,8 +440,6 @@ function Calendar() {
             </span>
             {format(visibleMonth, "MMMM yyyy")}
           </button>
-        ) : (
-          <h2 className="voice-display text-[1.3rem]">{visibleYear}</h2>
         )}
         <div className="flex items-baseline gap-1">
           {/* always in the row — appearing must never reflow the page */}
@@ -368,20 +457,23 @@ function Calendar() {
           </button>
           <button
             type="button"
-            aria-label={view === "month" ? "Previous month" : "Previous year"}
+            aria-label={view === "year" ? "Previous year" : "Previous month"}
             onClick={() => stepFeed(-1)}
-            className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink"
+            disabled={view === "schedule" && !scheduleTarget(-1)}
+            className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
           >
             ‹
           </button>
           <button
             type="button"
-            aria-label={view === "month" ? "Next month" : "Next year"}
+            aria-label={view === "year" ? "Next year" : "Next month"}
             onClick={() => stepFeed(1)}
             disabled={
               view === "month"
                 ? isSameMonth(visibleMonth, currentMonth)
-                : visibleYear >= today.getFullYear()
+                : view === "year"
+                  ? visibleYear >= today.getFullYear()
+                  : !scheduleTarget(1)
             }
             className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
           >
@@ -410,10 +502,16 @@ function Calendar() {
         ))}
       </div>
 
-      {/* the stage: both altitudes live here; the camera moves between */}
+      {/* the stage: all three altitudes live here; the camera moves
+          between them, and the frame grows when the book is open */}
       <div
         ref={stageRef}
-        className="relative h-[23rem] overflow-hidden sm:h-[26rem]"
+        className={cn(
+          "relative overflow-hidden transition-[height] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          view === "schedule"
+            ? "h-[min(34rem,62dvh)]"
+            : "h-[23rem] sm:h-[26rem]",
+        )}
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
             e.preventDefault();
@@ -462,31 +560,23 @@ function Calendar() {
             onVisible={setVisibleYear}
           />
         </div>
+        <div
+          ref={scheduleLayerRef}
+          className={cn(
+            "absolute inset-0",
+            !showScheduleLayer && "invisible",
+            (zoom || !showScheduleLayer) && "pointer-events-none",
+          )}
+        >
+          <ScheduleFeed
+            handleRef={scheduleFeedRef}
+            active={view === "schedule" && !zoom}
+            today={today}
+            selected={selected}
+            onVisible={onScheduleDay}
+          />
+        </div>
       </div>
-
-      {view === "month" && (
-        <section className="mt-8" aria-label={friendlyDay(selected)}>
-          <header className="flex items-baseline justify-between border-b border-rule pb-1.5">
-            <h2 className="voice-display text-[1.12rem]">
-              {friendlyDay(selected)}
-            </h2>
-            {daySnippets && daySnippets.length > 0 && (
-              <span className="voice-data">{daySnippets.length}</span>
-            )}
-          </header>
-          {/* always mounted: flapping the list in and out of the tree
-              raced Motion's presence bookkeeping into duplicate DOM */}
-          <MotionEntryList snippets={daySnippets ?? []} />
-          {daySnippets && daySnippets.length === 0 && (
-            <p className="voice-prose mt-4 italic text-ink-soft">
-              Nothing kept this day.
-            </p>
-          )}
-          {selected !== dayKey() && (
-            <BackfillCapture key={selected} day={selected} />
-          )}
-        </section>
-      )}
     </div>
   );
 }
@@ -597,12 +687,35 @@ function MonthFeed({
     },
     [indexOfMonth, setScrollY],
   );
+  const originFor = useCallback(
+    (day: string) => {
+      const el = scrollerRef.current;
+      const g = geomRef.current;
+      if (!el || !g) return null;
+      const d = dateFromDayKey(day);
+      const mi = indexOfMonth(startOfMonth(d));
+      const m = g.months[mi];
+      if (!m || !isSameMonth(d, m)) return null;
+      const idx = getDay(m) + d.getDate() - 1;
+      return {
+        x: (idx % 7) * g.cell + g.cell / 2,
+        y:
+          g.offsets[mi] +
+          g.labelRowH +
+          Math.floor(idx / 7) * g.cell +
+          g.cell / 2 -
+          el.scrollTop,
+        w: g.cell,
+      };
+    },
+    [indexOfMonth],
+  );
   useLayoutEffect(() => {
-    handleRef.current = { goTo };
+    handleRef.current = { goTo, originFor };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo]);
+  }, [handleRef, goTo, originFor]);
 
   const onScroll = () => {
     if (rafRef.current) return;
@@ -1143,13 +1256,222 @@ function MiniMonth({
   );
 }
 
-/* ── adding to a day that has already passed ────────────────────── */
+/* ── the schedule: the book of kept days ────────────────────────── */
 
-function BackfillCapture({ day }: { day: string }) {
+/**
+ * The deepest altitude is the book itself: every day that holds
+ * something, stacked in time, the dates standing in the margin like a
+ * ledger. Today is always present even when blank; days between simply
+ * don't exist — except the page the reader explicitly opened
+ * (`probe`), which offers its composer.
+ */
+function ScheduleFeed({
+  handleRef,
+  active,
+  today,
+  selected,
+  onVisible,
+}: {
+  handleRef: React.MutableRefObject<ScheduleFeedHandle | null>;
+  active: boolean;
+  today: Date;
+  selected: string;
+  onVisible: (day: string) => void;
+}) {
+  const all = useAllSnippets();
+  const todayKey = dayKey(today);
+  /** the day the book was opened to — keeps its composer row mounted
+      and never moves with the reader's scroll */
+  const [probe, setProbe] = useState<string | null>(selected);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef(new Map<string, HTMLElement>());
+  const spyRef = useRef<string | null>(null);
+  const pendingRef = useRef<string | null>(null);
+  const rafRef = useRef(0);
+  const didInit = useRef(false);
+
+  const rows = useMemo(() => {
+    if (!all) return null;
+    const groups = groupByDay([...all].reverse()); // oldest → newest
+    const map = new Map(groups.map((g) => [g.day, g.snippets]));
+    const days = new Set(map.keys());
+    days.add(todayKey);
+    if (probe) days.add(probe);
+    return [...days].sort().map((day) => ({
+      day,
+      snippets: map.get(day) ?? ([] as Snippet[]),
+    }));
+  }, [all, probe, todayKey]);
+
+  const scrollToRow = useCallback((day: string) => {
+    const el = scrollerRef.current;
+    const row = rowRefs.current.get(day);
+    if (!el || !row) return false;
+    spyRef.current = day; // the landing must not re-announce itself
+    el.scrollTop = row.offsetTop;
+    return true;
+  }, []);
+
+  const goTo = useCallback(
+    (day: string) => {
+      setProbe(day);
+      // land now so the camera zooms onto the right page, then settle
+      // once the probe (and any row churn) has committed
+      scrollToRow(day);
+      pendingRef.current = day;
+    },
+    [scrollToRow],
+  );
+  useLayoutEffect(() => {
+    handleRef.current = { goTo };
+    return () => {
+      handleRef.current = null;
+    };
+  }, [handleRef, goTo]);
+
+  // position once the rows are real; afterwards, settle pendings
+  useLayoutEffect(() => {
+    if (!rows) return;
+    if (!didInit.current) {
+      didInit.current = true;
+      scrollToRow(selected);
+      pendingRef.current = null;
+      return;
+    }
+    if (pendingRef.current) {
+      // one settle only — a stale pending must never replay a jump
+      scrollToRow(pendingRef.current);
+      pendingRef.current = null;
+    }
+    // `selected` only seeds the very first position
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, scrollToRow]);
+
+  const onScroll = () => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      const el = scrollerRef.current;
+      if (!el) return;
+      const top = el.scrollTop + 8;
+      let cur: string | null = null;
+      let curTop = -Infinity;
+      for (const [day, row] of rowRefs.current) {
+        const t = row.offsetTop;
+        if (t <= top && t > curTop) {
+          curTop = t;
+          cur = day;
+        }
+      }
+      if (cur && cur !== spyRef.current) {
+        spyRef.current = cur;
+        onVisible(cur);
+      }
+    });
+  };
+
+  const rowRef = (day: string) => (el: HTMLElement | null) => {
+    if (el) rowRefs.current.set(day, el);
+    else rowRefs.current.delete(day);
+  };
+
+  return (
+    <div
+      ref={scrollerRef}
+      onScroll={active ? onScroll : undefined}
+      className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      style={{ scrollbarWidth: "none" }}
+      tabIndex={-1}
+    >
+      {rows?.map((row, i) => {
+        const d = dateFromDayKey(row.day);
+        const newMonth =
+          i === 0 || rows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
+        const isToday = row.day === todayKey;
+        const showComposer = isToday || row.day === probe;
+        const last = i === rows.length - 1;
+        const pageRow = (
+          <section
+            ref={rowRef(row.day)}
+            data-day={row.day}
+            aria-label={friendlyDay(row.day)}
+            className="grid grid-cols-[3.4rem_1fr] gap-x-3 border-t border-rule-faint"
+          >
+                {/* the date stands in the margin and holds its ground
+                    while its day's entries scroll past */}
+                <div className="sticky top-0 self-start pb-3 pt-2.5 text-center">
+                  <span
+                    className={cn(
+                      "voice-label block text-[0.72rem] leading-tight",
+                      isToday ? "text-wax" : "text-ink-faint",
+                    )}
+                  >
+                    {format(d, "EEE")}
+                  </span>
+                  <span
+                    className={cn(
+                      "voice-display block text-[1.3rem] leading-tight",
+                      isToday && "text-wax",
+                    )}
+                  >
+                    {format(d, "d")}
+                  </span>
+                </div>
+                <div className="min-w-0 pb-3 pt-1">
+                  <MotionEntryList snippets={row.snippets} flush clampable />
+                  {showComposer && (
+                    <BackfillCapture
+                      key={row.day}
+                      day={row.day}
+                      withRule={row.snippets.length > 0}
+                    />
+                  )}
+                </div>
+          </section>
+        );
+        return (
+          <Fragment key={row.day}>
+            {newMonth && (
+              <p
+                className={cn(
+                  "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
+                  isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
+                )}
+              >
+                {format(d, "MMMM yyyy")}
+              </p>
+            )}
+            {last ? (
+              // min-height pins one viewport of room below the final
+              // row's top — in the same layout pass as any content
+              // change, so shrinking rows can never dip scrollHeight
+              // and clamp the reader off their page
+              <div className="min-h-full">{pageRow}</div>
+            ) : (
+              pageRow
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── adding to a day: today at its own moment, the past at noon ──── */
+
+function BackfillCapture({
+  day,
+  withRule = false,
+}: {
+  day: string;
+  /** separate the composer from entries standing above it */
+  withRule?: boolean;
+}) {
   const [text, setText] = useState("");
   const [stamped, setStamped] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isToday = day === dayKey();
   // remounted per day via key, so state starts fresh; only clean the timer
   useEffect(() => {
     return () => {
@@ -1176,7 +1498,8 @@ function BackfillCapture({ day }: { day: string }) {
       const snippet = await addSnippet({
         text: trimmed,
         source: "typed",
-        capturedAt: at.getTime(),
+        // today is stamped at its real moment; the past lands at noon
+        ...(isToday ? {} : { capturedAt: at.getTime() }),
       });
       void enrichSnippet(snippet);
     } catch {
@@ -1185,13 +1508,22 @@ function BackfillCapture({ day }: { day: string }) {
   };
 
   return (
-    <div className="mt-5 border-t border-rule-faint pt-4">
+    <div className={cn("pt-1", withRule && "mt-2 border-t border-rule-faint pt-3")}>
       <div className="flex items-end gap-3">
+        {isToday && !withRule && (
+          <span className="mb-2 shrink-0" aria-hidden="true">
+            <StampMark />
+          </span>
+        )}
         <textarea
           ref={areaRef}
           value={text}
           rows={1}
-          placeholder="Add something you remember from this day…"
+          placeholder={
+            isToday
+              ? "Add something from today…"
+              : "Add something you remember from this day…"
+          }
           aria-label={`Add an entry to ${friendlyDay(day)}`}
           onChange={(e) => {
             setText(e.target.value);
@@ -1220,14 +1552,21 @@ function BackfillCapture({ day }: { day: string }) {
           Keep
         </button>
       </div>
-      {stamped && (
-        <p
-          role="status"
-          className="stamp-in mt-2 font-serif text-[0.85rem] not-italic text-wax"
-        >
-          Kept to {friendlyDay(day).toLowerCase()}.
-        </p>
-      )}
+      {/* the line is always reserved: un-mounting it reshaped the last
+          row, transiently clamped the scroller, and woke the spy */}
+      <p
+        role="status"
+        className={cn(
+          "mt-1.5 h-5 font-serif text-[0.85rem] not-italic text-wax",
+          stamped ? "stamp-in" : "invisible",
+        )}
+      >
+        {stamped
+          ? isToday
+            ? "Kept."
+            : `Kept to ${friendlyDay(day).toLowerCase()}.`
+          : " "}
+      </p>
     </div>
   );
 }

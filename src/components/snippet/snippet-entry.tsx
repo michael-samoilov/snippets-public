@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import {
@@ -26,12 +26,31 @@ export function SnippetEntry({
   snippet,
   stagger = 0,
   showTime = true,
+  clampable = false,
 }: {
   snippet: Snippet;
   stagger?: number;
   showTime?: boolean;
+  /** cap long entries at a few lines behind a quiet “more” */
+  clampable?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  // does the clamped text actually hide anything? measured async-safely
+  useEffect(() => {
+    if (!clampable || expanded) return;
+    const el = textRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      setOverflows(el.scrollHeight > el.clientHeight + 1);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [clampable, expanded]);
+
   const isQuote = snippet.kind === "quote";
   // don't repeat an attribution the text already ends with
   const attribution =
@@ -67,13 +86,25 @@ export function SnippetEntry({
       )}
 
       <p
+        ref={textRef}
         className={cn(
           "voice-prose whitespace-pre-wrap",
           isQuote && "hang-quotes italic",
+          clampable && !expanded && "line-clamp-6",
         )}
       >
         {snippet.text}
       </p>
+      {clampable && (overflows || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="voice-data pressable -ml-1 mt-1 rounded-[4px] px-1 py-0.5 text-ink-soft hover:text-ink"
+        >
+          {expanded ? "less" : "more…"}
+        </button>
+      )}
 
       {attribution && (
         <p className="voice-prose mt-1 text-ink-soft">—&thinsp;{attribution}</p>

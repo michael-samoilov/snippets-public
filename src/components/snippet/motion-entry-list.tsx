@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import type { Snippet } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /**
  * A living list: new entries settle in from the capture area above,
@@ -13,15 +14,21 @@ import type { Snippet } from "@/lib/types";
 export function MotionEntryList({
   snippets,
   showTime = true,
+  flush = false,
+  clampable = false,
 }: {
   snippets: Snippet[];
   showTime?: boolean;
+  /** drop the legal-pad margin rule (surfaces with their own left structure) */
+  flush?: boolean;
+  /** clamp long entries behind a quiet “more” */
+  clampable?: boolean;
 }) {
   // entries already on the page at mount don't animate — only changes do
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
 
   return (
-    <ul className="entry-list divide-y divide-rule-faint">
+    <ul className={cn("divide-y divide-rule-faint", !flush && "entry-list")}>
       <AnimatePresence initial={false}>
         {snippets.map((snippet) => (
           <motion.li
@@ -41,7 +48,11 @@ export function MotionEntryList({
             exit={{ opacity: 0, height: 0, overflow: "hidden" }}
             transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}
           >
-            <SnippetEntry snippet={snippet} showTime={showTime} />
+            <SnippetEntry
+              snippet={snippet}
+              showTime={showTime}
+              clampable={clampable}
+            />
           </motion.li>
         ))}
       </AnimatePresence>
