@@ -61,7 +61,8 @@ interface MonthGeom {
   /** top of each month's label row */
   offsets: number[];
   /** scroll position at which each month takes the title — the moment
-      the previous month's final row-line slips under the weekday rail */
+      the previous month's final row-line fully overlaps the hairline
+      under the weekday rail */
   switchY: number[];
   total: number;
   cell: number;
@@ -82,7 +83,9 @@ function buildMonthGeom(
     const m = startOfMonth(addMonths(currentMonth, -i));
     months.push(m);
     offsets.push(y);
-    switchY.push(y === 0 ? 0 : y - cell);
+    // +1: at y − cell the row's top rule merely touches the rail's
+    // hairline from below; the two 1px lines coincide one pixel later
+    switchY.push(y === 0 ? 0 : y - cell + 1);
     y += labelRowH + monthRows(m) * cell;
   }
   return { months, offsets, switchY, total: y + 24, cell, labelRowH };
@@ -643,11 +646,14 @@ function MonthFeed({
     const idx = getDay(m) + d.getDate() - 1;
     return {
       x: (idx % 7) * geom.cell + 3,
+      // the top rule lives inside the cell's first pixel while the
+      // bottom rule belongs to the row below — centred between the
+      // visible lines sits 0.5px lower than centred in the box
       y:
         geom.offsets[mi] +
         geom.labelRowH +
         Math.floor(idx / 7) * geom.cell +
-        3,
+        3.5,
     };
   })();
 
