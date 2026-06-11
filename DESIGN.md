@@ -158,12 +158,19 @@ so the current month lands flush at the top), a scroll-bucketed render
 window, and **zero scrollTop writes during gestures** — iOS kills fling
 momentum the instant a feed compensates scroll mid-flight — plus
 `overflow-anchor: none` so the browser never re-anchors across window
-remounts. The month grid is recessed (gap hairlines + inset shadow)
-with the wax ring springing between selected days on z-10; the year is
-3–4-column mini-month dot constellations. Native scrolling does the
-travel (the title follows the feed); PageUp/Down and chevrons remain
-for discoverability; a wax "Today" affordance appears whenever the view
-has wandered. Past days grow a quiet backfill line in the day view
+remounts. The months are one **continuous canvas**, not tiles: per-day
+top-edge rules only (no verticals, no plate), blanks bare — so each
+month's lines start at its first day and stop at its last — and a short
+hand-over row carries the month's small-caps name over its first day's
+column; the voids interlock like paragraphs. A matching hairline under
+the pinned weekday rail is the reference line: the title hands over to
+the next month the moment a month's final row-line slips beneath it.
+The wax ring lives on the canvas itself (outside every month block) so
+it springs across month boundaries; the year is 3–4-column mini-month
+dot constellations. Native scrolling does the travel; PageUp/Down and
+chevrons remain for discoverability; a wax "Today" affordance fades in
+whenever the view has wandered. Past days grow a quiet backfill line in
+the day view
 ("Add something you remember from this day…", stamped at noon local).
 URL carries view state (`?d=`, `?q=`, `?kind=`, `?fav=`).
 

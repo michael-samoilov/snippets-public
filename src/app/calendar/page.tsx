@@ -44,9 +44,7 @@ const ym = (d: Date) => format(d, "yyyy-MM");
 
 const RANGE_MONTHS = 120;
 const RANGE_YEARS = 10;
-const BLOCK_GAP = 16; // between month blocks
 const YEAR_GAP = 24; // between year blocks
-const GRID_GAP = 1; // hairline gaps inside a month grid
 const MINI_GAP = 8; // gap-2 between minis
 const MINI_DOT = 3;
 
@@ -60,28 +58,34 @@ function monthsBetween(a: Date, b: Date): number {
 
 interface MonthGeom {
   months: Date[];
+  /** top of each month's label row */
   offsets: number[];
+  /** scroll position at which each month takes the title — the moment
+      the previous month's final row-line slips under the weekday rail */
+  switchY: number[];
   total: number;
   cell: number;
+  labelRowH: number;
 }
 
 function buildMonthGeom(
   width: number,
-  labelH: number,
+  labelRowH: number,
   currentMonth: Date,
 ): MonthGeom {
-  const cell = (width - 2 - 6 * GRID_GAP) / 7; // 2 = grid border
+  const cell = width / 7;
   const months: Date[] = [];
   const offsets: number[] = [];
+  const switchY: number[] = [];
   let y = 0;
   for (let i = RANGE_MONTHS - 1; i >= 0; i--) {
     const m = startOfMonth(addMonths(currentMonth, -i));
-    const rows = monthRows(m);
     months.push(m);
     offsets.push(y);
-    y += labelH + 2 + rows * cell + (rows - 1) * GRID_GAP + BLOCK_GAP;
+    switchY.push(y === 0 ? 0 : y - cell);
+    y += labelRowH + monthRows(m) * cell;
   }
-  return { months, offsets, total: y - BLOCK_GAP + 32, cell };
+  return { months, offsets, switchY, total: y + 24, cell, labelRowH };
 }
 
 /** last index whose offset is at or before y */
@@ -387,7 +391,7 @@ function Calendar() {
       <div
         role="row"
         className={cn(
-          "mt-3 grid grid-cols-7 transition-opacity duration-150",
+          "mt-3 grid grid-cols-7 border-b border-rule-faint transition-opacity duration-150",
           view === "month" ? "opacity-100" : "opacity-0",
         )}
         aria-hidden={view !== "month"}
@@ -513,7 +517,10 @@ function MonthFeed({
   const didInit = useRef(false);
 
   const geom = useMemo(
-    () => (metrics ? buildMonthGeom(metrics.w, metrics.labelH, currentMonth) : null),
+    () =>
+      metrics
+        ? buildMonthGeom(metrics.w, metrics.labelH + 8, currentMonth)
+        : null,
     // geometry depends on width + label height only (currentMonth is
     // stable) — a viewport-height blip must not rebuild it
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -606,7 +613,7 @@ function MonthFeed({
           ? top
           : prev,
       );
-      const vi = indexAt(g.offsets, top + (metrics?.h ?? 400) * 0.35);
+      const vi = indexAt(g.switchY, top);
       if (vi !== visibleIdxRef.current) {
         visibleIdxRef.current = vi;
         onVisible(g.months[vi]);
@@ -623,6 +630,26 @@ function MonthFeed({
       : 0);
   const from = geom ? indexAt(geom.offsets, anchorY - viewH) : 0;
   const to = geom ? indexAt(geom.offsets, anchorY + 2 * viewH) : 0;
+
+  // the ring lives on the canvas itself, outside every month block: it
+  // can spring across month boundaries and never remounts with the
+  // render window
+  const ring = (() => {
+    if (!geom) return null;
+    const d = dateFromDayKey(selected);
+    const mi = indexOfMonth(startOfMonth(d));
+    const m = geom.months[mi];
+    if (!m || !isSameMonth(d, m)) return null;
+    const idx = getDay(m) + d.getDate() - 1;
+    return {
+      x: (idx % 7) * geom.cell + 3,
+      y:
+        geom.offsets[mi] +
+        geom.labelRowH +
+        Math.floor(idx / 7) * geom.cell +
+        3,
+    };
+  })();
 
   return (
     <div
@@ -652,6 +679,16 @@ function MonthFeed({
             ),
           }}
         >
+          {ring && (
+            <motion.span
+              aria-hidden="true"
+              initial={false}
+              animate={{ x: ring.x, y: ring.y }}
+              transition={ringSpring}
+              className="pointer-events-none absolute left-0 top-0 z-10 rounded-[5px] border-[1.5px] border-wax bg-wax/5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
+              style={{ width: geom.cell - 6, height: geom.cell - 6 }}
+            />
+          )}
           {geom.months.slice(from, to + 1).map((m, k) => (
             <div
               key={ym(m)}
@@ -662,6 +699,7 @@ function MonthFeed({
               <MonthBlock
                 month={m}
                 cell={geom.cell}
+                labelRowH={geom.labelRowH}
                 today={today}
                 counts={counts}
                 selected={selected}
@@ -678,6 +716,7 @@ function MonthFeed({
 function MonthBlock({
   month,
   cell,
+  labelRowH,
   today,
   counts,
   selected,
@@ -685,6 +724,7 @@ function MonthBlock({
 }: {
   month: Date;
   cell: number;
+  labelRowH: number;
   today: Date;
   counts: Map<string, number> | undefined;
   selected: string;
@@ -693,49 +733,30 @@ function MonthBlock({
   const days = eachDayOfInterval({ start: month, end: endOfMonth(month) });
   const leadingBlanks = getDay(month);
   const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
-
-  // the selection ring is positioned by arithmetic and springs between
-  // cells — layout-projection glides proved hazardous across virtual
-  // block remounts
-  const selDate = dateFromDayKey(selected);
-  const ring = isSameMonth(selDate, month)
-    ? (() => {
-        const idx = leadingBlanks + selDate.getDate() - 1;
-        const row = Math.floor(idx / 7);
-        const col = idx % 7;
-        // coordinates start on the grid's padding box (inside the
-        // border), so the cell origin needs no border compensation;
-        // the ring is cell−6 wide → 3px of air on every side
-        return {
-          x: col * (cell + GRID_GAP) + 3,
-          y: row * (cell + GRID_GAP) + 3,
-        };
-      })()
-    : null;
+  const isCurrent = isSameMonth(month, today);
 
   return (
     <div>
-      <p className="voice-label mb-1.5 text-[0.82rem] text-ink-soft">
-        {format(month, "MMMM yyyy")}
-      </p>
+      {/* the hand-over row: only the month's name, standing over its
+          first day — the rule beneath it is that day's own top edge */}
+      <div className="relative" style={{ height: labelRowH }}>
+        <span
+          className={cn(
+            "voice-label absolute bottom-1 text-center text-[0.82rem]",
+            isCurrent ? "text-wax" : "text-ink-soft",
+          )}
+          style={{ left: leadingBlanks * cell, width: cell }}
+        >
+          {format(month, "MMM")}
+        </span>
+      </div>
       <div
         role="grid"
         aria-label={format(month, "MMMM yyyy")}
-        className="relative grid grid-cols-7 overflow-hidden rounded-[6px] border border-rule-faint bg-rule-faint/40 shadow-[inset_0_1px_3px_rgb(var(--shadow-hue)/0.05)]"
-        style={{ gap: `${GRID_GAP}px` }}
+        className="grid grid-cols-7"
       >
-        {ring && (
-          <motion.span
-            aria-hidden="true"
-            initial={false}
-            animate={{ x: ring.x, y: ring.y }}
-            transition={ringSpring}
-            className="pointer-events-none absolute left-0 top-0 z-10 rounded-[5px] border-[1.5px] border-wax bg-wax/5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
-            style={{ width: cell - 6, height: cell - 6 }}
-          />
-        )}
         {Array.from({ length: leadingBlanks }).map((_, i) => (
-          <span key={`b${i}`} className="aspect-square bg-paper" aria-hidden="true" />
+          <span key={`b${i}`} className="aspect-square" aria-hidden="true" />
         ))}
         {days.map((date) => {
           const key = dayKey(date);
@@ -753,7 +774,7 @@ function MonthBlock({
               aria-label={`${format(date, "MMMM d")}${count ? `, ${count} kept` : ""}`}
               aria-pressed={key === selected}
               className={cn(
-                "relative flex aspect-square flex-col items-center justify-center gap-1 bg-paper",
+                "relative flex aspect-square flex-col items-center justify-center gap-1 border-t border-rule-faint",
                 !isFuture && "transition-colors duration-150 hover:bg-paper-raised",
                 isFuture && "text-ink-faint/40",
               )}
@@ -779,8 +800,11 @@ function MonthBlock({
             </motion.button>
           );
         })}
+        {/* blanks carry no rule, before or after the days: a month's
+            lines start at its first day and stop at its last, and the
+            voids interlock with the neighbouring label rows */}
         {Array.from({ length: trailingBlanks }).map((_, i) => (
-          <span key={`t${i}`} className="aspect-square bg-paper" aria-hidden="true" />
+          <span key={`t${i}`} className="aspect-square" aria-hidden="true" />
         ))}
       </div>
     </div>
