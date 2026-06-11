@@ -521,6 +521,8 @@ function MonthFeed({
 
   const geom = useMemo(
     () =>
+      // the hand-over row is barely taller than its text: the label's
+      // line box plus 4px of air above and 4px down to the rule
       metrics
         ? buildMonthGeom(metrics.w, metrics.labelH + 8, currentMonth)
         : null,
@@ -550,7 +552,7 @@ function MonthFeed({
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
       const h = el.clientHeight;
-      const labelH = (probeRef.current?.offsetHeight ?? 14) + 6; // + mb-1.5
+      const labelH = probeRef.current?.offsetHeight ?? 14;
       if (w === 0) return;
       setMetrics((prev) =>
         prev && prev.w === w && prev.h === h && prev.labelH === labelH
