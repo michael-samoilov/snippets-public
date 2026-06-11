@@ -94,7 +94,7 @@ export function Capture() {
       {transcriptVisible ? (
         <div
           aria-live="polite"
-          className="voice-prose min-h-[7.5rem] whitespace-pre-wrap pt-1"
+          className="voice-prose min-h-[5.75rem] whitespace-pre-wrap pt-1 text-[1.125rem]"
         >
           {text && <span>{joinText(text, "")} </span>}
           {speech.segments.map((seg) => (
@@ -130,7 +130,7 @@ export function Capture() {
               void keep();
             }
           }}
-          className="voice-prose min-h-[7.5rem] w-full resize-none overflow-hidden bg-transparent pt-1 outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
+          className="voice-prose min-h-[5.75rem] w-full resize-none overflow-hidden bg-transparent pt-1 text-[1.125rem] outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
         />
       )}
 
@@ -143,7 +143,7 @@ export function Capture() {
             aria-pressed={listening}
             aria-label={listening ? "Stop listening" : "Speak a snippet"}
             className={cn(
-              "relative grid size-14 shrink-0 place-items-center rounded-full text-paper-raised",
+              "relative grid size-16 shrink-0 place-items-center rounded-full text-paper-raised sm:size-14",
               "bg-wax transition-[background-color,transform] duration-150 hover:bg-wax-deep active:scale-95",
             )}
           >

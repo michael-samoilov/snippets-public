@@ -33,6 +33,12 @@ export function SnippetEntry({
 }) {
   const [editing, setEditing] = useState(false);
   const isQuote = snippet.kind === "quote";
+  // don't repeat an attribution the text already ends with
+  const attribution =
+    snippet.attribution &&
+    !snippet.text.trimEnd().endsWith(snippet.attribution)
+      ? snippet.attribution
+      : null;
 
   const letGo = async () => {
     await softDeleteSnippet(snippet.id);
@@ -72,9 +78,9 @@ export function SnippetEntry({
         {snippet.text}
       </p>
 
-      {snippet.attribution && (
+      {attribution && (
         <p className="voice-prose mt-1 text-ink-soft">
-          —&thinsp;{snippet.attribution}
+          —&thinsp;{attribution}
         </p>
       )}
 

@@ -197,6 +197,14 @@ body::after {
   border-radius: 2px;
 }
 
+/* Writing surfaces show focus with the caret and a darkened rule,
+   not a box — the wax ring is for buttons and links. */
+input:focus-visible,
+textarea:focus-visible,
+[cmdk-input]:focus-visible {
+  outline: none;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--rule) transparent;
@@ -219,7 +227,8 @@ body::after {
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-feature-settings: "tnum";
+  /* lining figures: oldstyle digits blur at this size */
+  font-variant-numeric: tabular-nums lining-nums;
   color: var(--ink-faint);
 }
 
