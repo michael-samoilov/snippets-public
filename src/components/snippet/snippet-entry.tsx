@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -50,16 +51,18 @@ export function SnippetEntry({
     });
   };
 
-  const fileUnder = (kind: SnippetKind) =>
+  const fileUnder = (kind: SnippetKind) => {
+    navigator.vibrate?.(6);
     void updateSnippet(snippet.id, { kind, enriched: "manual" });
+  };
 
   return (
     <article
-      className="group entry-rise relative py-4 first:pt-2"
+      className="group entry-rise relative py-4 first:pt-3"
       style={{ "--stagger": Math.min(stagger, 8) } as React.CSSProperties}
     >
       {/* the mark hangs in the margin, left of the rule */}
-      <span className="absolute -left-10 top-[1.3rem] hidden sm:block">
+      <span className="absolute -left-10 top-[1.45rem] hidden opacity-80 transition-opacity duration-150 group-hover:opacity-100 sm:block">
         <KindMark kind={snippet.kind} />
       </span>
 
@@ -79,9 +82,7 @@ export function SnippetEntry({
       </p>
 
       {attribution && (
-        <p className="voice-prose mt-1 text-ink-soft">
-          —&thinsp;{attribution}
-        </p>
+        <p className="voice-prose mt-1 text-ink-soft">—&thinsp;{attribution}</p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -89,38 +90,44 @@ export function SnippetEntry({
           <KindMark kind={snippet.kind} className="size-3.5" />
         </span>
         {showTime && (
-          <span className="voice-meta">{clockTime(snippet.capturedAt)}</span>
+          <span className="voice-data">{clockTime(snippet.capturedAt)}</span>
         )}
         {snippet.kind && (
           <span
-            className="voice-meta"
+            className="voice-label text-[0.78rem]"
             style={{ color: KIND_META[snippet.kind].color }}
           >
             {KIND_META[snippet.kind].label}
           </span>
         )}
         {snippet.tags.map((tag) => (
-          <span key={tag} className="voice-meta normal-case">
+          <span key={tag} className="voice-data">
             #{tag}
           </span>
         ))}
-        {snippet.favorite === 1 && (
-          <svg
-            viewBox="0 0 16 16"
-            aria-label="Favorite"
-            className="size-3 text-gilt"
-            fill="none"
-            stroke="currentColor"
-          >
-            <path
-              d="M8 2.6 V13.4 M3.3 5.3 L12.7 10.7 M3.3 10.7 L12.7 5.3"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        )}
+        <AnimatePresence>
+          {snippet.favorite === 1 && (
+            <motion.svg
+              viewBox="0 0 16 16"
+              aria-label="Favorite"
+              className="size-3 text-gilt"
+              fill="none"
+              stroke="currentColor"
+              initial={{ scale: 0.3, rotate: -120, opacity: 0 }}
+              animate={{ scale: 1, rotate: 0, opacity: 1 }}
+              exit={{ scale: 0.3, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.45, bounce: 0.45 }}
+            >
+              <path
+                d="M8 2.6 V13.4 M3.3 5.3 L12.7 10.7 M3.3 10.7 L12.7 5.3"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </motion.svg>
+          )}
+        </AnimatePresence>
         {snippet.enriched === "pending" && (
-          <span className="voice-meta animate-pulse">filing…</span>
+          <span className="voice-data animate-pulse italic">filing…</span>
         )}
 
         <span className="flex-1" />
@@ -128,13 +135,16 @@ export function SnippetEntry({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Entry actions"
-            className="voice-meta -mr-1 rounded-[3px] px-2 py-0.5 tracking-[0.2em] opacity-40 transition-opacity duration-150 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-70 data-[state=open]:opacity-100"
+            className="voice-data pressable -mr-1 rounded-[4px] px-2 py-0.5 text-[0.8rem] tracking-[0.2em] opacity-50 transition-opacity duration-150 hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 sm:opacity-0 sm:group-hover:opacity-60"
           >
             ···
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="font-serif">
+          <DropdownMenuContent
+            align="end"
+            className="float origin-(--radix-dropdown-menu-content-transform-origin) border-none font-serif data-[state=closed]:duration-100 data-[state=open]:duration-150"
+          >
             <DropdownMenuItem onSelect={() => setEditing(true)}>
-              Edit
+              Edit…
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void toggleFavorite(snippet.id)}>
               {snippet.favorite ? "Unfavorite" : "Favorite"}

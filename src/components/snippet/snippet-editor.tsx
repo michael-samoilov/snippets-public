@@ -28,7 +28,7 @@ export function SnippetEditor({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-rule bg-paper-raised sm:max-w-lg">
+      <DialogContent className="float border-none bg-paper-raised sm:max-w-lg">
         {/* the form remounts with the dialog, seeding fresh state each time */}
         <EditorForm snippet={snippet} close={() => onOpenChange(false)} />
       </DialogContent>
@@ -73,7 +73,7 @@ function EditorForm({
         <DialogTitle className="voice-display text-left text-lg">
           Edit entry
         </DialogTitle>
-        <DialogDescription className="voice-meta text-left">
+        <DialogDescription className="voice-data text-left">
           {marginDate(new Date(snippet.capturedAt))} ·{" "}
           {snippet.source === "voice" ? "spoken" : "written"}
         </DialogDescription>

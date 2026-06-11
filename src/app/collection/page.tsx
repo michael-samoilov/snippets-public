@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { motion } from "motion/react";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { KindMark } from "@/components/kind-mark";
 import { groupByDay, useAllSnippets, useSearch } from "@/hooks/use-snippets";
@@ -20,10 +21,30 @@ export default function CollectionPage() {
 
 function Collection() {
   const params = useSearchParams();
+  const pathname = usePathname();
+
   const [query, setQuery] = useState(params.get("q") ?? "");
-  const [kindFilter, setKindFilter] = useState<SnippetKind | null>(null);
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [kindFilter, setKindFilter] = useState<SnippetKind | null>(() => {
+    const k = params.get("kind");
+    return KINDS.includes(k as SnippetKind) ? (k as SnippetKind) : null;
+  });
+  const [favoritesOnly, setFavoritesOnly] = useState(
+    params.get("fav") === "1",
+  );
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // the URL carries the view, so filters and searches can be shared
+  const syncUrl = useCallback(
+    (q: string, kind: SnippetKind | null, fav: boolean) => {
+      const next = new URLSearchParams();
+      if (q.trim()) next.set("q", q.trim());
+      if (kind) next.set("kind", kind);
+      if (fav) next.set("fav", "1");
+      const qs = next.toString();
+      window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+    },
+    [pathname],
+  );
 
   const all = useAllSnippets();
   const searched = useSearch(query, all);
@@ -33,6 +54,7 @@ function Collection() {
       (!favoritesOnly || s.favorite === 1),
   );
   const groups = groupByDay(filtered);
+  const filtering = Boolean(query.trim()) || kindFilter !== null || favoritesOnly;
 
   // "/" reaches for the search field, like flipping to the index
   useEffect(() => {
@@ -51,16 +73,18 @@ function Collection() {
   }, []);
 
   return (
-    <>
+    <div className="page-settle">
       <header className="mb-6">
-        <h1 className="voice-display text-[1.9rem] leading-tight sm:text-[2.2rem]">
+        <h1 className="voice-display text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
           Collection
         </h1>
         {all && (
-          <p className="voice-meta mt-1.5">
+          <p className="mt-2.5 font-serif text-[0.92rem] italic text-ink-soft">
             {all.length === 0
-              ? "Nothing kept yet"
-              : `${all.length} kept${query || kindFilter || favoritesOnly ? ` · ${filtered.length} shown` : ""}`}
+              ? "nothing kept yet"
+              : filtering
+                ? `${filtered.length} of ${all.length} kept`
+                : `${all.length} kept`}
           </p>
         )}
       </header>
@@ -70,7 +94,10 @@ function Collection() {
           ref={searchRef}
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            syncUrl(e.target.value, kindFilter, favoritesOnly);
+          }}
           placeholder="Search the collection…"
           aria-label="Search the collection"
           className="voice-prose w-full border-b border-rule bg-transparent pb-2 italic outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-ink-soft"
@@ -81,36 +108,52 @@ function Collection() {
         {KINDS.map((kind) => {
           const active = kindFilter === kind;
           return (
-            <button
+            <motion.button
               key={kind}
               type="button"
               aria-pressed={active}
-              onClick={() => setKindFilter(active ? null : kind)}
-              className="flex items-center gap-1.5 rounded-[3px] border px-2 py-1 font-mono text-[0.65rem] font-medium uppercase tracking-[0.07em] transition-colors duration-150"
+              onClick={() => {
+                const next = active ? null : kind;
+                setKindFilter(next);
+                syncUrl(query, next, favoritesOnly);
+              }}
+              whileTap={{ scale: 0.93 }}
+              transition={{ type: "spring", duration: 0.3, bounce: 0.3 }}
+              className="voice-label flex items-center gap-1.5 rounded-[5px] border px-2 py-[3px] text-[0.78rem] tracking-[0.09em] transition-colors duration-150"
               style={
                 active
-                  ? { borderColor: KIND_META[kind].color, color: KIND_META[kind].color }
+                  ? {
+                      borderColor: KIND_META[kind].color,
+                      color: KIND_META[kind].color,
+                      backgroundColor: `color-mix(in srgb, ${KIND_META[kind].color} 9%, transparent)`,
+                    }
                   : { borderColor: "var(--rule-faint)", color: "var(--ink-faint)" }
               }
             >
               <KindMark kind={kind} className="size-3" colored={active} />
               {KIND_META[kind].plural}
-            </button>
+            </motion.button>
           );
         })}
-        <button
+        <motion.button
           type="button"
           aria-pressed={favoritesOnly}
-          onClick={() => setFavoritesOnly((v) => !v)}
+          onClick={() => {
+            setFavoritesOnly((v) => {
+              syncUrl(query, kindFilter, !v);
+              return !v;
+            });
+          }}
+          whileTap={{ scale: 0.93 }}
           className={cn(
-            "rounded-[3px] border px-2 py-1 font-mono text-[0.65rem] font-medium uppercase tracking-[0.07em] transition-colors duration-150",
+            "voice-label rounded-[5px] border px-2 py-[3px] text-[0.78rem] tracking-[0.09em] transition-colors duration-150",
             favoritesOnly
-              ? "border-gilt text-gilt"
+              ? "border-gilt bg-gilt/10 text-gilt"
               : "border-rule-faint text-ink-faint",
           )}
         >
           ✳ Favorites
-        </button>
+        </motion.button>
       </div>
 
       {all && all.length === 0 && (
@@ -131,7 +174,7 @@ function Collection() {
         <section key={day} className="mt-7" aria-label={friendlyDay(day)}>
           <header className="flex items-baseline justify-between border-b border-rule pb-1.5">
             <h2 className="voice-display text-[1.12rem]">{friendlyDay(day)}</h2>
-            <span className="voice-meta">{snippets.length}</span>
+            <span className="voice-data">{snippets.length}</span>
           </header>
           <ul className="entry-list divide-y divide-rule-faint">
             {snippets.map((snippet, i) => (
@@ -142,6 +185,6 @@ function Collection() {
           </ul>
         </section>
       ))}
-    </>
+    </div>
   );
 }

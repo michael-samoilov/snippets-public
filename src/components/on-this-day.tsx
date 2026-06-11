@@ -13,7 +13,7 @@ export function OnThisDay() {
 
   return (
     <section aria-label="On this day" className="mt-12">
-      <h2 className="voice-meta border-b border-rule pb-2">On this day</h2>
+      <h2 className="voice-label border-b border-rule pb-1.5">On this day</h2>
       {groups.map((group) => (
         <div key={group.label} className="mt-4">
           <h3 className="voice-display text-[1.05rem] italic text-ink-soft">

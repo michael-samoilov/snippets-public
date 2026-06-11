@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { addSnippet } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { promptForDate } from "@/lib/kinds";
-import { useSpeech } from "@/hooks/use-speech";
+import { useSpeech, type SpeechSegment } from "@/hooks/use-speech";
 import { cn } from "@/lib/utils";
 
 function joinText(a: string, b: string): string {
@@ -14,23 +15,25 @@ function joinText(a: string, b: string): string {
   return `${a.replace(/\s+$/, "")} ${b}`;
 }
 
-/**
- * The day's page. Speak or type; either way the words set themselves
- * on paper. Nothing is asked of you at the moment of capture — filing
- * happens afterwards, quietly.
- */
 function autosize(el: HTMLTextAreaElement) {
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
 }
 
+/**
+ * The day's page. Speak or type; either way the words set themselves
+ * on paper — spoken phrases arrive word by word, like ink drying.
+ * Nothing is asked of you at the moment of capture.
+ */
 export function Capture() {
   const [text, setText] = useState("");
   const [voiceUsed, setVoiceUsed] = useState(false);
+  const [stampCount, setStampCount] = useState(0);
+  const [stampVisible, setStampVisible] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prompt = promptForDate(new Date());
 
-  // When a listening session settles, fold the transcript into the text.
   const speech = useSpeech((spoken) => {
     setText((prev) => joinText(prev, spoken));
     requestAnimationFrame(() => {
@@ -50,10 +53,17 @@ export function Capture() {
   useEffect(() => {
     if (speech.status === "denied") {
       toast("The microphone was declined.", {
-        description: "Re-allow it in your browser's site settings to speak your snippets.",
+        description:
+          "Re-allow it in your browser’s site settings to speak your snippets.",
       });
     }
   }, [speech.status]);
+
+  useEffect(() => {
+    return () => {
+      if (stampTimer.current) clearTimeout(stampTimer.current);
+    };
+  }, []);
 
   const toggleListening = useCallback(() => {
     if (listening) {
@@ -73,12 +83,18 @@ export function Capture() {
       el.value = "";
       autosize(el);
     }
+    navigator.vibrate?.(8);
+    // the confirmation stamps beside the action, not in a toast
+    setStampCount((n) => n + 1);
+    setStampVisible(true);
+    if (stampTimer.current) clearTimeout(stampTimer.current);
+    stampTimer.current = setTimeout(() => setStampVisible(false), 1600);
+
     const snippet = await addSnippet({
       text: trimmed,
       source: voiceUsed ? "voice" : "typed",
     });
     setVoiceUsed(false);
-    toast("Kept.");
     void enrichSnippet(snippet);
   }, [text, listening, voiceUsed]);
 
@@ -94,9 +110,7 @@ export function Capture() {
         >
           {text && <span>{joinText(text, "")} </span>}
           {speech.segments.map((seg) => (
-            <span key={seg.id} className="word-arrive">
-              {seg.text}{" "}
-            </span>
+            <Segment key={seg.id} segment={seg} />
           ))}
           {speech.interim && (
             <span className="ink-interim">{speech.interim}</span>
@@ -132,46 +146,55 @@ export function Capture() {
 
       {/* controls */}
       <div className="mt-4 flex items-center gap-4 border-t border-rule-faint pt-4">
-        {speech.supported && (
-          <button
-            type="button"
-            onClick={toggleListening}
-            aria-pressed={listening}
-            aria-label={listening ? "Stop listening" : "Speak a snippet"}
-            className={cn(
-              "relative grid size-16 shrink-0 place-items-center rounded-full text-paper-raised sm:size-14",
-              "bg-wax transition-[background-color,transform] duration-150 hover:bg-wax-deep active:scale-95",
-            )}
-          >
-            {listening && (
-              <>
-                <span aria-hidden="true" className="seal-ring absolute inset-0 rounded-full bg-wax" />
-                <span aria-hidden="true" className="seal-ring seal-ring-late absolute inset-0 rounded-full bg-wax" />
-              </>
-            )}
-            <span className="relative">
-              {listening ? <StopGlyph /> : <MicGlyph />}
-            </span>
-          </button>
-        )}
+        {speech.supported && <Seal listening={listening} onToggle={toggleListening} />}
 
-        <p className="voice-meta flex-1 normal-case tracking-normal">
-          {listening ? (
-            <span className="text-wax">Listening — tap the seal to stop</span>
-          ) : speech.supported ? (
-            "Speak it or write it"
-          ) : (
-            "Voice capture needs Chrome, Safari, or Edge — writing works everywhere"
-          )}
-        </p>
+        <div className="relative flex-1 self-center">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.p
+              key={
+                listening
+                  ? "listening"
+                  : stampVisible
+                    ? `stamp-${stampCount}`
+                    : "hint"
+              }
+              initial={{ opacity: 0, filter: "blur(2px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, filter: "blur(2px)" }}
+              transition={{ duration: 0.14, ease: "easeOut" }}
+              className="font-serif text-[0.88rem] italic text-ink-faint"
+            >
+              {listening ? (
+                <span className="not-italic text-wax">
+                  Listening — tap the seal to stop
+                </span>
+              ) : stampVisible ? (
+                <span
+                  className="stamp-in inline-flex items-center gap-1.5 not-italic text-wax"
+                  role="status"
+                >
+                  <StampMark /> Kept.
+                </span>
+              ) : speech.supported ? (
+                "speak it or write it"
+              ) : (
+                "voice needs Chrome, Safari, or Edge — writing works everywhere"
+              )}
+            </motion.p>
+          </AnimatePresence>
+        </div>
 
         <button
           type="button"
           onClick={() => void keep()}
           disabled={!hasText || listening}
           className={cn(
-            "rounded-[3px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper transition-all duration-150",
-            "hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none",
+            "rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper",
+            "bg-[linear-gradient(to_bottom,rgb(255_255_255/0.1),transparent_60%)] bg-ink",
+            "shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_1px_2px_rgb(var(--shadow-hue)/0.25),0_3px_6px_-2px_rgb(var(--shadow-hue)/0.3)]",
+            "transition-[opacity,transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+            "active:translate-y-px active:scale-[0.98] active:shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)]",
+            "disabled:pointer-events-none",
             hasText && !listening ? "opacity-100" : "opacity-0",
           )}
         >
@@ -182,9 +205,91 @@ export function Capture() {
   );
 }
 
+/** A finalized phrase arrives word by word, each blurring into focus. */
+function Segment({ segment }: { segment: SpeechSegment }) {
+  const words = segment.text.split(/\s+/);
+  return (
+    <span>
+      {words.map((word, i) => (
+        <span
+          key={`${segment.id}-${i}`}
+          className="word-arrive"
+          style={{ animationDelay: `${Math.min(i, 18) * 26}ms` }}
+        >
+          {word}{" "}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The wax seal. A real material: lit from the upper left, a grooved
+ * rim, sitting proud of the paper. Pressing it depresses it; while
+ * listening it breathes.
+ */
+function Seal({
+  listening,
+  onToggle,
+}: {
+  listening: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <span className="relative inline-grid place-items-center">
+      {listening && (
+        <>
+          <span
+            aria-hidden="true"
+            className="seal-ring absolute inset-0 rounded-full bg-wax"
+          />
+          <span
+            aria-hidden="true"
+            className="seal-ring seal-ring-late absolute inset-0 rounded-full bg-wax"
+          />
+        </>
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={listening}
+        aria-label={listening ? "Stop listening" : "Speak a snippet"}
+        className={cn(
+          "relative grid size-16 shrink-0 place-items-center rounded-full text-paper-raised sm:size-14",
+          "bg-[radial-gradient(circle_at_32%_28%,var(--wax-bright)_0%,var(--wax)_48%,var(--wax-deep)_100%)]",
+          "shadow-[inset_0_1.5px_2px_rgb(255_255_255/0.3),inset_0_-3px_5px_rgb(0_0_0/0.3),0_1px_2px_rgb(var(--shadow-hue)/0.3),0_5px_12px_-2px_rgb(122_44_27/0.45)]",
+          "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+          "active:scale-[0.93] active:shadow-[inset_0_2px_5px_rgb(0_0_0/0.4),0_1px_2px_rgb(var(--shadow-hue)/0.25)]",
+          listening && "seal-breathe",
+        )}
+      >
+        {/* the grooved rim of the seal */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[5px] rounded-full border border-black/25 shadow-[inset_0_1px_1px_rgb(255_255_255/0.18)]"
+        />
+        <span className="relative grid place-items-center [grid-template-areas:'icon']">
+          <AnimatePresence initial={false}>
+            <motion.span
+              key={listening ? "stop" : "mic"}
+              initial={{ opacity: 0, scale: 0.7, filter: "blur(2px)" }}
+              animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+              exit={{ opacity: 0, scale: 0.7, filter: "blur(2px)" }}
+              transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+              className="[grid-area:icon]"
+            >
+              {listening ? <StopGlyph /> : <MicGlyph />}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+      </button>
+    </span>
+  );
+}
+
 function MicGlyph() {
   return (
-    <svg viewBox="0 0 20 20" className="size-5" fill="none" stroke="currentColor" aria-hidden="true">
+    <svg viewBox="0 0 20 20" className="size-5 drop-shadow-[0_1px_1px_rgb(0_0_0/0.3)]" fill="none" stroke="currentColor" aria-hidden="true">
       <rect x="7.4" y="2.6" width="5.2" height="9.2" rx="2.6" fill="currentColor" stroke="none" />
       <path d="M4.6 9.8 a5.4 5.4 0 0 0 10.8 0" strokeWidth="1.6" strokeLinecap="round" />
       <path d="M10 15.2 V17.6" strokeWidth="1.6" strokeLinecap="round" />
@@ -194,8 +299,20 @@ function MicGlyph() {
 
 function StopGlyph() {
   return (
-    <svg viewBox="0 0 20 20" className="size-5" aria-hidden="true">
+    <svg viewBox="0 0 20 20" className="size-5 drop-shadow-[0_1px_1px_rgb(0_0_0/0.3)]" aria-hidden="true">
       <rect x="5.8" y="5.8" width="8.4" height="8.4" rx="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** A tiny wax mark for the "Kept." stamp. */
+function StampMark() {
+  return (
+    <svg viewBox="0 0 12 12" className="size-3" aria-hidden="true">
+      <circle cx="6" cy="6" r="6" fill="var(--wax-deep)" />
+      <circle cx="6" cy="6" r="5" fill="var(--wax)" />
+      <circle cx="4.2" cy="3.9" r="1.9" fill="var(--wax-bright)" opacity="0.65" />
+      <path d="M6 3.2 V8.8 M3.6 4.6 L8.4 7.4 M3.6 7.4 L8.4 4.6" stroke="var(--paper-raised)" strokeWidth="0.9" strokeLinecap="round" />
     </svg>
   );
 }

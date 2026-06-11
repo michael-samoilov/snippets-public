@@ -1,154 +1,171 @@
 # Snippets — Design System
 
-> A pocket commonplace book. The interface is a sheet of warm paper; your
-> words are the only thing on it that matters. Everything else whispers.
+> A desk under lamplight, one sheet of paper on it. The sheet carries
+> your words; the desk gives them depth. Everything you can touch
+> responds like a physical thing.
 
-This document is the design constitution. Future work — by people or by
-agents — should be checked against it. The companion skill
-`.claude/skills/snippets-craft/` enforces the short version.
+This is the design constitution. Future work — by people or by agents —
+is checked against it. The `.claude/skills/snippets-craft/` skill
+enforces the short version. The lineage: Emil Kowalski's design-eng
+skill, Rauno Freiberg's Web Interface Guidelines, Vercel's interface
+checklist, and Apple HIG motion principles, all vendored knowledge in
+this repo's history.
 
 ## The idea
 
 Snippets exists for one ritual: *Homework for Life* (Matthew Dicks,
-**Storyworthy**) — at the end of each day, keep the most storyworthy moment
-that happened, before it evaporates. Jokes, quotes, ideas, and turns of
-phrase ride along. The two governing constraints:
+**Storyworthy**) — at the end of each day, keep the most storyworthy
+moment before it evaporates. Two governing constraints:
 
-1. **Capture must cost one breath.** Speak or type; never decide, file,
-   or configure at the moment of capture. Filing happens afterwards,
+1. **Capture costs one breath.** Speak or type; never decide, file, or
+   configure at the moment of capture. Filing happens afterwards,
    invisibly (Claude) or with one tap (chips).
-2. **Rereading must feel like leafing through a beloved notebook**, not
-   scanning a database. Typography does the work; chrome stays quiet.
+2. **Rereading feels like a beloved notebook**, not a database. The UI
+   defers to the words (HIG: deference); the world around them is
+   physical, lit, and quiet.
 
-## Visual direction: writer's field notes
+## The physical model
 
-Warm paper and ink, a faded red margin rule, marks in the margin,
-sealing-wax red reserved for the act of recording. Deliberately **not**
-the generic AI-app look (cream + serif + terracotta cards): the
-distinctiveness lives in *structure* — a ruled page, hanging marks,
-typographic chrome — not in the background color.
+Everything renders inside one conceit — **a desk under lamplight**:
 
-### The signature moment
-
-Live transcription on the day's page: words appear in Fraunces as you
-speak — finalized phrases in full ink (`word-arrive`), the phrase still
-forming in ghost ink (`.ink-interim`), a wax caret blinking after it.
-The seal button breathes while listening. **Spend boldness here and
-nowhere else.** Everything around it stays disciplined.
+- **The desk** (`--desk`): the page background. Darker than the sheet,
+  lit by a radial pool of light from above (`body` background-image),
+  textured with grain. Chrome lives here: wordmark, nav, footer, the
+  floating mobile dock.
+- **The sheet** (`.sheet`): one piece of paper holding all content.
+  Raised off the desk by a warm layered shadow + top-edge highlight
+  (light from above), with a real paper material on top
+  (`@paper-design/shaders-react` `PaperTexture`, static, masked to fade
+  out down the page; plain paper beneath so it's never load-bearing).
+- **Floating surfaces** (`.float`): dialogs, menus, toasts, the dock —
+  brighter paper (`--paper-raised`), stronger shadow. Depth = hierarchy.
+- **Light is the depth cue.** Shadows are warm
+  (`rgb(var(--shadow-hue))`, never gray-black in Paper mode), highlights
+  sit on top edges (`--press-highlight`), display type is pressed into
+  the paper (`.voice-display` letterpress text-shadow).
 
 ## Tokens (`src/app/globals.css` is the source of truth)
 
-| Token | Paper (light) | Lamplight (dark) | Role |
+| Token | Paper | Lamplight | Role |
 |---|---|---|---|
-| `--paper` | `#f6f0e2` | `#171310` | the page |
-| `--paper-raised` | `#fcf8ee` | `#211c15` | popovers, dialogs, toasts |
-| `--paper-recessed` | `#ede5d2` | `#100d0a` | pressed/secondary surfaces |
-| `--ink` | `#241e15` | `#eae1cd` | primary text |
-| `--ink-soft` | `#6f6553` | `#a59879` | secondary text |
-| `--ink-faint` | `#978c79` | `#6e6450` | meta text |
-| `--rule` / `--rule-faint` | ink @ 14% / 8% | ink @ 16% / 9% | hairlines |
-| `--wax` / `--wax-deep` | `#993b26` / `#7a2c1b` | `#c75b40` / `#a44733` | recording, margin rule, destructive |
+| `--desk` | `#e8dcc2` | `#0f0c08` | the table; page bg, browser chrome |
+| `--paper` | `#f7f1e3` | `#1d1812` | the sheet |
+| `--paper-raised` | `#fdf9ef` | `#292219` | floating surfaces |
+| `--paper-recessed` | `#eee6d2` | `#15100b` | pressed/secondary fills |
+| `--ink` / `--ink-soft` / `--ink-faint` | warm blacks→taupes | creams→umbers | text hierarchy |
+| `--rule` / `--rule-faint` | ink @ 14% / 8% | @ 16% / 9% | hairlines |
+| `--wax` / `--wax-deep` / `--wax-bright` | `#993b26` família | brighter set | recording, margin rule, destructive; bright = specular highlight |
 | `--gilt` | `#a87a24` | `#c99c45` | favorites only |
-| `--kind-*` | six muted editorial inks | lightened variants | kind labels + marks |
+| `--kind-*` | six muted editorial inks | lightened | kind labels + marks |
+| `--sheet-shadow` / `--float-shadow` | warm layered stacks | black layered | the two elevations |
 
-Rules of use:
-- **Wax is semantic, not decorative**: the recording light, the margin
-  rule, the active nav dot, destructive actions. Never as a "brand splash".
-- **Gilt appears only on favorites.** Scarcity is what makes it gold.
-- New colors require a reason this table can't answer.
+Rules: wax is semantic (recording, rule, destructive), gilt only on
+favorites, all shadows from the shadow tokens or `--shadow-hue`, no flat
+hex in components, no new flat fills — a new surface needs a light story
+(highlight + shadow), not just a color.
 
-## Type system
+## Type voices
 
-Two families, three voices. No Inter, no Lucide-as-identity, ever.
+Two families, three voices. No Inter, no icon fonts, ever. Mono is
+**data only** and never uppercase.
 
 | Voice | Class | Spec | Used for |
 |---|---|---|---|
-| Display | `.voice-display` | Fraunces, wght 540, `WONK 1`, `SOFT 0`, tight tracking | page titles, day headers, wordmark (italic) |
-| Prose | `.voice-prose` | Fraunces, wght 420, 17px/1.6, oldstyle figures | snippet text, longer copy |
-| Meta | `.voice-meta` | IBM Plex Mono 500, 11px, +0.08em, uppercase, **lining tabular numerals** | dates, counts, labels, nav |
+| Display | `.voice-display` | Fraunces 560, `WONK 1`, letterpress shadow | mastheads, day headers, wordmark |
+| Label | `.voice-label` | Fraunces 540, `all-small-caps`, +0.13em | section headers, nav, chips, eyebrows |
+| Data | `.voice-data` | Plex Mono 450, 11px, lowercase, tabular lining | times, counts, tags |
+| Prose | `.voice-prose` | Fraunces 420, 17px/1.6, oldstyle figures | snippet text |
 
-Details that matter: `font-optical-sizing: auto` everywhere (WONK
-auto-disables ≤18px); `hanging-punctuation` on quotes (Safari
-enhancement); quotes set in italic with `.hang-quotes`.
-
-## Structure
-
-- One centered column, `max-w-[42rem]`. No sidebars, no cards, no grids
-  of boxes.
-- **Entries are typeset, not boxed**: hairline dividers
-  (`divide-rule-faint`), a `.entry-list` inset with the faded wax margin
-  rule (from `sm:`), kind marks hanging in the margin.
-- **Printers' marks** (`src/components/kind-mark.tsx`) are the only
-  iconography of identity: ¶ story, ‽ joke, ❞ quote, ✳ idea, ~ phrase,
-  ◉ observation — drawn as SVG (the glyphs aren't reliable cross-platform).
-  Lucide is permitted for purely functional chrome only (and currently
-  unused outside vendored primitives).
-- Navigation is **words**: mono-caps links with a wax dot for the active
-  page. Mobile gets a typographic bottom tab bar — no icons.
+The Today masthead pattern: small-caps eyebrow (weekday) → huge display
+date → italic serif stat line with `<NumberFlow>`. Other pages: display
+title + italic stat line (no forced eyebrow).
 
 ## Motion
 
-Durations and easings are tokens; durations collapse to 0.01ms under
-`prefers-reduced-motion` (opacity feedback survives, movement doesn't).
+Strong curves, short durations, springs for anything touchable.
+Duration tokens collapse under `prefers-reduced-motion`; Motion runs
+inside `<MotionConfig reducedMotion="user">`.
 
-| Token | Value | Use |
-|---|---|---|
-| `--dur-fast` | 140ms | hovers, color shifts |
-| `--dur-base` | 220ms | dropdowns, chips |
-| `--dur-slow` | 320ms | entries arriving, dialogs |
-| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | everything entering |
-| `--ease-in` | `cubic-bezier(0.45, 0, 0.85, 0.4)` | everything leaving |
+| Token | Value |
+|---|---|
+| `--ease-out` | `cubic-bezier(0.23, 1, 0.32, 1)` (entries, default) |
+| `--ease-in-out` | `cubic-bezier(0.77, 0, 0.175, 1)` (on-screen moves) |
+| `--ease-drawer` | `cubic-bezier(0.32, 0.72, 0, 1)` (gesture surfaces) |
+| `--dur-fast/base/slow` | 120 / 180 / 260ms |
 
-Choreography: `entry-rise` (8px rise + fade, 45ms stagger, capped at 8),
-`word-arrive` (rise + blur(2px)→0 per finalized phrase), `seal-ring`
-(1.8s breathing pulse ×2, second delayed 0.9s). Scale floor 0.95; never
-animate from scale(0); transform/opacity only. No scroll-triggered
-theater, no parallax.
+**The frequency rule (Emil):** actions used 100+×/day never animate
+(⌘K palette: zoom neutralized, 100ms fade); tens-of-times actions get
+≤120ms; occasional surfaces get standard motion; the one theatrical
+moment is the live transcription. **Springs:** magic-move indicators
+(`layoutId` nav underline, dock pill, calendar day ring) use
+`{ stiffness: 380, damping: 30 }`; list insertions
+`{ type: "spring", duration: 0.5, bounce: 0.16 }`; selection pops
+`bounce: 0.4` keyframed `[1, 1.07, 1]`. **CSS transitions over
+keyframes** for anything rapidly re-triggered (interruptibility);
+`AnimatePresence` + `layout` for list changes (`MotionEntryList`);
+never `scale(0)`; exits faster than entries; transform/opacity only;
+hovers gated behind `@media (hover: hover)`.
 
-## Surfaces & depth
+## Pressable physics
 
-Paper sits flat. Elevation exists only for transient surfaces
-(dialogs, menus, toasts): `--paper-raised` + hairline border + a warm
-layered shadow (`rgb(58 46 28 / 0.05–0.07)`, doubling offsets — never
-neutral black). Overlays are ink-tinted (`rgb(24 19 13 / 0.45)`), not
-gray. Grain: `feTurbulence` fractalNoise 0.7/3 octaves at 5% (7% dark),
-`soft-light` — subliminal or delete it.
+Everything clickable feels physical:
 
-## Focus & input
+- `.pressable` — comprehensive interactive transition + `scale(0.97)`
+  on `:active`. It owns the `transition` property; never pair it with
+  `transition-*` utilities.
+- Raised buttons (Keep, `PaperButton`) — gradient light from above,
+  inset top highlight, drop shadow; press = `translateY(1px)` +
+  `scale(0.98)` + shadow compresses to an inset.
+- The seal — radial wax material (`--wax-bright` specular at 32%/28%),
+  grooved rim, breathing animation + rings while listening, icon
+  crossfades through 2px blur (Emil's blur-masking).
+- Chips stamp: `whileTap 0.93`, pop `[1, 1.07, 1]` on selection, tinted
+  fill via `color-mix`.
+- Destructive = **hold-to-confirm** (`HoldToErase`): wax fills via
+  `clip-path` over 1.4s linear while held, drains in 200ms on release —
+  slow where deciding, fast where responding.
+- Haptics: `navigator.vibrate` 6–10ms taps on keep/file/select (Android
+  enhancement; never load-bearing).
 
-- Buttons/links: 2px wax outline, offset 2px.
-- Text fields: no box — the caret plus a darkened bottom rule show focus.
-- Touch targets ≥ 44px; the seal is 64px on touch, 56px on desktop.
+## Feedback placement
+
+Feedback appears **at its trigger** (Rauno): keeping an entry stamps
+"Kept." beside the button (`stamp-in`), not a toast; the entry then
+visibly settles into the list below (FLIP). Toasts are reserved for
+undo-able events (delete) and far-from-trigger results (import).
+Numbers that change on action animate with `<NumberFlow>`.
+
+## Structure
+
+One centered column (`max-w-[46rem]` desk, sheet inside). No cards, no
+boxes: entries are typeset with hairline dividers, the `.entry-list`
+margin rule, and hand-drawn printers' marks (¶ ‽ ❞ ✳ ~ ◉ in
+`kind-mark.tsx`) hanging in the margin. Navigation is words — small-caps
+serif with a gliding ink underline (desktop) and a floating dock pill
+(mobile). The calendar is a recessed ruled grid (gap hairlines + inset
+shadow) with a wax ring that **glides** between selected days; URL
+carries view state (`?d=`, `?q=`, `?kind=`, `?fav=`).
 
 ## Copy voice
 
-Quiet, literary, terse, second person. Sentence case. No exclamation
-marks, no emoji, no "✨ AI". Claude is mentioned by name only in
-Settings; elsewhere filing simply *happens*.
-
-| Instead of | Say |
-|---|---|
-| Saved successfully! | Kept. |
-| Delete / Are you sure? | Let go / "Let this one go?" |
-| No items found | Nothing kept yet. Today is a good day to start. |
-| Streak: 🔥 12 | 12 days running *(only ever past-tense, never countdown)* |
-
-Streaks are framed as accumulation ("collected on N days"), missed days
-are blank, never red.
+Quiet, literary, terse, sentence case. Curly quotes, the `…` character.
+"Kept." / "Let go." / "Nothing kept this day." No exclamation marks, no
+emoji, no sparkle-AI framing. Streaks past-tense only; gaps are blank,
+never red.
 
 ## Architecture notes that protect the design
 
-- Local-first: Dexie (`src/lib/db.ts`), soft delete with undo, day keys
-  in local time. The storage layer is the seam for future sync.
-- Enrichment (`/api/enrich`, Claude Haiku) is **best-effort decoration**:
-  `enriched: "manual"` always wins; offline → retried; unavailable →
-  heuristics + chips. The app must remain whole with zero AI.
-- Speech (`use-speech.ts`) auto-stitches mobile session drops and
-  flushes lingering interim text on stop. Tap-to-toggle, never hold.
+- Local-first Dexie; soft delete + undo; day keys in local time.
+- Enrichment is best-effort decoration; `enriched: "manual"` wins; the
+  app must remain whole with zero AI and zero network.
+- Speech: tap-to-toggle, auto-stitches dropped mobile sessions, settles
+  via `onSettled` callback; finalized phrases animate word-by-word
+  (26ms stagger, blur 3px→0).
+- The shader layer is progressive enhancement: gated on mount + Save-Data,
+  static (`speed 0`), masked, plain paper always beneath.
 
-## Roadmap (intentionally deferred)
+## Deferred (intentionally)
 
-Sync layer behind the repository seam · Whisper-class adapter behind the
-speech interface · weekly "review" digest · notification nudges (needs
-push infra) · drawer-based editor on touch · import from Apple
-Notes/Google Docs.
+Sync layer · Whisper adapter · weekly digest · push nudges · vaul drawer
+editor on touch · opt-in UI sound (paper-thud at 440→220Hz, gain ≤0.08,
+default off) · view transitions (no list→detail route pair yet).

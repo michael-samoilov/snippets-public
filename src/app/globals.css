@@ -5,29 +5,35 @@
 
 /*
  * Snippets — "writer's field notes"
- * One sheet of paper, warm ink, a sealing-wax accent.
- * Typography does the talking; chrome stays quiet.
- * See DESIGN.md for the full rationale.
+ * The physical model: a desk under lamplight, one sheet of paper on it.
+ * The sheet carries the writing; the desk gives it depth. Light comes
+ * from above. Wax is reserved for the act of recording.
+ * See DESIGN.md for the constitution.
  */
 
 :root {
-  /* ── paper & ink ───────────────────────────────────────── */
-  --paper: #f6f0e2;
-  --paper-raised: #fcf8ee;
-  --paper-recessed: #ede5d2;
+  /* ── the desk (the world around the page) ─────────────── */
+  --desk: #e8dcc2;
+  --desk-deep: #ddcfb0;
+
+  /* ── the sheet & ink ──────────────────────────────────── */
+  --paper: #f7f1e3;
+  --paper-raised: #fdf9ef;
+  --paper-recessed: #eee6d2;
   --ink: #241e15;
   --ink-soft: #6f6553;
-  --ink-faint: #978c79;
+  --ink-faint: #988c77;
   --rule: rgb(36 30 21 / 0.14);
   --rule-faint: rgb(36 30 21 / 0.08);
 
   /* sealing wax — the recording light, the margin rule, the accent */
   --wax: #993b26;
   --wax-deep: #7a2c1b;
+  --wax-bright: #b04a31;
   --wax-faint: rgb(153 59 38 / 0.32);
-  --gilt: #a87a24; /* gold leaf, for favorites */
+  --gilt: #a87a24;
 
-  /* ── the six kinds, as muted editorial inks ────────────── */
+  /* ── the six kinds, as muted editorial inks ───────────── */
   --kind-story: #8a5a28;
   --kind-joke: #a16812;
   --kind-quote: #44586c;
@@ -35,15 +41,33 @@
   --kind-phrase: #6d4a66;
   --kind-observation: #4e6356;
 
-  /* ── motion (durations collapse under reduced motion) ──── */
-  --dur-fast: 140ms;
-  --dur-base: 220ms;
-  --dur-slow: 320ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.45, 0, 0.85, 0.4);
-  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+  /* ── light (shadows are warm, never gray) ─────────────── */
+  --shadow-hue: 58 46 28;
+  --sheet-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 0 0 1px rgb(var(--shadow-hue) / 0.06),
+    0 1px 2px rgb(var(--shadow-hue) / 0.05),
+    0 3px 6px rgb(var(--shadow-hue) / 0.04),
+    0 12px 24px -8px rgb(var(--shadow-hue) / 0.08),
+    0 32px 56px -16px rgb(var(--shadow-hue) / 0.09);
+  --float-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    0 0 0 1px rgb(var(--shadow-hue) / 0.08),
+    0 2px 4px rgb(var(--shadow-hue) / 0.06),
+    0 8px 18px -4px rgb(var(--shadow-hue) / 0.12),
+    0 24px 48px -12px rgb(var(--shadow-hue) / 0.14);
+  --press-highlight: rgb(255 255 255 / 0.4);
 
-  /* ── shadcn semantic mapping ───────────────────────────── */
+  /* ── motion (Emil-strength curves; collapse under reduced motion) ── */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 260ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-in: cubic-bezier(0.45, 0, 0.85, 0.4);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── shadcn semantic mapping ──────────────────────────── */
   --radius: 0.375rem;
   --background: var(--paper);
   --foreground: var(--ink);
@@ -64,12 +88,17 @@
   --border: var(--rule);
   --input: var(--rule);
   --ring: var(--wax);
+
+  color-scheme: light;
 }
 
 .dark {
-  --paper: #171310;
-  --paper-raised: #211c15;
-  --paper-recessed: #100d0a;
+  --desk: #0f0c08;
+  --desk-deep: #090706;
+
+  --paper: #1d1812;
+  --paper-raised: #292219;
+  --paper-recessed: #15100b;
   --ink: #eae1cd;
   --ink-soft: #a59879;
   --ink-faint: #6e6450;
@@ -78,6 +107,7 @@
 
   --wax: #c75b40;
   --wax-deep: #a44733;
+  --wax-bright: #de6a4c;
   --wax-faint: rgb(199 91 64 / 0.4);
   --gilt: #c99c45;
 
@@ -88,7 +118,23 @@
   --kind-phrase: #b389a7;
   --kind-observation: #91ab9d;
 
+  --shadow-hue: 0 0 0;
+  --sheet-shadow:
+    inset 0 1px 0 rgb(255 240 210 / 0.05),
+    0 0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 4px 10px rgb(0 0 0 / 0.35),
+    0 16px 32px -8px rgb(0 0 0 / 0.45);
+  --float-shadow:
+    inset 0 1px 0 rgb(255 240 210 / 0.07),
+    0 0 0 1px rgb(0 0 0 / 0.5),
+    0 4px 10px rgb(0 0 0 / 0.5),
+    0 16px 40px -8px rgb(0 0 0 / 0.6);
+  --press-highlight: rgb(255 240 210 / 0.06);
+
   --accent: rgb(234 225 205 / 0.07);
+
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -112,6 +158,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  --color-desk: var(--desk);
   --color-paper: var(--paper);
   --color-paper-raised: var(--paper-raised);
   --color-paper-recessed: var(--paper-recessed);
@@ -122,6 +169,7 @@
   --color-rule-faint: var(--rule-faint);
   --color-wax: var(--wax);
   --color-wax-deep: var(--wax-deep);
+  --color-wax-bright: var(--wax-bright);
   --color-gilt: var(--gilt);
   --color-kind-story: var(--kind-story);
   --color-kind-joke: var(--kind-joke);
@@ -152,12 +200,21 @@
 
 html {
   height: 100%;
-  hanging-punctuation: first allow-end last; /* Safari enhancement; degrades silently */
+  hanging-punctuation: first allow-end last;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   min-height: 100%;
-  background: var(--paper);
+  background: var(--desk);
+  /* lamplight: a pool of light upper-center, edges falling away */
+  background-image: radial-gradient(
+    120% 85% at 50% -12%,
+    rgb(255 250 235 / 0.5) 0%,
+    transparent 55%,
+    rgb(54 40 18 / 0.12) 100%
+  );
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-serif);
   font-optical-sizing: auto;
@@ -165,23 +222,47 @@ body {
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-kerning: normal;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
   text-rendering: optimizeLegibility;
 }
 
-/* paper grain — subliminal, fixed to the viewport like real tooth */
+.dark body {
+  background-image: radial-gradient(
+    120% 85% at 50% -12%,
+    rgb(255 220 160 / 0.05) 0%,
+    transparent 50%,
+    rgb(0 0 0 / 0.5) 100%
+  );
+}
+
+/* desk grain — the tooth of the table, above color, below content */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 70;
   pointer-events: none;
-  opacity: 0.05;
+  opacity: 0.055;
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .dark body::after {
-  opacity: 0.07;
+  opacity: 0.08;
+}
+
+button,
+[role="button"],
+a {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 ::selection {
@@ -210,24 +291,49 @@ textarea:focus-visible,
   scrollbar-color: var(--rule) transparent;
 }
 
+/* ── the sheet: one piece of paper on the desk ─────────────── */
+
+.sheet {
+  position: relative;
+  background: var(--paper);
+  border-radius: 6px;
+  box-shadow: var(--sheet-shadow);
+}
+
+/* anything raised off the sheet (dialogs, menus, toasts) */
+.float {
+  background: var(--paper-raised);
+  box-shadow: var(--float-shadow);
+}
+
 /* ── typographic voices ────────────────────────────────────── */
 
-/* display: where Fraunces gets to be wonky */
+/* display: where Fraunces gets to be wonky; pressed into the paper */
 .voice-display {
   font-family: var(--font-serif);
   font-variation-settings: "SOFT" 0, "WONK" 1;
-  font-weight: 540;
+  font-weight: 560;
   letter-spacing: -0.01em;
+  text-shadow: 0 1px 0 var(--press-highlight);
 }
 
-/* meta: the archival typewriter voice */
-.voice-meta {
+/* labels: quiet small caps in the serif — never the terminal voice */
+.voice-label {
+  font-family: var(--font-serif);
+  font-variant-caps: all-small-caps;
+  font-variant-numeric: oldstyle-nums;
+  font-weight: 540;
+  font-size: 0.86rem;
+  letter-spacing: 0.13em;
+  color: var(--ink-soft);
+}
+
+/* data: mono strictly for true data — times, counts. lowercase, tiny */
+.voice-data {
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  /* lining figures: oldstyle digits blur at this size */
+  font-size: 0.7rem;
+  font-weight: 450;
+  letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums lining-nums;
   color: var(--ink-faint);
 }
@@ -241,16 +347,38 @@ textarea:focus-visible,
   letter-spacing: 0.001em;
 }
 
-/* hanging punctuation for quotes, where supported */
 .voice-prose blockquote,
 .hang-quotes {
   hanging-punctuation: first;
 }
 
-/* ── the margin rule: the page's spine ───────────────────────
-   Entry lists are inset like a ruled notebook page: kind marks
-   hang in the margin, a faded red rule divides them from the
-   words. Mobile keeps the full width; the rule appears from sm. */
+/* ── pressable physics (Emil: the interface must listen) ───── */
+
+.pressable {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.pressable:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift {
+    transition:
+      transform var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out);
+  }
+  .hover-lift:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* ── the margin rule: the page's spine ─────────────────────── */
 
 .entry-list {
   position: relative;
@@ -277,14 +405,14 @@ textarea:focus-visible,
 .ink-interim {
   color: var(--ink-soft);
   opacity: 0.55;
-  transition: opacity var(--dur-base) var(--ease-standard);
+  transition: opacity var(--dur-base) var(--ease-out);
 }
 
 @keyframes word-arrive {
   from {
     opacity: 0;
-    transform: translateY(0.3em);
-    filter: blur(2px);
+    transform: translateY(0.25em);
+    filter: blur(3px);
   }
   to {
     opacity: 1;
@@ -294,8 +422,8 @@ textarea:focus-visible,
 }
 
 .word-arrive {
-  display: inline;
-  animation: word-arrive 380ms var(--ease-out) both;
+  display: inline-block;
+  animation: word-arrive 300ms var(--ease-out) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -319,23 +447,31 @@ textarea:focus-visible,
   animation: caret-blink 1.1s step-end infinite;
 }
 
-/* the seal's breathing rings while listening */
+/* the seal's breathing while listening */
 @keyframes seal-ring {
   0% {
     transform: scale(1);
-    opacity: 0.45;
+    opacity: 0.4;
   }
   70%, 100% {
-    transform: scale(1.65);
+    transform: scale(1.7);
     opacity: 0;
   }
 }
 
 .seal-ring {
-  animation: seal-ring 1.8s var(--ease-standard) infinite;
+  animation: seal-ring 1.8s var(--ease-in-out) infinite;
 }
 .seal-ring-late {
   animation-delay: 0.9s;
+}
+
+@keyframes seal-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+.seal-breathe {
+  animation: seal-breathe 1.8s var(--ease-in-out) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -345,9 +481,38 @@ textarea:focus-visible,
     opacity: 0.25;
     transform: scale(1.18);
   }
+  .seal-breathe {
+    animation: none;
+  }
 }
 
-/* ── entries arriving on the page ──────────────────────────── */
+/* "Kept." — the stamp of confirmation, beside the button */
+@keyframes stamp-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.3) rotate(-6deg);
+    filter: blur(2px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.98) rotate(0.5deg);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+.stamp-in {
+  animation: stamp-in 360ms var(--ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stamp-in {
+    animation: none;
+  }
+}
+
+/* ── entries arriving (CSS path for long lists) ────────────── */
 
 @keyframes entry-rise {
   from {
@@ -362,7 +527,7 @@ textarea:focus-visible,
 
 .entry-rise {
   animation: entry-rise var(--dur-slow) var(--ease-out) both;
-  animation-delay: calc(var(--stagger, 0) * 45ms);
+  animation-delay: calc(var(--stagger, 0) * 40ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -372,13 +537,34 @@ textarea:focus-visible,
   }
 }
 
+/* ── page entry: each route settles onto the desk ──────────── */
+
+@keyframes page-settle {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-settle {
+  animation: page-settle 280ms var(--ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-settle {
+    animation: none;
+  }
+}
+
 /* ── quiet links ───────────────────────────────────────────── */
 
 .link-quiet {
   text-decoration: underline;
   text-decoration-color: var(--rule);
   text-underline-offset: 0.2em;
-  transition: text-decoration-color var(--dur-fast) var(--ease-standard);
+  transition: text-decoration-color var(--dur-fast) var(--ease-out);
 }
 .link-quiet:hover {
   text-decoration-color: var(--ink-soft);

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { ThemeProvider } from "next-themes";
+import { MotionConfig } from "motion/react";
 import { Toaster } from "@/components/ui/sonner";
 import { purgeOldDeleted } from "@/lib/db";
 import { retryPendingEnrichment } from "@/lib/enrich";
@@ -26,21 +27,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      {children}
+      <MotionConfig reducedMotion="user">{children}</MotionConfig>
       <Toaster
         position="bottom-center"
         offset={{ bottom: 24 }}
-        mobileOffset={{ bottom: 92 }}
+        mobileOffset={{ bottom: 96 }}
         toastOptions={{
           style: {
             background: "var(--paper-raised)",
-            border: "1px solid var(--rule)",
-            borderRadius: "4px",
+            borderRadius: "8px",
+            border: "none",
             color: "var(--ink)",
             fontFamily: "var(--font-fraunces), Georgia, serif",
             fontSize: "0.95rem",
-            boxShadow:
-              "0 1px 1px rgb(58 46 28 / 0.05), 0 4px 10px rgb(58 46 28 / 0.07), 0 12px 28px rgb(58 46 28 / 0.07)",
+            boxShadow: "var(--float-shadow)",
           },
         }}
       />

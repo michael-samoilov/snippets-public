@@ -43,12 +43,13 @@ export function CommandMenu() {
   };
 
   return (
+    // opened by keyboard dozens of times a day — no entrance theater
     <CommandDialog
       open={open}
       onOpenChange={setOpen}
       title="Command menu"
       description="Search the collection or jump somewhere"
-      className="border-rule bg-paper-raised"
+      className="float border-none bg-paper-raised duration-100 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
     >
       <CommandInput
         value={query}
