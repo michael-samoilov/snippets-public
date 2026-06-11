@@ -10,10 +10,12 @@ life is full of stories.
 
 ## What it does
 
-- **Speak it or write it.** Tap the wax seal and talk; words set
-  themselves on the page as you speak — live, streaming, on-device via
-  the Web Speech API. Or just type. Nothing is asked of you at the
-  moment of capture.
+- **Speak it or write it.** Tap the wax seal and talk. With an Aqua
+  Voice key configured, recordings are transcribed by Avalon — the most
+  accurate dictation model going — about half a second after you stop,
+  in any browser that has a microphone. Without one, the browser's own
+  speech engine streams words live (Chrome, Safari, Edge). Or just
+  type. Nothing is asked of you at the moment of capture.
 - **Filed for you, quietly.** A few seconds after you keep an entry,
   Claude titles it, files it under a kind (story · joke · quote · idea ·
   phrase · observation), and tags it. No key configured? One-tap chips
@@ -33,18 +35,22 @@ pnpm install
 pnpm dev            # http://localhost:3000
 ```
 
-Voice capture needs Chrome, Safari, or Edge (typing works everywhere).
+### Optional keys
 
-### Automatic filing (optional)
-
-Set an API key and entries title/file themselves:
+Both are optional; the app is fully functional with neither.
 
 ```sh
+# Voice transcription via Aqua Voice's Avalon (works in every browser).
+# Without it, voice falls back to the browser's own speech engine
+# (Chrome, Safari, Edge) — typing works everywhere regardless.
+AQUA_API_KEY=…
+# AQUA_BASE_URL=https://api.aqua.sh/v1   # override if Aqua's base moves
+# AQUA_MODEL=avalon-1                    # override the model name
+
+# Automatic filing (title/kind/tags) via Claude.
+# Without it, filing falls back to heuristics and one-tap chips.
 ANTHROPIC_API_KEY=sk-ant-…   # uses claude-haiku-4-5; override with ENRICH_MODEL
 ```
-
-Without a key the app is fully functional — filing falls back to
-heuristics and one-tap chips.
 
 ### Production
 

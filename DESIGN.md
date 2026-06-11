@@ -158,14 +158,16 @@ never red.
 - Local-first Dexie; soft delete + undo; day keys in local time.
 - Enrichment is best-effort decoration; `enriched: "manual"` wins; the
   app must remain whole with zero AI and zero network.
-- Speech: tap-to-toggle, auto-stitches dropped mobile sessions, settles
-  via `onSettled` callback; finalized phrases animate word-by-word
-  (26ms stagger, blur 3px→0).
+- Speech: two engines behind one hook. Aqua/Avalon (primary, when
+  keyed): record with the live wax waveform (`InkBars`), words set
+  ~450ms after stop; works in every browser. Web Speech (fallback):
+  live word-by-word ink (26ms stagger, blur 3px→0). Both settle via
+  `onSettled`; tap-to-toggle always; failures always say why.
 - The shader layer is progressive enhancement: gated on mount + Save-Data,
   static (`speed 0`), masked, plain paper always beneath.
 
 ## Deferred (intentionally)
 
-Sync layer · Whisper adapter · weekly digest · push nudges · vaul drawer
+Sync layer · weekly digest · push nudges · vaul drawer
 editor on touch · opt-in UI sound (paper-thud at 440→220Hz, gain ≤0.08,
 default off) · view transitions (no list→detail route pair yet).

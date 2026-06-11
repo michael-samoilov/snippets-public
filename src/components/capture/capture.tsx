@@ -52,8 +52,12 @@ export function Capture() {
   });
 
   const listening = speech.status === "listening";
-  const transcriptVisible =
-    listening || speech.segments.length > 0 || speech.interim.length > 0;
+  const transcribing = speech.status === "transcribing";
+  // the web engine streams words live; aqua records, then sets them
+  const liveWords =
+    speech.engine === "web" &&
+    (listening || speech.segments.length > 0 || speech.interim.length > 0);
+  const recordingQuietly = speech.engine === "aqua" && listening;
 
   // voice must never fail silently — every failure says what happened
   useEffect(() => {
@@ -78,6 +82,16 @@ export function Capture() {
         description: isIOSStandalone()
           ? "iOS doesn’t allow voice inside installed web apps yet. Open Snippets in Safari itself for voice — writing works everywhere."
           : "This browser is refusing speech recognition. Chrome, Safari, or Edge offer it — writing works everywhere.",
+      },
+      transcribe: {
+        title: "Aqua couldn’t set the words.",
+        description:
+          "The recording was made but transcription failed. Try the seal again, or write it.",
+      },
+      "too-long": {
+        title: "That take ran long.",
+        description:
+          "Recordings stop at five minutes — what was said is being set now. Split longer thoughts and keep both halves.",
       },
       unknown: {
         title: "Voice capture hit a snag.",
@@ -105,7 +119,7 @@ export function Capture() {
 
   const keep = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || listening) return;
+    if (!trimmed || listening || transcribing) return;
     setText("");
     const el = textareaRef.current;
     if (el) {
@@ -125,14 +139,14 @@ export function Capture() {
     });
     setVoiceUsed(false);
     void enrichSnippet(snippet);
-  }, [text, listening, voiceUsed]);
+  }, [text, listening, transcribing, voiceUsed]);
 
   const hasText = text.trim().length > 0;
 
   return (
     <section aria-label="Capture a snippet">
       {/* the writing surface */}
-      {transcriptVisible ? (
+      {liveWords ? (
         <div
           aria-live="polite"
           className="voice-prose min-h-[5.75rem] whitespace-pre-wrap pt-1 text-[1.125rem]"
@@ -151,6 +165,23 @@ export function Capture() {
             !speech.interim && (
               <span className="italic text-ink-faint">Listening…</span>
             )}
+        </div>
+      ) : recordingQuietly || transcribing ? (
+        <div
+          aria-live="polite"
+          className="voice-prose flex min-h-[5.75rem] items-center gap-4 pt-1 text-[1.125rem]"
+        >
+          {text && (
+            <span className="whitespace-pre-wrap">{joinText(text, "")}</span>
+          )}
+          {recordingQuietly ? (
+            <>
+              <InkBars getLevel={speech.getLevel} />
+              <span className="caret-blink" aria-hidden="true" />
+            </>
+          ) : (
+            <span className="italic text-ink-faint">Setting your words…</span>
+          )}
         </div>
       ) : (
         <textarea
@@ -175,7 +206,13 @@ export function Capture() {
 
       {/* controls */}
       <div className="mt-4 flex items-center gap-4 border-t border-rule-faint pt-4">
-        {speech.supported && <Seal listening={listening} onToggle={toggleListening} />}
+        {speech.supported && (
+          <Seal
+            listening={listening}
+            busy={transcribing}
+            onToggle={toggleListening}
+          />
+        )}
 
         <div className="relative flex-1 self-center">
           <AnimatePresence mode="wait" initial={false}>
@@ -183,9 +220,11 @@ export function Capture() {
               key={
                 listening
                   ? "listening"
-                  : stampVisible
-                    ? `stamp-${stampCount}`
-                    : "hint"
+                  : transcribing
+                    ? "transcribing"
+                    : stampVisible
+                      ? `stamp-${stampCount}`
+                      : "hint"
               }
               initial={{ opacity: 0, filter: "blur(2px)" }}
               animate={{ opacity: 1, filter: "blur(0px)" }}
@@ -197,6 +236,8 @@ export function Capture() {
                 <span className="not-italic text-wax">
                   Listening — tap the seal to stop
                 </span>
+              ) : transcribing ? (
+                <span className="text-ink-soft">a moment…</span>
               ) : stampVisible ? (
                 <span
                   className="stamp-in inline-flex items-center gap-1.5 not-italic text-wax"
@@ -204,7 +245,7 @@ export function Capture() {
                 >
                   <StampMark /> Kept.
                 </span>
-              ) : speech.supported ? (
+              ) : !speech.resolved || speech.supported ? (
                 "speak it or write it"
               ) : (
                 "this browser doesn’t offer voice capture — Chrome, Safari, or Edge do; writing works everywhere"
@@ -216,7 +257,7 @@ export function Capture() {
         <button
           type="button"
           onClick={() => void keep()}
-          disabled={!hasText || listening}
+          disabled={!hasText || listening || transcribing}
           className={cn(
             "rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper",
             "bg-[linear-gradient(to_bottom,rgb(255_255_255/0.1),transparent_60%)] bg-ink",
@@ -224,13 +265,63 @@ export function Capture() {
             "transition-[opacity,transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
             "active:translate-y-px active:scale-[0.98] active:shadow-[inset_0_1px_2px_rgb(0_0_0/0.25)]",
             "disabled:pointer-events-none",
-            hasText && !listening ? "opacity-100" : "opacity-0",
+            hasText && !listening && !transcribing ? "opacity-100" : "opacity-0",
           )}
         >
           Keep
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * Ink before words: a small live waveform in wax while Aqua records.
+ * Heights are driven straight from the analyser each frame — React
+ * stays out of the render loop. Fast attack, slow decay, like breath.
+ */
+function InkBars({ getLevel }: { getLevel: () => number }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const bars = Array.from(el.children) as HTMLElement[];
+    const phases = bars.map((_, i) => i * 0.9);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    let smoothed = 0;
+    let raf = 0;
+    const tick = (t: number) => {
+      const target = getLevel();
+      smoothed += (target - smoothed) * (target > smoothed ? 0.5 : 0.12);
+      bars.forEach((bar, i) => {
+        const wobble = reduceMotion
+          ? 1
+          : 0.62 + 0.38 * Math.sin(t / 170 + phases[i]);
+        bar.style.height = `${4 + smoothed * 26 * wobble}px`;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [getLevel]);
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden="true"
+      className="flex h-8 items-center gap-[3px]"
+    >
+      {Array.from({ length: 7 }).map((_, i) => (
+        <span
+          key={i}
+          className="w-[3px] rounded-full bg-wax"
+          style={{ height: 4 }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -259,9 +350,11 @@ function Segment({ segment }: { segment: SpeechSegment }) {
  */
 function Seal({
   listening,
+  busy = false,
   onToggle,
 }: {
   listening: boolean;
+  busy?: boolean;
   onToggle: () => void;
 }) {
   return (
@@ -281,8 +374,16 @@ function Seal({
       <button
         type="button"
         onClick={onToggle}
+        disabled={busy}
         aria-pressed={listening}
-        aria-label={listening ? "Stop listening" : "Speak a snippet"}
+        aria-busy={busy}
+        aria-label={
+          busy
+            ? "Setting your words"
+            : listening
+              ? "Stop listening"
+              : "Speak a snippet"
+        }
         className={cn(
           "relative grid size-16 shrink-0 place-items-center rounded-full text-paper-raised sm:size-14",
           "bg-[radial-gradient(circle_at_32%_28%,var(--wax-bright)_0%,var(--wax)_48%,var(--wax-deep)_100%)]",
@@ -290,6 +391,7 @@ function Seal({
           "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
           "active:scale-[0.93] active:shadow-[inset_0_2px_5px_rgb(0_0_0/0.4),0_1px_2px_rgb(var(--shadow-hue)/0.25)]",
           listening && "seal-breathe",
+          busy && "animate-pulse opacity-80",
         )}
       >
         {/* the grooved rim of the seal */}

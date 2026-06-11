@@ -29,10 +29,16 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (`deletedAt`) with 30-day purge; `favorite` is `0|1` because IndexedDB
   can't index booleans. Live UI via `dexie-react-hooks` in
   `src/hooks/use-snippets.ts`.
-- **Speech:** `src/hooks/use-speech.ts` wraps Web Speech API —
-  tap-to-toggle, auto-restarts dropped mobile sessions, flushes
-  lingering interim text on stop. The capture flow folds finalized
-  segments into the textarea (`src/components/capture/capture.tsx`).
+- **Speech:** `src/hooks/use-speech.ts` is one hook with two engines.
+  Primary: Aqua Voice's Avalon via `src/app/api/transcribe/route.ts`
+  (Whisper-compatible proxy; `AQUA_API_KEY`, optional `AQUA_BASE_URL`/
+  `AQUA_MODEL`) — MediaRecorder → upload on stop → text settles ~450ms
+  later; works in every browser incl. Firefox/Brave/installed iOS PWA.
+  Fallback: Web Speech API streaming live words (tap-to-toggle,
+  auto-restarts dropped mobile sessions, iOS runs non-continuous,
+  circuit breaker against dead services). Engine chosen by probing
+  `GET /api/transcribe`. Every failure surfaces a typed reason
+  (`SpeechFailure`) that capture.tsx turns into specific copy.
 - **Enrichment:** `src/app/api/enrich/route.ts` (Claude Haiku via
   `@anthropic-ai/sdk`, structured output with `zodOutputFormat`,
   model overridable via `ENRICH_MODEL`). Client orchestration +
