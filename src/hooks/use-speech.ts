@@ -32,6 +32,7 @@ interface SpeechRecognitionLike {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives: number;
   start(): void;
   stop(): void;
   abort(): void;
@@ -50,7 +51,33 @@ function getRecognizer(): SRConstructor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    // iPadOS reports as MacIntel with touch
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** Installed to the home screen on iOS — a context where the speech
+ *  service is often blocked even though the API object exists. */
+export function isIOSStandalone(): boolean {
+  return (
+    isIOS() &&
+    (navigator as { standalone?: boolean }).standalone === true
+  );
+}
+
 export type SpeechStatus = "idle" | "listening" | "denied" | "error";
+
+/** Why listening failed — so the UI can say something useful. */
+export type SpeechFailure =
+  | "denied" // mic permission refused
+  | "no-mic" // no audio capture device
+  | "network" // engine's speech service unreachable
+  | "service" // engine refused service (e.g. iOS installed-app context)
+  | "unknown";
 
 export interface SpeechSegment {
   id: number;
@@ -60,6 +87,7 @@ export interface SpeechSegment {
 export interface UseSpeech {
   supported: boolean;
   status: SpeechStatus;
+  failure: SpeechFailure | null;
   /** finalized phrases, in order — ink that has dried */
   segments: SpeechSegment[];
   /** the phrase still forming — ink that hasn't */
@@ -76,6 +104,8 @@ const noopSubscribe = () => () => {};
  * writer still wants to talk, we quietly start a new session and stitch
  * the segments together. When the session fully settles after stop(),
  * the complete transcript is delivered once via `onSettled`.
+ *
+ * Every failure surfaces with a reason — voice must never die silently.
  */
 export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const supported = useSyncExternalStore(
@@ -84,6 +114,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     () => false,
   );
   const [status, setStatus] = useState<SpeechStatus>("idle");
+  const [failure, setFailure] = useState<SpeechFailure | null>(null);
   const [segments, setSegments] = useState<SpeechSegment[]>([]);
   const [interim, setInterim] = useState("");
 
@@ -92,6 +123,9 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const interimRef = useRef("");
   const segmentsRef = useRef<string[]>([]);
   const nextIdRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const rapidEndsRef = useRef(0);
+  const gotResultRef = useRef(false);
   const onSettledRef = useRef(onSettled);
   useEffect(() => {
     onSettledRef.current = onSettled;
@@ -111,16 +145,40 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     setSegments((prev) => [...prev, { id: nextIdRef.current++, text: trimmed }]);
   }, []);
 
+  const fail = useCallback((kind: SpeechFailure) => {
+    wantedRef.current = false;
+    setFailure(kind);
+    setStatus(kind === "denied" ? "denied" : "error");
+  }, []);
+
+  const settle = useCallback(() => {
+    setStatus((s) => (s === "listening" ? "idle" : s));
+    const spoken = segmentsRef.current.join(" ").trim();
+    if (spoken) {
+      // hand the transcript over and clear the slate
+      segmentsRef.current = [];
+      nextIdRef.current = 0;
+      setSegments([]);
+      setInterim("");
+      onSettledRef.current?.(spoken);
+    }
+  }, []);
+
   const spinUp = useCallback(() => {
     const Recognizer = getRecognizer();
     if (!Recognizer) return;
 
     const rec = new Recognizer();
     rec.lang = navigator.language || "en-US";
-    rec.continuous = true;
+    // iOS WebKit is unreliable in continuous mode; short sessions
+    // stitched by the restart loop behave far better there.
+    rec.continuous = !isIOS();
     rec.interimResults = true;
+    rec.maxAlternatives = 1;
 
     rec.onresult = (e) => {
+      gotResultRef.current = true;
+      rapidEndsRef.current = 0;
       let interimText = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const result = e.results[i];
@@ -136,9 +194,25 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     };
 
     rec.onerror = (e) => {
-      if (e.error === "no-speech" || e.error === "aborted") return;
-      wantedRef.current = false;
-      setStatus(e.error === "not-allowed" ? "denied" : "error");
+      switch (e.error) {
+        case "no-speech":
+        case "aborted":
+          return; // benign; onend handles the rest
+        case "not-allowed":
+          fail("denied");
+          return;
+        case "service-not-allowed":
+          fail("service");
+          return;
+        case "audio-capture":
+          fail("no-mic");
+          return;
+        case "network":
+          fail("network");
+          return;
+        default:
+          fail("unknown");
+      }
     };
 
     rec.onend = () => {
@@ -148,51 +222,64 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         interimRef.current = "";
         setInterim("");
       }
-      if (wantedRef.current) {
-        // the writer is still talking — stitch a new session on
-        try {
-          rec.start();
-        } catch {
-          setStatus("idle");
+      if (!wantedRef.current) {
+        settle();
+        return;
+      }
+      // Circuit breaker: sessions that die instantly without ever
+      // producing a result mean the service is refusing us (common in
+      // iOS installed-app contexts). Don't spin forever — say so.
+      const lifetime = Date.now() - startedAtRef.current;
+      if (lifetime < 500 && !gotResultRef.current) {
+        rapidEndsRef.current += 1;
+        if (rapidEndsRef.current >= 2) {
+          fail("service");
+          settle();
+          return;
         }
-      } else {
-        setStatus((s) => (s === "listening" ? "idle" : s));
-        const spoken = segmentsRef.current.join(" ").trim();
-        if (spoken) {
-          // hand the transcript over and clear the slate
-          segmentsRef.current = [];
-          nextIdRef.current = 0;
-          setSegments([]);
-          setInterim("");
-          onSettledRef.current?.(spoken);
-        }
+      }
+      // the writer is still talking — stitch a new session on
+      try {
+        startedAtRef.current = Date.now();
+        rec.start();
+      } catch {
+        fail("unknown");
+        settle();
       }
     };
 
     recRef.current = rec;
+    startedAtRef.current = Date.now();
     rec.start();
-  }, [pushSegment]);
+  }, [pushSegment, fail, settle]);
 
   const start = useCallback(() => {
     if (wantedRef.current) return;
     wantedRef.current = true;
+    rapidEndsRef.current = 0;
+    gotResultRef.current = false;
+    setFailure(null);
     setStatus("listening");
     navigator.vibrate?.(40);
     try {
       spinUp();
     } catch {
-      setStatus("error");
-      wantedRef.current = false;
+      fail("unknown");
     }
-  }, [spinUp]);
+  }, [spinUp, fail]);
 
   const stop = useCallback(() => {
     if (!wantedRef.current) return;
     wantedRef.current = false;
     navigator.vibrate?.([25, 40, 25]);
-    recRef.current?.stop();
     setStatus("idle");
-  }, []);
+    try {
+      recRef.current?.stop();
+    } catch {
+      // session already gone — settle with whatever we have
+      settle();
+    }
+  }, [settle]);
 
   const reset = useCallback(() => {
     setSegments([]);
@@ -202,5 +289,5 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     nextIdRef.current = 0;
   }, []);
 
-  return { supported, status, segments, interim, start, stop, reset };
+  return { supported, status, failure, segments, interim, start, stop, reset };
 }

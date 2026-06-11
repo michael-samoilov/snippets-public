@@ -1,9 +1,24 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { Component, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+
+/** The texture is grace, not load-bearing: if WebGL misbehaves on some
+ *  device, the plain paper beneath simply shows through. */
+class TextureBoundary extends Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 const PaperTexture = dynamic(
   () => import("@paper-design/shaders-react").then((m) => m.PaperTexture),
@@ -46,6 +61,7 @@ export function Sheet({
   return (
     <div className={cn("sheet", className)}>
       {isMounted && !saveData() && (
+        <TextureBoundary>
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden rounded-[inherit]"
@@ -77,6 +93,7 @@ export function Sheet({
             style={{ width: "100%", height: "100%", opacity: dark ? 0.5 : 0.65 }}
           />
         </div>
+        </TextureBoundary>
       )}
       <div className="relative">{children}</div>
     </div>

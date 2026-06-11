@@ -6,7 +6,12 @@ import { toast } from "sonner";
 import { addSnippet } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { promptForDate } from "@/lib/kinds";
-import { useSpeech, type SpeechSegment } from "@/hooks/use-speech";
+import {
+  isIOSStandalone,
+  useSpeech,
+  type SpeechFailure,
+  type SpeechSegment,
+} from "@/hooks/use-speech";
 import { cn } from "@/lib/utils";
 
 function joinText(a: string, b: string): string {
@@ -50,14 +55,38 @@ export function Capture() {
   const transcriptVisible =
     listening || speech.segments.length > 0 || speech.interim.length > 0;
 
+  // voice must never fail silently — every failure says what happened
   useEffect(() => {
-    if (speech.status === "denied") {
-      toast("The microphone was declined.", {
+    if (!speech.failure) return;
+    const messages: Record<SpeechFailure, { title: string; description: string }> = {
+      denied: {
+        title: "The microphone was declined.",
         description:
           "Re-allow it in your browser’s site settings to speak your snippets.",
-      });
-    }
-  }, [speech.status]);
+      },
+      "no-mic": {
+        title: "No microphone found.",
+        description: "Plug one in or check your input settings — writing works meanwhile.",
+      },
+      network: {
+        title: "The speech service couldn’t be reached.",
+        description:
+          "This browser transcribes over the network. Check the connection, or write it instead.",
+      },
+      service: {
+        title: "Voice isn’t available here.",
+        description: isIOSStandalone()
+          ? "iOS doesn’t allow voice inside installed web apps yet. Open Snippets in Safari itself for voice — writing works everywhere."
+          : "This browser is refusing speech recognition. Chrome, Safari, or Edge offer it — writing works everywhere.",
+      },
+      unknown: {
+        title: "Voice capture hit a snag.",
+        description: "Try the seal again, or write it — nothing was lost.",
+      },
+    };
+    const m = messages[speech.failure];
+    toast(m.title, { description: m.description });
+  }, [speech.failure]);
 
   useEffect(() => {
     return () => {
@@ -178,7 +207,7 @@ export function Capture() {
               ) : speech.supported ? (
                 "speak it or write it"
               ) : (
-                "voice needs Chrome, Safari, or Edge — writing works everywhere"
+                "this browser doesn’t offer voice capture — Chrome, Safari, or Edge do; writing works everywhere"
               )}
             </motion.p>
           </AnimatePresence>
