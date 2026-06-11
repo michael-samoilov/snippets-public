@@ -84,6 +84,59 @@ Three layers, in implementation order:
   mini-months are cheap (dots from `useDayCounts`).
 - "Today" affordance returns view + selection to now from anywhere.
 
+## 5. The seal becomes the completion affordance
+
+> "Wax seal should show microphone by default, but if the user starts
+> typing or talking it should shift to some kind of 'completion'
+> interaction instead of remaining a microphone icon."
+
+The conceptually perfect move: a wax seal's real-world job is to
+*complete* a letter. States: empty page → mic (speak). Once text
+exists (typed, or settled from voice) → the seal morphs into the
+sealing/keep affordance and **pressing it keeps the entry** — likely
+absorbing the separate ink "Keep" button entirely. While listening it
+stays the stop square as today. The glyph crossfade-through-blur
+machinery already handles two states; extend to three (mic / stop /
+seal-emblem — the six-ray brand asterisk from `StampMark`, which is the
+app's mark, not one of the retiring kind glyphs). Consider a subtle
+material shift when armed (a touch deeper wax, or a gilt glint).
+
+**Open fork to resolve in the working session:** with text present the
+mic is no longer one tap away — how does a writer *append by voice*?
+Candidates: (a) long-press the seal to talk (hold-to-speak pairs well
+with press-to-seal), (b) a small satellite mic that slides out beside
+the armed seal, (c) voice only from the empty state. Prototype (a)
+first. `⌘↵` keeps working regardless; `aria-label` must track the
+state.
+
+## 6. The stamping moment — make keeping an entry juicy
+
+> "Make the wax seal animation more delightful and juicy upon
+> completing an entry. We may need a dedicated working session to get
+> this right, may need some custom work."
+
+Builds on #5: if pressing the seal keeps the entry, the completion
+animation IS a wax stamping. Material to explore in a dedicated
+session (this wants iteration against real frames, not one pass):
+
+- **The press:** deeper-than-normal depress (scale ~0.88, shadow fully
+  inset, slight squash), then release with overshoot — stamping has
+  weight that a button press doesn't.
+- **The impression:** the existing "Kept." `StampMark` should appear to
+  be *left behind by* the seal — spring out from under it (origin-aware,
+  feedback at the trigger), maybe with a one-shot ring ripple outward
+  (single, decisive — not the listening breath).
+- **The launch:** the new entry's FLIP into the list could originate
+  from the seal's position rather than generic above-fade — one
+  continuous cause→effect line from press to page.
+- **Glint, maybe:** a brief specular sweep across the wax face on
+  release (CSS gradient translate, 250ms). Resist confetti and
+  particles — the constitution holds.
+- Haptic: `[12, 30, 12]`. Budget: whole choreography ≤ 600ms,
+  interruptible, reduced-motion = simple stamp fade. Custom WAAPI or
+  Motion sequencing likely; shader experiments (wax melt) are allowed
+  in the session but must justify their weight.
+
 ## Done from the same request
 
 - ~~Calendar focus-ring z-order (ring traveled under tiles when moving
