@@ -193,7 +193,17 @@ function Calendar() {
       return;
     }
 
+    const outgoing = zoom.out === "month" ? monthLayer : yearLayer;
+    const incoming = zoom.out === "month" ? yearLayer : monthLayer;
+    // the previous finish left the departed layer inline-hidden
+    monthLayer.style.visibility = "";
+    yearLayer.style.visibility = "";
+
     const finish = () => {
+      // keep the departed layer hidden across the gap between these
+      // inline clears and the commit that restores its `invisible`
+      // class — a paint in that gap flashed the old view at full scale
+      outgoing.style.visibility = "hidden";
       monthLayer.style.transform = "";
       yearLayer.style.transform = "";
       monthLayer.style.opacity = "";
@@ -203,10 +213,12 @@ function Calendar() {
     };
 
     if (reduceMotion) {
-      const outgoing = zoom.out === "month" ? monthLayer : yearLayer;
       void animate(outgoing, { opacity: [1, 0] }, { duration: 0.12 }).then(finish);
       return;
     }
+
+    // hold the arriving layer dark until the animation's first tick owns it
+    incoming.style.opacity = "0";
 
     // where the active month's mini sits — pure geometry, no DOM query
     const o = yearFeedRef.current?.originFor(zoom.ym);
@@ -334,15 +346,19 @@ function Calendar() {
           <h2 className="voice-display text-[1.3rem]">{visibleYear}</h2>
         )}
         <div className="flex items-baseline gap-1">
-          {!atToday && (
-            <button
-              type="button"
-              onClick={goToday}
-              className="voice-label pressable mr-2 rounded-[5px] px-2 py-1 text-wax hover:bg-accent"
-            >
-              Today
-            </button>
-          )}
+          {/* always in the row — appearing must never reflow the page */}
+          <button
+            type="button"
+            onClick={goToday}
+            disabled={atToday}
+            aria-hidden={atToday}
+            className={cn(
+              "voice-label pressable mr-2 rounded-[5px] px-2 py-1 leading-none text-wax hover:bg-accent",
+              atToday && "opacity-0",
+            )}
+          >
+            Today
+          </button>
           <button
             type="button"
             aria-label={view === "month" ? "Previous month" : "Previous year"}
@@ -687,9 +703,12 @@ function MonthBlock({
         const idx = leadingBlanks + selDate.getDate() - 1;
         const row = Math.floor(idx / 7);
         const col = idx % 7;
+        // coordinates start on the grid's padding box (inside the
+        // border), so the cell origin needs no border compensation;
+        // the ring is cell−6 wide → 3px of air on every side
         return {
-          x: 1 + col * (cell + GRID_GAP) + 3,
-          y: 1 + row * (cell + GRID_GAP) + 3,
+          x: col * (cell + GRID_GAP) + 3,
+          y: row * (cell + GRID_GAP) + 3,
         };
       })()
     : null;
