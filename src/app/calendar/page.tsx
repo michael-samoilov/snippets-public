@@ -178,7 +178,10 @@ function Calendar() {
                       layoutId="day-ring"
                       aria-hidden="true"
                       transition={ringSpring}
-                      className="absolute inset-[3px] rounded-[5px] border-[1.5px] border-wax bg-wax/5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
+                      // z-10 so the ring glides OVER neighboring tiles in
+                      // both directions — cells later in DOM order would
+                      // otherwise paint above a ring flying backwards
+                      className="absolute inset-[3px] z-10 rounded-[5px] border-[1.5px] border-wax bg-wax/5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
                     />
                   )}
                   <span

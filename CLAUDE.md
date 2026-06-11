@@ -7,6 +7,8 @@ voice/typed capture, quiet Claude-powered filing, calendar review.
 **Before touching any UI, styling, copy, or animation, use the
 `snippets-craft` skill** (`.claude/skills/snippets-craft/`) — it is the
 design constitution. `DESIGN.md` has the full rationale and tokens.
+`BACKLOG.md` holds owner-accepted future work with design notes —
+check it before proposing scope; items there are decided.
 
 ## Commands
 
