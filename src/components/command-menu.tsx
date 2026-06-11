@@ -12,7 +12,6 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { KindMark } from "@/components/kind-mark";
 import { useAllSnippets, useSearch } from "@/hooks/use-snippets";
 import { exportJSON, exportMarkdown } from "@/lib/export";
 
@@ -76,7 +75,6 @@ export function CommandMenu() {
                   }
                   className="font-serif"
                 >
-                  <KindMark kind={s.kind} className="size-3.5 shrink-0" />
                   <span className="truncate">{s.title ?? s.text}</span>
                 </CommandItem>
               ))}

@@ -17,7 +17,7 @@ export default function TodayPage() {
     <div className="page-settle">
       <header className="mb-7 sm:mb-8">
         <p className="voice-label text-ink-faint">{format(now, "EEEE")}</p>
-        <h1 className="voice-display mt-0.5 text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
+        <h1 className="voice-display ink-bleed mt-0.5 text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
           {format(now, "MMMM d")}
         </h1>
         {stats && stats.total > 0 && (

@@ -6,6 +6,25 @@ import { CommandMenu } from "@/components/command-menu";
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[46rem] flex-col px-3 sm:px-8">
+      {/* ink-bleed: a hair of edge wobble for masthead type */}
+      <svg aria-hidden="true" width="0" height="0" className="absolute">
+        <filter id="ink-bleed" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.22"
+            numOctaves="2"
+            seed="3"
+            result="n"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="n"
+            scale="1.6"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          />
+        </filter>
+      </svg>
       {/* desk chrome */}
       <header className="flex items-baseline justify-between px-2 pb-4 pt-5 sm:px-1 sm:pt-7">
         <Link

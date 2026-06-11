@@ -46,7 +46,7 @@ export default function SettingsPage() {
   return (
     <div className="page-settle">
       <header className="mb-8">
-        <h1 className="voice-display text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
+        <h1 className="voice-display ink-bleed text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
           Settings
         </h1>
       </header>

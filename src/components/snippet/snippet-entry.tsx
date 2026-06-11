@@ -9,7 +9,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { KindMark } from "@/components/kind-mark";
 import { KindChips } from "@/components/snippet/kind-chips";
 import { SnippetEditor } from "@/components/snippet/snippet-editor";
 import {
@@ -61,11 +60,6 @@ export function SnippetEntry({
       className="group entry-rise relative py-4 first:pt-3"
       style={{ "--stagger": Math.min(stagger, 8) } as React.CSSProperties}
     >
-      {/* the mark hangs in the margin, left of the rule */}
-      <span className="absolute -left-10 top-[1.45rem] hidden opacity-80 transition-opacity duration-150 group-hover:opacity-100 sm:block">
-        <KindMark kind={snippet.kind} />
-      </span>
-
       {snippet.title && (
         <h3 className="mb-0.5 font-serif text-[1.04rem] font-[560] leading-snug">
           {snippet.title}
@@ -86,9 +80,6 @@ export function SnippetEntry({
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="sm:hidden">
-          <KindMark kind={snippet.kind} className="size-3.5" />
-        </span>
         {showTime && (
           <span className="voice-data">{clockTime(snippet.capturedAt)}</span>
         )}

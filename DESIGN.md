@@ -138,13 +138,24 @@ Numbers that change on action animate with `<NumberFlow>`.
 ## Structure
 
 One centered column (`max-w-[46rem]` desk, sheet inside). No cards, no
-boxes: entries are typeset with hairline dividers, the `.entry-list`
-margin rule, and hand-drawn printers' marks (¶ ‽ ❞ ✳ ~ ◉ in
-`kind-mark.tsx`) hanging in the margin. Navigation is words — small-caps
-serif with a gliding ink underline (desktop) and a floating dock pill
-(mobile). The calendar is a recessed ruled grid (gap hairlines + inset
-shadow) with a wax ring that **glides** between selected days; URL
-carries view state (`?d=`, `?q=`, `?kind=`, `?fav=`).
+boxes, **no iconography for kinds**: entries are typeset with hairline
+dividers and the `.entry-list` margin rule (an empty margin, like a
+legal pad's); kinds appear only as small-caps colored labels, chips are
+text-only stamps. The app's sole marks are the wordmark's wax dot and
+the "Kept." StampMark. Navigation is words — small-caps serif with a
+gliding ink underline (desktop) and a floating dock pill (mobile).
+
+The calendar is two views: a recessed ruled month grid (gap hairlines +
+inset shadow, wax ring **gliding** between selected days on z-10) and a
+**year at a glance** (3×4 mini-month dot constellations) — the tapped
+month and the full grid share a `layoutId` so one morphs into the other
+(spring 320/32). Wheel and vertical swipe travel through months/years
+(native non-passive wheel listener — React's synthetic can't
+preventDefault; 90px accumulation, 350ms lockout; PageUp/Down too);
+chevrons remain for discoverability; a wax "Today" affordance appears
+whenever the view has wandered. Past days grow a quiet backfill line in
+the day view ("Add something you remember from this day…", stamped at
+noon local). URL carries view state (`?d=`, `?q=`, `?kind=`, `?fav=`).
 
 ## Copy voice
 
@@ -158,6 +169,12 @@ never red.
 - Local-first Dexie; soft delete + undo; day keys in local time.
 - Enrichment is best-effort decoration; `enriched: "manual"` wins; the
   app must remain whole with zero AI and zero network.
+- **Ink on paper:** `.voice-prose`/`.voice-display` use
+  `mix-blend-mode: multiply` in Paper mode so the sheet's fibers show
+  through the strokes (Lamplight stays unblended — luminous ink), plus
+  a hair of `currentColor` text-shadow feathering the edges; the four
+  mastheads get `.ink-bleed` (SVG `feDisplacementMap`, scale 1.6 —
+  display sizes only, it's paint-expensive).
 - Speech: two engines behind one hook. Aqua/Avalon (primary, when
   keyed): record with the live wax waveform (`InkBars`), words set
   ~450ms after stop; works in every browser. Web Speech (fallback):

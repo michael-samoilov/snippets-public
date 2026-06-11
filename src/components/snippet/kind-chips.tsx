@@ -3,7 +3,6 @@
 import { motion } from "motion/react";
 import { KIND_META } from "@/lib/kinds";
 import { KINDS, type SnippetKind } from "@/lib/types";
-import { KindMark } from "@/components/kind-mark";
 
 /**
  * One tap to file an entry by hand. The chips behave like small stamps:
@@ -37,7 +36,7 @@ export function KindChips({
             whileTap={{ scale: 0.93 }}
             animate={active ? { scale: [1, 1.07, 1] } : { scale: 1 }}
             transition={{ type: "spring", duration: 0.35, bounce: 0.4 }}
-            className="voice-label flex items-center gap-1.5 rounded-[5px] border px-2 py-[3px] text-[0.78rem] tracking-[0.09em] transition-colors duration-150"
+            className="voice-label rounded-[5px] border px-2 py-[3px] text-[0.78rem] tracking-[0.09em] transition-colors duration-150"
             style={
               active
                 ? {
@@ -49,7 +48,6 @@ export function KindChips({
                 : { borderColor: "var(--rule)", color: "var(--ink-soft)" }
             }
           >
-            <KindMark kind={kind} className="size-3" colored={active} />
             {KIND_META[kind].label}
           </motion.button>
         );

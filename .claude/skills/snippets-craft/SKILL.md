@@ -43,10 +43,14 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    results; counters animate with `<NumberFlow>`; destructive actions
    are hold-to-confirm (wax `clip-path` fill, 1.4s linear hold / 200ms
    release). Haptic taps (`navigator.vibrate` 6–10ms) on keep/file/select.
-6. **No cards, no icon identity.** Entries are typeset lists with the
-   `.entry-list` margin rule; kinds use the printers' marks in
-   `kind-mark.tsx`. Wax is semantic (recording, rule, destructive);
-   gilt = favorites only.
+6. **No cards, no iconography.** Entries are typeset lists with the
+   `.entry-list` margin rule; kinds are small-caps colored labels ONLY
+   (the printers' marks were retired by the owner — don't reintroduce
+   glyphs/icons for kinds). The only marks are the wordmark's wax dot
+   and the StampMark. Wax is semantic (recording, rule, destructive);
+   gilt = favorites only. Text on the sheet is real ink:
+   `.voice-prose`/`.voice-display` multiply into the paper in Paper
+   mode; `.ink-bleed` is for mastheads only.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,
    `…`. No exclamation marks, emoji, or sparkle-AI framing. Streaks
    past-tense; gaps blank, never red.

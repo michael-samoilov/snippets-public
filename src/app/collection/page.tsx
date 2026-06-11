@@ -4,7 +4,6 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
-import { KindMark } from "@/components/kind-mark";
 import { groupByDay, useAllSnippets, useSearch } from "@/hooks/use-snippets";
 import { friendlyDay } from "@/lib/dates";
 import { KIND_META } from "@/lib/kinds";
@@ -75,7 +74,7 @@ function Collection() {
   return (
     <div className="page-settle">
       <header className="mb-6">
-        <h1 className="voice-display text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
+        <h1 className="voice-display ink-bleed text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
           Collection
         </h1>
         {all && (
@@ -119,7 +118,7 @@ function Collection() {
               }}
               whileTap={{ scale: 0.93 }}
               transition={{ type: "spring", duration: 0.3, bounce: 0.3 }}
-              className="voice-label flex items-center gap-1.5 rounded-[5px] border px-2 py-[3px] text-[0.78rem] tracking-[0.09em] transition-colors duration-150"
+              className="voice-label rounded-[5px] border px-2 py-[3px] text-[0.78rem] tracking-[0.09em] transition-colors duration-150"
               style={
                 active
                   ? {
@@ -130,7 +129,6 @@ function Collection() {
                   : { borderColor: "var(--rule-faint)", color: "var(--ink-faint)" }
               }
             >
-              <KindMark kind={kind} className="size-3" colored={active} />
               {KIND_META[kind].plural}
             </motion.button>
           );
@@ -152,7 +150,7 @@ function Collection() {
               : "border-rule-faint text-ink-faint",
           )}
         >
-          ✳ Favorites
+          Favorites
         </motion.button>
       </div>
 
