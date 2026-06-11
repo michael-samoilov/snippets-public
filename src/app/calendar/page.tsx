@@ -363,6 +363,21 @@ function Calendar() {
       };
       const fromEls = collect(outgoing);
       const toEls = collect(incoming);
+      // pulling back, only the day the reader stood on travels — the
+      // other visible dates belong to the page being closed
+      if (zoom.from === "schedule") {
+        for (const day of [...fromEls.keys()])
+          if (day !== zoom.anchor) fromEls.delete(day);
+      }
+      // the digits' painted box, not the element's line box — block
+      // boxes carry leading the glyphs don't, and the difference reads
+      // as the number landing low, then skipping into place
+      const textRect = (el: HTMLElement) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const r = range.getBoundingClientRect();
+        return r.width > 0 ? r : el.getBoundingClientRect();
+      };
       flyerBox = document.createElement("div");
       flyerBox.style.cssText =
         "position:absolute;inset:0;pointer-events:none;z-index:30;";
@@ -370,16 +385,18 @@ function Calendar() {
       for (const [day, fromEl] of fromEls) {
         const toEl = toEls.get(day);
         if (!toEl) continue;
-        const a = fromEl.getBoundingClientRect();
-        const b = toEl.getBoundingClientRect();
+        const a = textRect(fromEl);
+        const b = textRect(toEl);
         const point = document.createElement("span");
         const glyph = document.createElement("span");
         glyph.textContent = String(Number(day.slice(8)));
         glyph.className = "voice-display";
-        glyph.style.cssText = `display:inline-block;transform:translate(-50%,-50%);line-height:1;color:${
+        // absolute inside a zero-size point: no inline baseline seating
+        // to drag the digits below the animated track
+        glyph.style.cssText = `position:absolute;left:0;top:0;transform:translate(-50%,-50%);line-height:1;color:${
           day === dayKey() ? "var(--wax)" : "var(--ink)"
         };`;
-        point.style.cssText = "position:absolute;left:0;top:0;";
+        point.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;";
         point.appendChild(glyph);
         flyerBox.appendChild(point);
         fromEl.style.visibility = "hidden";
@@ -612,24 +629,36 @@ function Calendar() {
         </div>
       </div>
 
-      {/* weekday rail stays pinned above the feed */}
+      {/* the weekday rail exists only at the month altitude; elsewhere
+          it folds shut so content sits flush under the title, and its
+          hairline — the line where the scroll area terminates — rides
+          along to sit beneath the month header */}
       <div
-        role="row"
         className={cn(
-          "mt-3 grid grid-cols-7 border-b border-rule-faint transition-opacity duration-150",
-          view === "month" ? "opacity-100" : "opacity-0",
+          "mt-3 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          view === "month" ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
-        aria-hidden={view !== "month"}
       >
-        {WEEKDAYS.map((d, i) => (
-          <span
-            key={`${d}${i}`}
-            role="columnheader"
-            className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
+        <div className="overflow-hidden">
+          <div
+            role="row"
+            className={cn(
+              "grid grid-cols-7 transition-opacity duration-150",
+              view === "month" ? "opacity-100" : "opacity-0",
+            )}
+            aria-hidden={view !== "month"}
           >
-            {d}
-          </span>
-        ))}
+            {WEEKDAYS.map((d, i) => (
+              <span
+                key={`${d}${i}`}
+                role="columnheader"
+                className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* the stage: all three altitudes live here; the camera moves
@@ -1503,12 +1532,17 @@ function ScheduleFeed({
       rafRef.current = 0;
       const el = scrollerRef.current;
       if (!el) return;
-      const top = el.scrollTop + 8;
+      const top = el.scrollTop;
+      // the reader's day is the topmost whose margin date is still
+      // fully stacked — a row whose tail merely peeks under the rail
+      // has already handed over (its date has slid off the pin)
       let cur: string | null = null;
-      let curTop = -Infinity;
+      let curTop = Infinity;
       for (const [day, row] of rowRefs.current) {
+        const headH =
+          (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? 48;
         const t = row.offsetTop;
-        if (t <= top && t > curTop) {
+        if (t + row.offsetHeight >= top + headH && t < curTop) {
           curTop = t;
           cur = day;
         }

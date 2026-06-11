@@ -159,9 +159,14 @@ anchors on the tapped day's cell at a capped 2.4× (the literal ~7× is
 violent); book⇄entry anchors on the pressed tile at 1.45×. During
 month⇄book, any **date number standing in both altitudes flies** as a
 shared element from its grid cell to its ledger slot (originals hidden
-while their double is in the air, font-size morphing en route). The
-stage grows below the month; the title row always climbs one altitude
-and follows whichever feed scrolls beneath it.
+while their double is in the air, font-size morphing en route; flight
+endpoints are Range text-rects, not line boxes — leading reads as a
+landing skip). Pulling back, only the day being read flies. The stage
+grows below the month; the title row always climbs one altitude and
+follows whichever feed scrolls beneath it. The weekday rail exists
+only at the month altitude — elsewhere it folds shut (animated
+`0fr`/`1fr` grid row) so content sits flush under the title, its
+hairline riding along to mark where the scroll area terminates.
 
 Within the year and month, time is one continuous **virtualized
 feed**: ten years at precomputed offsets inside a fixed-height spacer
@@ -192,8 +197,9 @@ offers "Add something from today…" beside the wax mark, stamped at the
 real moment; the page the reader opened (`probe`) keeps its composer
 too, past days stamping at noon. The views are one instrument: tapping
 a day opens the book there; reading the book moves selection, title,
-and URL (scroll-spy), so pulling back finds the ring already on the
-day being read. The final row is wrapped in `min-h-full` so landings
+and URL — the reader's day is the **topmost whose margin date is
+still fully stacked** (a row whose tail merely peeks has handed over)
+— so pulling back finds the ring already on the day being read. The final row is wrapped in `min-h-full` so landings
 are exact and shrinking content can never dip scrollHeight and clamp
 the reader off their page. `?d=` deep-links into the book; the month
 view drops it. PageUp/Down and chevrons step months; a wax "Today"
