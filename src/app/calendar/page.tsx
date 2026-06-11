@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -15,11 +16,11 @@ import {
   format,
   getDay,
   isAfter,
-  isBefore,
   isSameDay,
+  isSameMonth,
   startOfMonth,
 } from "date-fns";
-import { AnimatePresence, motion } from "motion/react";
+import { motion, animate, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { toast } from "sonner";
 import { MotionEntryList } from "@/components/snippet/motion-entry-list";
@@ -30,12 +31,8 @@ import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
 const ringSpring = { type: "spring", stiffness: 380, damping: 30 } as const;
-const zoomSpring = { type: "spring", stiffness: 320, damping: 32 } as const;
+const ym = (d: Date) => format(d, "yyyy-MM");
 
 export default function CalendarPage() {
   return (
@@ -45,6 +42,13 @@ export default function CalendarPage() {
   );
 }
 
+/**
+ * The calendar is a camera over time. Month view and year view are two
+ * altitudes of the same world: switching views zooms the whole field —
+ * the year layer scales about the active month's own slot while the
+ * layers crossfade — and within a view, time is one continuous feed you
+ * scroll through with real momentum, the way a calendar should feel.
+ */
 function Calendar() {
   const params = useSearchParams();
   const pathname = usePathname();
@@ -54,20 +58,34 @@ function Calendar() {
   })();
 
   const [view, setView] = useState<"month" | "year">("month");
+  /** during a zoom both layers render; `out` is the departing view */
+  const [zoom, setZoom] = useState<null | { out: "month" | "year"; ym: string }>(null);
   const [selected, setSelected] = useState(initialDay);
-  const [month, setMonthState] = useState(() =>
+  /** the month the title shows — follows the feed's scroll */
+  const [visibleMonth, setVisibleMonth] = useState(() =>
     startOfMonth(dateFromDayKey(initialDay)),
   );
-  const [year, setYear] = useState(() => month.getFullYear());
-  const [direction, setDirection] = useState(0);
+  const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
+  /** set to ask a feed to scroll somewhere; cleared when honored */
+  const [monthTarget, setMonthTarget] = useState<Date | null>(null);
+  const [yearTarget, setYearTarget] = useState<number | null>(null);
+
   const counts = useDayCounts();
   const stats = useStats();
   const daySnippets = useDaySnippets(selected);
+  const reduceMotion = useReducedMotion();
 
   const today = new Date();
   const currentMonth = startOfMonth(today);
-  const monthKey = format(month, "yyyy-MM");
-  const atToday = monthKey === format(today, "yyyy-MM") && selected === dayKey();
+  const atToday =
+    view === "month" &&
+    isSameMonth(visibleMonth, today) &&
+    selected === dayKey();
+
+  const stageRef = useRef<HTMLDivElement>(null);
+  const monthLayerRef = useRef<HTMLDivElement>(null);
+  const yearLayerRef = useRef<HTMLDivElement>(null);
+  const zooming = useRef(false);
 
   const pick = useCallback(
     (key: string) => {
@@ -82,70 +100,127 @@ function Calendar() {
     [pathname],
   );
 
-  const step = useCallback(
-    (delta: number) => {
-      if (view === "month") {
-        if (delta > 0 && !isBefore(month, currentMonth)) return false;
-        setDirection(delta);
-        setMonthState((m) => addMonths(m, delta));
-      } else {
-        if (delta > 0 && year >= today.getFullYear()) return false;
-        setDirection(delta);
-        setYear((y) => y + delta);
-      }
-      return true;
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [view, month, year],
-  );
+  /* ── the zoom: one camera move between altitudes ──────────────── */
 
-  /* wheel steps months/years — native listener; React's synthetic
-     onWheel is passive and can't preventDefault */
-  const gridWrapRef = useRef<HTMLDivElement>(null);
-  const stepRef = useRef(step);
-  useEffect(() => {
-    stepRef.current = step;
-  });
-  useEffect(() => {
-    const el = gridWrapRef.current;
-    if (!el) return;
-    let acc = 0;
-    let lockedUntil = 0;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const now = Date.now();
-      if (now < lockedUntil) return;
-      acc += e.deltaY;
-      if (Math.abs(acc) > 90) {
-        const moved = stepRef.current(acc > 0 ? 1 : -1);
-        acc = 0;
-        if (moved) lockedUntil = now + 350;
-      }
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+  const runZoom = useCallback((out: "month" | "year", anchor: string) => {
+    if (zooming.current) return;
+    zooming.current = true;
+    setZoom({ out, ym: anchor });
+    setView(out === "month" ? "year" : "month");
   }, []);
 
-  const goToday = () => {
-    setDirection(0);
-    setMonthState(currentMonth);
-    setYear(today.getFullYear());
-    setSelected(dayKey());
-    setView("month");
-    window.history.replaceState(null, "", pathname);
-  };
+  useLayoutEffect(() => {
+    if (!zoom) return;
+    const stage = stageRef.current;
+    const monthLayer = monthLayerRef.current;
+    const yearLayer = yearLayerRef.current;
+    if (!stage || !monthLayer || !yearLayer) {
+      setZoom(null);
+      zooming.current = false;
+      return;
+    }
+
+    const finish = () => {
+      monthLayer.style.transform = "";
+      yearLayer.style.transform = "";
+      monthLayer.style.opacity = "";
+      yearLayer.style.opacity = "";
+      setZoom(null);
+      zooming.current = false;
+    };
+
+    if (reduceMotion) {
+      const outgoing = zoom.out === "month" ? monthLayer : yearLayer;
+      void animate(outgoing, { opacity: [1, 0] }, { duration: 0.12 }).then(finish);
+      return;
+    }
+
+    // where the active month lives inside the year layer
+    const mini = yearLayer.querySelector<HTMLElement>(`[data-ym="${zoom.ym}"]`);
+    const stageRect = stage.getBoundingClientRect();
+    const miniRect = mini?.getBoundingClientRect();
+    const factor = miniRect ? stageRect.width / miniRect.width : 3.2;
+    const origin = miniRect
+      ? `${(((miniRect.left + miniRect.right) / 2 - stageRect.left) / stageRect.width) * 100}% ${
+          (((miniRect.top + miniRect.bottom) / 2 - stageRect.top) / stageRect.height) * 100
+        }%`
+      : "50% 30%";
+    monthLayer.style.transformOrigin = origin;
+    yearLayer.style.transformOrigin = origin;
+
+    const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
+    const moves: Promise<unknown>[] = [];
+    if (zoom.out === "month") {
+      // camera pulls back: the month shrinks toward its slot,
+      // the (blown-up) year settles to rest
+      moves.push(
+        animate(
+          monthLayer,
+          { scale: [1, 1 / factor], opacity: [1, 0] },
+          { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
+        ).finished,
+        animate(
+          yearLayer,
+          { scale: [factor, 1], opacity: [0, 1] },
+          { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
+        ).finished,
+      );
+    } else {
+      // camera dives in: the year blows up past its slot,
+      // the month resolves out of it
+      moves.push(
+        animate(
+          yearLayer,
+          { scale: [1, factor], opacity: [1, 0] },
+          { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
+        ).finished,
+        animate(
+          monthLayer,
+          { scale: [1 / factor, 1], opacity: [0, 1] },
+          { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
+        ).finished,
+      );
+    }
+    void Promise.all(moves).then(finish);
+  }, [zoom, reduceMotion]);
 
   const openYear = () => {
-    setYear(month.getFullYear());
-    setDirection(0);
-    setView("year");
+    setYearTarget(visibleMonth.getFullYear());
+    setVisibleYear(visibleMonth.getFullYear());
+    runZoom("month", ym(visibleMonth));
   };
 
   const pickMonth = (m: Date) => {
-    setDirection(0);
-    setMonthState(m);
-    setView("month");
+    setMonthTarget(m);
+    setVisibleMonth(m);
+    runZoom("year", ym(m));
   };
+
+  const goToday = () => {
+    setSelected(dayKey());
+    window.history.replaceState(null, "", pathname);
+    if (view === "year" && !zoom) {
+      pickMonth(currentMonth);
+    } else {
+      setMonthTarget(currentMonth);
+      setVisibleMonth(currentMonth);
+    }
+  };
+
+  const stepFeed = (delta: number) => {
+    if (view === "month") {
+      const next = addMonths(visibleMonth, delta);
+      if (isAfter(startOfMonth(next), currentMonth)) return;
+      setMonthTarget(next);
+    } else {
+      const next = visibleYear + delta;
+      if (next > today.getFullYear()) return;
+      setYearTarget(next);
+    }
+  };
+
+  const showMonthLayer = view === "month" || zoom?.out === "month";
+  const showYearLayer = view === "year" || zoom?.out === "year";
 
   return (
     <div className="page-settle">
@@ -167,37 +242,23 @@ function Calendar() {
         )}
       </header>
 
-      {/* title row: month opens the year; the year steps by year */}
+      {/* title row: the month opens the year; the title follows the scroll */}
       <div className="flex items-baseline justify-between">
-        <AnimatePresence mode="wait" initial={false}>
-          {view === "month" ? (
-            <motion.button
-              key={`title-${monthKey}`}
-              type="button"
-              onClick={openYear}
-              aria-label={`Show ${month.getFullYear()} at a glance`}
-              initial={{ opacity: 0, x: direction * 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: direction * -16 }}
-              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-              className="voice-display pressable rounded-[5px] text-[1.3rem] hover:text-wax"
-            >
-              <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">‹</span>
-              {format(month, "MMMM yyyy")}
-            </motion.button>
-          ) : (
-            <motion.h2
-              key={`title-${year}`}
-              initial={{ opacity: 0, x: direction * 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: direction * -16 }}
-              transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-              className="voice-display text-[1.3rem]"
-            >
-              {year}
-            </motion.h2>
-          )}
-        </AnimatePresence>
+        {view === "month" ? (
+          <button
+            type="button"
+            onClick={openYear}
+            aria-label={`Show ${visibleMonth.getFullYear()} at a glance`}
+            className="voice-display pressable rounded-[5px] text-[1.3rem] hover:text-wax"
+          >
+            <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">
+              ‹
+            </span>
+            {format(visibleMonth, "MMMM yyyy")}
+          </button>
+        ) : (
+          <h2 className="voice-display text-[1.3rem]">{visibleYear}</h2>
+        )}
         <div className="flex items-baseline gap-1">
           {!atToday && (
             <button
@@ -211,7 +272,7 @@ function Calendar() {
           <button
             type="button"
             aria-label={view === "month" ? "Previous month" : "Previous year"}
-            onClick={() => step(-1)}
+            onClick={() => stepFeed(-1)}
             className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink"
           >
             ‹
@@ -219,11 +280,11 @@ function Calendar() {
           <button
             type="button"
             aria-label={view === "month" ? "Next month" : "Next year"}
-            onClick={() => step(1)}
+            onClick={() => stepFeed(1)}
             disabled={
               view === "month"
-                ? !isBefore(month, currentMonth)
-                : year >= today.getFullYear()
+                ? isSameMonth(visibleMonth, currentMonth)
+                : visibleYear >= today.getFullYear()
             }
             className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
           >
@@ -232,61 +293,88 @@ function Calendar() {
         </div>
       </div>
 
-      {/* the grid: wheel and vertical swipe travel through time */}
+      {/* weekday rail stays pinned above the feed */}
       <div
-        ref={gridWrapRef}
-        className="mt-3"
+        role="row"
+        className={cn(
+          "mt-3 grid grid-cols-7 transition-opacity duration-150",
+          view === "month" ? "opacity-100" : "opacity-0",
+        )}
+        aria-hidden={view !== "month"}
+      >
+        {WEEKDAYS.map((d, i) => (
+          <span
+            key={`${d}${i}`}
+            role="columnheader"
+            className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
+          >
+            {d}
+          </span>
+        ))}
+      </div>
+
+      {/* the stage: both altitudes live here; the camera moves between */}
+      <div
+        ref={stageRef}
+        className="relative h-[23rem] overflow-hidden sm:h-[26rem]"
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
             e.preventDefault();
-            step(-1);
+            stepFeed(-1);
           } else if (e.key === "PageDown") {
             e.preventDefault();
-            step(1);
+            stepFeed(1);
           }
         }}
       >
-        <AnimatePresence mode="popLayout" initial={false}>
-          {view === "month" ? (
-            <MonthGrid
-              key={monthKey}
-              month={month}
-              today={today}
-              direction={direction}
-              counts={counts}
-              selected={selected}
-              onPick={pick}
-              onStep={step}
-            />
-          ) : (
-            <YearGrid
-              key={`year-${year}`}
-              year={year}
-              anchorKey={monthKey}
-              today={today}
-              counts={counts}
-              onPickMonth={pickMonth}
-              onStep={step}
-            />
+        <div
+          ref={monthLayerRef}
+          className={cn(
+            "absolute inset-0",
+            !showMonthLayer && "invisible",
+            (zoom || !showMonthLayer) && "pointer-events-none",
           )}
-        </AnimatePresence>
+        >
+          <MonthFeed
+            active={view === "month" && !zoom}
+            today={today}
+            counts={counts}
+            selected={selected}
+            onPick={pick}
+            target={monthTarget}
+            onTargetDone={() => setMonthTarget(null)}
+            onVisible={(m) => {
+              setVisibleMonth(m);
+              setVisibleYear(m.getFullYear());
+            }}
+          />
+        </div>
+        <div
+          ref={yearLayerRef}
+          className={cn(
+            "absolute inset-0",
+            !showYearLayer && "invisible",
+            (zoom || !showYearLayer) && "pointer-events-none",
+          )}
+        >
+          <YearFeed
+            active={view === "year" && !zoom}
+            today={today}
+            counts={counts}
+            onPickMonth={pickMonth}
+            target={yearTarget}
+            onTargetDone={() => setYearTarget(null)}
+            onVisible={setVisibleYear}
+          />
+        </div>
       </div>
 
       {view === "month" && (
-        <section className="mt-9" aria-label={friendlyDay(selected)}>
+        <section className="mt-8" aria-label={friendlyDay(selected)}>
           <header className="flex items-baseline justify-between border-b border-rule pb-1.5">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.h2
-                key={selected}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.13, ease: [0.23, 1, 0.32, 1] }}
-                className="voice-display text-[1.12rem]"
-              >
-                {friendlyDay(selected)}
-              </motion.h2>
-            </AnimatePresence>
+            <h2 className="voice-display text-[1.12rem]">
+              {friendlyDay(selected)}
+            </h2>
             {daySnippets && daySnippets.length > 0 && (
               <span className="voice-data">{daySnippets.length}</span>
             )}
@@ -308,57 +396,158 @@ function Calendar() {
   );
 }
 
-/* ── one month, in full ─────────────────────────────────────────── */
+/* ── the month feed: time as one continuous scroll ──────────────── */
 
-function MonthGrid({
-  month,
+function monthsWindow(center: Date, currentMonth: Date): Date[] {
+  const out: Date[] = [];
+  for (let i = -2; i <= 2; i++) {
+    const m = startOfMonth(addMonths(center, i));
+    if (!isAfter(m, currentMonth)) out.push(m);
+  }
+  return out;
+}
+
+function MonthFeed({
+  active,
   today,
-  direction,
   counts,
   selected,
   onPick,
-  onStep,
+  target,
+  onTargetDone,
+  onVisible,
 }: {
-  month: Date;
+  active: boolean;
   today: Date;
-  direction: number;
   counts: Map<string, number> | undefined;
   selected: string;
   onPick: (key: string) => void;
-  onStep: (delta: number) => boolean;
+  target: Date | null;
+  onTargetDone: () => void;
+  onVisible: (m: Date) => void;
+}) {
+  const currentMonth = startOfMonth(today);
+  const [center, setCenter] = useState(() =>
+    startOfMonth(dateFromDayKey(selected)),
+  );
+  const months = monthsWindow(center, currentMonth);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const settling = useRef(false);
+  const didInit = useRef(false);
+
+  const scrollToMonth = useCallback((m: Date, smooth: boolean) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const block = el.querySelector<HTMLElement>(`[data-month="${ym(m)}"]`);
+    if (!block) return;
+    settling.current = smooth;
+    el.scrollTo({ top: block.offsetTop, behavior: smooth ? "smooth" : "instant" });
+    if (smooth) setTimeout(() => (settling.current = false), 650);
+  }, []);
+
+  // first paint: stand on the selected month
+  useLayoutEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+    scrollToMonth(center, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // honor navigation requests (chevrons, Today, zoom-in)
+  useEffect(() => {
+    if (!target) return;
+    const t = startOfMonth(target);
+    const present = months.some((m) => ym(m) === ym(t));
+    if (!present) {
+      requestAnimationFrame(() => {
+        setCenter(t);
+        requestAnimationFrame(() => {
+          scrollToMonth(t, false);
+          onTargetDone();
+        });
+      });
+      return;
+    }
+    scrollToMonth(t, true);
+    onTargetDone();
+  }, [target, months, scrollToMonth, onTargetDone]);
+
+  // when re-centering prepends content above the reader,
+  // compensate scrollTop exactly so their eyes never move
+  const pendingRecenter = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !pendingRecenter.current) return;
+    const { prevHeight, prevTop } = pendingRecenter.current;
+    pendingRecenter.current = null;
+    const delta = el.scrollHeight - prevHeight;
+    if (delta > 0 && el.scrollTop <= prevTop) {
+      el.scrollTop = prevTop + delta;
+    }
+  });
+
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (!el || settling.current) return;
+    const blocks = Array.from(el.querySelectorAll<HTMLElement>("[data-month]"));
+    if (blocks.length === 0) return;
+    const probe = el.scrollTop + el.clientHeight * 0.35;
+    let cur = blocks[0];
+    for (const b of blocks) if (b.offsetTop <= probe) cur = b;
+    const visible = startOfMonth(dateFromDayKey(`${cur.dataset.month}-01`));
+    onVisible(visible);
+    if (ym(visible) !== ym(center)) {
+      pendingRecenter.current = { prevHeight: el.scrollHeight, prevTop: el.scrollTop };
+      setCenter(visible);
+    }
+  };
+
+  return (
+    <div
+      ref={scrollerRef}
+      onScroll={active ? onScroll : undefined}
+      className="h-full overflow-y-auto overscroll-contain"
+      style={{ scrollbarWidth: "none" }}
+      tabIndex={-1}
+    >
+      <div className="flex flex-col gap-4 pb-8">
+        {months.map((m) => (
+          <MonthBlock
+            key={ym(m)}
+            month={m}
+            today={today}
+            counts={counts}
+            selected={selected}
+            onPick={onPick}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MonthBlock({
+  month,
+  today,
+  counts,
+  selected,
+  onPick,
+}: {
+  month: Date;
+  today: Date;
+  counts: Map<string, number> | undefined;
+  selected: string;
+  onPick: (key: string) => void;
 }) {
   const days = eachDayOfInterval({ start: month, end: endOfMonth(month) });
   const leadingBlanks = getDay(month);
   const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
 
   return (
-    <motion.div
-      layoutId={`cal-${format(month, "yyyy-MM")}`}
-      initial={{ opacity: 0, y: direction * 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: direction * -24 }}
-      transition={{ ...zoomSpring, opacity: { duration: 0.16 } }}
-      onPanEnd={(_, info) => {
-        if (
-          Math.abs(info.offset.y) > 56 &&
-          Math.abs(info.offset.y) > Math.abs(info.offset.x)
-        ) {
-          onStep(info.offset.y < 0 ? 1 : -1);
-        }
-      }}
-      style={{ touchAction: "none" }}
-    >
-      <div role="row" className="grid grid-cols-7">
-        {WEEKDAYS.map((d, i) => (
-          <span
-            key={`${d}${i}`}
-            role="columnheader"
-            className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
-          >
-            {d}
-          </span>
-        ))}
-      </div>
+    <div data-month={ym(month)}>
+      <p className="voice-label mb-1.5 text-[0.82rem] text-ink-soft">
+        {format(month, "MMMM yyyy")}
+      </p>
       <div
         role="grid"
         aria-label={format(month, "MMMM yyyy")}
@@ -366,7 +555,7 @@ function MonthGrid({
         style={{ gap: "1px" }}
       >
         {Array.from({ length: leadingBlanks }).map((_, i) => (
-          <span key={`blank-${i}`} className="aspect-square bg-paper" aria-hidden="true" />
+          <span key={`b${i}`} className="aspect-square bg-paper" aria-hidden="true" />
         ))}
         {days.map((date) => {
           const key = dayKey(date);
@@ -423,83 +612,155 @@ function MonthGrid({
           );
         })}
         {Array.from({ length: trailingBlanks }).map((_, i) => (
-          <span key={`tail-${i}`} className="aspect-square bg-paper" aria-hidden="true" />
+          <span key={`t${i}`} className="aspect-square bg-paper" aria-hidden="true" />
         ))}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
-/* ── the year at a glance ───────────────────────────────────────── */
+/* ── the year feed: higher altitude, same physics ───────────────── */
 
-function YearGrid({
-  year,
-  anchorKey,
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function YearFeed({
+  active,
   today,
   counts,
   onPickMonth,
-  onStep,
+  target,
+  onTargetDone,
+  onVisible,
 }: {
-  year: number;
-  anchorKey: string;
+  active: boolean;
   today: Date;
   counts: Map<string, number> | undefined;
   onPickMonth: (m: Date) => void;
-  onStep: (delta: number) => boolean;
+  target: number | null;
+  onTargetDone: () => void;
+  onVisible: (y: number) => void;
 }) {
+  const currentYear = today.getFullYear();
+  const [center, setCenter] = useState(currentYear);
+  const years = [center - 1, center, center + 1].filter((y) => y <= currentYear);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const settling = useRef(false);
+  const didInit = useRef(false);
+
+  const scrollToYear = useCallback((y: number, smooth: boolean) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const block = el.querySelector<HTMLElement>(`[data-year="${y}"]`);
+    if (!block) return;
+    settling.current = smooth;
+    el.scrollTo({ top: block.offsetTop, behavior: smooth ? "smooth" : "instant" });
+    if (smooth) setTimeout(() => (settling.current = false), 650);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
+    scrollToYear(center, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (target === null) return;
+    if (!years.includes(target)) {
+      requestAnimationFrame(() => {
+        setCenter(target);
+        requestAnimationFrame(() => {
+          scrollToYear(target, false);
+          onTargetDone();
+        });
+      });
+      return;
+    }
+    scrollToYear(target, true);
+    onTargetDone();
+  }, [target, years, scrollToYear, onTargetDone]);
+
+  const pendingRecenter = useRef<{ prevHeight: number; prevTop: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !pendingRecenter.current) return;
+    const { prevHeight, prevTop } = pendingRecenter.current;
+    pendingRecenter.current = null;
+    const delta = el.scrollHeight - prevHeight;
+    if (delta > 0 && el.scrollTop <= prevTop) {
+      el.scrollTop = prevTop + delta;
+    }
+  });
+
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (!el || settling.current) return;
+    const blocks = Array.from(el.querySelectorAll<HTMLElement>("[data-year]"));
+    if (blocks.length === 0) return;
+    const probe = el.scrollTop + el.clientHeight * 0.35;
+    let cur = blocks[0];
+    for (const b of blocks) if (b.offsetTop <= probe) cur = b;
+    const y = Number(cur.dataset.year);
+    onVisible(y);
+    if (y !== center) {
+      pendingRecenter.current = { prevHeight: el.scrollHeight, prevTop: el.scrollTop };
+      setCenter(y);
+    }
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.16 }}
-      onPanEnd={(_, info) => {
-        if (
-          Math.abs(info.offset.y) > 56 &&
-          Math.abs(info.offset.y) > Math.abs(info.offset.x)
-        ) {
-          onStep(info.offset.y < 0 ? 1 : -1);
-        }
-      }}
-      style={{ touchAction: "none" }}
-      className="grid grid-cols-3 gap-2 sm:grid-cols-4"
+    <div
+      ref={scrollerRef}
+      onScroll={active ? onScroll : undefined}
+      className="h-full overflow-y-auto overscroll-contain"
+      style={{ scrollbarWidth: "none" }}
+      tabIndex={-1}
     >
-      {MONTH_LABELS.map((label, m) => {
-        const start = new Date(year, m, 1);
-        const ym = format(start, "yyyy-MM");
-        const isFutureMonth = isAfter(start, today);
-        const isCurrent =
-          year === today.getFullYear() && m === today.getMonth();
-        return (
-          <motion.button
-            key={ym}
-            type="button"
-            layoutId={ym === anchorKey ? `cal-${ym}` : undefined}
-            transition={zoomSpring}
-            disabled={isFutureMonth}
-            onClick={() => onPickMonth(start)}
-            whileTap={isFutureMonth ? undefined : { scale: 0.96 }}
-            className={cn(
-              "pressable flex flex-col gap-1.5 rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
-              !isFutureMonth &&
-                "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
-              isFutureMonth && "opacity-40",
-            )}
-            aria-label={`${format(start, "MMMM yyyy")}`}
-          >
-            <span
-              className={cn(
-                "voice-label text-[0.8rem]",
-                isCurrent ? "text-wax" : "text-ink-soft",
-              )}
-            >
-              {label}
-            </span>
-            <MiniMonth start={start} today={today} counts={counts} />
-          </motion.button>
-        );
-      })}
-    </motion.div>
+      <div className="flex flex-col gap-6 pb-8">
+        {years.map((y) => (
+          <div key={y} data-year={y}>
+            <p className="voice-label mb-1.5 text-[0.82rem] text-ink-soft">{y}</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {MONTH_LABELS.map((label, m) => {
+                const start = new Date(y, m, 1);
+                const isFutureMonth = isAfter(start, today);
+                const isCurrent = y === currentYear && m === today.getMonth();
+                return (
+                  <motion.button
+                    key={ym(start)}
+                    data-ym={ym(start)}
+                    type="button"
+                    disabled={isFutureMonth}
+                    onClick={() => onPickMonth(start)}
+                    whileTap={isFutureMonth ? undefined : { scale: 0.96 }}
+                    className={cn(
+                      "pressable flex flex-col gap-1.5 rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                      !isFutureMonth &&
+                        "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
+                      isFutureMonth && "opacity-40",
+                    )}
+                    aria-label={format(start, "MMMM yyyy")}
+                  >
+                    <span
+                      className={cn(
+                        "voice-label text-[0.8rem]",
+                        isCurrent ? "text-wax" : "text-ink-soft",
+                      )}
+                    >
+                      {label}
+                    </span>
+                    <MiniMonth start={start} today={today} counts={counts} />
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
