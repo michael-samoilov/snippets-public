@@ -22,10 +22,10 @@ import {
   isSameMonth,
   startOfMonth,
 } from "date-fns";
-import { motion, animate, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { toast } from "sonner";
-import { MotionEntryList } from "@/components/snippet/motion-entry-list";
+import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { StampMark } from "@/components/stamp-mark";
 import {
   groupByDay,
@@ -122,9 +122,9 @@ export default function CalendarPage() {
   );
 }
 
-type View = "year" | "month" | "schedule";
+type View = "year" | "month" | "schedule" | "entry";
 /** altitude order: a zoom to a deeper view dives in, shallower pulls back */
-const DEPTH: Record<View, number> = { year: 0, month: 1, schedule: 2 };
+const DEPTH: Record<View, number> = { year: 0, month: 1, schedule: 2, entry: 3 };
 
 interface MonthFeedHandle {
   goTo: (m: Date, smooth: boolean) => void;
@@ -175,7 +175,15 @@ function Calendar() {
 
   const counts = useDayCounts();
   const stats = useStats();
+  const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
+
+  /** the entry the camera has dived into */
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const focused = useMemo(
+    () => (focusedId && all ? (all.find((s) => s.id === focusedId) ?? null) : null),
+    [all, focusedId],
+  );
 
   const today = new Date();
   const currentMonth = startOfMonth(today);
@@ -189,6 +197,7 @@ function Calendar() {
   const monthLayerRef = useRef<HTMLDivElement>(null);
   const yearLayerRef = useRef<HTMLDivElement>(null);
   const scheduleLayerRef = useRef<HTMLDivElement>(null);
+  const entryLayerRef = useRef<HTMLDivElement>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   const yearFeedRef = useRef<YearFeedHandle | null>(null);
   const scheduleFeedRef = useRef<ScheduleFeedHandle | null>(null);
@@ -244,6 +253,7 @@ function Calendar() {
       year: yearLayerRef.current,
       month: monthLayerRef.current,
       schedule: scheduleLayerRef.current,
+      entry: entryLayerRef.current,
     };
     const outgoing = layers[zoom.from];
     const incoming = layers[zoom.to];
@@ -256,6 +266,9 @@ function Calendar() {
     // the previous finish left the departed layer inline-hidden
     for (const el of Object.values(layers)) if (el) el.style.visibility = "";
 
+    let flyerBox: HTMLDivElement | null = null;
+    const hiddenNumbers: HTMLElement[] = [];
+
     const finish = () => {
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
@@ -266,6 +279,8 @@ function Calendar() {
         el.style.transform = "";
         el.style.opacity = "";
       }
+      flyerBox?.remove();
+      for (const el of hiddenNumbers) el.style.visibility = "";
       setZoom(null);
       zooming.current = false;
     };
@@ -278,17 +293,34 @@ function Calendar() {
     // hold the arriving layer dark until the animation's first tick owns it
     incoming.style.opacity = "0";
 
-    // where the chosen slot sits — pure geometry, no DOM query.
-    // year⇄month is a literal camera move (the mini becomes the canvas),
-    // so it uses the true slot ratio; month⇄schedule keeps the same
-    // grammar but the literal cell-to-stage ratio (~7×) is violent —
-    // a capped dive about the day's cell matches the reference feel.
-    const monthish = zoom.from === "year" || zoom.to === "year";
-    const o = monthish
-      ? yearFeedRef.current?.originFor(zoom.anchor)
-      : monthFeedRef.current?.originFor(zoom.anchor);
+    // where the chosen slot sits. Year⇄month is a literal camera move
+    // (the mini becomes the canvas), so it uses the true slot ratio;
+    // the deeper dives keep the same grammar with tamed factors — the
+    // literal cell-to-stage ratio (~7×) is violent, and an entry card
+    // is already nearly stage-wide.
     const stageRect = stage.getBoundingClientRect();
-    const factor = monthish ? (o ? stageRect.width / o.w : 3.2) : 2.4;
+    let o: { x: number; y: number; w: number } | null = null;
+    let factor: number;
+    if (zoom.from === "year" || zoom.to === "year") {
+      o = yearFeedRef.current?.originFor(zoom.anchor) ?? null;
+      factor = o ? stageRect.width / o.w : 3.2;
+    } else if (zoom.from === "entry" || zoom.to === "entry") {
+      const card = scheduleLayerRef.current?.querySelector(
+        `[data-entry="${CSS.escape(zoom.anchor)}"]`,
+      );
+      const r = card?.getBoundingClientRect();
+      o = r
+        ? {
+            x: r.left + r.width / 2 - stageRect.left,
+            y: r.top + r.height / 2 - stageRect.top,
+            w: r.width,
+          }
+        : null;
+      factor = 1.45;
+    } else {
+      o = monthFeedRef.current?.originFor(zoom.anchor) ?? null;
+      factor = 2.4;
+    }
     const origin = o
       ? `${(o.x / stageRect.width) * 100}% ${(o.y / stageRect.height) * 100}%`
       : "50% 30%";
@@ -297,7 +329,7 @@ function Calendar() {
 
     const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
-    void Promise.all([
+    const moves: Promise<unknown>[] = [
       // diving: the departing view blows up past its slot; pulling back:
       // it shrinks toward it — and the arriving view does the inverse
       animate(
@@ -310,7 +342,73 @@ function Calendar() {
         { scale: [deeper ? 1 / factor : factor, 1], opacity: [0, 1] },
         { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
       ).finished,
-    ]).then(finish);
+    ];
+
+    // shared-element flight: a date standing in both altitudes travels
+    // from its grid cell to its ledger slot (and back) instead of
+    // crossfading — the originals hide while their double is in the air
+    const dayPair =
+      (zoom.from === "month" && zoom.to === "schedule") ||
+      (zoom.from === "schedule" && zoom.to === "month");
+    if (dayPair) {
+      const collect = (root: HTMLElement) => {
+        const found = new Map<string, HTMLElement>();
+        for (const el of root.querySelectorAll<HTMLElement>("[data-flydate]")) {
+          const r = el.getBoundingClientRect();
+          const y = r.top - stageRect.top;
+          if (y > -r.height && y < stageRect.height)
+            found.set(el.dataset.flydate!, el);
+        }
+        return found;
+      };
+      const fromEls = collect(outgoing);
+      const toEls = collect(incoming);
+      flyerBox = document.createElement("div");
+      flyerBox.style.cssText =
+        "position:absolute;inset:0;pointer-events:none;z-index:30;";
+      stage.appendChild(flyerBox);
+      for (const [day, fromEl] of fromEls) {
+        const toEl = toEls.get(day);
+        if (!toEl) continue;
+        const a = fromEl.getBoundingClientRect();
+        const b = toEl.getBoundingClientRect();
+        const point = document.createElement("span");
+        const glyph = document.createElement("span");
+        glyph.textContent = String(Number(day.slice(8)));
+        glyph.className = "voice-display";
+        glyph.style.cssText = `display:inline-block;transform:translate(-50%,-50%);line-height:1;color:${
+          day === dayKey() ? "var(--wax)" : "var(--ink)"
+        };`;
+        point.style.cssText = "position:absolute;left:0;top:0;";
+        point.appendChild(glyph);
+        flyerBox.appendChild(point);
+        fromEl.style.visibility = "hidden";
+        toEl.style.visibility = "hidden";
+        hiddenNumbers.push(fromEl, toEl);
+        moves.push(
+          animate(
+            point,
+            {
+              x: [a.left + a.width / 2 - stageRect.left, b.left + b.width / 2 - stageRect.left],
+              y: [a.top + a.height / 2 - stageRect.top, b.top + b.height / 2 - stageRect.top],
+            },
+            { type: "spring", stiffness: 320, damping: 34 },
+          ).finished,
+          animate(
+            glyph,
+            {
+              fontSize: [
+                getComputedStyle(fromEl).fontSize,
+                getComputedStyle(toEl).fontSize,
+              ],
+            },
+            { type: "spring", stiffness: 320, damping: 34 },
+          ).finished,
+        );
+      }
+    }
+
+    void Promise.all(moves).then(finish);
   }, [zoom, reduceMotion]);
 
   const openYear = () => {
@@ -335,6 +433,20 @@ function Calendar() {
     if (urlTimer.current) clearTimeout(urlTimer.current);
     window.history.replaceState(null, "", pathname);
     runZoom("schedule", "month", selected);
+  };
+
+  /** pressing a card dives the camera one altitude further, into it */
+  const openEntry = useCallback(
+    (id: string) => {
+      navigator.vibrate?.(6);
+      setFocusedId(id);
+      runZoom("schedule", "entry", id);
+    },
+    [runZoom],
+  );
+
+  const closeEntry = () => {
+    runZoom("entry", "schedule", focusedId ?? "");
   };
 
   /** move the book to a day: selection, title, URL, scroll */
@@ -364,6 +476,12 @@ function Calendar() {
 
   const goToday = () => {
     setSelected(dayKey());
+    if (view === "entry") {
+      // surface to the book first, then turn it to today
+      runZoom("entry", "schedule", focusedId ?? "");
+      jumpTo(dayKey());
+      return;
+    }
     if (view === "schedule") {
       jumpTo(dayKey());
       return;
@@ -378,6 +496,7 @@ function Calendar() {
   };
 
   const stepFeed = (delta: number) => {
+    if (view === "entry") return;
     if (view === "schedule") {
       const target = scheduleTarget(delta);
       if (target) jumpTo(target);
@@ -398,6 +517,7 @@ function Calendar() {
   const showMonthLayer = view === "month" || zoom?.from === "month";
   const showYearLayer = view === "year" || zoom?.from === "year";
   const showScheduleLayer = view === "schedule" || zoom?.from === "schedule";
+  const showEntryLayer = view === "entry" || zoom?.from === "entry";
 
   return (
     <div className="page-settle">
@@ -427,11 +547,19 @@ function Calendar() {
         ) : (
           <button
             type="button"
-            onClick={view === "month" ? openYear : closeSchedule}
+            onClick={
+              view === "month"
+                ? openYear
+                : view === "schedule"
+                  ? closeSchedule
+                  : closeEntry
+            }
             aria-label={
               view === "month"
                 ? `Show ${visibleMonth.getFullYear()} at a glance`
-                : `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
+                : view === "schedule"
+                  ? `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
+                  : "Back to the days"
             }
             className="voice-display pressable rounded-[5px] text-[1.3rem] hover:text-wax"
           >
@@ -459,7 +587,9 @@ function Calendar() {
             type="button"
             aria-label={view === "year" ? "Previous year" : "Previous month"}
             onClick={() => stepFeed(-1)}
-            disabled={view === "schedule" && !scheduleTarget(-1)}
+            disabled={
+              view === "entry" || (view === "schedule" && !scheduleTarget(-1))
+            }
             className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
           >
             ‹
@@ -473,7 +603,7 @@ function Calendar() {
                 ? isSameMonth(visibleMonth, currentMonth)
                 : view === "year"
                   ? visibleYear >= today.getFullYear()
-                  : !scheduleTarget(1)
+                  : view === "entry" || !scheduleTarget(1)
             }
             className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
           >
@@ -508,9 +638,9 @@ function Calendar() {
         ref={stageRef}
         className={cn(
           "relative overflow-hidden transition-[height] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
-          view === "schedule"
-            ? "h-[min(34rem,62dvh)]"
-            : "h-[23rem] sm:h-[26rem]",
+          view === "month" || view === "year"
+            ? "h-[23rem] sm:h-[26rem]"
+            : "h-[min(34rem,62dvh)]",
         )}
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
@@ -524,6 +654,7 @@ function Calendar() {
       >
         <div
           ref={monthLayerRef}
+          data-layer="month"
           className={cn(
             "absolute inset-0",
             !showMonthLayer && "invisible",
@@ -545,6 +676,7 @@ function Calendar() {
         </div>
         <div
           ref={yearLayerRef}
+          data-layer="year"
           className={cn(
             "absolute inset-0",
             !showYearLayer && "invisible",
@@ -562,6 +694,7 @@ function Calendar() {
         </div>
         <div
           ref={scheduleLayerRef}
+          data-layer="schedule"
           className={cn(
             "absolute inset-0",
             !showScheduleLayer && "invisible",
@@ -573,8 +706,21 @@ function Calendar() {
             active={view === "schedule" && !zoom}
             today={today}
             selected={selected}
+            all={all}
             onVisible={onScheduleDay}
+            onOpen={openEntry}
           />
+        </div>
+        <div
+          ref={entryLayerRef}
+          data-layer="entry"
+          className={cn(
+            "absolute inset-0",
+            !showEntryLayer && "invisible",
+            (zoom || !showEntryLayer) && "pointer-events-none",
+          )}
+        >
+          <EntryView snippet={focused} />
         </div>
       </div>
     </div>
@@ -901,6 +1047,7 @@ function MonthBlock({
               )}
             >
               <span
+                data-flydate={key}
                 className={cn(
                   "relative font-mono text-[0.78rem] tabular-nums",
                   isToday && "font-semibold text-wax",
@@ -1270,15 +1417,18 @@ function ScheduleFeed({
   active,
   today,
   selected,
+  all,
   onVisible,
+  onOpen,
 }: {
   handleRef: React.MutableRefObject<ScheduleFeedHandle | null>;
   active: boolean;
   today: Date;
   selected: string;
+  all: Snippet[] | undefined;
   onVisible: (day: string) => void;
+  onOpen: (id: string) => void;
 }) {
-  const all = useAllSnippets();
   const todayKey = dayKey(today);
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
@@ -1395,30 +1545,31 @@ function ScheduleFeed({
             ref={rowRef(row.day)}
             data-day={row.day}
             aria-label={friendlyDay(row.day)}
-            className="grid grid-cols-[3.4rem_1fr] gap-x-3 border-t border-rule-faint"
+            className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint"
           >
                 {/* the date stands in the margin and holds its ground
                     while its day's entries scroll past */}
-                <div className="sticky top-0 self-start pb-3 pt-2.5 text-center">
+                <div className="sticky top-0 self-start pb-3 pt-2 text-center">
                   <span
                     className={cn(
-                      "voice-label block text-[0.72rem] leading-tight",
+                      "voice-label block text-[0.62rem] leading-tight",
                       isToday ? "text-wax" : "text-ink-faint",
                     )}
                   >
                     {format(d, "EEE")}
                   </span>
                   <span
+                    data-flydate={row.day}
                     className={cn(
-                      "voice-display block text-[1.3rem] leading-tight",
+                      "voice-display block text-[1.15rem] leading-tight",
                       isToday && "text-wax",
                     )}
                   >
                     {format(d, "d")}
                   </span>
                 </div>
-                <div className="min-w-0 pb-3 pt-1">
-                  <MotionEntryList snippets={row.snippets} flush clampable />
+                <div className="min-w-0 pb-3 pt-2">
+                  <ScheduleCards snippets={row.snippets} onOpen={onOpen} />
                   {showComposer && (
                     <BackfillCapture
                       key={row.day}
@@ -1453,6 +1604,90 @@ function ScheduleFeed({
           </Fragment>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * A day's entries, each a paper tile in the same material as the year
+ * view's minis — text only, no clutter; everything else lives one
+ * altitude deeper. Pressing a tile dives the camera into it.
+ */
+function ScheduleCards({
+  snippets,
+  onOpen,
+}: {
+  snippets: Snippet[];
+  onOpen: (id: string) => void;
+}) {
+  // entries already on the page at mount don't animate — only changes do
+  const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
+
+  return (
+    <ul className="flex flex-col gap-1.5">
+      <AnimatePresence initial={false}>
+        {snippets.map((s) => (
+          <motion.li
+            key={s.id}
+            layout="position"
+            initial={
+              presentAtMount.has(s.id)
+                ? false
+                : { opacity: 0, y: -10, scale: 0.985 }
+            }
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, height: 0, overflow: "hidden" }}
+            transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}
+          >
+            <button
+              type="button"
+              data-entry={s.id}
+              onClick={() => onOpen(s.id)}
+              className={cn(
+                "pressable block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
+              )}
+            >
+              <p
+                className={cn(
+                  "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.5]",
+                  s.kind === "quote" && "hang-quotes italic",
+                )}
+              >
+                {s.text}
+              </p>
+            </button>
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ul>
+  );
+}
+
+/* ── the focused entry: one card, the whole stage ────────────────── */
+
+function EntryView({ snippet }: { snippet: Snippet | null }) {
+  return (
+    <div
+      className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      style={{ scrollbarWidth: "none" }}
+      tabIndex={-1}
+    >
+      {snippet ? (
+        <article aria-label={friendlyDay(snippet.day)}>
+          <header className="border-b border-rule pb-1.5">
+            <h2 className="voice-display text-[1.12rem]">
+              {friendlyDay(snippet.day)}
+            </h2>
+          </header>
+          {/* the clutter the tiles refuse — time, kind, tags, actions —
+              belongs here, where one entry has the reader's full
+              attention; the title stays off even here */}
+          <SnippetEntry snippet={snippet} showTitle={false} />
+        </article>
+      ) : (
+        <p className="voice-prose mt-6 italic text-ink-soft">Let go.</p>
+      )}
     </div>
   );
 }

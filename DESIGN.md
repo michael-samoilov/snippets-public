@@ -143,20 +143,25 @@ One centered column (`max-w-[46rem]` desk, sheet inside). No cards, no
 boxes, **no iconography for kinds**: entries are typeset with hairline
 dividers and the `.entry-list` margin rule (an empty margin, like a
 legal pad's); kinds appear only as small-caps colored labels, chips are
-text-only stamps. The app's sole marks are the wordmark's wax dot and
+text-only stamps. The one sanctioned tile material is the calendar's
+(year minis and the book's entry tiles — `bg-paper`, hairline border,
+inset top highlight); it never leaves the calendar. The app's sole marks are the wordmark's wax dot and
 the "Kept." StampMark. Navigation is words — small-caps serif with a
 gliding ink underline (desktop) and a floating dock pill (mobile).
 
-The calendar is a camera over time with **three altitudes**: the year
-at a glance, the month canvas, and — deepest — **the book** (the
-schedule of kept days). All three are always-mounted layers in one
+The calendar is a camera over time with **four altitudes**: the year
+at a glance, the month canvas, **the book** (the schedule of kept
+days), and the focused entry. All are always-mounted layers in one
 stage; every transition is the same camera move, paired counter-scales
 about the chosen thing's own slot (spring 320/34) while the layers
 crossfade. Year⇄month uses the mini's literal slot ratio; month⇄book
-anchors on the tapped day's cell with a capped factor (2.4 — the
-literal ~7× is violent). The stage grows while the book is open; the
-title row always climbs one altitude and follows whichever feed
-scrolls beneath it.
+anchors on the tapped day's cell at a capped 2.4× (the literal ~7× is
+violent); book⇄entry anchors on the pressed tile at 1.45×. During
+month⇄book, any **date number standing in both altitudes flies** as a
+shared element from its grid cell to its ledger slot (originals hidden
+while their double is in the air, font-size morphing en route). The
+stage grows below the month; the title row always climbs one altitude
+and follows whichever feed scrolls beneath it.
 
 Within the year and month, time is one continuous **virtualized
 feed**: ten years at precomputed offsets inside a fixed-height spacer
@@ -175,21 +180,25 @@ on the canvas itself so it springs across month boundaries; the year
 is 3–4-column mini-month dot constellations.
 
 **The book** lists only days that hold something, ascending, dates
-standing in the margin as sticky ledger headers, with month hand-over
-labels inherited from the canvas grammar. Today is always present —
-blank, it offers "Add something from today…" beside the wax mark,
-stamped at the real moment; the page the reader opened (`probe`) keeps
-its composer too, past days stamping at noon. Long entries clamp at
-six lines behind a quiet mono "more…". The two views are one
-instrument: tapping a day opens the book there; reading the book moves
-selection, title, and URL (scroll-spy), so pulling back finds the ring
-already on the day being read. The final row is wrapped in
-`min-h-full` so landings are exact and shrinking content can never dip
-scrollHeight and clamp the reader off their page. `?d=` deep-links
-into the book; the month view drops it. PageUp/Down and chevrons step
-months at every altitude; a wax "Today" affordance fades in whenever
-the view has wandered. URL carries view state (`?d=`, `?q=`,
-`?kind=`, `?fav=`).
+standing in a narrow margin (2.1rem) as sticky ledger headers, with
+month hand-over labels inherited from the canvas grammar. Entries are
+**paper tiles in the year-mini material** (the one sanctioned card:
+`bg-paper`, hairline border, inset top highlight) carrying nothing but
+their text at reading density (0.9rem/1.5, clamped at six lines) — no
+title, no time, no kind, no tags, no menu. Pressing a tile dives to
+the **focused entry**, where the whole text and all of that chrome
+live, with the entry actions. Today is always present — blank, it
+offers "Add something from today…" beside the wax mark, stamped at the
+real moment; the page the reader opened (`probe`) keeps its composer
+too, past days stamping at noon. The views are one instrument: tapping
+a day opens the book there; reading the book moves selection, title,
+and URL (scroll-spy), so pulling back finds the ring already on the
+day being read. The final row is wrapped in `min-h-full` so landings
+are exact and shrinking content can never dip scrollHeight and clamp
+the reader off their page. `?d=` deep-links into the book; the month
+view drops it. PageUp/Down and chevrons step months; a wax "Today"
+affordance fades in whenever the view has wandered. URL carries view
+state (`?d=`, `?q=`, `?kind=`, `?fav=`).
 
 ## Copy voice
 

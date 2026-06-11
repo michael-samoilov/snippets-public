@@ -46,7 +46,10 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
 6. **No cards, no iconography.** Entries are typeset lists with the
    `.entry-list` margin rule; kinds are small-caps colored labels ONLY
    (the printers' marks were retired by the owner — don't reintroduce
-   glyphs/icons for kinds). The only marks are the wordmark's wax dot
+   glyphs/icons for kinds). One sanctioned tile material exists — the
+   calendar's (year minis + the book's entry tiles: `bg-paper`,
+   hairline border, inset top highlight), owner-approved and calendar
+   only; don't spread it. The only marks are the wordmark's wax dot
    and the StampMark. Wax is semantic (recording, rule, destructive);
    gilt = favorites only. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
