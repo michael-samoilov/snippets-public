@@ -859,7 +859,12 @@ function Calendar() {
             }
             className="voice-display pressable whitespace-nowrap rounded-[5px] text-left text-(length:--date-head) hover:text-wax"
           >
-            <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">
+            <span
+              aria-hidden="true"
+              // the guillemet fills little of its em, so it's set larger
+              // than the date to stand the same height as the letters
+              className="mr-1 text-[calc(var(--date-head)*1.5)] leading-none text-ink-faint"
+            >
               ‹
             </span>
             {/* the header climbs to the full date in the entry view: the
