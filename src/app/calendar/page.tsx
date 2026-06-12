@@ -818,8 +818,9 @@ function Calendar() {
     <div className="page-settle">
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
-          the page itself has to scroll */}
-      <div className="sticky top-0 z-30 flex items-baseline justify-between bg-paper">
+          the page itself has to scroll. No painted background — a flat
+          fill over the textured sheet reads as a white band */}
+      <div className="sticky top-0 z-30 flex items-baseline justify-between">
         {view === "year" ? (
           <h2 className="voice-display text-(length:--date-head)">{visibleYear}</h2>
         ) : (
