@@ -308,6 +308,13 @@ function Calendar() {
 
     let flyerBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
+    const willChanged: HTMLElement[] = [];
+    const entryCard = entryLayerRef.current?.querySelector<HTMLElement>(
+      "[data-entry-card]",
+    );
+    const entryContent = entryLayerRef.current?.querySelector<HTMLElement>(
+      "[data-entry-card-content]",
+    );
 
     const finish = () => {
       // keep the departed layer hidden across the gap between these
@@ -319,6 +326,9 @@ function Calendar() {
         el.style.transform = "";
         el.style.opacity = "";
       }
+      if (entryCard) entryCard.style.transform = "";
+      if (entryContent) entryContent.style.opacity = "";
+      for (const el of willChanged) el.style.willChange = "";
       flyerBox?.remove();
       for (const el of hiddenNumbers) el.style.visibility = "";
       setZoom(null);
@@ -330,33 +340,91 @@ function Calendar() {
       return;
     }
 
+    const stageRect = stage.getBoundingClientRect();
+    const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
+    const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
+    const moves: Promise<unknown>[] = [];
+
+    // book⇄entry is not a camera scale but a shared element: the tapped
+    // tile expands to fill the stage (and shrinks back), the same paper
+    // card the whole way. The schedule fades under it; the full content
+    // fades in as it opens.
+    if (zoom.from === "entry" || zoom.to === "entry") {
+      const tile = scheduleLayerRef.current?.querySelector<HTMLElement>(
+        `[data-entry="${CSS.escape(zoom.anchor)}"]`,
+      );
+      if (entryCard && entryContent && tile) {
+        const t = tile.getBoundingClientRect();
+        const c = entryCard.getBoundingClientRect();
+        // the card's box mapped onto the tile's exact box (origin 0,0)
+        const ox = t.left - c.left;
+        const oy = t.top - c.top;
+        const osx = t.width / c.width;
+        const osy = t.height / c.height;
+        const schedEl = layers.schedule!;
+        layers.entry!.style.opacity = "1";
+        tile.style.visibility = "hidden";
+        hiddenNumbers.push(tile);
+        // promote both moving surfaces to their own GPU layers: scaling
+        // a paper-textured, mix-blended card is murderously expensive to
+        // re-raster each frame on the CPU; cached layers make it cheap
+        entryCard.style.willChange = "transform";
+        schedEl.style.willChange = "opacity";
+        willChanged.push(entryCard, schedEl);
+        // a hand-rolled rAF drives the whole shared-element move off one
+        // eased value (Motion's numeric animate was being cancelled after
+        // a single frame here, alone among the transitions)
+        const lerp = (a: number, bb: number, k: number) => a + (bb - a) * k;
+        const apply = (open: number) => {
+          // open: 0 = sitting on the tile, 1 = filling the stage
+          entryCard.style.transform = `translate(${lerp(ox, 0, open)}px, ${lerp(
+            oy,
+            0,
+            open,
+          )}px) scale(${lerp(osx, 1, open)}, ${lerp(osy, 1, open)})`;
+          entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`;
+          schedEl.style.opacity = `${1 - open}`;
+        };
+        apply(deeper ? 0 : 1);
+        const DUR = 440;
+        const start = performance.now();
+        moves.push(
+          new Promise<void>((resolve) => {
+            const loop = (now: number) => {
+              const k = Math.min(1, (now - start) / DUR);
+              const e = 1 - Math.pow(1 - k, 3); // easeOutCubic — a clean open
+              apply(deeper ? e : 1 - e);
+              if (k < 1) requestAnimationFrame(loop);
+              else resolve();
+            };
+            requestAnimationFrame(loop);
+          }),
+        );
+        void Promise.all(moves).then(finish);
+        return;
+      }
+      // missing nodes — fall through to a plain crossfade
+      incoming.style.opacity = "0";
+      moves.push(
+        animate(outgoing, { opacity: [1, 0] }, { duration: 0.16 }).finished,
+        animate(incoming, { opacity: [0, 1] }, { duration: 0.16 }).finished,
+      );
+      void Promise.all(moves).then(finish);
+      return;
+    }
+
     // hold the arriving layer dark until the animation's first tick owns it
     incoming.style.opacity = "0";
 
     // where the chosen slot sits. Year⇄month is a literal camera move
     // (the mini becomes the canvas), so it uses the true slot ratio;
-    // the deeper dives keep the same grammar with tamed factors — the
-    // literal cell-to-stage ratio (~7×) is violent, and an entry card
-    // is already nearly stage-wide.
-    const stageRect = stage.getBoundingClientRect();
+    // month⇄book keeps the grammar with a tamed factor — the literal
+    // cell-to-stage ratio (~7×) is violent.
     let o: { x: number; y: number; w: number } | null = null;
     let factor: number;
     if (zoom.from === "year" || zoom.to === "year") {
       o = yearFeedRef.current?.originFor(zoom.anchor) ?? null;
       factor = o ? stageRect.width / o.w : 3.2;
-    } else if (zoom.from === "entry" || zoom.to === "entry") {
-      const card = scheduleLayerRef.current?.querySelector(
-        `[data-entry="${CSS.escape(zoom.anchor)}"]`,
-      );
-      const r = card?.getBoundingClientRect();
-      o = r
-        ? {
-            x: r.left + r.width / 2 - stageRect.left,
-            y: r.top + r.height / 2 - stageRect.top,
-            w: r.width,
-          }
-        : null;
-      factor = 1.45;
     } else {
       o = monthFeedRef.current?.originFor(zoom.anchor) ?? null;
       factor = 2.4;
@@ -367,9 +435,7 @@ function Calendar() {
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
 
-    const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
-    const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
-    const moves: Promise<unknown>[] = [
+    moves.push(
       // diving: the departing view blows up past its slot; pulling back:
       // it shrinks toward it — and the arriving view does the inverse
       animate(
@@ -382,7 +448,7 @@ function Calendar() {
         { scale: [deeper ? 1 / factor : factor, 1], opacity: [0, 1] },
         { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
       ).finished,
-    ];
+    );
 
     // shared-element flight: a date standing in both altitudes travels
     // from its grid cell to its ledger slot (and back) instead of
@@ -440,7 +506,7 @@ function Calendar() {
         // one — crossfading through a hair of blur. Position, size, and
         // the crossfade all ride one spring value, so the type changes
         // exactly when the number reaches the middle of its flight,
-        // not when it lands (Emil's blur-mask)
+        // not when it lands
         const point = document.createElement("span");
         point.dataset.fly = day;
         point.style.cssText =
@@ -467,13 +533,12 @@ function Calendar() {
               const fs = fromFont.size + (toFont.size - fromFont.size) * t;
               gFrom.style.fontSize = `${fs}px`;
               gTo.style.fontSize = `${fs}px`;
-              // crossover centred on t=0.5 — the flight's midpoint
+              // crossover centred on t=0.5 — the flight's midpoint, so
+              // the swap is never seen sitting at the origin or the
+              // destination (no blur: the flight is too quick to read one)
               const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
               gFrom.style.opacity = `${1 - k}`;
               gTo.style.opacity = `${k}`;
-              const blur = Math.max(0, 1 - Math.abs(t - 0.5) * 2) * 1.1;
-              gFrom.style.filter = `blur(${blur}px)`;
-              gTo.style.filter = `blur(${blur}px)`;
             },
           }).finished,
         );
@@ -512,9 +577,18 @@ function Calendar() {
     (id: string) => {
       navigator.vibrate?.(6);
       setFocusedId(id);
+      // stand the header on the entry's own day so the month + year in
+      // it hold still while the weekday and date wipe in
+      const s = all?.find((x) => x.id === id);
+      if (s) {
+        setSelected(s.day);
+        const m = startOfMonth(dateFromDayKey(s.day));
+        setVisibleMonth(m);
+        setVisibleYear(m.getFullYear());
+      }
       runZoom("schedule", "entry", id);
     },
-    [runZoom],
+    [all, runZoom],
   );
 
   const closeEntry = () => {
@@ -633,20 +707,38 @@ function Calendar() {
                   ? `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
                   : "Back to the days"
             }
-            className="voice-display pressable rounded-[5px] text-[1.3rem] hover:text-wax"
+            className="voice-display pressable rounded-[5px] text-left text-[1.3rem] hover:text-wax"
           >
             <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">
               ‹
             </span>
-            {format(visibleMonth, "MMMM yyyy")}
+            {/* the header climbs to the full date in the entry view: the
+                weekday and day-of-month wipe in from their own spots
+                while the month and year hold still */}
+            <WipeWord open={view === "entry"}>
+              {format(dateFromDayKey(selected), "EEEE")},{" "}
+            </WipeWord>
+            {format(visibleMonth, "MMMM")}
+            <WipeWord open={view === "entry"}>
+              {" "}
+              {format(dateFromDayKey(selected), "d")},
+            </WipeWord>{" "}
+            {format(visibleMonth, "yyyy")}
           </button>
         )}
-        <div className="flex items-baseline gap-1">
+        {/* the navigation controls have no business in a single entry */}
+        <div
+          className={cn(
+            "flex items-baseline gap-1 transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            view === "entry" && "pointer-events-none opacity-0",
+          )}
+          aria-hidden={view === "entry"}
+        >
           {/* always in the row — appearing must never reflow the page */}
           <button
             type="button"
             onClick={goToday}
-            disabled={atToday}
+            disabled={atToday || view === "entry"}
             aria-hidden={atToday}
             className={cn(
               "voice-label pressable mr-2 rounded-[5px] px-2 py-1 leading-none text-wax hover:bg-accent",
@@ -1756,28 +1848,51 @@ function ScheduleCards({
 /* ── the focused entry: one card, the whole stage ────────────────── */
 
 function EntryView({ snippet }: { snippet: Snippet | null }) {
+  // one tile, grown to fill the stage — the same paper material as the
+  // schedule card it expanded from, so the FLIP reads as that very card
+  // opening. The zoom drives [data-entry-card]'s box and fades the
+  // content in; the date now lives in the header, so no header here.
   return (
     <div
-      className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
-      style={{ scrollbarWidth: "none" }}
-      tabIndex={-1}
+      data-entry-card
+      className="flex h-full flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
+      style={{ transformOrigin: "0 0" }}
     >
-      {snippet ? (
-        <article aria-label={friendlyDay(snippet.day)}>
-          <header className="border-b border-rule pb-1.5">
-            <h2 className="voice-display text-[1.12rem]">
-              {friendlyDay(snippet.day)}
-            </h2>
-          </header>
-          {/* the clutter the tiles refuse — time, kind, tags, actions —
-              belongs here, where one entry has the reader's full
-              attention; the title stays off even here */}
+      <div
+        data-entry-card-content
+        className="overflow-y-auto overscroll-contain p-4 [overflow-anchor:none]"
+        style={{ scrollbarWidth: "none" }}
+        tabIndex={-1}
+      >
+        {snippet ? (
+          // the clutter the tiles refuse — time, kind, tags, actions —
+          // belongs here, where one entry has the reader's full attention
           <SnippetEntry snippet={snippet} showTitle={false} />
-        </article>
-      ) : (
-        <p className="voice-prose mt-6 italic text-ink-soft">Let go.</p>
-      )}
+        ) : (
+          <p className="voice-prose italic text-ink-soft">Let go.</p>
+        )}
+      </div>
     </div>
+  );
+}
+
+/**
+ * A word that wipes open from its own slot in a line of text — used to
+ * extend a month header into a full date without disturbing the words
+ * that stay. Animated grid column (0fr→1fr) reveals the clipped text.
+ */
+function WipeWord({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      aria-hidden={!open}
+      data-wipe={open ? "open" : "closed"}
+      className={cn(
+        "inline-grid align-baseline transition-[grid-template-columns,opacity] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+        open ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0",
+      )}
+    >
+      <span className="overflow-hidden whitespace-pre">{children}</span>
+    </span>
   );
 }
 
