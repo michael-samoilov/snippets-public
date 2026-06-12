@@ -3,6 +3,7 @@
 import {
   Fragment,
   Suspense,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -253,7 +254,10 @@ function Calendar() {
     [all, focusedId],
   );
 
-  const today = new Date();
+  const todayStamp = dayKey();
+  // one Date for the whole day: the feeds memoize their heavy windows
+  // against it, and a fresh identity every render would bust them all
+  const today = useMemo(() => dateFromDayKey(todayStamp), [todayStamp]);
   const currentMonth = startOfMonth(today);
   const atToday =
     (view === "month" &&
@@ -724,11 +728,14 @@ function Calendar() {
     runZoom("month", "year", ym(visibleMonth));
   };
 
-  const pickMonth = (m: Date) => {
-    setVisibleMonth(m);
-    monthFeedRef.current?.goTo(m, false); // land exactly, behind the zoom
-    runZoom("year", "month", ym(m));
-  };
+  const pickMonth = useCallback(
+    (m: Date) => {
+      setVisibleMonth(m);
+      monthFeedRef.current?.goTo(m, false); // land exactly, behind the zoom
+      runZoom("year", "month", ym(m));
+    },
+    [runZoom],
+  );
 
   /* climbing out happens through the history stack: UI back affordances
      call history.back(), and the popstate handler runs the zoom — so the
@@ -966,7 +973,9 @@ function Calendar() {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const hits = useSearch(query, all);
+  // the index is built on first open, not on every visit — the command
+  // menu already keeps one for the whole app
+  const hits = useSearch(query, searching ? all : undefined);
   const searchActive = searching && query.trim() !== "";
   const searchGroups = useMemo(() => {
     if (!searchActive) return [];
@@ -1719,7 +1728,12 @@ function MonthFeed({
                 labelRowH={geom.labelRowH}
                 today={today}
                 counts={counts}
-                selected={selected}
+                // scoped to its own month, so the book's scroll spy
+                // (selection churning day by day) re-renders at most
+                // the two blocks that actually change
+                selected={
+                  isSameMonth(dateFromDayKey(selected), m) ? selected : ""
+                }
                 onPick={onPick}
               />
             </div>
@@ -1739,7 +1753,7 @@ function MonthFeed({
   );
 }
 
-function MonthBlock({
+const MonthBlock = memo(function MonthBlock({
   month,
   cell,
   labelRowH,
@@ -1753,6 +1767,7 @@ function MonthBlock({
   labelRowH: number;
   today: Date;
   counts: Map<string, number> | undefined;
+  /** the selected day when it lives in this month, else "" */
   selected: string;
   onPick: (key: string) => void;
 }) {
@@ -1837,7 +1852,7 @@ function MonthBlock({
       </div>
     </div>
   );
-}
+});
 
 /* ── the year feed: higher altitude, same physics ───────────────── */
 
@@ -2046,35 +2061,12 @@ function YearFeed({
   const from = geom ? indexAt(geom.offsets, anchorY - viewH) : 0;
   const to = geom ? indexAt(geom.offsets, anchorY + 2 * viewH) : 0;
 
-  return (
-    <div
-      ref={scrollerRef}
-      onScroll={active ? onScroll : undefined}
-      className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
-      style={{ scrollbarWidth: "none" }}
-      tabIndex={-1}
-    >
-      <p
-        ref={probeRef}
-        aria-hidden="true"
-        className="voice-label invisible absolute text-[0.82rem]"
-      >
-        2026
-      </p>
-      <span
-        ref={miniProbeRef}
-        aria-hidden="true"
-        className="voice-label invisible absolute text-[0.8rem]"
-      >
-        Jan
-      </span>
-      {geom && (
-        // same layout-synchronous floor as the month feed
-        <div
-          className="relative"
-          style={{ height: geom.offsets[geom.offsets.length - 1] }}
-        >
-          {geom.years.slice(from, to + 1).map((y, k) => (
+  // the window's dot-grids are thousands of spans — memoized as
+  // elements so the page's scroll-spy re-renders bail out wholesale
+  const blocks = useMemo(
+    () =>
+      geom
+        ? geom.years.slice(from, to + 1).map((y, k) => (
             <div
               key={y}
               data-year={y}
@@ -2124,7 +2116,42 @@ function YearFeed({
                 })}
               </div>
             </div>
-          ))}
+          ))
+        : null,
+    // currentYear rides on `today`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [geom, from, to, today, counts, onPickMonth],
+  );
+
+  return (
+    <div
+      ref={scrollerRef}
+      onScroll={active ? onScroll : undefined}
+      className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      style={{ scrollbarWidth: "none" }}
+      tabIndex={-1}
+    >
+      <p
+        ref={probeRef}
+        aria-hidden="true"
+        className="voice-label invisible absolute text-[0.82rem]"
+      >
+        2026
+      </p>
+      <span
+        ref={miniProbeRef}
+        aria-hidden="true"
+        className="voice-label invisible absolute text-[0.8rem]"
+      >
+        Jan
+      </span>
+      {geom && (
+        // same layout-synchronous floor as the month feed
+        <div
+          className="relative"
+          style={{ height: geom.offsets[geom.offsets.length - 1] }}
+        >
+          {blocks}
         </div>
       )}
       {geom && (
@@ -2323,15 +2350,12 @@ function ScheduleFeed({
     else rowRefs.current.delete(day);
   };
 
-  return (
-    <div
-      ref={scrollerRef}
-      onScroll={active ? onScroll : undefined}
-      className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
-      style={{ scrollbarWidth: "none" }}
-      tabIndex={-1}
-    >
-      {rows?.map((row, i) => {
+  // hundreds of day sections — memoized as elements, so the scroll
+  // spy's selection churn (a page re-render per day crossed) bails
+  // out of the whole book instead of reconciling it
+  const body = useMemo(
+    () =>
+      rows?.map((row, i) => {
         const d = dateFromDayKey(row.day);
         const newMonth =
           i === 0 || rows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
@@ -2406,7 +2430,19 @@ function ScheduleFeed({
             )}
           </Fragment>
         );
-      })}
+      }),
+    [rows, probe, todayKey, yesterdayKey, onOpen, today],
+  );
+
+  return (
+    <div
+      ref={scrollerRef}
+      onScroll={active ? onScroll : undefined}
+      className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      style={{ scrollbarWidth: "none" }}
+      tabIndex={-1}
+    >
+      {body}
     </div>
   );
 }

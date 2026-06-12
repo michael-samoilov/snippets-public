@@ -226,14 +226,16 @@ html {
    each overscroll-contained so a fling inside never chains out. */
 html {
   background: var(--desk);
-  /* lamplight: a pool of light upper-center, edges falling away */
+  /* lamplight: a pool of light upper-center, edges falling away.
+     No fixed attachment: the root doesn't scroll, and the canvas
+     paint never translates anyway — fixed attachment only buys the
+     engine's slow path */
   background-image: radial-gradient(
     120% 85% at 50% -12%,
     rgb(255 250 235 / 0.5) 0%,
     transparent 55%,
     rgb(54 40 18 / 0.12) 100%
   );
-  background-attachment: fixed;
 }
 
 html.dark {
@@ -265,12 +267,13 @@ body {
 }
 
 /* desk grain — the tooth of the table, above color, below content.
-   Oversized past the viewport: iOS drags fixed layers along with the
-   rubber-band, and the grain must never show an edge. */
+   Viewport-sized: oversizing it multiplied the blended area the
+   compositor pays for on every frame, and at 5.5% soft-light nobody
+   can see the sliver of bare desk a rubber-band might reveal. */
 body::after {
   content: "";
   position: fixed;
-  inset: -30%;
+  inset: 0;
   z-index: 70;
   pointer-events: none;
   opacity: 0.055;
