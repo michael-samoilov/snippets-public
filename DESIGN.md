@@ -206,8 +206,12 @@ moves between views (in the entry it goes transparent: the card's own
 bottom edge is the terminator there). The feeds' floors are laid out,
 not measured — a px container to the last offset plus a `min-h-full`
 tail — so a mid-zoom stage resize can never clamp a scroller and
-drift a flight's landing. The year glance reaches back exactly to the
-first entry's year (or last week's year on an empty book). The desk is exactly one screen at every size
+drift a flight's landing. The glance and the canvas agree on
+what time exists — January of the earliest year (the first entry's, or
+last week's on an empty book) through the current month — so a title
+never names a month the canvas can't show; when history loads and the
+range grows, the canvas re-anchors by month, not by index, keeping the
+reader's page. The desk is exactly one screen at every size
 (html/body never scroll; every scroll lives in a container — the
 sheet's main, the feeds, the entry card). The title row always climbs one altitude and
 follows whichever feed scrolls beneath it. A **left-to-right swipe**

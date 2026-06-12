@@ -48,7 +48,6 @@ const ym = (d: Date) => format(d, "yyyy-MM");
    iOS killing fling momentum the instant the old windowed feed
    compensated scroll positions mid-flight. */
 
-const RANGE_MONTHS = 120;
 const YEAR_GAP = 24; // between year blocks
 const MINI_GAP = 8; // gap-2 between minis
 const MINI_DOT = 3;
@@ -78,13 +77,14 @@ function buildMonthGeom(
   width: number,
   labelRowH: number,
   currentMonth: Date,
+  span: number,
 ): MonthGeom {
   const cell = width / 7;
   const months: Date[] = [];
   const offsets: number[] = [];
   const switchY: number[] = [];
   let y = 0;
-  for (let i = RANGE_MONTHS - 1; i >= 0; i--) {
+  for (let i = span - 1; i >= 0; i--) {
     const m = startOfMonth(addMonths(currentMonth, -i));
     months.push(m);
     offsets.push(y);
@@ -846,6 +846,12 @@ function Calendar() {
     return y;
   }, [all]);
   const yearSpan = Math.max(1, today.getFullYear() - earliestYear + 1);
+  // the canvas and the glance agree on what time exists: January of
+  // the earliest year through the current month
+  const monthSpan = Math.max(
+    1,
+    (today.getFullYear() - earliestYear) * 12 + today.getMonth() + 1,
+  );
 
   /** days that exist in the book, for stepping it by months */
   const keptDays = useMemo(() => {
@@ -1084,6 +1090,7 @@ function Calendar() {
             handleRef={monthFeedRef}
             active={view === "month" && !zoom}
             today={today}
+            span={monthSpan}
             counts={counts}
             selected={selected}
             onPick={pick}
@@ -1164,6 +1171,7 @@ function MonthFeed({
   handleRef,
   active,
   today,
+  span,
   counts,
   selected,
   onPick,
@@ -1172,6 +1180,8 @@ function MonthFeed({
   handleRef: React.MutableRefObject<MonthFeedHandle | null>;
   active: boolean;
   today: Date;
+  /** how many months the canvas reaches back (shared with the glance) */
+  span: number;
   counts: Map<string, number> | undefined;
   selected: string;
   onPick: (key: string) => void;
@@ -1183,6 +1193,7 @@ function MonthFeed({
   const [metrics, setMetrics] = useState<{ w: number; h: number; labelH: number } | null>(null);
   const [scrollY, setScrollY] = useState<number | null>(null);
   const visibleIdxRef = useRef(-1);
+  const anchorMonthRef = useRef<Date | null>(null);
   const rafRef = useRef(0);
   const didInit = useRef(false);
 
@@ -1191,12 +1202,13 @@ function MonthFeed({
       // the hand-over row is barely taller than its text: the label's
       // line box plus 4px of air above and 4px down to the rule
       metrics
-        ? buildMonthGeom(metrics.w, metrics.labelH + 8, currentMonth)
+        ? buildMonthGeom(metrics.w, metrics.labelH + 8, currentMonth, span)
         : null,
-    // geometry depends on width + label height only (currentMonth is
-    // stable) — a viewport-height blip must not rebuild it
+    // geometry depends on width, label height, and the span only
+    // (currentMonth is stable) — a viewport-height blip must not
+    // rebuild it
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [metrics?.w, metrics?.labelH],
+    [metrics?.w, metrics?.labelH, span],
   );
   const geomRef = useRef<MonthGeom | null>(null);
   useLayoutEffect(() => {
@@ -1206,10 +1218,10 @@ function MonthFeed({
   const indexOfMonth = useCallback(
     (m: Date) => {
       const diff = monthsBetween(m, currentMonth);
-      return Math.min(RANGE_MONTHS - 1, Math.max(0, RANGE_MONTHS - 1 - diff));
+      return Math.min(span - 1, Math.max(0, span - 1 - diff));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [span],
   );
 
   // measure once + on resize; ResizeObserver callbacks are async-safe
@@ -1244,9 +1256,14 @@ function MonthFeed({
       // seed the anchor too: fonts/scrollbars can rebuild geometry before
       // the first scroll event lands, and that rebuild must re-anchor
       visibleIdxRef.current = idx;
+      anchorMonthRef.current = geom.months[idx];
       el.scrollTop = geom.offsets[idx];
-    } else if (visibleIdxRef.current >= 0) {
-      el.scrollTop = geom.offsets[visibleIdxRef.current];
+    } else if (anchorMonthRef.current) {
+      // re-anchor by MONTH, not index: a span change (history loading
+      // in) prepends months and shifts every index
+      const idx = indexOfMonth(anchorMonthRef.current);
+      visibleIdxRef.current = idx;
+      el.scrollTop = geom.offsets[idx];
     }
     // `selected` only seeds the very first position
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1311,6 +1328,7 @@ function MonthFeed({
       const vi = indexAt(g.switchY, top);
       if (vi !== visibleIdxRef.current) {
         visibleIdxRef.current = vi;
+        anchorMonthRef.current = g.months[vi];
         onVisible(g.months[vi]);
       }
     });
