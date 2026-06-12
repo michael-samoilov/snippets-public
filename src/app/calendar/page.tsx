@@ -815,8 +815,9 @@ function Calendar() {
   return (
     <div className="page-settle">
       {/* title row: the title always climbs one altitude; it follows
-          whichever feed is scrolling beneath it */}
-      <div className="flex items-baseline justify-between">
+          whichever feed is scrolling beneath it, and stays pinned when
+          the page itself has to scroll */}
+      <div className="sticky top-0 z-30 flex items-baseline justify-between bg-paper">
         {view === "year" ? (
           <h2 className="voice-display text-(length:--date-head)">{visibleYear}</h2>
         ) : (
@@ -841,8 +842,10 @@ function Calendar() {
             <span
               aria-hidden="true"
               // the guillemet fills little of its em, so it's set larger
-              // than the date to stand the same height as the letters
-              className="mr-1 text-[calc(var(--date-head)*1.5)] leading-none text-ink-faint"
+              // than the date to stand the same height as the letters.
+              // em, not calc(var(…)): WebKit can evaluate a calc over a
+              // var holding clamp() to 0 — the chevron vanished on iOS
+              className="mr-1 text-[1.5em] leading-none text-ink-faint"
             >
               ‹
             </span>
@@ -949,7 +952,8 @@ function Calendar() {
       <div
         ref={stageRef}
         className={cn(
-          "relative overflow-hidden border-b border-rule-faint transition-[height] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          "relative overflow-hidden border-b transition-[height,border-color] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          view === "entry" ? "border-transparent" : "border-rule-faint",
           view === "month" || view === "year"
             ? "h-[23rem] sm:h-[26rem]"
             : "h-[min(34rem,62dvh)]",
@@ -2020,14 +2024,17 @@ function EntryView({ snippet }: { snippet: Snippet | null }) {
   // opening. The zoom drives [data-entry-card]'s box and fades the
   // content in; the date now lives in the header, so no header here.
   return (
+    // max-h, not h: a short entry's card reaches only as far as its
+    // words; only a long one fills the stage and scrolls inside, with
+    // the card's own bottom rule marking where the scroll terminates
     <div
       data-entry-card
-      className="flex h-full flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
+      className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
       style={{ transformOrigin: "0 0" }}
     >
       <div
         data-entry-card-content
-        className="overflow-y-auto overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none]"
+        className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >

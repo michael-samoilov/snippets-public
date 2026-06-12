@@ -9,7 +9,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // on phones the desk is exactly one screen: the sheet takes the
     // remaining height and pages scroll inside it, never the page —
     // the paper's bottom edge stays above the dock
-    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 sm:h-auto sm:min-h-dvh sm:overflow-visible sm:px-8">
+    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[calc(max(env(safe-area-inset-bottom),0.75rem)+3.9rem)] sm:h-auto sm:min-h-dvh sm:overflow-visible sm:px-8 sm:pb-8">
       {/* ink-bleed: a hair of edge wobble for masthead type */}
       <svg aria-hidden="true" width="0" height="0" className="absolute">
         <filter id="ink-bleed" x="-5%" y="-5%" width="110%" height="110%">
@@ -58,12 +58,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </Sheet>
-
-      <footer className="shrink-0 px-2 pb-[4.75rem] pt-3 text-center sm:pb-8 sm:pt-5 sm:text-left">
-        <p className="font-serif text-[0.8rem] italic text-ink-faint">
-          kept on this device, yours alone
-        </p>
-      </footer>
 
       <ShellTabs />
       <CommandMenu />

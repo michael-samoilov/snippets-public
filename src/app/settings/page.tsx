@@ -106,7 +106,8 @@ export default function SettingsPage() {
         <section aria-label="Your data">
           <h2 className="voice-label border-b border-rule pb-1.5">Your data</h2>
           <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
-            Everything lives in this browser, on this device.
+            Everything lives in this browser — kept on this device, yours
+            alone.
             {stats && stats.total > 0 && (
               <>
                 {" "}
