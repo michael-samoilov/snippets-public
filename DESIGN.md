@@ -192,10 +192,11 @@ Range text-rects, not line boxes (leading would read as a landing skip).
 The stage grows below the month; the title row always climbs one altitude and
 follows whichever feed scrolls beneath it. A **left-to-right swipe**
 (touch/pen, decisively rightward, a flick not a wander) climbs one
-altitude too: entry → book anywhere on the card, book → month when the
-swipe begins on the page itself rather than a tile or composer. The
-layers carry `touch-action: pan-y` so iOS never claims the horizontal
-gesture mid-flight. The weekday rail exists
+altitude too: entry → book anywhere on the card; book → month and
+month → year when the swipe begins on the page itself (the blank cells
+and label rows between months, a composer or tile or day never arms
+it). The layers carry `touch-action: pan-y` so iOS never claims the
+horizontal gesture mid-flight. The weekday rail exists
 only at the month altitude — elsewhere it folds shut (animated
 `0fr`/`1fr` grid row) so content sits flush under the title, its
 hairline riding along to mark where the scroll area terminates.

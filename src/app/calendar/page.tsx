@@ -983,8 +983,13 @@ function Calendar() {
         <div
           ref={monthLayerRef}
           data-layer="month"
+          // a swipe begun on the canvas itself (the blank cells and
+          // label rows between months, never a day) climbs to the year
+          onPointerDown={(e) => armSwipe(e, true)}
+          onPointerUp={(e) => settleSwipe(e, openYear)}
+          onPointerCancel={() => (swipe.current = null)}
           className={cn(
-            "absolute inset-0",
+            "absolute inset-0 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
             (zoom || !showMonthLayer) && "pointer-events-none",
           )}
