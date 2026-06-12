@@ -10,13 +10,7 @@ import type { Snippet } from "@/lib/types";
  * removed ones close up like a line struck from the page. Entries
  * already present at first paint don't animate — only changes do.
  */
-export function MotionEntryList({
-  snippets,
-  showTime = true,
-}: {
-  snippets: Snippet[];
-  showTime?: boolean;
-}) {
+export function MotionEntryList({ snippets }: { snippets: Snippet[] }) {
   // entries already on the page at mount don't animate — only changes do
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
 
@@ -41,7 +35,7 @@ export function MotionEntryList({
             exit={{ opacity: 0, height: 0, overflow: "hidden" }}
             transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}
           >
-            <SnippetEntry snippet={snippet} showTime={showTime} />
+            <SnippetEntry snippet={snippet} />
           </motion.li>
         ))}
       </AnimatePresence>

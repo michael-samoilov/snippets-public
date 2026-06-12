@@ -44,17 +44,19 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    are hold-to-confirm (wax `clip-path` fill, 1.4s linear hold / 200ms
    release). Haptic taps (`navigator.vibrate` 6–10ms) on keep/file/select.
 6. **No cards, no iconography.** Entries are typeset lists with the
-   `.entry-list` margin rule; kinds are small-caps colored labels ONLY
-   (the printers' marks were retired by the owner — don't reintroduce
-   glyphs/icons for kinds). One sanctioned tile material exists — the
+   `.entry-list` margin rule, and they are their words ALONE: title,
+   kind, tags, time, and source live in the data (search) and are
+   never displayed (the printers' marks, kind labels, and chips were
+   all retired by the owner — don't reintroduce any of them). One sanctioned tile material exists — the
    calendar's (year minis + the book's entry tiles + the header's
    search pill + the book's composer, whose paint fades into the page:
    `bg-paper`, hairline border, inset top highlight), owner-approved
    and calendar only; don't spread it. The sanctioned
    marks: the wordmark's wax dot, the StampMark, the dock's two
    hand-drawn strokes (quill + calendar, small-caps words beneath),
-   the calendar header's search glass, and the account glyph —
-   nothing else. Wax is semantic (recording, rule, destructive);
+   the calendar header's search glass, the entry card's two foot marks
+   (wax quill/microphone stamp + ink trash — destructive is NOT wax),
+   and the account glyph — nothing else. Wax is semantic (recording, rule, destructive);
    gilt = favorites only. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
    mode; `.ink-bleed` is for mastheads only.

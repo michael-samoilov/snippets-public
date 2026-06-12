@@ -89,10 +89,11 @@ export default function SettingsPage() {
             <div>
               <p className="font-serif text-[0.98rem]">Automatic filing</p>
               <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                New entries get a title, a kind, and tags on their own, via
-                Claude. Needs an API key on the server; without one, the
-                one-tap chips do the job. Your words stay on this device
-                either way — only the entry text is sent for filing.
+                New entries are quietly filed by Claude — a title, a kind,
+                tags — kept in the data to make search smarter, never shown
+                on the page. Needs an API key on the server. Your words stay
+                on this device either way — only the entry text is sent for
+                filing.
               </p>
             </div>
             <Switch

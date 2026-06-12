@@ -19,7 +19,7 @@ moment before it evaporates. Two governing constraints:
 
 1. **Capture costs one breath.** Speak or type; never decide, file, or
    configure at the moment of capture. Filing happens afterwards,
-   invisibly (Claude) or with one tap (chips).
+   invisibly (Claude), into the data only — never onto the page.
 2. **Rereading feels like a beloved notebook**, not a database. The UI
    defers to the words (HIG: deference); the world around them is
    physical, lit, and quiet.
@@ -148,10 +148,10 @@ any overscroll and never translates, so Safari's rubber-band and
 pull-to-refresh move the sheet over a desk that holds perfectly still
 (the fixed grain overlay is oversized past the viewport for the same
 reason — nothing ever shows an edge). No cards, no boxes, **no
-iconography for kinds**: entries are typeset with hairline dividers
+metadata on the page**: entries are typeset with hairline dividers
 and the `.entry-list` margin rule (an empty margin, like a legal
-pad's); kinds appear only as small-caps colored labels, chips are
-text-only stamps. The one sanctioned tile material is the calendar's
+pad's), and they are their words alone — title, kind, tags, time, and
+source stay in the data, feeding search, never displayed. The one sanctioned tile material is the calendar's
 (year minis, the book's entry tiles, the header search pill, and the
 book's composer — whose paint fades rightward into the bare page, an
 entry not yet written, its card spanning exactly the margin date's
@@ -159,8 +159,10 @@ ink — `bg-paper`, hairline border, inset top highlight); it never
 leaves the calendar. The sanctioned marks are the wordmark's wax dot, the "Kept."
 StampMark, the dock's two hand-drawn strokes (a quill for the day's
 page, a calendar for the book — with small-caps words beneath), the
-calendar header's search glass in the same line, and the account
-glyph. Desktop navigation
+calendar header's search glass in the same line, the entry card's two
+foot marks (a pressed-wax stamp bearing the quill — the microphone,
+while writing — and a quiet ink trash, deliberately not wax: wax is
+the writer's color, not the destroyer's), and the account glyph. Desktop navigation
 is words — small-caps serif with a gliding ink underline; there are
 two pages, Today and the calendar (the collection folded into the
 book). The avatar sits on the desk's top-right edge: its menu holds
@@ -292,12 +294,20 @@ month hand-over labels inherited from the canvas grammar. Entries are
 **paper tiles in the year-mini material** (the one sanctioned card:
 `bg-paper`, hairline border, inset top highlight) carrying nothing but
 their text at reading density (0.9rem/1.5, clamped at six lines) — no
-title, no time, no kind, no tags, no menu. Pressing a tile dives to
-the **focused entry**, where the whole text and all of that chrome
-live, with the entry actions. Today is always present — blank, it
-offers "Add something from today…" beside the wax mark, stamped at the
-real moment; the page the reader opened (`probe`) keeps its composer
-too, past days stamping at noon. The views are one instrument: tapping
+title, no time, no kind, no tags, no menu — **an entry is its words,
+everywhere**: title, kind, tags, time, and source live in the data
+(they feed search and the future) but are never displayed. Pressing a
+tile dives to the **focused entry**: the whole text, and at the
+card's foot two marks only — the wax quill stamp that opens the words
+for rewriting *in place* (the words themselves become the field, same
+metrics, caret at the end, keyboard up; the stamp becomes a wax
+microphone that speaks into the entry, as on the day's page; leaving
+the field keeps the change), and across from it a quiet ink trash
+that lets the entry go (soft delete, undo in the toast, the page
+closing over the struck line). Today is always present — blank, it
+offers "Add something from today…", stamped at the real moment; the
+page the reader opened (`probe`) keeps its composer too, past days
+stamping at noon. The views are one instrument: tapping
 a day opens the book there; reading the book moves selection, title,
 and URL — the reader's day is the **topmost whose margin date is
 still fully stacked** (a row whose tail merely peeks has handed over)

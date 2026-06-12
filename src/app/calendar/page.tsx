@@ -32,7 +32,13 @@ import {
   useDayCounts,
   useSearch,
 } from "@/hooks/use-snippets";
-import { addSnippet } from "@/lib/db";
+import {
+  addSnippet,
+  restoreSnippet,
+  softDeleteSnippet,
+  updateSnippet,
+} from "@/lib/db";
+import { useSpeech } from "@/hooks/use-speech";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
@@ -2651,22 +2657,227 @@ function EntryView({ snippet }: { snippet: Snippet | null }) {
       className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
       style={{ transformOrigin: "0 0" }}
     >
+      {snippet ? (
+        <EntryBody key={snippet.id} snippet={snippet} />
+      ) : (
+        <div data-entry-card-content className="px-4 pb-4 pt-3">
+          <p className="voice-prose italic text-ink-soft">Let go.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The entry's words, and two marks at the card's foot: the wax quill
+ * that opens the words for rewriting in place (becoming a wax
+ * microphone while you write, as on the day's page), and a quiet ink
+ * trash that lets the entry go. Editing looks exactly like writing in
+ * the composer — the words themselves become the field.
+ */
+function EntryBody({ snippet }: { snippet: Snippet }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(snippet.text);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  const speech = useSpeech((spoken) => {
+    setDraft((prev) => {
+      const next = joinSpoken(prev, spoken);
+      requestAnimationFrame(() => {
+        const el = areaRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(el.value.length, el.value.length);
+          autosizeArea(el);
+        }
+      });
+      return next;
+    });
+  });
+  const listening = speech.status === "listening";
+  useEffect(() => {
+    if (!speech.failure) return;
+    toast("Voice didn’t take here.", {
+      description: "Write the change instead — nothing was lost.",
+    });
+  }, [speech.failure]);
+  // a recording must not outlive the card
+  useEffect(() => {
+    return () => speech.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startEdit = () => {
+    setDraft(snippet.text);
+    // focus the (already mounted, invisible) field synchronously, in
+    // the gesture — iOS won't raise the keyboard for a deferred focus
+    const el = areaRef.current;
+    if (el) {
+      el.value = snippet.text;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+    setEditing(true);
+    requestAnimationFrame(() => {
+      if (areaRef.current) autosizeArea(areaRef.current);
+    });
+  };
+  const save = async () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== snippet.text) {
+      try {
+        await updateSnippet(snippet.id, { text: trimmed });
+      } catch {
+        toast("That didn’t take — try again.");
+      }
+    }
+  };
+  const stopEdit = () => {
+    if (listening) speech.stop();
+    void save();
+    setEditing(false);
+  };
+  const letGo = async () => {
+    if (listening) speech.stop();
+    await softDeleteSnippet(snippet.id);
+    window.history.back(); // the page closes over the struck line
+    toast("Let go.", {
+      action: { label: "Undo", onClick: () => void restoreSnippet(snippet.id) },
+    });
+  };
+
+  return (
+    <>
       <div
         data-entry-card-content
-        className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none]"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-3 [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {snippet ? (
-          // the clutter the tiles refuse — time, kind, tags, actions —
-          // belongs here, where one entry has the reader's full attention
-          <SnippetEntry snippet={snippet} showTitle={false} dense />
-        ) : (
-          <p className="voice-prose italic text-ink-soft">Let go.</p>
-        )}
+        {!editing && <SnippetEntry snippet={snippet} dense />}
+        {/* the field is always mounted (a hidden one can't take the
+            gesture's synchronous focus); writing, it wears the exact
+            metrics of the words it replaces */}
+        <textarea
+          ref={areaRef}
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            autosizeArea(e.target);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") stopEdit();
+          }}
+          onBlur={() => {
+            if (editing && !listening) stopEdit();
+          }}
+          aria-label="The entry’s words"
+          tabIndex={editing ? 0 : -1}
+          className={cn(
+            "voice-prose w-full resize-none overflow-hidden whitespace-pre-wrap bg-transparent leading-[1.5] outline-none",
+            !editing && "pointer-events-none absolute left-4 top-3 h-px opacity-0",
+          )}
+        />
       </div>
-    </div>
+      <div className="flex shrink-0 items-center justify-between px-3 pb-2.5 pt-1">
+        {editing ? (
+          <WaxStamp
+            label={listening ? "Stop listening" : "Speak into this entry"}
+            onClick={() => (listening ? speech.stop() : speech.start())}
+            listening={listening}
+            keepFocus
+          >
+            {/* a microphone, drawn in the dock strokes' line */}
+            <rect x="7.4" y="2.6" width="5.2" height="9.2" rx="2.6" />
+            <path d="M4.6 9.4a5.4 5.4 0 0 0 10.8 0M10 14.8v2.6" />
+          </WaxStamp>
+        ) : (
+          <WaxStamp label="Rewrite this entry" onClick={startEdit}>
+            {/* the dock's quill */}
+            <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
+            <path d="M4.4 15.6 12.6 7" />
+            <path d="M4.4 15.6 3.4 17.6" />
+          </WaxStamp>
+        )}
+        <button
+          type="button"
+          onClick={() => void letGo()}
+          aria-label="Let this entry go"
+          className="pressable grid size-[34px] place-items-center rounded-full text-ink-faint hover:bg-accent hover:text-ink"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="size-[1.05rem]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3.8 5.6h12.4M8 5.4V3.6h4v1.8M5.4 5.8l.9 10a1.6 1.6 0 0 0 1.6 1.4h4.2a1.6 1.6 0 0 0 1.6-1.4l.9-10" />
+            <path d="M8.3 8.6v5.6M11.7 8.6v5.6" />
+          </svg>
+        </button>
+      </div>
+    </>
   );
+}
+
+/** A pressed-wax stamp bearing a drawn glyph — the entry card's marks. */
+function WaxStamp({
+  label,
+  onClick,
+  listening = false,
+  keepFocus = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  listening?: boolean;
+  /** don't steal focus from the field on press (the mic, mid-edit) */
+  keepFocus?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
+      className="pressable relative grid size-[34px] place-items-center rounded-full"
+    >
+      {listening && (
+        <span
+          aria-hidden="true"
+          className="absolute -inset-1 animate-pulse rounded-full border-2 border-wax/45"
+        />
+      )}
+      <svg viewBox="0 0 30 30" className="absolute inset-[2px] size-[30px]" aria-hidden="true">
+        <circle cx="15" cy="15" r="15" fill="var(--wax-deep)" />
+        <circle cx="15" cy="15" r="12.8" fill="var(--wax)" />
+        <circle cx="10.4" cy="9.6" r="4.4" fill="var(--wax-bright)" opacity="0.5" />
+      </svg>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+        className="relative size-[15px]"
+        fill="none"
+        stroke="var(--paper-raised)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </svg>
+    </button>
+  );
+}
+
+function joinSpoken(a: string, b: string): string {
+  if (!a.trim()) return b;
+  if (!b.trim()) return a;
+  return `${a.replace(/\s+$/, "")} ${b}`;
 }
 
 /**
