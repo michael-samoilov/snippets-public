@@ -24,6 +24,7 @@ import {
   startOfMonth,
 } from "date-fns";
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
+import { annotate } from "rough-notation";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import {
@@ -2984,18 +2985,43 @@ function MarkedPreview({ text, query }: { text: string; query: string }) {
     for (let i = 0; i < parts.length; i++) {
       if (!parts[i]) continue;
       out.push(
-        i % 2 === 1 ? (
-          <mark key={i} className="snippet-mark">
-            {parts[i]}
-          </mark>
-        ) : (
-          parts[i]
-        ),
+        i % 2 === 1 ? <RoughMark key={i}>{parts[i]}</RoughMark> : parts[i],
       );
     }
     return out;
   }, [text, query]);
   return <>{nodes}</>;
+}
+
+/** One found phrase under a drawn highlighter. rough-notation inserts
+    its SVG as a sibling just before the mark, so the stroke lives in
+    the scroller and travels with the words; `multiline` draws one
+    wavering stroke per wrapped line. The stroke color is the marker
+    token, resolved here — presentation attributes can't read var(). */
+function RoughMark({ children }: { children: string }) {
+  const ref = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const color =
+      getComputedStyle(el).getPropertyValue("--marker").trim() || "#e8c558";
+    const a = annotate(el, {
+      type: "highlight",
+      multiline: true,
+      color,
+      iterations: 1,
+      padding: 2,
+      animationDuration: 380,
+      animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    });
+    a.show();
+    return () => a.remove();
+  }, [children]);
+  return (
+    <mark ref={ref} className="snippet-mark">
+      {children}
+    </mark>
+  );
 }
 
 /**

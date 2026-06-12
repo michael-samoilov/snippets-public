@@ -518,39 +518,20 @@ textarea:focus-visible,
   }
 }
 
-/* the marker: a chisel-tipped highlighter drawn across found words.
-   The angled gradient ends are the tip; the background-size sweep is
-   the hand moving left to right; box-decoration-break keeps each
-   wrapped line a stroke of its own. Multiplied into the paper like
-   real ink (plain on Lamplight — multiply dies on dark paper). */
+/* the marker is DRAWN, by rough-notation: a hand-wavering stroke per
+   wrapped line, its SVG standing beside the mark so it scrolls with
+   the words. The mark itself stays bare — the UA's yellow must not
+   double under the drawn stroke — and the stroke multiplies into the
+   paper like real ink (plain on Lamplight, where multiply dies). */
 mark.snippet-mark {
-  background-color: transparent;
+  background: transparent;
   color: inherit;
-  background-image: linear-gradient(
-    100deg,
-    transparent 0%,
-    var(--marker) 4%,
-    var(--marker) 96%,
-    transparent 100%
-  );
-  background-repeat: no-repeat;
-  background-size: 0% 100%;
-  background-position: 0 0;
-  border-radius: 0.35em 0.2em 0.4em 0.25em;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-  padding: 0.04em 0.14em;
-  margin: -0.04em -0.14em;
+}
+svg.rough-annotation {
   mix-blend-mode: multiply;
-  animation: marker-sweep var(--dur-slow) var(--ease-out) var(--dur-fast) both;
 }
-.dark mark.snippet-mark {
+.dark svg.rough-annotation {
   mix-blend-mode: normal;
-}
-@keyframes marker-sweep {
-  to {
-    background-size: 100% 100%;
-  }
 }
 
 @keyframes caret-blink {

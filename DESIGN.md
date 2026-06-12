@@ -254,10 +254,12 @@ dismisses the bar too; standing words keep it open. While a query stands, the st
 book**: the same ledger and tiles, only the days that answer, opened
 at its last page (the weekday rail folds; the altitudes wait beneath,
 hidden; no animation — it re-renders with every keystroke). Found words wear **the
-marker** — a chisel-tipped highlighter (an angled gradient on an
-inline `mark`, swept across by a background-size animation,
-`box-decoration-break: clone` keeping each wrapped line a stroke of
-its own, multiplied into the paper). A match deeper than the six-line
+marker** — a real highlighter drawn by `rough-notation`: one
+hand-wavering stroke per wrapped line (`multiline`), animated as a
+left-to-right sweep, its SVG standing beside the `mark` so it scrolls
+with the words, stroked in the marker token (resolved at draw time —
+presentation attributes can't read `var()`) and multiplied into the
+paper. A match deeper than the six-line
 clamp re-windows the preview to show it — led by EARLIER context,
 snapped to a sentence opening, behind an ellipsis (a story builds
 forward; the lines before a match explain it). Pressing a
