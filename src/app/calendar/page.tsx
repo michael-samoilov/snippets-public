@@ -412,7 +412,10 @@ function Calendar() {
     };
 
     if (reduceMotion) {
-      void animate(outgoing, { opacity: [1, 0] }, { duration: 0.12 }).then(finish);
+      // finish on rejection too: an animation cancelled mid-flight (a
+      // navigation during a selection gesture, say) must never leave
+      // the zooming latch stuck and the app deaf
+      void animate(outgoing, { opacity: [1, 0] }, { duration: 0.12 }).then(finish, finish);
       return;
     }
 
@@ -522,7 +525,7 @@ function Calendar() {
             requestAnimationFrame(loop);
           }),
         );
-        void Promise.all(moves).then(finish);
+        void Promise.all(moves).then(finish, finish);
         return;
       }
       // missing nodes — fall through to a plain crossfade
@@ -531,7 +534,7 @@ function Calendar() {
         animate(outgoing, { opacity: [1, 0] }, { duration: 0.16 }).finished,
         animate(incoming, { opacity: [0, 1] }, { duration: 0.16 }).finished,
       );
-      void Promise.all(moves).then(finish);
+      void Promise.all(moves).then(finish, finish);
       return;
     }
 
@@ -724,7 +727,7 @@ function Calendar() {
       }
     }
 
-    void Promise.all(moves).then(finish);
+    void Promise.all(moves).then(finish, finish);
   }, [zoom, reduceMotion]);
 
   const openYear = () => {
@@ -829,8 +832,16 @@ function Calendar() {
      Trigger-on-release (the camera zoom is the transition) and touch/
      pen only, so a desktop text-selection drag can never misfire. */
   const swipe = useRef<{ x: number; y: number; t: number; ok: boolean } | null>(null);
+  /** standing selected text owns the gestures: dragging its handles
+      must never read as a back-swipe (navigating mid-selection left
+      iOS holding handles over a view that no longer existed) */
+  const selectionStands = () => {
+    const sel = window.getSelection();
+    return !!sel && !sel.isCollapsed;
+  };
   const armSwipe = (e: React.PointerEvent, ignoreInteractive: boolean) => {
     if (e.pointerType === "mouse") return;
+    if (selectionStands()) return;
     const onControl = (e.target as HTMLElement).closest(
       "button, a, textarea, input, select",
     );
@@ -844,7 +855,7 @@ function Calendar() {
   const settleSwipe = (e: React.PointerEvent, back: () => void) => {
     const s = swipe.current;
     swipe.current = null;
-    if (!s || !s.ok) return;
+    if (!s || !s.ok || selectionStands()) return;
     const dx = e.clientX - s.x;
     const dy = Math.abs(e.clientY - s.y);
     // rightward within a 45° cone, and a flick rather than a wander —
@@ -2750,7 +2761,9 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
     <>
       <div
         data-entry-card-content
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-2 pt-3 [overflow-anchor:none]"
+        // pb-4: iOS draws selection handles inside the scroller's clip
+        // box — the last line's bottom handle needs standing room
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
@@ -2779,7 +2792,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           )}
         />
       </div>
-      <div className="flex shrink-0 items-center justify-between px-3 pb-2.5 pt-1">
+      <div className="flex shrink-0 items-center justify-between px-3 pb-2.5 pt-0">
         {editing ? (
           <WaxStamp
             label={listening ? "Stop listening" : "Speak into this entry"}
