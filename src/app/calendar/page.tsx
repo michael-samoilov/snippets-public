@@ -986,6 +986,15 @@ function Calendar() {
   // seating the bar on the circle must not itself animate — only the
   // growth after it (and the contraction back) do
   const [pillSeating, setPillSeating] = useState(false);
+  // the contraction is a visible move: the bar stays opaque while it
+  // retracts into the circle, and only then hands the spot back
+  const [pillClosing, setPillClosing] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
   // the index is built on first open, not on every visit — the command
   // menu already keeps one for the whole app
   const hits = useSearch(query, searching ? all : undefined);
@@ -1025,6 +1034,8 @@ function Calendar() {
     // focus synchronously, inside the gesture — iOS won't raise the
     // keyboard for a focus that arrives by timer
     searchInputRef.current?.focus();
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setPillClosing(false);
     setPillSeating(true);
     setPillBox(glassBox()); // seat the bar on the circle, untransitioned…
     requestAnimationFrame(() =>
@@ -1035,9 +1046,15 @@ function Calendar() {
     );
   };
   const closeSearch = () => {
-    setPillBox(glassBox()); // contract back into the circle
+    setPillBox(glassBox()); // retract both sides back into the circle…
     setSearching(false);
     setQuery("");
+    setPillClosing(true);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      // …and only once it lands, hand the spot back to the glass
+      setPillClosing(false);
+    }, 200);
   };
   /** a found page opens in the book itself — straight there, from any
       altitude, never through the canvas */
@@ -1161,17 +1178,21 @@ function Calendar() {
             aria-label="Search entries"
             aria-expanded={searching}
             className={cn(
-              // the cards' material, drawn into a small circle — the
-              // same coin the avatar is struck from
-              "pressable grid size-[26px] shrink-0 place-items-center self-center rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised hover:text-ink",
-              searching && "invisible",
+              // the cards' material, drawn into a circle as tall as
+              // the grown bar — the same coin the avatar is struck
+              // from. Top-anchored, reaching down past the row like
+              // the bar does; the full-height negative margin keeps
+              // its reach out of the row's height entirely, so the
+              // frame below never moves
+              "pressable -mb-[36px] grid h-[36px] w-[36px] shrink-0 place-items-center self-start rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised hover:text-ink",
+              (searching || pillClosing) && "invisible",
             )}
           >
             {/* a hand-drawn glass, in the dock strokes' own line */}
             <svg
               aria-hidden="true"
               viewBox="0 0 20 20"
-              className="size-[0.85rem]"
+              className="size-[1rem]"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.5"
@@ -1268,7 +1289,8 @@ function Calendar() {
           className={cn(
             "absolute z-10 transition-[left,right,top,bottom,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
             pillSeating && "transition-none",
-            searching ? "opacity-100" : "pointer-events-none opacity-0",
+            searching || pillClosing ? "opacity-100" : "opacity-0",
+            !searching && "pointer-events-none",
           )}
           style={
             searching
