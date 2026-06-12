@@ -107,6 +107,10 @@ interface FlyFont {
   style: string;
   variation: string;
   numeric: string;
+  /** small-caps live here, not in text-transform — forget it and the
+      flyer reads as full-size lowercase mid-flight */
+  caps: string;
+  transform: string;
   spacing: string;
   shadow: string;
 }
@@ -120,6 +124,8 @@ function readFont(el: HTMLElement): FlyFont {
     style: cs.fontStyle,
     variation: cs.fontVariationSettings,
     numeric: cs.fontVariantNumeric,
+    caps: cs.fontVariantCaps,
+    transform: cs.textTransform,
     spacing: cs.letterSpacing,
     shadow: cs.textShadow,
   };
@@ -138,7 +144,8 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
     `transform:translate(-50%,-50%);color:${color};` +
     `font-family:${font.family};font-weight:${font.weight};` +
     `font-style:${font.style};font-variation-settings:${font.variation};` +
-    `font-variant-numeric:${font.numeric};letter-spacing:${font.spacing};` +
+    `font-variant-numeric:${font.numeric};font-variant-caps:${font.caps};` +
+    `text-transform:${font.transform};letter-spacing:${font.spacing};` +
     `text-shadow:${font.shadow};`;
   return g;
 }
