@@ -2577,11 +2577,11 @@ function BackfillCapture({
   const hasText = text.trim().length > 0;
 
   return (
-    // standing alone, the card's top sits exactly on the day name's
-    // first pixel of ink (one above the tile line), and a single quiet
-    // line in the tile's own paddings makes its height the date's —
-    // weekday-text top to number-text bottom
-    <div className={cn("group relative", follows ? "mt-1" : "-mt-px")}>
+    // standing alone, the card spans the date's INK, not its line
+    // boxes: from the weekday's cap top (the run box carries 4px of
+    // ascent air above it) down to the number's baseline — measured
+    // with canvas TextMetrics against the ledger's fixed type scale
+    <div className={cn("group relative", follows ? "mt-1" : "mt-[3px]")}>
       {/* the tile's paint, fading rightward into the bare page: an
           entry not yet written. Focus darkens the rule, as writing
           surfaces do */}
@@ -2611,7 +2611,12 @@ function BackfillCapture({
             void keep();
           }
         }}
-        className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent px-2.5 py-2 text-[0.9rem] leading-[1.42] outline-none placeholder:italic placeholder:text-ink-faint"
+        className={cn(
+          "voice-prose relative block w-full resize-none overflow-hidden bg-transparent px-2.5 py-[3.5px] text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+          // today's invitation shares today's hue, like its date across
+          // the gutter; other days keep the quiet ink
+          isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
+        )}
       />
       {hasText && (
         <div className="mt-2 flex justify-end">
