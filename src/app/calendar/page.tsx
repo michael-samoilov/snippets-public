@@ -983,9 +983,6 @@ function Calendar() {
     top: number;
     bottom: number;
   } | null>(null);
-  // seating the bar on the circle must not itself animate — only the
-  // growth after it (and the contraction back) do
-  const [pillSeating, setPillSeating] = useState(false);
   // the contraction is a visible move: the bar stays opaque while it
   // retracts into the circle, and only then hands the spot back
   const [pillClosing, setPillClosing] = useState(false);
@@ -1036,13 +1033,10 @@ function Calendar() {
     searchInputRef.current?.focus();
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setPillClosing(false);
-    setPillSeating(true);
-    setPillBox(glassBox()); // seat the bar on the circle, untransitioned…
+    setPillBox(glassBox()); // seat the bar on the circle (untransitioned
+    // at rest), and only once the seat has painted, let it grow
     requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        setPillSeating(false);
-        setSearching(true); // …then let it grow
-      }),
+      requestAnimationFrame(() => setSearching(true)),
     );
   };
   const closeSearch = () => {
@@ -1180,11 +1174,10 @@ function Calendar() {
             className={cn(
               // the cards' material, drawn into a circle as tall as
               // the grown bar — the same coin the avatar is struck
-              // from. Top-anchored, reaching down past the row like
-              // the bar does; the full-height negative margin keeps
-              // its reach out of the row's height entirely, so the
-              // frame below never moves
-              "pressable -mb-[36px] grid h-[36px] w-[36px] shrink-0 place-items-center self-start rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised hover:text-ink",
+              // from. Centered on the title text (the full-height
+              // negative margins keep its box out of the row's layout,
+              // so the frame below never moves)
+              "pressable -my-[15px] grid h-[30px] w-[30px] shrink-0 place-items-center self-center rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised hover:text-ink",
               (searching || pillClosing) && "invisible",
             )}
           >
@@ -1282,50 +1275,90 @@ function Calendar() {
         </div>
         {/* the search bar IS the glass's circle, grown: its box
             animates between the circle's measured spot and the whole
-            row (downward only for the extra height — the sticky row
-            sits flush on the scroll container's clip line, and
-            anything above it is shorn off) */}
+            row. From the first frame of the retraction its content is
+            the glass again — riding the bar's center home — and the
+            landing swap is atomic: at that instant the contracted bar
+            and the coin are the same pixels */}
         <div
           className={cn(
-            "absolute z-10 transition-[left,right,top,bottom,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
-            pillSeating && "transition-none",
-            searching || pillClosing ? "opacity-100" : "opacity-0",
+            "absolute z-10",
+            // at rest there is no transition: the seat before a growth
+            // and the landing swap after a retraction are both instant
+            // (and the resting bar stays focusable for the gesture's
+            // synchronous focus — visibility:hidden would refuse it)
+            searching || pillClosing
+              ? "transition-[left,right,top,bottom,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)] opacity-100"
+              : "transition-none opacity-0",
             !searching && "pointer-events-none",
           )}
           style={
             searching
-              ? { left: 0, right: 0, top: 0, bottom: -6 }
+              ? { left: 0, right: 0, top: 0, bottom: 0 }
               : (pillBox ?? { left: "100%", right: 0, top: 0, bottom: 0 })
           }
           aria-hidden={!searching}
         >
-          <div className="flex h-full items-center overflow-hidden rounded-full border border-rule-faint bg-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") closeSearch();
-                else if (e.key === "Enter" && searchGroups.length)
-                  jumpFromSearch(searchGroups[searchGroups.length - 1].day);
-              }}
-              placeholder="Find an entry…"
-              aria-label="Search entries"
-              tabIndex={searching ? 0 : -1}
+          <div className="relative flex h-full items-center overflow-hidden rounded-full border border-rule-faint bg-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
+            {/* the glass, centered, for the trip back */}
+            <span
+              aria-hidden="true"
               className={cn(
-                "voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none transition-opacity duration-[var(--dur-fast)] placeholder:italic placeholder:text-ink-faint",
-                !searching && "opacity-0",
+                "pointer-events-none absolute inset-0 grid place-items-center text-ink-soft",
+                searching
+                  ? "opacity-0 transition-opacity duration-[var(--dur-fast)]"
+                  : "opacity-100",
               )}
-            />
-            <button
-              type="button"
-              onClick={closeSearch}
-              tabIndex={searching ? 0 : -1}
-              className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.72rem] text-ink-faint hover:bg-accent hover:text-ink"
             >
-              Clear
-            </button>
+              <svg
+                viewBox="0 0 20 20"
+                className="size-[1rem]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              >
+                <circle cx="8.8" cy="8.6" r="5.3" />
+                <path d="M12.8 12.8 17 17.2" />
+              </svg>
+            </span>
+            {/* words and Clear leave the moment the retraction begins */}
+            <span
+              className={cn(
+                "flex min-w-0 flex-1 items-center",
+                searching
+                  ? "opacity-100 transition-opacity duration-[var(--dur-fast)]"
+                  : "opacity-0",
+              )}
+            >
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeSearch();
+                  else if (e.key === "Enter" && searchGroups.length)
+                    jumpFromSearch(searchGroups[searchGroups.length - 1].day);
+                }}
+                onBlur={() => {
+                  // dismissing the keyboard over an empty bar dismisses
+                  // the bar; standing words keep it open
+                  if (searching && !query.trim()) closeSearch();
+                }}
+                placeholder="Find an entry…"
+                aria-label="Search entries"
+                tabIndex={searching ? 0 : -1}
+                className="voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              />
+              <button
+                type="button"
+                onClick={closeSearch}
+                tabIndex={searching ? 0 : -1}
+                className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.72rem] text-ink-faint hover:bg-accent hover:text-ink"
+              >
+                Clear
+              </button>
+            </span>
           </div>
         </div>
       </div>

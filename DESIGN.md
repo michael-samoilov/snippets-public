@@ -237,11 +237,14 @@ returning the same way out, and the Today button wipes away rightward
 and yields its width while the reader stands on today — the search
 glass slides over to the corner — returning the same way when they
 wander. The glass itself is a circle of the cards' material, as tall
-as the grown bar (the same coin the avatar is struck from); pressed,
-that circle grows from its own spot out both ways into the full-row
-search bar — the title slides off left, the other buttons off right —
-and on Clear the bar retracts both sides back into the circle, opaque
-the whole way, handing the spot back only when it lands. While a query stands, the stage shows **the filtered
+as the grown bar and centered on the title text (the same coin the
+avatar is struck from); pressed, that circle grows from its own spot
+out both ways into the full-row search bar — the title slides off
+left, the other buttons off right — and on dismissal the bar retracts
+both sides back into the circle, opaque the whole way, wearing the
+glass at its center from the retraction's first frame so it lands
+already in costume. Dismissing the keyboard over an empty bar
+dismisses the bar too; standing words keep it open. While a query stands, the stage shows **the filtered
 book**: the same ledger and tiles, only the days that answer, opened
 at its last page (the weekday rail folds; the altitudes wait beneath,
 hidden; no animation — it re-renders with every keystroke). Pressing a
