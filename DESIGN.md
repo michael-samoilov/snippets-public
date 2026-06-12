@@ -159,9 +159,12 @@ anchors on the tapped day's cell at a capped 2.4× (the literal ~7× is
 violent); book⇄entry anchors on the pressed tile at 1.45×. During
 month⇄book, any **date number standing in both altitudes flies** as a
 shared element from its grid cell to its ledger slot (originals hidden
-while their double is in the air, font-size morphing en route; flight
-endpoints are Range text-rects, not line boxes — leading reads as a
-landing skip). Pulling back, only the day being read flies. The stage
+while their double is in the air). The flyer overlays both typefaces —
+the grid's mono and the ledger's Fraunces — and position, size, and a
+blur-masked crossfade all ride one spring value, so the type changes
+exactly at the flight's spatial midpoint rather than snapping on
+landing. Endpoints are Range text-rects, not line boxes (leading would
+read as a landing skip). Pulling back, only the day being read flies. The stage
 grows below the month; the title row always climbs one altitude and
 follows whichever feed scrolls beneath it. The weekday rail exists
 only at the month altitude — elsewhere it folds shut (animated

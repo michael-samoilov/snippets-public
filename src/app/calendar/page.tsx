@@ -99,6 +99,46 @@ function buildMonthGeom(
   return { months, offsets, switchY, total: y + 24, cell, labelRowH };
 }
 
+/** A typeface snapshot, for the date numbers that fly between altitudes. */
+interface FlyFont {
+  family: string;
+  size: number;
+  weight: string;
+  style: string;
+  variation: string;
+  numeric: string;
+  spacing: string;
+  shadow: string;
+}
+
+function readFont(el: HTMLElement): FlyFont {
+  const cs = getComputedStyle(el);
+  return {
+    family: cs.fontFamily,
+    size: parseFloat(cs.fontSize),
+    weight: cs.fontWeight,
+    style: cs.fontStyle,
+    variation: cs.fontVariationSettings,
+    numeric: cs.fontVariantNumeric,
+    spacing: cs.letterSpacing,
+    shadow: cs.textShadow,
+  };
+}
+
+/** A detached, absolutely-centred number wearing a given typeface. */
+function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
+  const g = document.createElement("span");
+  g.textContent = text;
+  g.style.cssText =
+    "position:absolute;left:0;top:0;line-height:1;white-space:nowrap;" +
+    `transform:translate(-50%,-50%);color:${color};` +
+    `font-family:${font.family};font-weight:${font.weight};` +
+    `font-style:${font.style};font-variation-settings:${font.variation};` +
+    `font-variant-numeric:${font.numeric};letter-spacing:${font.spacing};` +
+    `text-shadow:${font.shadow};`;
+  return g;
+}
+
 /** last index whose offset is at or before y */
 function indexAt(offsets: number[], y: number): number {
   let lo = 0,
@@ -387,40 +427,55 @@ function Calendar() {
         if (!toEl) continue;
         const a = textRect(fromEl);
         const b = textRect(toEl);
+        const ax = a.left + a.width / 2 - stageRect.left;
+        const ay = a.top + a.height / 2 - stageRect.top;
+        const bx = b.left + b.width / 2 - stageRect.left;
+        const by = b.top + b.height / 2 - stageRect.top;
+        const fromFont = readFont(fromEl);
+        const toFont = readFont(toEl);
+        const num = String(Number(day.slice(8)));
+        const color = day === dayKey() ? "var(--wax)" : "var(--ink)";
+
+        // two glyphs overlaid — the departing typeface and the arriving
+        // one — crossfading through a hair of blur. Position, size, and
+        // the crossfade all ride one spring value, so the type changes
+        // exactly when the number reaches the middle of its flight,
+        // not when it lands (Emil's blur-mask)
         const point = document.createElement("span");
-        const glyph = document.createElement("span");
-        glyph.textContent = String(Number(day.slice(8)));
-        glyph.className = "voice-display";
-        // absolute inside a zero-size point: no inline baseline seating
-        // to drag the digits below the animated track
-        glyph.style.cssText = `position:absolute;left:0;top:0;transform:translate(-50%,-50%);line-height:1;color:${
-          day === dayKey() ? "var(--wax)" : "var(--ink)"
-        };`;
-        point.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;";
-        point.appendChild(glyph);
+        point.dataset.fly = day;
+        point.style.cssText =
+          `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
+        const gFrom = flyGlyph(num, fromFont, color);
+        const gTo = flyGlyph(num, toFont, color);
+        gFrom.style.fontSize = `${fromFont.size}px`;
+        gTo.style.fontSize = `${fromFont.size}px`;
+        gTo.style.opacity = "0";
+        point.append(gFrom, gTo);
         flyerBox.appendChild(point);
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
         moves.push(
-          animate(
-            point,
-            {
-              x: [a.left + a.width / 2 - stageRect.left, b.left + b.width / 2 - stageRect.left],
-              y: [a.top + a.height / 2 - stageRect.top, b.top + b.height / 2 - stageRect.top],
+          animate(0, 1, {
+            type: "spring",
+            stiffness: 320,
+            damping: 34,
+            onUpdate: (t) => {
+              point.style.transform = `translate(${ax + (bx - ax) * t}px,${
+                ay + (by - ay) * t
+              }px)`;
+              const fs = fromFont.size + (toFont.size - fromFont.size) * t;
+              gFrom.style.fontSize = `${fs}px`;
+              gTo.style.fontSize = `${fs}px`;
+              // crossover centred on t=0.5 — the flight's midpoint
+              const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
+              gFrom.style.opacity = `${1 - k}`;
+              gTo.style.opacity = `${k}`;
+              const blur = Math.max(0, 1 - Math.abs(t - 0.5) * 2) * 1.1;
+              gFrom.style.filter = `blur(${blur}px)`;
+              gTo.style.filter = `blur(${blur}px)`;
             },
-            { type: "spring", stiffness: 320, damping: 34 },
-          ).finished,
-          animate(
-            glyph,
-            {
-              fontSize: [
-                getComputedStyle(fromEl).fontSize,
-                getComputedStyle(toEl).fontSize,
-              ],
-            },
-            { type: "spring", stiffness: 320, damping: 34 },
-          ).finished,
+          }).finished,
         );
       }
     }
