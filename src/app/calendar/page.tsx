@@ -337,7 +337,10 @@ function Calendar() {
         el.style.transform = "";
         el.style.opacity = "";
       }
-      if (entryCard) entryCard.style.transform = "";
+      if (entryCard) {
+        entryCard.style.transform = "";
+        entryCard.style.opacity = "";
+      }
       if (entryContent) {
         entryContent.style.opacity = "";
         entryContent.style.transform = "";
@@ -377,12 +380,15 @@ function Calendar() {
         const osy = t.height / c.height;
         const schedEl = layers.schedule!;
         layers.entry!.style.opacity = "1";
-        tile.style.visibility = "hidden";
-        hiddenNumbers.push(tile);
+        if (deeper) {
+          // opening, the card's blank paper covers the tile's spot
+          tile.style.visibility = "hidden";
+          hiddenNumbers.push(tile);
+        }
         // promote both moving surfaces to their own GPU layers: scaling
         // a paper-textured, mix-blended card is murderously expensive to
         // re-raster each frame on the CPU; cached layers make it cheap
-        entryCard.style.willChange = "transform";
+        entryCard.style.willChange = "transform, opacity";
         entryContent.style.willChange = "transform, opacity";
         schedEl.style.willChange = "opacity";
         willChanged.push(entryCard, entryContent, schedEl);
@@ -400,15 +406,26 @@ function Calendar() {
             0,
             open,
           )}px) scale(${sx}, ${sy})`;
-          // the glyphs never distort: the content counter-scales against
-          // the box, so the shrinking card crops the words like a window
-          // instead of squashing them
-          entryContent.style.transform = `scale(${1 / sx}, ${1 / sy})`;
-          // opening, the full text fades in over the tile's; closing, it
-          // stays solid the whole way down so the words never vanish
-          entryContent.style.opacity = deeper
-            ? `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`
-            : "1";
+          if (deeper) {
+            // opening: the content holds its natural size against the
+            // growing box (a window opening over the words) while the
+            // full text fades in
+            entryContent.style.transform = `scale(${1 / sx}, ${1 / sy})`;
+            entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`;
+            entryCard.style.opacity = "1";
+          } else {
+            // closing: counter-scale only the axis mismatch so the net
+            // text scale is uniform (sx, sx) — the laid-out width then
+            // tracks the card's width exactly, so the right edge can
+            // never clip a glyph, and the type shrinks smoothly with
+            // the box. The last stretch crossfades the whole card onto
+            // the real tile beneath (same paper, converging boxes), so
+            // the entry's line-breaks hand over to the tile's inside a
+            // fade instead of popping on landing.
+            entryContent.style.transform = `scale(1, ${sx / sy})`;
+            entryContent.style.opacity = "1";
+            entryCard.style.opacity = `${Math.min(1, open / 0.25)}`;
+          }
           schedEl.style.opacity = `${1 - open}`;
         };
         apply(deeper ? 0 : 1);
