@@ -58,7 +58,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // overflow-x hidden, explicitly: setting only overflow-y makes
           // the other axis auto per spec, and iOS pans it sideways on a
           // diagonal swipe — the page then sits "clipped" at scrollLeft>0
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-4 sm:overflow-visible sm:pb-6 [scrollbar-width:none]"
+          // -mx/px cancel visually but move the clip boundary out, so focus
+          // rings and selection shadows at the content edge survive the
+          // scroll container (the Settings swatch ring was shorn)
+          className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 sm:overflow-visible sm:pb-6 [scrollbar-width:none]"
         >
           {children}
         </main>

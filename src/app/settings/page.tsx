@@ -54,7 +54,7 @@ export default function SettingsPage() {
       <div className="space-y-10">
         <section aria-label="Appearance">
           <h2 className="voice-label border-b border-rule pb-1.5">Appearance</h2>
-          <div className="mt-4 flex gap-3" role="radiogroup" aria-label="Theme">
+          <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label="Theme">
             <ThemeSwatch
               label="Paper"
               active={mounted && theme === "light"}
@@ -220,12 +220,12 @@ function ThemeSwatch({
       aria-checked={active}
       onClick={onPick}
       className={cn(
-        "pressable hover-lift group flex flex-col items-center gap-1.5 rounded-[8px] p-1.5",
+        "pressable hover-lift group flex w-full flex-col items-center gap-1.5 rounded-[8px] p-1.5",
         active && "shadow-[0_0_0_1.5px_var(--wax)]",
       )}
     >
       <span
-        className="relative grid h-16 w-20 place-items-center overflow-hidden rounded-[5px] shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_1px_3px_rgb(var(--shadow-hue)/0.25)]"
+        className="relative grid h-16 w-full place-items-center overflow-hidden rounded-[5px] shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_1px_3px_rgb(var(--shadow-hue)/0.25)]"
         style={{ background: desk }}
         aria-hidden="true"
       >
