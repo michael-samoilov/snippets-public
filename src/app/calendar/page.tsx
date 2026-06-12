@@ -707,7 +707,7 @@ function Calendar() {
                   ? `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
                   : "Back to the days"
             }
-            className="voice-display pressable rounded-[5px] text-left text-[1.3rem] hover:text-wax"
+            className="voice-display pressable whitespace-nowrap rounded-[5px] text-left text-[1.3rem] hover:text-wax"
           >
             <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">
               ‹
@@ -726,11 +726,13 @@ function Calendar() {
             {format(visibleMonth, "yyyy")}
           </button>
         )}
-        {/* the navigation controls have no business in a single entry */}
+        {/* the navigation controls have no business in a single entry —
+            they fade out and yield their width so the full date never
+            wraps */}
         <div
           className={cn(
-            "flex items-baseline gap-1 transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]",
-            view === "entry" && "pointer-events-none opacity-0",
+            "flex shrink-0 items-baseline gap-1 transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            view === "entry" && "pointer-events-none w-0 overflow-hidden opacity-0",
           )}
           aria-hidden={view === "entry"}
         >
