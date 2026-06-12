@@ -2842,7 +2842,10 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   );
 }
 
-/** A pressed-wax stamp bearing a drawn glyph — the entry card's marks. */
+/** A pressed-wax seal at stamp scale — the entry card's marks, in the
+    day page seal's own material: lit from the upper left, a grooved
+    rim, sitting proud of the paper, depressing under the finger.
+    While listening it breathes, rings widening. */
 function WaxStamp({
   label,
   onClick,
@@ -2858,37 +2861,52 @@ function WaxStamp({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
-      className="pressable relative grid size-[34px] place-items-center rounded-full"
-    >
+    <span className="relative inline-grid place-items-center">
       {listening && (
+        <>
+          <span
+            aria-hidden="true"
+            className="seal-ring absolute inset-0 rounded-full bg-wax"
+          />
+          <span
+            aria-hidden="true"
+            className="seal-ring seal-ring-late absolute inset-0 rounded-full bg-wax"
+          />
+        </>
+      )}
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
+        className={cn(
+          "relative grid size-[34px] shrink-0 place-items-center rounded-full text-paper-raised",
+          "bg-[radial-gradient(circle_at_32%_28%,var(--wax-bright)_0%,var(--wax)_48%,var(--wax-deep)_100%)]",
+          "shadow-[inset_0_1px_1.5px_rgb(255_255_255/0.3),inset_0_-2px_3.5px_rgb(0_0_0/0.3),0_1px_2px_rgb(var(--shadow-hue)/0.3),0_3px_8px_-2px_var(--wax-shadow)]",
+          "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+          "active:scale-[0.93] active:shadow-[inset_0_2px_4px_rgb(0_0_0/0.4),0_1px_2px_rgb(var(--shadow-hue)/0.25)]",
+          listening && "seal-breathe",
+        )}
+      >
+        {/* the grooved rim */}
         <span
           aria-hidden="true"
-          className="absolute -inset-1 animate-pulse rounded-full border-2 border-wax/45"
+          className="pointer-events-none absolute inset-[3.5px] rounded-full border border-black/25 shadow-[inset_0_1px_1px_rgb(255_255_255/0.18)]"
         />
-      )}
-      <svg viewBox="0 0 30 30" className="absolute inset-[2px] size-[30px]" aria-hidden="true">
-        <circle cx="15" cy="15" r="15" fill="var(--wax-deep)" />
-        <circle cx="15" cy="15" r="12.8" fill="var(--wax)" />
-        <circle cx="10.4" cy="9.6" r="4.4" fill="var(--wax-bright)" opacity="0.5" />
-      </svg>
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 20 20"
-        className="relative size-[15px]"
-        fill="none"
-        stroke="var(--paper-raised)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {children}
-      </svg>
-    </button>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 20 20"
+          className="relative size-[15px] drop-shadow-[0_1px_1px_rgb(0_0_0/0.3)]"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {children}
+        </svg>
+      </button>
+    </span>
   );
 }
 

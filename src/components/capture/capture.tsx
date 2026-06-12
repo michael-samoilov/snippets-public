@@ -388,7 +388,7 @@ function Seal({
         className={cn(
           "relative grid size-16 shrink-0 place-items-center rounded-full text-paper-raised sm:size-14",
           "bg-[radial-gradient(circle_at_32%_28%,var(--wax-bright)_0%,var(--wax)_48%,var(--wax-deep)_100%)]",
-          "shadow-[inset_0_1.5px_2px_rgb(255_255_255/0.3),inset_0_-3px_5px_rgb(0_0_0/0.3),0_1px_2px_rgb(var(--shadow-hue)/0.3),0_5px_12px_-2px_rgb(122_44_27/0.45)]",
+          "shadow-[inset_0_1.5px_2px_rgb(255_255_255/0.3),inset_0_-3px_5px_rgb(0_0_0/0.3),0_1px_2px_rgb(var(--shadow-hue)/0.3),0_5px_12px_-2px_var(--wax-shadow)]",
           "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
           "active:scale-[0.93] active:shadow-[inset_0_2px_5px_rgb(0_0_0/0.4),0_1px_2px_rgb(var(--shadow-hue)/0.25)]",
           listening && "seal-breathe",

@@ -46,6 +46,8 @@ html {
   --wax-deep: #234468;
   --wax-bright: #3d6b9e;
   --wax-faint: rgb(46 86 133 / 0.32);
+  /* the wax's colored ambient shadow, for seals sitting proud */
+  --wax-shadow: rgb(35 68 104 / 0.45);
   /* the ember — destructive only, never an accent */
   --ember: #993b26;
   --ember-deep: #7a2c1b;
@@ -127,6 +129,7 @@ html {
   --wax-deep: #46739f;
   --wax-bright: #6f9fd0;
   --wax-faint: rgb(91 140 192 / 0.4);
+  --wax-shadow: rgb(20 40 65 / 0.6);
   --ember: #c75b40;
   --ember-deep: #a44733;
   --gilt: #c99c45;
