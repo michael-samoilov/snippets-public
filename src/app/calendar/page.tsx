@@ -41,7 +41,7 @@ const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const ringSpring = { type: "spring", stiffness: 380, damping: 30 } as const;
 const ym = (d: Date) => format(d, "yyyy-MM");
 
-/* ── feed geometry: ten years of time, computed, never reflowed ────
+/* ── feed geometry: decades of time, computed, never reflowed ──────
    The feeds are virtualized over arithmetic offsets inside one
    fixed-height spacer. Nothing is ever inserted above the reader and
    scrollTop is never written during a gesture — the recording showed
@@ -52,8 +52,26 @@ const YEAR_GAP = 24; // between year blocks
 const MINI_GAP = 8; // gap-2 between minis
 const MINI_DOT = 3;
 
+/** The canvas alone reaches into the deep archive — back to January
+    1950, far enough for any living writer's earliest pages. The
+    glance never volunteers those years; the effort of scrolling there
+    scales with the unlikelihood of needing to. */
+const ARCHIVE_YEAR = 1950;
+
 function monthRows(m: Date): number {
   return Math.ceil((getDay(m) + endOfMonth(m).getDate()) / 7);
+}
+
+/** Stand a scroller on its true bottom. The archive spacer is a
+    quarter-million pixels tall and the engine shaves a fraction off a
+    box that size, so the geometric bottom sits just past the real one.
+    A write there is honored until the next rendering update — forced
+    reflows don't re-clamp it — then snaps back a whole pixel, under a
+    flight that already measured its landing. The spacer's rendered
+    height IS readable synchronously, so stand on its painted pixel:
+    a position the engine never takes back. */
+function settleBottom(scroller: HTMLElement, spacer: HTMLElement) {
+  scroller.scrollTop = Math.floor(spacer.getBoundingClientRect().height);
 }
 
 function monthsBetween(a: Date, b: Date): number {
@@ -833,24 +851,56 @@ function Calendar() {
     scheduleFeedRef.current?.goTo(key);
   };
 
-  /** the year view reaches back to the first entry's year — or, with
-      an empty book, the year of last week (early January still wants
-      to backfill December) */
-  const earliestYear = useMemo(() => {
+  /** the glance shows the lived years: the first entry's through
+      today's (last week's on an empty book — early January still
+      wants to backfill December). Dormant years between kept ones
+      stand as empty blocks; a gap of five or more folds away, so old
+      and new pages sit a scroll apart. The year the camera is over is
+      always included — climbing out of 1980 needs a 1980 to land in —
+      but without permanence: move the camera on, and it folds away */
+  const anchorYear = visibleMonth.getFullYear();
+  const glanceYearsRaw = useMemo(() => {
+    const now = new Date();
     const lastWeek = new Date();
     lastWeek.setDate(lastWeek.getDate() - 7);
-    let y = lastWeek.getFullYear();
-    if (all?.length) {
-      y = Math.min(y, Number(all[all.length - 1].day.slice(0, 4)) || y);
+    const nowYear = now.getFullYear();
+    const kept = new Set([nowYear, lastWeek.getFullYear()]);
+    for (const s of all ?? []) {
+      const y = Number(s.day.slice(0, 4));
+      if (y >= 1 && y <= nowYear) kept.add(y);
     }
-    return y;
-  }, [all]);
-  const yearSpan = Math.max(1, today.getFullYear() - earliestYear + 1);
-  // the canvas and the glance agree on what time exists: January of
-  // the earliest year through the current month
+    const years: number[] = [];
+    let gap: number[] = [];
+    for (let y = Math.min(...kept); y <= nowYear; y++) {
+      if (kept.has(y)) {
+        if (gap.length < 5) years.push(...gap);
+        years.push(y);
+        gap = [];
+      } else {
+        gap.push(y);
+      }
+    }
+    if (anchorYear <= nowYear && !years.includes(anchorYear)) {
+      years.push(anchorYear);
+      years.sort((a, b) => a - b);
+    }
+    return years;
+  }, [all, anchorYear]);
+  // identity-stable through a string key: the camera crossing year
+  // lines inside the lived span recomputes the same list, and that
+  // must not rebuild the glance's geometry
+  const glanceYearsKey = glanceYearsRaw.join(",");
+  const glanceYears = useMemo(
+    () => glanceYearsKey.split(",").map(Number),
+    [glanceYearsKey],
+  );
+  // the canvas is the deep archive: back to January 1950, or the first
+  // entry's year should an import reach further — so every month the
+  // glance can name, the canvas can show
+  const archiveYear = Math.min(ARCHIVE_YEAR, glanceYears[0]);
   const monthSpan = Math.max(
     1,
-    (today.getFullYear() - earliestYear) * 12 + today.getMonth() + 1,
+    (today.getFullYear() - archiveYear) * 12 + today.getMonth() + 1,
   );
 
   /** days that exist in the book, for stepping it by months */
@@ -895,12 +945,15 @@ function Calendar() {
       if (target) jumpTo(target);
     } else if (view === "month") {
       const next = startOfMonth(addMonths(visibleMonth, delta));
-      if (isAfter(next, currentMonth)) return;
+      if (isAfter(next, currentMonth) || next.getFullYear() < archiveYear)
+        return;
       setVisibleMonth(next);
       monthFeedRef.current?.goTo(next, true);
     } else {
-      const next = visibleYear + delta;
-      if (next > today.getFullYear() || next < earliestYear) return;
+      // step through the lived years — a folded gap is a single step
+      const i = glanceYears.indexOf(visibleYear);
+      const next = glanceYears[i + delta];
+      if (i < 0 || next === undefined) return;
       setVisibleYear(next);
       yearFeedRef.current?.goTo(next, true);
     }
@@ -1113,7 +1166,7 @@ function Calendar() {
             handleRef={yearFeedRef}
             active={view === "year" && !zoom}
             today={today}
-            span={yearSpan}
+            years={glanceYears}
             counts={counts}
             onPickMonth={pickMonth}
             onVisible={setVisibleYear}
@@ -1189,6 +1242,7 @@ function MonthFeed({
 }) {
   const currentMonth = startOfMonth(today);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
   const probeRef = useRef<HTMLParagraphElement>(null);
   const [metrics, setMetrics] = useState<{ w: number; h: number; labelH: number } | null>(null);
   const [scrollY, setScrollY] = useState<number | null>(null);
@@ -1257,13 +1311,17 @@ function MonthFeed({
       // the first scroll event lands, and that rebuild must re-anchor
       visibleIdxRef.current = idx;
       anchorMonthRef.current = geom.months[idx];
-      el.scrollTop = geom.offsets[idx];
+      if (idx === geom.offsets.length - 1 && spacerRef.current)
+        settleBottom(el, spacerRef.current);
+      else el.scrollTop = geom.offsets[idx];
     } else if (anchorMonthRef.current) {
       // re-anchor by MONTH, not index: a span change (history loading
       // in) prepends months and shifts every index
       const idx = indexOfMonth(anchorMonthRef.current);
       visibleIdxRef.current = idx;
-      el.scrollTop = geom.offsets[idx];
+      if (idx === geom.offsets.length - 1 && spacerRef.current)
+        settleBottom(el, spacerRef.current);
+      else el.scrollTop = geom.offsets[idx];
     }
     // `selected` only seeds the very first position
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1274,10 +1332,14 @@ function MonthFeed({
       const el = scrollerRef.current;
       const g = geomRef.current;
       if (!el || !g) return;
-      const top = g.offsets[indexOfMonth(startOfMonth(m))];
+      const idx = indexOfMonth(startOfMonth(m));
+      const top = g.offsets[idx];
       setScrollY(top); // window renders the destination immediately
       visibleIdxRef.current = -1;
-      el.scrollTo({ top, behavior: smooth ? "smooth" : "instant" });
+      anchorMonthRef.current = g.months[idx];
+      if (idx === g.offsets.length - 1 && !smooth && spacerRef.current)
+        settleBottom(el, spacerRef.current);
+      else el.scrollTo({ top, behavior: smooth ? "smooth" : "instant" });
     },
     [indexOfMonth, setScrollY],
   );
@@ -1389,6 +1451,7 @@ function MonthFeed({
         // stage resize — a mid-zoom rail collapse can no longer clamp
         // the scroller and drift the flights' landing targets
         <div
+          ref={spacerRef}
           className="relative"
           style={{ height: geom.offsets[geom.offsets.length - 1] }}
         >
@@ -1557,8 +1620,7 @@ function buildYearGeom(
   width: number,
   labelH: number,
   miniLabelH: number,
-  currentYear: number,
-  span: number,
+  years: number[],
 ): YearGeom {
   const cols = typeof window !== "undefined" && window.innerWidth >= 640 ? 4 : 3;
   const rows = 12 / cols;
@@ -1567,11 +1629,9 @@ function buildYearGeom(
   const dots = 6 * MINI_DOT + 5 * 3;
   const miniH = 2 + 20 + miniLabelH + 6 + dots;
   const blockH = labelH + rows * miniH + (rows - 1) * MINI_GAP;
-  const years: number[] = [];
   const offsets: number[] = [];
   let y = 0;
-  for (let i = span - 1; i >= 0; i--) {
-    years.push(currentYear - i);
+  for (let i = 0; i < years.length; i++) {
     offsets.push(y);
     y += blockH + YEAR_GAP;
   }
@@ -1582,7 +1642,7 @@ function YearFeed({
   handleRef,
   active,
   today,
-  span,
+  years,
   counts,
   onPickMonth,
   onVisible,
@@ -1590,8 +1650,9 @@ function YearFeed({
   handleRef: React.MutableRefObject<YearFeedHandle | null>;
   active: boolean;
   today: Date;
-  /** how many years the glance reaches back (≥1, ends at today's) */
-  span: number;
+  /** the lived years, ascending and ending at today's — gaps of five
+      or more dormant years are already folded out of the list */
+  years: number[];
   counts: Map<string, number> | undefined;
   onPickMonth: (m: Date) => void;
   onVisible: (y: number) => void;
@@ -1608,22 +1669,17 @@ function YearFeed({
   } | null>(null);
   const [scrollY, setScrollY] = useState<number | null>(null);
   const visibleRef = useRef(-1);
+  const anchorYearRef = useRef<number | null>(null);
   const rafRef = useRef(0);
   const didInit = useRef(false);
 
   const geom = useMemo(
     () =>
       metrics
-        ? buildYearGeom(
-            metrics.w,
-            metrics.labelH,
-            metrics.miniLabelH,
-            currentYear,
-            span,
-          )
+        ? buildYearGeom(metrics.w, metrics.labelH, metrics.miniLabelH, years)
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [metrics?.w, metrics?.labelH, metrics?.miniLabelH, span],
+    [metrics?.w, metrics?.labelH, metrics?.miniLabelH, years],
   );
   const geomRef = useRef<YearGeom | null>(null);
   useLayoutEffect(() => {
@@ -1654,7 +1710,9 @@ function YearFeed({
   }, []);
 
   // same discipline as the month feed: position only after the spacer
-  // is real; re-anchor the visible year when geometry truly changes
+  // is real. Re-anchor by YEAR, not index — the list breathes (a
+  // transient year folding away, history loading in) and a breath
+  // shifts every index
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el || !geom) return;
@@ -1662,9 +1720,21 @@ function YearFeed({
       didInit.current = true;
       const idx = geom.offsets.length - 1;
       visibleRef.current = idx;
+      anchorYearRef.current = geom.years[idx];
       el.scrollTop = geom.offsets[idx];
-    } else if (visibleRef.current >= 0) {
-      el.scrollTop = geom.offsets[visibleRef.current];
+    } else if (anchorYearRef.current != null) {
+      const a = anchorYearRef.current;
+      let idx = geom.years.indexOf(a);
+      if (idx < 0) {
+        // the year under the camera folded away — stand on the nearest
+        idx = geom.years.reduce(
+          (p, c, i) => (Math.abs(c - a) < Math.abs(geom.years[p] - a) ? i : p),
+          0,
+        );
+        anchorYearRef.current = geom.years[idx];
+      }
+      visibleRef.current = idx;
+      el.scrollTop = geom.offsets[idx];
     }
   }, [geom]);
 
@@ -1676,6 +1746,7 @@ function YearFeed({
     if (idx < 0) return;
     setScrollY(g.offsets[idx]);
     visibleRef.current = -1;
+    anchorYearRef.current = y;
     el.scrollTo({ top: g.offsets[idx], behavior: smooth ? "smooth" : "instant" });
   }, [setScrollY]);
   const originFor = useCallback((ymKey: string) => {
@@ -1722,6 +1793,7 @@ function YearFeed({
       const vi = indexAt(g.offsets, top + (metrics?.h ?? 400) * 0.35);
       if (vi !== visibleRef.current) {
         visibleRef.current = vi;
+        anchorYearRef.current = g.years[vi];
         onVisible(g.years[vi]);
       }
     });
