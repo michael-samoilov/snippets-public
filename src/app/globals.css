@@ -217,6 +217,19 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* On phones the page itself never scrolls — every scroll lives in a
+   container (the sheet's main, the calendar feeds, the entry card).
+   Retiring the root scroller also retires Safari's rubber-band, which
+   could drag the whole desk off-screen. Desktop keeps document flow. */
+@media (max-width: 639.98px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior-y: none;
+  }
+}
+
 body {
   min-height: 100%;
   background: var(--desk);
