@@ -199,7 +199,12 @@ abbreviation morphs between its year-view mini label and its hand-over
 label over the first of the month — one small-caps tag, flying and
 resizing. Originals hide while their double is in the air; endpoints are
 Range text-rects, not line boxes (leading would read as a landing skip).
-The stage grows below the month; the title row always climbs one altitude and
+The stage is **one fixed frame at every altitude**: it fills the page
+column, and its terminating hairline sits the same distance from the
+sheet's bottom as the header stands from its top — the line never
+moves between views. The desk is exactly one screen at every size
+(html/body never scroll; every scroll lives in a container — the
+sheet's main, the feeds, the entry card). The title row always climbs one altitude and
 follows whichever feed scrolls beneath it. A **left-to-right swipe**
 (touch/pen, rightward within a 45° cone, a flick not a wander) climbs
 one altitude too: entry → book anywhere on the card; book → month and

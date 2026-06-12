@@ -6,10 +6,11 @@ import { CommandMenu } from "@/components/command-menu";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    // on phones the desk is exactly one screen: the sheet takes the
-    // remaining height and pages scroll inside it, never the page —
-    // the paper's bottom edge stays above the dock
-    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[calc(max(env(safe-area-inset-bottom),0.75rem)+3.9rem)] sm:h-auto sm:min-h-dvh sm:overflow-visible sm:px-8 sm:pb-8">
+    // the desk is exactly one screen at every size: the sheet takes the
+    // remaining height and pages scroll inside it, never the page. (An
+    // indefinite min-h chain on desktop let h-full children collapse —
+    // the calendar's stage shrank to its 1px border.)
+    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[calc(max(env(safe-area-inset-bottom),0.75rem)+3.9rem)] sm:px-8 sm:pb-8">
       {/* ink-bleed: a hair of edge wobble for masthead type */}
       <svg aria-hidden="true" width="0" height="0" className="absolute">
         <filter id="ink-bleed" x="-5%" y="-5%" width="110%" height="110%">
@@ -53,7 +54,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* the sheet of paper */}
-      <Sheet className="flex min-h-0 flex-1 flex-col px-5 py-6 sm:px-10 sm:py-9">
+      <Sheet className="flex min-h-0 flex-1 flex-col px-5 pb-2 pt-6 sm:px-10 sm:pb-3 sm:pt-9">
         <main
           // overflow-x hidden, explicitly: setting only overflow-y makes
           // the other axis auto per spec, and iOS pans it sideways on a
@@ -61,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // -mx/px cancel visually but move the clip boundary out, so focus
           // rings and selection shadows at the content edge survive the
           // scroll container (the Settings swatch ring was shorn)
-          className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 sm:overflow-visible sm:pb-6 [scrollbar-width:none]"
+          className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 sm:pb-6 [scrollbar-width:none]"
         >
           {children}
         </main>

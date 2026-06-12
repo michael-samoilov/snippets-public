@@ -894,7 +894,7 @@ function Calendar() {
   const showEntryLayer = view === "entry" || zoom?.from === "entry";
 
   return (
-    <div className="page-settle">
+    <div className="page-settle flex h-full min-h-0 flex-col">
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat
@@ -1032,17 +1032,13 @@ function Calendar() {
         </div>
       </div>
 
-      {/* the stage: all three altitudes live here; the camera moves
-          between them, and the frame grows when the book is open */}
+      {/* the stage: one fixed frame for every altitude. It fills the
+          column, and its terminating hairline sits the same distance
+          from the sheet's bottom as the header stands from its top —
+          and never moves between views */}
       <div
         ref={stageRef}
-        className={cn(
-          "relative overflow-hidden border-b transition-[height,border-color] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
-          view === "entry" ? "border-transparent" : "border-rule-faint",
-          view === "month" || view === "year"
-            ? "h-[23rem] sm:h-[26rem]"
-            : "h-[min(34rem,62dvh)]",
-        )}
+        className="relative min-h-0 flex-1 overflow-hidden border-b border-rule-faint"
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
             e.preventDefault();
