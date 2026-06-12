@@ -139,15 +139,25 @@ Numbers that change on action animate with `<NumberFlow>`.
 
 ## Structure
 
-One centered column (`max-w-[46rem]` desk, sheet inside). No cards, no
-boxes, **no iconography for kinds**: entries are typeset with hairline
-dividers and the `.entry-list` margin rule (an empty margin, like a
-legal pad's); kinds appear only as small-caps colored labels, chips are
-text-only stamps. The one sanctioned tile material is the calendar's
-(year minis and the book's entry tiles — `bg-paper`, hairline border,
-inset top highlight); it never leaves the calendar. The app's sole marks are the wordmark's wax dot and
-the "Kept." StampMark. Navigation is words — small-caps serif with a
-gliding ink underline (desktop) and a floating dock pill (mobile).
+One centered column (`max-w-[46rem]` desk, sheet inside). On phones
+the desk is exactly one screen: the sheet takes the remaining height
+and pages scroll inside it, never the page — the paper's bottom edge
+stays above the dock. No cards, no boxes, **no iconography for
+kinds**: entries are typeset with hairline dividers and the
+`.entry-list` margin rule (an empty margin, like a legal pad's); kinds
+appear only as small-caps colored labels, chips are text-only stamps.
+The one sanctioned tile material is the calendar's (year minis and the
+book's entry tiles — `bg-paper`, hairline border, inset top
+highlight); it never leaves the calendar. The sanctioned marks are the
+wordmark's wax dot, the "Kept." StampMark, the dock's two hand-drawn
+strokes (a quill for the day's page, a calendar for the book — with
+small-caps words beneath), and the account glyph. Desktop navigation
+is words — small-caps serif with a gliding ink underline; there are
+two pages, Today and the calendar (the collection folded into the
+book). The avatar sits on the desk's top-right edge: its menu holds
+Settings and the seam where cross-device sync will plug in
+(`src/lib/auth.ts` — local-first is the constitution, sync only ever
+adds on top).
 
 The calendar is a camera over time with **four altitudes**: the year
 at a glance, the month canvas, **the book** (the schedule of kept
@@ -237,7 +247,9 @@ are exact and shrinking content can never dip scrollHeight and clamp
 the reader off their page. `?d=` deep-links into the book; the month
 view drops it. PageUp/Down and chevrons step months; a wax "Today"
 affordance fades in whenever the view has wandered. URL carries view
-state (`?d=`, `?q=`, `?kind=`, `?fav=`).
+state (`?d=`). The calendar page is chromeless — no masthead, the
+title row is the page's first line — and the stage terminates in the
+same hairline the weekday rail draws at its top.
 
 ## Copy voice
 

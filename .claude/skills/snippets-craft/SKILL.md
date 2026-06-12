@@ -49,8 +49,9 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    glyphs/icons for kinds). One sanctioned tile material exists — the
    calendar's (year minis + the book's entry tiles: `bg-paper`,
    hairline border, inset top highlight), owner-approved and calendar
-   only; don't spread it. The only marks are the wordmark's wax dot
-   and the StampMark. Wax is semantic (recording, rule, destructive);
+   only; don't spread it. The sanctioned marks: the wordmark's wax dot,
+   the StampMark, the dock's two hand-drawn strokes (quill + calendar,
+   small-caps words beneath), and the account glyph — nothing else. Wax is semantic (recording, rule, destructive);
    gilt = favorites only. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
    mode; `.ink-bleed` is for mastheads only.

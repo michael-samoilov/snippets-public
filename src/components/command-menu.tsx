@@ -47,7 +47,7 @@ export function CommandMenu() {
       open={open}
       onOpenChange={setOpen}
       title="Command menu"
-      description="Search the collection or jump somewhere"
+      description="Search the book or jump somewhere"
       className="float border-none bg-paper-raised duration-100 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
     >
       <CommandInput
@@ -63,16 +63,12 @@ export function CommandMenu() {
 
         {query.trim() && results.length > 0 && (
           <>
-            <CommandGroup heading="In the collection">
+            <CommandGroup heading="In the book">
               {results.map((s) => (
                 <CommandItem
                   key={s.id}
                   value={`${s.id} ${s.title ?? ""} ${s.text.slice(0, 60)}`}
-                  onSelect={() =>
-                    run(() =>
-                      router.push(`/collection?q=${encodeURIComponent(query)}`),
-                    )
-                  }
+                  onSelect={() => run(() => router.push(`/calendar?d=${s.day}`))}
                   className="font-serif"
                 >
                   <span className="truncate">{s.title ?? s.text}</span>
@@ -86,9 +82,6 @@ export function CommandMenu() {
         <CommandGroup heading="Go to">
           <CommandItem className="font-serif" onSelect={() => run(() => router.push("/"))}>
             Today
-          </CommandItem>
-          <CommandItem className="font-serif" onSelect={() => run(() => router.push("/collection"))}>
-            Collection
           </CommandItem>
           <CommandItem className="font-serif" onSelect={() => run(() => router.push("/calendar"))}>
             Calendar

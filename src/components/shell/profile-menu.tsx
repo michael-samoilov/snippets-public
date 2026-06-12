@@ -1,0 +1,65 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useSession } from "@/lib/auth";
+
+/**
+ * The account mark on the desk's top edge. Until a sync provider is
+ * wired it stands as the promise of one — and the quiet door to
+ * Settings, which left the nav to live here.
+ */
+export function ProfileMenu() {
+  const router = useRouter();
+  const { user } = useSession();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Account"
+        className="pressable flex size-8 shrink-0 items-center justify-center rounded-full border border-rule bg-paper-raised text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.08)] hover:text-ink data-[state=open]:text-ink"
+      >
+        {user ? (
+          <span className="voice-label text-[0.72rem] leading-none">
+            {user.name
+              .split(/\s+/)
+              .map((w) => w[0])
+              .slice(0, 2)
+              .join("")}
+          </span>
+        ) : (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="size-[17px]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
+            <circle cx="10" cy="7" r="3.1" />
+            <path d="M4.2 16.4c1.2-2.9 3.3-4.3 5.8-4.3s4.6 1.4 5.8 4.3" />
+          </svg>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="float origin-(--radix-dropdown-menu-content-transform-origin) border-none font-serif data-[state=closed]:duration-100 data-[state=open]:duration-150"
+      >
+        <DropdownMenuItem disabled className="italic">
+          Sign in to sync across devices — soon
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => router.push("/settings")}>
+          Settings…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

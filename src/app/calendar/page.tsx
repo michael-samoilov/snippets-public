@@ -23,7 +23,6 @@ import {
   startOfMonth,
 } from "date-fns";
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
-import NumberFlow from "@number-flow/react";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { StampMark } from "@/components/stamp-mark";
@@ -31,7 +30,6 @@ import {
   groupByDay,
   useAllSnippets,
   useDayCounts,
-  useStats,
 } from "@/hooks/use-snippets";
 import { addSnippet } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
@@ -225,7 +223,6 @@ function Calendar() {
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
 
   const counts = useDayCounts();
-  const stats = useStats();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
 
@@ -817,24 +814,6 @@ function Calendar() {
 
   return (
     <div className="page-settle">
-      <header className="mb-6">
-        <h1 className="voice-display ink-bleed text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
-          Calendar
-        </h1>
-        {stats && stats.daysWithEntries > 0 && (
-          <p className="mt-2.5 font-serif text-[0.92rem] italic text-ink-soft">
-            collected on <NumberFlow value={stats.daysWithEntries} />{" "}
-            {stats.daysWithEntries === 1 ? "day" : "days"}
-            {stats.longestStreak > 1 && (
-              <>
-                {" "}
-                · longest run <NumberFlow value={stats.longestStreak} />
-              </>
-            )}
-          </p>
-        )}
-      </header>
-
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it */}
       <div className="flex items-baseline justify-between">
@@ -970,7 +949,7 @@ function Calendar() {
       <div
         ref={stageRef}
         className={cn(
-          "relative overflow-hidden transition-[height] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          "relative overflow-hidden border-b border-rule-faint transition-[height] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
           view === "month" || view === "year"
             ? "h-[23rem] sm:h-[26rem]"
             : "h-[min(34rem,62dvh)]",

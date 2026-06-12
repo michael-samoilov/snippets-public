@@ -7,9 +7,7 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/", label: "Today" },
-  { href: "/collection", label: "Collection" },
   { href: "/calendar", label: "Calendar" },
-  { href: "/settings", label: "Settings" },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {
@@ -51,7 +49,51 @@ export function ShellNav() {
   );
 }
 
-/** Mobile: a floating dock of words on the desk. */
+/* the dock's two marks: a quill for the day's page, a calendar for the
+   book — hand-drawn strokes in the ink, owner-sanctioned iconography */
+
+function QuillIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
+      <path d="M4.4 15.6 12.6 7" />
+      <path d="M4.4 15.6 3.4 17.6" />
+    </svg>
+  );
+}
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
+      <rect x="3.2" y="4.6" width="13.6" height="12" rx="2.2" />
+      <path d="M6.8 2.8v3.4M13.2 2.8v3.4M3.2 9h13.6" />
+    </svg>
+  );
+}
+
+const TABS = [
+  { href: "/", label: "today", Icon: QuillIcon },
+  { href: "/calendar", label: "calendar", Icon: CalendarIcon },
+] as const;
+
+/** Mobile: a floating dock on the desk — two marks with small words. */
 export function ShellTabs() {
   const pathname = usePathname();
   return (
@@ -60,15 +102,16 @@ export function ShellTabs() {
       className="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:hidden"
     >
       <div className="float flex items-center gap-1 rounded-full px-2 py-1">
-        {LINKS.map(({ href, label }) => {
+        {TABS.map(({ href, label, Icon }) => {
           const active = isActive(pathname, href);
           return (
             <Link
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
+              aria-label={label}
               className={cn(
-                "voice-label pressable relative rounded-full px-3 py-2 text-[0.8rem]",
+                "pressable relative flex flex-col items-center gap-0.5 rounded-[1.25rem] px-5 pb-1 pt-1.5",
                 active ? "text-ink" : "text-ink-faint",
               )}
             >
@@ -77,10 +120,13 @@ export function ShellTabs() {
                   layoutId="tab-ink"
                   aria-hidden="true"
                   transition={underlineSpring}
-                  className="absolute inset-0 rounded-full bg-accent"
+                  className="absolute inset-0 rounded-[1.25rem] bg-accent"
                 />
               )}
-              <span className="relative">{label}</span>
+              <Icon className="relative size-5" />
+              <span className="voice-label relative text-[0.6rem] leading-none">
+                {label}
+              </span>
             </Link>
           );
         })}
