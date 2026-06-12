@@ -225,11 +225,27 @@ html {
    a container (the sheet's main, the calendar feeds, the entry card),
    each overscroll-contained so a fling inside never chains out. */
 html {
+  /* color only — the canvas extends it through every overscroll and
+     zoom gap, so the desk has no findable edge */
   background: var(--desk);
-  /* lamplight: a pool of light upper-center, edges falling away.
-     No fixed attachment: the root doesn't scroll, and the canvas
-     paint never translates anyway — fixed attachment only buys the
-     engine's slow path */
+}
+
+html,
+body {
+  height: 100%;
+}
+
+/* lamplight: a pool of light upper-center, edges falling away. It
+   lives on a screen-glued layer, not the canvas — a canvas gradient
+   tiles past the document's edge (a second pool below the page), and
+   a bounce would find the seam; glued to the viewport, the light goes
+   wherever the screen goes */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image: radial-gradient(
     120% 85% at 50% -12%,
     rgb(255 250 235 / 0.5) 0%,
@@ -238,18 +254,13 @@ html {
   );
 }
 
-html.dark {
+.dark body::before {
   background-image: radial-gradient(
     120% 85% at 50% -12%,
     rgb(255 220 160 / 0.05) 0%,
     transparent 50%,
     rgb(0 0 0 / 0.5) 100%
   );
-}
-
-html,
-body {
-  height: 100%;
 }
 
 body {

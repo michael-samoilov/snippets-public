@@ -39,6 +39,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // iOS auto-zooms onto focused fields it deems small; a capped scale
+  // declines that jump (pinch zoom itself stays available — Safari
+  // ignores the cap for the accessibility gesture)
+  maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#e8dcc2" },

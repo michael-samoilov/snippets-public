@@ -1195,10 +1195,13 @@ function Calendar() {
           </div>
         </div>
         {/* the search bar: the cards' material drawn out to a pill. It
-            grows leftward from the icon's corner to take the whole row */}
+            grows leftward from the icon's corner to take the whole row
+            — downward only for its extra height: the sticky row sits
+            flush on the scroll container's clip line, and anything
+            above it is shorn off */}
         <div
           className={cn(
-            "absolute -inset-y-1 right-0 z-10 transition-[width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            "absolute -bottom-1.5 top-0 right-0 z-10 transition-[width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
             searching ? "w-full opacity-100" : "pointer-events-none w-12 opacity-0",
           )}
           aria-hidden={!searching}
@@ -2625,6 +2628,16 @@ function BackfillCapture({
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
       />
+      {/* …and while words stand in it, the paint completes: the card
+          is becoming real */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
+          "border-rule-faint group-focus-within:border-rule",
+          text.length > 0 ? "opacity-100" : "opacity-0",
+        )}
+      />
       <textarea
         ref={areaRef}
         value={text}
@@ -2655,7 +2668,9 @@ function BackfillCapture({
         )}
       />
       {hasText && (
-        <div className="mt-2 flex justify-end">
+        // pr-px: the button's 1px ring shadow sits outside its box, and
+        // the column's right edge is also the stage's clip line
+        <div className="mt-2 flex justify-end pr-px">
           <button
             type="button"
             onClick={() => void keep()}
