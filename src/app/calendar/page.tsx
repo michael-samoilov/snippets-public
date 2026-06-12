@@ -1608,6 +1608,11 @@ function ScheduleFeed({
   onOpen: (id: string) => void;
 }) {
   const todayKey = dayKey(today);
+  const yesterdayKey = useMemo(() => {
+    const d = dateFromDayKey(todayKey);
+    d.setDate(d.getDate() - 1);
+    return dayKey(d);
+  }, [todayKey]);
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
   const [probe, setProbe] = useState<string | null>(selected);
@@ -1624,12 +1629,15 @@ function ScheduleFeed({
     const map = new Map(groups.map((g) => [g.day, g.snippets]));
     const days = new Set(map.keys());
     days.add(todayKey);
+    // yesterday always earns a page so its memory can still be caught —
+    // even when nothing was kept there
+    if (!map.has(yesterdayKey)) days.add(yesterdayKey);
     if (probe) days.add(probe);
     return [...days].sort().map((day) => ({
       day,
       snippets: map.get(day) ?? ([] as Snippet[]),
     }));
-  }, [all, probe, todayKey]);
+  }, [all, probe, todayKey, yesterdayKey]);
 
   const scrollToRow = useCallback((day: string) => {
     const el = scrollerRef.current;
@@ -1721,7 +1729,12 @@ function ScheduleFeed({
         const newMonth =
           i === 0 || rows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
         const isToday = row.day === todayKey;
-        const showComposer = isToday || row.day === probe;
+        // today always invites; yesterday invites while it's still empty;
+        // and the page you opened keeps its composer
+        const showComposer =
+          isToday ||
+          row.day === probe ||
+          (row.day === yesterdayKey && row.snippets.length === 0);
         const last = i === rows.length - 1;
         const pageRow = (
           <section
@@ -1948,9 +1961,13 @@ function BackfillCapture({
     }
   };
 
+  const hasText = text.trim().length > 0;
+
   return (
     <div className={cn("pt-1", withRule && "mt-2 border-t border-rule-faint pt-3")}>
-      <div className="flex items-end gap-3">
+      {/* the field runs the full width of the cards above it — the Keep
+          button drops below so it never crops the line and forces wraps */}
+      <div className="flex items-end gap-2">
         {isToday && !withRule && (
           <span className="mb-2 shrink-0" aria-hidden="true">
             <StampMark />
@@ -1976,23 +1993,25 @@ function BackfillCapture({
               void keep();
             }
           }}
-          className="voice-prose min-h-[2.2rem] flex-1 resize-none overflow-hidden border-b border-rule bg-transparent pb-1 text-[1rem] outline-none transition-colors duration-150 placeholder:italic placeholder:text-ink-faint focus:border-ink-soft"
+          className="voice-prose min-h-[2.2rem] w-full flex-1 resize-none overflow-hidden border-b border-rule bg-transparent pb-1 text-[1rem] outline-none transition-colors duration-150 placeholder:italic placeholder:text-ink-faint focus:border-ink-soft"
         />
-        <button
-          type="button"
-          onClick={() => void keep()}
-          disabled={!text.trim()}
-          className={cn(
-            "rounded-[5px] bg-paper-raised px-3 py-1.5 font-serif text-[0.9rem] text-ink",
-            "shadow-[inset_0_1px_0_var(--press-highlight),0_0_0_1px_rgb(var(--shadow-hue)/0.1),0_1px_2px_rgb(var(--shadow-hue)/0.1)]",
-            "transition-[opacity,transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-            "active:translate-y-px active:scale-[0.97] active:shadow-[inset_0_1px_3px_rgb(0_0_0/0.12)]",
-            text.trim() ? "opacity-100" : "opacity-0",
-          )}
-        >
-          Keep
-        </button>
       </div>
+      {hasText && (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => void keep()}
+            className={cn(
+              "rounded-[5px] bg-paper-raised px-3 py-1.5 font-serif text-[0.9rem] text-ink",
+              "shadow-[inset_0_1px_0_var(--press-highlight),0_0_0_1px_rgb(var(--shadow-hue)/0.1),0_1px_2px_rgb(var(--shadow-hue)/0.1)]",
+              "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
+              "active:translate-y-px active:scale-[0.97] active:shadow-[inset_0_1px_3px_rgb(0_0_0/0.12)]",
+            )}
+          >
+            Keep
+          </button>
+        </div>
+      )}
       {/* the line is always reserved: un-mounting it reshaped the last
           row, transiently clamped the scroller, and woke the spy */}
       <p
