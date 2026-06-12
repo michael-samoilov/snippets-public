@@ -142,7 +142,7 @@ export default function SettingsPage() {
           <div className="mt-8 border-t border-rule-faint pt-4">
             <Button
               variant="ghost"
-              className="px-0 font-serif text-wax hover:bg-transparent hover:text-wax-deep"
+              className="px-0 font-serif text-ember hover:bg-transparent hover:text-ember-deep"
               onClick={() => setEraseOpen(true)}
             >
               Let everything go…
@@ -247,7 +247,7 @@ function ThemeSwatch({
           <span className="mt-[3px] block h-[2px] w-8 rounded-full" style={{ background: ink, opacity: 0.3 }} />
           <span
             className="mt-1.5 block size-2 rounded-full"
-            style={{ background: "#993b26" }}
+            style={{ background: "#2e5685" }}
           />
         </span>
       </span>
@@ -330,11 +330,11 @@ function HoldToErase({ onComplete }: { onComplete: () => void }) {
       }}
       onKeyUp={cancel}
       onContextMenu={(e) => e.preventDefault()}
-      className="relative select-none overflow-hidden rounded-[5px] bg-wax px-4 py-2 font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
+      className="relative select-none overflow-hidden rounded-[5px] bg-ember px-4 py-2 font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
     >
       <span
         aria-hidden="true"
-        className="absolute inset-0 bg-wax-deep"
+        className="absolute inset-0 bg-ember-deep"
         style={{
           clipPath: holding ? "inset(0 0 0 0)" : "inset(0 100% 0 0)",
           transition: holding

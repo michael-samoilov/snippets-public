@@ -41,8 +41,8 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
 5. **Feedback at the trigger.** Confirmations stamp in place ("Kept."
    beside the button); toasts only for undo (delete) or far-from-trigger
    results; counters animate with `<NumberFlow>`; destructive actions
-   are hold-to-confirm (wax `clip-path` fill, 1.4s linear hold / 200ms
-   release). Haptic taps (`navigator.vibrate` 6–10ms) on keep/file/select.
+   are hold-to-confirm (ember `clip-path` fill, 1.4s linear hold /
+   200ms release). Haptic taps (`navigator.vibrate` 6–10ms) on keep/file/select.
 6. **No cards, no iconography.** Entries are typeset lists with the
    `.entry-list` margin rule, and they are their words ALONE: title,
    kind, tags, time, and source live in the data (search) and are
@@ -56,8 +56,9 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    hand-drawn strokes (quill + calendar, small-caps words beneath),
    the calendar header's search glass, the entry card's two foot marks
    (wax quill/microphone stamp + ink trash — destructive is NOT wax),
-   and the account glyph — nothing else. Wax is semantic (recording, rule, destructive);
-   gilt = favorites only. Text on the sheet is real ink:
+   and the account glyph — nothing else. Wax (a sealing-wax BLUE) is
+   semantic (recording, rule, today) and never destructive — the ember
+   red (`--ember`) is destructive's alone; gilt = favorites only. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
    mode; `.ink-bleed` is for mastheads only.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,

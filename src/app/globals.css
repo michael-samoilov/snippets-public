@@ -39,11 +39,16 @@ html {
   --rule: rgb(36 30 21 / 0.14);
   --rule-faint: rgb(36 30 21 / 0.08);
 
-  /* sealing wax — the recording light, the margin rule, the accent */
-  --wax: #993b26;
-  --wax-deep: #7a2c1b;
-  --wax-bright: #b04a31;
-  --wax-faint: rgb(153 59 38 / 0.32);
+  /* sealing wax, blue — the recording light, the margin rule, the
+     accent. Blue so the writer's color can never be mistaken for the
+     destroyer's: destructive keeps the ember red below */
+  --wax: #2e5685;
+  --wax-deep: #234468;
+  --wax-bright: #3d6b9e;
+  --wax-faint: rgb(46 86 133 / 0.32);
+  /* the ember — destructive only, never an accent */
+  --ember: #993b26;
+  --ember-deep: #7a2c1b;
   --gilt: #a87a24;
 
   /* ── the six kinds, as muted editorial inks ───────────── */
@@ -96,7 +101,7 @@ html {
   --muted-foreground: var(--ink-soft);
   --accent: rgb(36 30 21 / 0.06);
   --accent-foreground: var(--ink);
-  --destructive: var(--wax);
+  --destructive: var(--ember);
   --destructive-foreground: var(--paper-raised);
   --border: var(--rule);
   --input: var(--rule);
@@ -118,10 +123,12 @@ html {
   --rule: rgb(234 225 205 / 0.16);
   --rule-faint: rgb(234 225 205 / 0.09);
 
-  --wax: #c75b40;
-  --wax-deep: #a44733;
-  --wax-bright: #de6a4c;
-  --wax-faint: rgb(199 91 64 / 0.4);
+  --wax: #5b8cc0;
+  --wax-deep: #46739f;
+  --wax-bright: #6f9fd0;
+  --wax-faint: rgb(91 140 192 / 0.4);
+  --ember: #c75b40;
+  --ember-deep: #a44733;
   --gilt: #c99c45;
 
   --kind-story: #c49a5c;
@@ -167,6 +174,8 @@ html {
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-ember: var(--ember);
+  --color-ember-deep: var(--ember-deep);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

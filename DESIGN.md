@@ -54,12 +54,15 @@ Everything renders inside one conceit — **a desk under lamplight**:
 | `--paper-recessed` | `#eee6d2` | `#15100b` | pressed/secondary fills |
 | `--ink` / `--ink-soft` / `--ink-faint` | warm blacks→taupes | creams→umbers | text hierarchy |
 | `--rule` / `--rule-faint` | ink @ 14% / 8% | @ 16% / 9% | hairlines |
-| `--wax` / `--wax-deep` / `--wax-bright` | `#993b26` família | brighter set | recording, margin rule, destructive; bright = specular highlight |
+| `--wax` / `--wax-deep` / `--wax-bright` | `#2e5685` família (sealing-wax blue) | brighter set | recording, margin rule, today; bright = specular highlight |
+| `--ember` / `--ember-deep` | `#993b26` família | brighter set | destructive only — never an accent |
 | `--gilt` | `#a87a24` | `#c99c45` | favorites only |
 | `--kind-*` | six muted editorial inks | lightened | kind labels + marks |
 | `--sheet-shadow` / `--float-shadow` | warm layered stacks | black layered | the two elevations |
 
-Rules: wax is semantic (recording, rule, destructive), gilt only on
+Rules: wax is semantic (recording, rule, today) and never destructive
+— the ember red is destructive's alone, so the writer's color can't be
+mistaken for the destroyer's; gilt only on
 favorites, all shadows from the shadow tokens or `--shadow-hue`, no flat
 hex in components, no new flat fills — a new surface needs a light story
 (highlight + shadow), not just a color.
@@ -123,7 +126,7 @@ Everything clickable feels physical:
   crossfades through 2px blur (Emil's blur-masking).
 - Chips stamp: `whileTap 0.93`, pop `[1, 1.07, 1]` on selection, tinted
   fill via `color-mix`.
-- Destructive = **hold-to-confirm** (`HoldToErase`): wax fills via
+- Destructive = **hold-to-confirm** (`HoldToErase`): ember fills via
   `clip-path` over 1.4s linear while held, drains in 200ms on release —
   slow where deciding, fast where responding.
 - Haptics: `navigator.vibrate` 6–10ms taps on keep/file/select (Android
