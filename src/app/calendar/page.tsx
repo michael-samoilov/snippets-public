@@ -1101,8 +1101,13 @@ function Calendar() {
     !searchActive && (view === "schedule" || zoom?.from === "schedule");
   const showEntryLayer =
     !searchActive && (view === "entry" || zoom?.from === "entry");
-  // the steppers belong to the grids; the book turns its own pages
-  const steppers = view === "month" || view === "year";
+  // the steppers belong to the grids; the book turns its own pages.
+  // Climbing out of the book, they wipe in only once the camera has
+  // landed — started mid-zoom, the layout transition runs on the same
+  // main thread as the flights and the phone eats it whole
+  const steppers =
+    (view === "month" || view === "year") &&
+    !(zoom && Math.max(DEPTH[zoom.from], DEPTH[zoom.to]) >= DEPTH.schedule);
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
