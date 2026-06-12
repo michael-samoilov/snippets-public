@@ -65,8 +65,10 @@ export function useSearch(query: string, snippets: Snippet[] | undefined): Snipp
         field === "tagText" ? doc.tags.join(" ") : String(doc[field as keyof Snippet] ?? ""),
       searchOptions: {
         boost: { title: 2, tagText: 1.5 },
+        // prefix only, no fuzz: search is a FILTER — every entry shown
+        // must literally contain what was typed (prefix covers the
+        // word still being typed; fuzzy let "poop" surface "poo")
         prefix: true,
-        fuzzy: 0.15,
       },
     });
     mini.addAll(snippets);
