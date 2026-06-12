@@ -48,8 +48,9 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    (the printers' marks were retired by the owner — don't reintroduce
    glyphs/icons for kinds). One sanctioned tile material exists — the
    calendar's (year minis + the book's entry tiles + the header's
-   search pill: `bg-paper`, hairline border, inset top highlight),
-   owner-approved and calendar only; don't spread it. The sanctioned
+   search pill + the book's composer, whose paint fades into the page:
+   `bg-paper`, hairline border, inset top highlight), owner-approved
+   and calendar only; don't spread it. The sanctioned
    marks: the wordmark's wax dot, the StampMark, the dock's two
    hand-drawn strokes (quill + calendar, small-caps words beneath),
    the calendar header's search glass, and the account glyph —

@@ -2377,7 +2377,7 @@ function ScheduleFeed({
                     <BackfillCapture
                       key={row.day}
                       day={row.day}
-                      withRule={row.snippets.length > 0}
+                      follows={row.snippets.length > 0}
                     />
                   )}
                 </div>
@@ -2525,11 +2525,11 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 
 function BackfillCapture({
   day,
-  withRule = false,
+  follows = false,
 }: {
   day: string;
-  /** separate the composer from entries standing above it */
-  withRule?: boolean;
+  /** the composer stands below entries, stacked like one more tile */
+  follows?: boolean;
 }) {
   const [text, setText] = useState("");
   const [stamped, setStamped] = useState(false);
@@ -2577,9 +2577,18 @@ function BackfillCapture({
   const hasText = text.trim().length > 0;
 
   return (
-    <div className={cn("pt-1", withRule && "mt-2 border-t border-rule-faint pt-3")}>
-      {/* the field runs the full width of the cards above it — the Keep
-          button drops below so it never crops the line and forces wraps */}
+    // standing alone, the card's top sits exactly on the day name's
+    // first pixel of ink (one above the tile line), and a single quiet
+    // line in the tile's own paddings makes its height the date's —
+    // weekday-text top to number-text bottom
+    <div className={cn("group relative", follows ? "mt-1" : "-mt-px")}>
+      {/* the tile's paint, fading rightward into the bare page: an
+          entry not yet written. Focus darkens the rule, as writing
+          surfaces do */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
+      />
       <textarea
         ref={areaRef}
         value={text}
@@ -2602,7 +2611,7 @@ function BackfillCapture({
             void keep();
           }
         }}
-        className="voice-prose min-h-[2.2rem] w-full resize-none overflow-hidden border-b border-rule bg-transparent pb-1 text-[1rem] outline-none transition-colors duration-150 placeholder:italic placeholder:text-ink-faint focus:border-ink-soft"
+        className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent px-2.5 py-2 text-[0.9rem] leading-[1.42] outline-none placeholder:italic placeholder:text-ink-faint"
       />
       {hasText && (
         <div className="mt-2 flex justify-end">
@@ -2625,7 +2634,7 @@ function BackfillCapture({
       <p
         role="status"
         className={cn(
-          "mt-1.5 h-5 font-serif text-[0.85rem] not-italic text-wax",
+          "mt-1.5 h-5 px-2.5 font-serif text-[0.85rem] not-italic text-wax",
           stamped ? "stamp-in" : "invisible",
         )}
       >

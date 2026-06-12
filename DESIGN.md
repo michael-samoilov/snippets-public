@@ -152,9 +152,11 @@ iconography for kinds**: entries are typeset with hairline dividers
 and the `.entry-list` margin rule (an empty margin, like a legal
 pad's); kinds appear only as small-caps colored labels, chips are
 text-only stamps. The one sanctioned tile material is the calendar's
-(year minis, the book's entry tiles, and the header search pill —
-`bg-paper`, hairline border, inset top highlight); it never leaves the
-calendar. The sanctioned marks are the wordmark's wax dot, the "Kept."
+(year minis, the book's entry tiles, the header search pill, and the
+book's composer — whose paint fades rightward into the bare page, an
+entry not yet written, its card spanning exactly the margin date's
+ink — `bg-paper`, hairline border, inset top highlight); it never
+leaves the calendar. The sanctioned marks are the wordmark's wax dot, the "Kept."
 StampMark, the dock's two hand-drawn strokes (a quill for the day's
 page, a calendar for the book — with small-caps words beneath), the
 calendar header's search glass in the same line, and the account
