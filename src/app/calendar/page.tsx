@@ -738,8 +738,10 @@ function Calendar() {
     if (!s || !s.ok) return;
     const dx = e.clientX - s.x;
     const dy = Math.abs(e.clientY - s.y);
-    // decisively rightward, and a flick rather than a wander
-    if (dx >= 64 && dx >= dy * 1.6 && performance.now() - s.t <= 700) back();
+    // rightward within a 45° cone, and a flick rather than a wander —
+    // thumbs arc, so the cone is generous; truly vertical drags are
+    // already claimed by the scroller before release anyway
+    if (dx >= 56 && dx >= dy && performance.now() - s.t <= 700) back();
   };
 
   /** move the book to a day: selection, title, URL, scroll */
