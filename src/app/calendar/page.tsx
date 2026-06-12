@@ -33,7 +33,7 @@ import {
 } from "@/hooks/use-snippets";
 import { addSnippet } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
-import { dayKey, dateFromDayKey, friendlyDay, marginDate } from "@/lib/dates";
+import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -961,12 +961,28 @@ function Calendar() {
 
   /* ── the header search: a pill that borrows the whole title row ──
      The title slides off left, the buttons off right; Clear hands the
-     row back, reversing the same moves. */
+     row back, reversing the same moves. While a query stands, the
+     stage shows the book filtered to it. */
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const found = useSearch(query, all);
-  const hits = query.trim() ? found.slice(0, 8) : [];
+  const hits = useSearch(query, all);
+  const searchActive = searching && query.trim() !== "";
+  const searchGroups = useMemo(() => {
+    if (!searchActive) return [];
+    // the book reads upward through time; the filtered book too
+    const sorted = [...hits].sort((a, b) =>
+      a.day === b.day ? a.capturedAt - b.capturedAt : a.day < b.day ? -1 : 1,
+    );
+    return groupByDay(sorted);
+  }, [searchActive, hits]);
+  // the latest match is the likeliest one: the filtered book opens at
+  // its last page, like the book itself
+  const searchScrollRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = searchScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [searchGroups]);
 
   const openSearch = () => {
     setSearching(true);
@@ -978,30 +994,40 @@ function Calendar() {
     setSearching(false);
     setQuery("");
   };
-  /** a found line opens that day's page, from whatever altitude */
+  /** a found page opens in the book itself — straight there, from any
+      altitude, never through the canvas */
   const jumpFromSearch = (day: string) => {
+    const from = viewRef.current;
     closeSearch();
-    if (viewRef.current === "schedule") {
+    if (from === "schedule") {
       jumpTo(day);
       return;
     }
-    if (viewRef.current === "month") {
+    if (from === "month") {
       pick(day);
       return;
     }
-    // from the glance: stand the canvas on the month, then dive on
-    pickMonth(startOfMonth(dateFromDayKey(day)));
-    const dive = () => {
-      if (zooming.current) setTimeout(dive, 120);
-      else pick(day);
-    };
-    setTimeout(dive, 120);
+    // from the glance the camera dives into the day's month-mini and
+    // arrives directly at the book — the same dive as pick, one
+    // altitude steeper
+    setSelected(day);
+    navigator.vibrate?.(6);
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    window.history.pushState(null, "", `${pathname}?d=${day}`);
+    scheduleFeedRef.current?.goTo(day);
+    runZoom("year", "schedule", day);
   };
 
-  const showMonthLayer = view === "month" || zoom?.from === "month";
-  const showYearLayer = view === "year" || zoom?.from === "year";
-  const showScheduleLayer = view === "schedule" || zoom?.from === "schedule";
-  const showEntryLayer = view === "entry" || zoom?.from === "entry";
+  // while the filtered book stands in the stage, the altitudes wait
+  // beneath, hidden
+  const showMonthLayer =
+    !searchActive && (view === "month" || zoom?.from === "month");
+  const showYearLayer =
+    !searchActive && (view === "year" || zoom?.from === "year");
+  const showScheduleLayer =
+    !searchActive && (view === "schedule" || zoom?.from === "schedule");
+  const showEntryLayer =
+    !searchActive && (view === "entry" || zoom?.from === "entry");
   // the steppers belong to the grids; the book turns its own pages
   const steppers = view === "month" || view === "year";
 
@@ -1176,7 +1202,8 @@ function Calendar() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") closeSearch();
-                else if (e.key === "Enter" && hits[0]) jumpFromSearch(hits[0].day);
+                else if (e.key === "Enter" && searchGroups.length)
+                  jumpFromSearch(searchGroups[searchGroups.length - 1].day);
               }}
               placeholder="Find an entry…"
               aria-label="Search entries"
@@ -1193,34 +1220,6 @@ function Calendar() {
             </button>
           </div>
         </div>
-        {/* found pages float beneath the bar */}
-        {searching && query.trim() !== "" && (
-          <div className="absolute inset-x-0 top-full z-20 mt-2">
-            <div className="float max-h-72 overflow-y-auto overscroll-contain rounded-[8px] p-1.5">
-              {hits.length === 0 ? (
-                <p className="voice-prose px-2.5 py-2 text-[0.9rem] italic text-ink-faint">
-                  Nothing kept matches.
-                </p>
-              ) : (
-                hits.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => jumpFromSearch(s.day)}
-                    className="pressable flex w-full items-baseline gap-3 rounded-[6px] px-2.5 py-2 text-left hover:bg-accent"
-                  >
-                    <span className="voice-prose line-clamp-1 min-w-0 flex-1 text-[0.92rem]">
-                      {s.title ?? s.text}
-                    </span>
-                    <span className="voice-data shrink-0 text-ink-faint">
-                      {marginDate(dateFromDayKey(s.day)).toLowerCase()}
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
       </div>
       </div>
 
@@ -1231,7 +1230,9 @@ function Calendar() {
       <div
         className={cn(
           "mt-3 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
-          view === "month" ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          view === "month" && !searchActive
+            ? "grid-rows-[1fr]"
+            : "grid-rows-[0fr]",
         )}
       >
         <div className="overflow-hidden">
@@ -1239,9 +1240,9 @@ function Calendar() {
             role="row"
             className={cn(
               "grid grid-cols-7 transition-opacity duration-150",
-              view === "month" ? "opacity-100" : "opacity-0",
+              view === "month" && !searchActive ? "opacity-100" : "opacity-0",
             )}
-            aria-hidden={view !== "month"}
+            aria-hidden={view !== "month" || searchActive}
           >
             {WEEKDAYS.map((d, i) => (
               <span
@@ -1366,6 +1367,93 @@ function Calendar() {
         >
           <EntryView snippet={focused} />
         </div>
+        {/* the filtered book: while a query stands, the stage shows the
+            schedule of matching pages — same ledger, same tiles, only
+            the days that answer. Pressing one opens that page in the
+            book itself. No animation: it re-renders with every keystroke */}
+        {searchActive && (
+          <div
+            ref={searchScrollRef}
+            data-layer="search"
+            className="absolute inset-0 overflow-y-auto overscroll-contain [scrollbar-width:none]"
+            tabIndex={-1}
+          >
+            {searchGroups.length === 0 ? (
+              <p className="voice-prose pt-10 text-center text-[0.92rem] italic text-ink-faint">
+                Nothing kept matches.
+              </p>
+            ) : (
+              searchGroups.map((g, i) => {
+                const d = dateFromDayKey(g.day);
+                const newMonth =
+                  i === 0 ||
+                  searchGroups[i - 1].day.slice(0, 7) !== g.day.slice(0, 7);
+                const isToday = g.day === dayKey();
+                return (
+                  <Fragment key={g.day}>
+                    {newMonth && (
+                      <p
+                        className={cn(
+                          "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
+                          isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
+                        )}
+                      >
+                        {format(d, "MMMM yyyy")}
+                      </p>
+                    )}
+                    <section
+                      data-found={g.day}
+                      aria-label={friendlyDay(g.day)}
+                      className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint"
+                    >
+                      <div className="self-start pb-3 pt-2 text-center">
+                        <span
+                          className={cn(
+                            "voice-label block text-[0.62rem] leading-tight",
+                            isToday ? "text-wax" : "text-ink-faint",
+                          )}
+                        >
+                          {format(d, "EEE")}
+                        </span>
+                        <span
+                          className={cn(
+                            "voice-display block text-[1.15rem] leading-tight",
+                            isToday && "text-wax",
+                          )}
+                        >
+                          {format(d, "d")}
+                        </span>
+                      </div>
+                      <ul className="flex min-w-0 flex-col gap-1 pb-3 pt-2">
+                        {g.snippets.map((s) => (
+                          <li key={s.id}>
+                            <button
+                              type="button"
+                              onClick={() => jumpFromSearch(s.day)}
+                              className={cn(
+                                "pressable block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                                "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
+                              )}
+                            >
+                              <p
+                                className={cn(
+                                  "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+                                  s.kind === "quote" && "hang-quotes italic",
+                                )}
+                              >
+                                {s.text}
+                              </p>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </Fragment>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

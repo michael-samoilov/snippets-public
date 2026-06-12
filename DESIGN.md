@@ -234,9 +234,14 @@ the grids and slide off to the right when the camera enters the book,
 returning the same way out. At the cluster's left edge sits the search
 glass: pressed, the row becomes a full-width pill of the cards'
 material (fully round ends) — the title slides off left, the buttons
-off right — with found pages floating beneath; Clear, or choosing a
-line, hands the row back by the same moves. A found line opens that
-day's page from any altitude. A **left-to-right swipe**
+off right. While a query stands, the stage shows **the filtered
+book**: the same ledger and tiles, only the days that answer, opened
+at its last page (the weekday rail folds; the altitudes wait beneath,
+hidden; no animation — it re-renders with every keystroke). Pressing a
+found tile opens that day's page in the book itself, straight from
+any altitude — from the glance the camera dives through the day's
+month-mini directly to the book; the canvas never shows its face.
+Clear hands the stage and the row back by the same moves. A **left-to-right swipe**
 (touch/pen, rightward within a 45° cone, a flick not a wander) climbs
 one altitude too: entry → book anywhere on the card; book → month and
 month → year when the swipe begins on the page itself (the blank cells
