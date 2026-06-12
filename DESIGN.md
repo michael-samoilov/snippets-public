@@ -56,6 +56,7 @@ Everything renders inside one conceit — **a desk under lamplight**:
 | `--rule` / `--rule-faint` | ink @ 14% / 8% | @ 16% / 9% | hairlines |
 | `--wax` / `--wax-deep` / `--wax-bright` | `#2e5685` família (sealing-wax blue) | brighter set | recording, margin rule, today; bright = specular highlight |
 | `--ember` / `--ember-deep` | `#993b26` família | brighter set | destructive only — never an accent |
+| `--marker` | translucent highlighter yellow | dim amber | found words in search, nothing else |
 | `--gilt` | `#a87a24` | `#c99c45` | favorites only |
 | `--kind-*` | six muted editorial inks | lightened | kind labels + marks |
 | `--sheet-shadow` / `--float-shadow` | warm layered stacks | black layered | the two elevations |
@@ -252,7 +253,14 @@ already in costume. Dismissing the keyboard over an empty bar
 dismisses the bar too; standing words keep it open. While a query stands, the stage shows **the filtered
 book**: the same ledger and tiles, only the days that answer, opened
 at its last page (the weekday rail folds; the altitudes wait beneath,
-hidden; no animation — it re-renders with every keystroke). Pressing a
+hidden; no animation — it re-renders with every keystroke). Found words wear **the
+marker** — a chisel-tipped highlighter (an angled gradient on an
+inline `mark`, swept across by a background-size animation,
+`box-decoration-break: clone` keeping each wrapped line a stroke of
+its own, multiplied into the paper). A match deeper than the six-line
+clamp re-windows the preview to show it — led by EARLIER context,
+snapped to a sentence opening, behind an ellipsis (a story builds
+forward; the lines before a match explain it). Pressing a
 found tile opens that day's page in the book itself, straight from
 any altitude — from the glance the camera dives through the day's
 month-mini directly to the book; the canvas never shows its face.

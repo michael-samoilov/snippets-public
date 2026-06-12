@@ -1608,7 +1608,7 @@ function Calendar() {
                                   s.kind === "quote" && "hang-quotes italic",
                                 )}
                               >
-                                {s.text}
+                                <MarkedPreview text={s.text} query={query} />
                               </p>
                             </button>
                           </li>
@@ -2918,6 +2918,84 @@ function joinSpoken(a: string, b: string): string {
   if (!a.trim()) return b;
   if (!b.trim()) return a;
   return `${a.replace(/\s+$/, "")} ${b}`;
+}
+
+/* ── the found words, marked ──────────────────────────────────────
+   A search tile shows its match under a real highlighter, and if the
+   match lives past the six-line clamp, the preview re-windows so it
+   shows — leading with EARLIER context (a story builds forward, so
+   the lines before the match explain it; the lines after follow
+   anyway in whatever clamp room remains). */
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** the query's literal terms, longest first so overlaps mark whole */
+function queryTerms(query: string): string[] {
+  return [
+    ...new Set(
+      query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2),
+    ),
+  ].sort((a, b) => b.length - a.length);
+}
+
+/** where any term first literally appears, or -1 (fuzzy-only match) */
+function firstMatchIndex(text: string, terms: string[]): number {
+  const lower = text.toLowerCase();
+  let best = -1;
+  for (const t of terms) {
+    const i = lower.indexOf(t);
+    if (i >= 0 && (best < 0 || i < best)) best = i;
+  }
+  return best;
+}
+
+/** A match deeper than the clamp can show re-windows the preview:
+    stand a couple of lines before the match — at a sentence opening
+    if one is near, else a word — and lead with an ellipsis. ~160
+    chars is a conservative six-line budget at the tile's measure. */
+function previewWindow(text: string, matchIdx: number): { text: string; led: boolean } {
+  if (matchIdx <= 160) return { text, led: false };
+  const earliest = matchIdx - 150;
+  const latest = matchIdx - 30;
+  let start = -1;
+  for (const sep of [". ", "! ", "? ", "\n"]) {
+    const i = text.lastIndexOf(sep, latest);
+    if (i >= earliest && i + sep.length > start) start = i + sep.length;
+  }
+  if (start < 0) {
+    const sp = text.indexOf(" ", matchIdx - 90);
+    start = sp >= 0 && sp < matchIdx ? sp + 1 : matchIdx - 90;
+  }
+  return { text: text.slice(start), led: true };
+}
+
+/** the tile's words with every literal term under the marker */
+function MarkedPreview({ text, query }: { text: string; query: string }) {
+  const nodes = useMemo(() => {
+    const terms = queryTerms(query);
+    if (!terms.length) return [text];
+    const at = firstMatchIndex(text, terms);
+    const windowed = at >= 0 ? previewWindow(text, at) : { text, led: false };
+    const re = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
+    const parts = windowed.text.split(re);
+    const out: React.ReactNode[] = windowed.led ? ["… "] : [];
+    for (let i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      out.push(
+        i % 2 === 1 ? (
+          <mark key={i} className="snippet-mark">
+            {parts[i]}
+          </mark>
+        ) : (
+          parts[i]
+        ),
+      );
+    }
+    return out;
+  }, [text, query]);
+  return <>{nodes}</>;
 }
 
 /**

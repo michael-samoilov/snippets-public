@@ -58,7 +58,9 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    (wax quill/microphone stamp + ink trash — destructive is NOT wax),
    and the account glyph — nothing else. Wax (a sealing-wax BLUE) is
    semantic (recording, rule, today) and never destructive — the ember
-   red (`--ember`) is destructive's alone; gilt = favorites only. Text on the sheet is real ink:
+   red (`--ember`) is destructive's alone; the marker yellow
+   (`--marker`) belongs to found words in search, nothing else;
+   gilt = favorites only. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
    mode; `.ink-bleed` is for mastheads only.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,

@@ -48,6 +48,8 @@ html {
   --wax-faint: rgb(46 86 133 / 0.32);
   /* the wax's colored ambient shadow, for seals sitting proud */
   --wax-shadow: rgb(35 68 104 / 0.45);
+  /* the marker — a real highlighter, drawn across found words */
+  --marker: rgb(255 211 66 / 0.6);
   /* the ember — destructive only, never an accent */
   --ember: #993b26;
   --ember-deep: #7a2c1b;
@@ -130,6 +132,7 @@ html {
   --wax-bright: #6f9fd0;
   --wax-faint: rgb(91 140 192 / 0.4);
   --wax-shadow: rgb(20 40 65 / 0.6);
+  --marker: rgb(186 142 38 / 0.4);
   --ember: #c75b40;
   --ember-deep: #a44733;
   --gilt: #c99c45;
@@ -512,6 +515,41 @@ textarea:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   .word-arrive {
     animation: none;
+  }
+}
+
+/* the marker: a chisel-tipped highlighter drawn across found words.
+   The angled gradient ends are the tip; the background-size sweep is
+   the hand moving left to right; box-decoration-break keeps each
+   wrapped line a stroke of its own. Multiplied into the paper like
+   real ink (plain on Lamplight — multiply dies on dark paper). */
+mark.snippet-mark {
+  background-color: transparent;
+  color: inherit;
+  background-image: linear-gradient(
+    100deg,
+    transparent 0%,
+    var(--marker) 4%,
+    var(--marker) 96%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  background-position: 0 0;
+  border-radius: 0.35em 0.2em 0.4em 0.25em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.04em 0.14em;
+  margin: -0.04em -0.14em;
+  mix-blend-mode: multiply;
+  animation: marker-sweep var(--dur-slow) var(--ease-out) var(--dur-fast) both;
+}
+.dark mark.snippet-mark {
+  mix-blend-mode: normal;
+}
+@keyframes marker-sweep {
+  to {
+    background-size: 100% 100%;
   }
 }
 
