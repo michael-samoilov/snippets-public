@@ -25,7 +25,6 @@ import {
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
-import { StampMark } from "@/components/stamp-mark";
 import {
   groupByDay,
   useAllSnippets,
@@ -2295,6 +2294,9 @@ function BackfillCapture({
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isToday = day === dayKey();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = day === dayKey(yesterday);
   // remounted per day via key, so state starts fresh; only clean the timer
   useEffect(() => {
     return () => {
@@ -2336,35 +2338,30 @@ function BackfillCapture({
     <div className={cn("pt-1", withRule && "mt-2 border-t border-rule-faint pt-3")}>
       {/* the field runs the full width of the cards above it — the Keep
           button drops below so it never crops the line and forces wraps */}
-      <div className="flex items-end gap-2">
-        {isToday && !withRule && (
-          <span className="mb-2 shrink-0" aria-hidden="true">
-            <StampMark />
-          </span>
-        )}
-        <textarea
-          ref={areaRef}
-          value={text}
-          rows={1}
-          placeholder={
-            isToday
-              ? "Add something from today…"
+      <textarea
+        ref={areaRef}
+        value={text}
+        rows={1}
+        placeholder={
+          isToday
+            ? "Add something from today…"
+            : isYesterday
+              ? "Add something from yesterday…"
               : "Add something you want to remember…"
+        }
+        aria-label={`Add an entry to ${friendlyDay(day)}`}
+        onChange={(e) => {
+          setText(e.target.value);
+          autosizeArea(e.target);
+        }}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            void keep();
           }
-          aria-label={`Add an entry to ${friendlyDay(day)}`}
-          onChange={(e) => {
-            setText(e.target.value);
-            autosizeArea(e.target);
-          }}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              void keep();
-            }
-          }}
-          className="voice-prose min-h-[2.2rem] w-full flex-1 resize-none overflow-hidden border-b border-rule bg-transparent pb-1 text-[1rem] outline-none transition-colors duration-150 placeholder:italic placeholder:text-ink-faint focus:border-ink-soft"
-        />
-      </div>
+        }}
+        className="voice-prose min-h-[2.2rem] w-full resize-none overflow-hidden border-b border-rule bg-transparent pb-1 text-[1rem] outline-none transition-colors duration-150 placeholder:italic placeholder:text-ink-faint focus:border-ink-soft"
+      />
       {hasText && (
         <div className="mt-2 flex justify-end">
           <button
