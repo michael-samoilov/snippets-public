@@ -201,12 +201,20 @@ resizing. Originals hide while their double is in the air; endpoints are
 Range text-rects, not line boxes (leading would read as a landing skip).
 The stage grows below the month; the title row always climbs one altitude and
 follows whichever feed scrolls beneath it. A **left-to-right swipe**
-(touch/pen, decisively rightward, a flick not a wander) climbs one
-altitude too: entry → book anywhere on the card; book → month and
+(touch/pen, rightward within a 45° cone, a flick not a wander) climbs
+one altitude too: entry → book anywhere on the card; book → month and
 month → year when the swipe begins on the page itself (the blank cells
 and label rows between months, a composer or tile or day never arms
 it). The layers carry `touch-action: pan-y` so iOS never claims the
-horizontal gesture mid-flight. The weekday rail exists
+horizontal gesture mid-flight. **Every dive is a real history entry**
+(`?d=` for the book, `&e=` for the entry — which deep-links too):
+descents run through `history.back()` + one popstate handler, so the
+browser's own back — the iOS edge swipe included — pops one altitude
+through the same camera moves and flights, with the book's scroll and
+the ring's day kept. The forward gesture re-dives. Arriving deep, the
+stack beneath is synthesized so back always has a floor; on
+Chrome/Android, `overscroll-behavior-x: none` declines the rival
+navigation gesture outright. The weekday rail exists
 only at the month altitude — elsewhere it folds shut (animated
 `0fr`/`1fr` grid row) so content sits flush under the title, its
 hairline riding along to mark where the scroll area terminates.

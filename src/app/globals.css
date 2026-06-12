@@ -11,6 +11,14 @@
  * See DESIGN.md for the constitution.
  */
 
+/* Chrome/Android interprets a left-edge drag as history navigation;
+   declining the overscroll gesture keeps the calendar's own back swipe
+   in charge there. (iOS Safari's edge swipe is system chrome — the
+   calendar answers it through real history entries instead.) */
+html {
+  overscroll-behavior-x: none;
+}
+
 :root {
   /* the date header is the largest size that still keeps the longest
      full date ("Wednesday, September 22, 2020") on one line — it scales

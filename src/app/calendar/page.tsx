@@ -207,7 +207,8 @@ function Calendar() {
   // a valid ?d= deep-links straight into the book, open to that day
   const [view, setView] = useState<View>(() => {
     const d = params.get("d");
-    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? "schedule" : "month";
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "month";
+    return params.get("e") ? "entry" : "schedule";
   });
   /** during a zoom both layers render; the camera moves `from` → `to` */
   const [zoom, setZoom] = useState<null | {
@@ -227,7 +228,9 @@ function Calendar() {
   const reduceMotion = useReducedMotion();
 
   /** the entry the camera has dived into */
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [focusedId, setFocusedId] = useState<string | null>(() =>
+    params.get("e"),
+  );
   const focused = useMemo(
     () => (focusedId && all ? (all.find((s) => s.id === focusedId) ?? null) : null),
     [all, focusedId],
@@ -257,6 +260,34 @@ function Calendar() {
     };
   }, []);
 
+  // live mirrors for the popstate handler
+  const viewRef = useRef(view);
+  const selectedRef = useRef(selected);
+  const focusedIdRef = useRef(focusedId);
+  const visibleMonthRef = useRef(visibleMonth);
+  useEffect(() => {
+    viewRef.current = view;
+    selectedRef.current = selected;
+    focusedIdRef.current = focusedId;
+    visibleMonthRef.current = visibleMonth;
+  });
+
+  // every dive is a real history entry, so the browser's own back —
+  // the iOS edge swipe included — pops one altitude instead of leaving
+  // the page. Arriving deep, synthesize the stack beneath so back
+  // always has a floor.
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const d = sp.get("d");
+    const e = sp.get("e");
+    if (d) {
+      window.history.replaceState(null, "", pathname);
+      window.history.pushState(null, "", `${pathname}?d=${d}`);
+      if (e) window.history.pushState(null, "", `${pathname}?d=${d}&e=${e}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* ── the zoom: one camera move between altitudes ──────────────── */
 
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
@@ -272,7 +303,7 @@ function Calendar() {
       setSelected(key);
       navigator.vibrate?.(6);
       if (urlTimer.current) clearTimeout(urlTimer.current);
-      window.history.replaceState(null, "", `${pathname}?d=${key}`);
+      window.history.pushState(null, "", `${pathname}?d=${key}`);
       scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
       runZoom("month", "schedule", key);
     },
@@ -682,16 +713,61 @@ function Calendar() {
     runZoom("year", "month", ym(m));
   };
 
-  const closeSchedule = () => {
+  /* climbing out happens through the history stack: UI back affordances
+     call history.back(), and the popstate handler runs the zoom — so the
+     browser's own back gesture and ours are the same action */
+
+  const descendFromSchedule = useCallback(() => {
     // stand the canvas on the month being read before pulling back
-    const m = startOfMonth(dateFromDayKey(selected));
+    const m = startOfMonth(dateFromDayKey(selectedRef.current));
     setVisibleMonth(m);
     setVisibleYear(m.getFullYear());
     monthFeedRef.current?.goTo(m, false);
     if (urlTimer.current) clearTimeout(urlTimer.current);
-    window.history.replaceState(null, "", pathname);
-    runZoom("schedule", "month", selected);
-  };
+    runZoom("schedule", "month", selectedRef.current);
+  }, [runZoom]);
+
+  const descendFromEntry = useCallback(() => {
+    runZoom("entry", "schedule", focusedIdRef.current ?? "");
+  }, [runZoom]);
+
+  useEffect(() => {
+    const onPop = () => {
+      if (zooming.current) {
+        // a camera move is mid-flight; settle, then honor the pop
+        setTimeout(onPop, 240);
+        return;
+      }
+      const sp = new URLSearchParams(window.location.search);
+      const target: View = sp.get("e")
+        ? "entry"
+        : sp.get("d")
+          ? "schedule"
+          : "month";
+      const cur = viewRef.current;
+      if (target === cur) return;
+      if (DEPTH[target] < DEPTH[cur]) {
+        if (cur === "entry") descendFromEntry();
+        else if (cur === "schedule") descendFromSchedule();
+      } else {
+        // the forward gesture re-dives
+        const d = sp.get("d");
+        const e = sp.get("e");
+        if (cur === "month" && d) {
+          setSelected(d);
+          scheduleFeedRef.current?.goTo(d);
+          runZoom("month", "schedule", d);
+        } else if (cur === "schedule" && e) {
+          setFocusedId(e);
+          runZoom("schedule", "entry", e);
+        }
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [descendFromEntry, descendFromSchedule, runZoom]);
+
+  const closeSchedule = () => window.history.back();
 
   /** pressing a card dives the camera one altitude further, into it */
   const openEntry = useCallback(
@@ -707,14 +783,17 @@ function Calendar() {
         setVisibleMonth(m);
         setVisibleYear(m.getFullYear());
       }
+      window.history.pushState(
+        null,
+        "",
+        `${pathname}?d=${s?.day ?? selectedRef.current}&e=${id}`,
+      );
       runZoom("schedule", "entry", id);
     },
-    [all, runZoom],
+    [all, pathname, runZoom],
   );
 
-  const closeEntry = () => {
-    runZoom("entry", "schedule", focusedId ?? "");
-  };
+  const closeEntry = () => window.history.back();
 
   /* ── the back swipe: a left-to-right flick climbs one altitude ────
      Trigger-on-release (the camera zoom is the transition) and touch/
@@ -772,8 +851,8 @@ function Calendar() {
   const goToday = () => {
     setSelected(dayKey());
     if (view === "entry") {
-      // surface to the book first, then turn it to today
-      runZoom("entry", "schedule", focusedId ?? "");
+      // pop to the book (the handler runs the zoom), then turn it
+      window.history.back();
       jumpTo(dayKey());
       return;
     }
