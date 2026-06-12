@@ -719,6 +719,32 @@ function Calendar() {
     runZoom("entry", "schedule", focusedId ?? "");
   };
 
+  /* ── the back swipe: a left-to-right flick climbs one altitude ────
+     Trigger-on-release (the camera zoom is the transition) and touch/
+     pen only, so a desktop text-selection drag can never misfire. */
+  const swipe = useRef<{ x: number; y: number; t: number; ok: boolean } | null>(null);
+  const armSwipe = (e: React.PointerEvent, ignoreInteractive: boolean) => {
+    if (e.pointerType === "mouse") return;
+    const onControl = (e.target as HTMLElement).closest(
+      "button, a, textarea, input, select",
+    );
+    swipe.current = {
+      x: e.clientX,
+      y: e.clientY,
+      t: performance.now(),
+      ok: !(ignoreInteractive && onControl),
+    };
+  };
+  const settleSwipe = (e: React.PointerEvent, back: () => void) => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || !s.ok) return;
+    const dx = e.clientX - s.x;
+    const dy = Math.abs(e.clientY - s.y);
+    // decisively rightward, and a flick rather than a wander
+    if (dx >= 64 && dx >= dy * 1.6 && performance.now() - s.t <= 700) back();
+  };
+
   /** move the book to a day: selection, title, URL, scroll */
   const jumpTo = (key: string) => {
     setSelected(key);
@@ -997,8 +1023,14 @@ function Calendar() {
         <div
           ref={scheduleLayerRef}
           data-layer="schedule"
+          // pan-y keeps iOS from claiming horizontal touches, so the
+          // back swipe's release always arrives; tiles and composers
+          // don't arm it — a swipe must begin on the page itself
+          onPointerDown={(e) => armSwipe(e, true)}
+          onPointerUp={(e) => settleSwipe(e, closeSchedule)}
+          onPointerCancel={() => (swipe.current = null)}
           className={cn(
-            "absolute inset-0",
+            "absolute inset-0 [touch-action:pan-y]",
             !showScheduleLayer && "invisible",
             (zoom || !showScheduleLayer) && "pointer-events-none",
           )}
@@ -1016,10 +1048,13 @@ function Calendar() {
         <div
           ref={entryLayerRef}
           data-layer="entry"
+          onPointerDown={(e) => armSwipe(e, false)}
+          onPointerUp={(e) => settleSwipe(e, closeEntry)}
+          onPointerCancel={() => (swipe.current = null)}
           className={cn(
             // pt-2 mirrors the schedule card's gap below its date rule,
             // so the expanded card keeps that same breath under the title
-            "absolute inset-0 pt-2",
+            "absolute inset-0 pt-2 [touch-action:pan-y]",
             !showEntryLayer && "invisible",
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
