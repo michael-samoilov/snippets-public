@@ -160,15 +160,16 @@ violent). book⇄entry is *not* a camera scale but a shared element: the
 pressed tile is the same paper card you read on, so it grows to fill
 the stage (easeOutCubic, GPU-promoted via `will-change` — scaling a
 mix-blended card is murder to re-raster on the CPU) while the schedule
-fades under it. Opening, the content holds its natural size against
-the growing box (a window opening over the words) while the full text
-fades in. Closing, the net text scale is kept uniform and tied to the
-card's width — the laid-out measure tracks the box exactly, so the
-right edge can never clip a glyph and the type shrinks smoothly with
-the card — and the last stretch crossfades the whole card onto the
-real tile beneath (same paper, converging boxes), handing the entry's
-line-breaks to the tile's inside a fade instead of a landing pop.
-Words are visible at every frame in both directions. The card keeps the tiles' 8px breath under
+fades under it. Both directions follow one recipe: a beat of blank,
+then the words re-rendered in their **final configuration**, which
+pure geometry carries home. Opening, the full entry text holds its
+natural size against the growing box (a window opening over the
+words) as it fades in. Closing, a stand-in wearing the tile's exact
+layout takes the stage in the first beat and rides the card at a
+uniform width-locked scale — its right edge can never clip, and it
+lands pixel-identical to the real tile (the card's radius eases 10→6
+alongside), so the swap is invisible. Never two text layouts
+crossfading mid-air. The card keeps the tiles' 8px breath under
 the header's hairline rather than climbing flush to it. In the entry
 the header climbs to the full date — the weekday and day-of-month
 **wipe open from their own slots** (animated `0fr`→`1fr` grid columns)

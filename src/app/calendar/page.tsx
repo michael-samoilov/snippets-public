@@ -340,6 +340,10 @@ function Calendar() {
       if (entryCard) {
         entryCard.style.transform = "";
         entryCard.style.opacity = "";
+        entryCard.style.borderRadius = "";
+        entryCard
+          .querySelectorAll("[data-stand-in]")
+          .forEach((el) => el.remove());
       }
       if (entryContent) {
         entryContent.style.opacity = "";
@@ -380,10 +384,29 @@ function Calendar() {
         const osy = t.height / c.height;
         const schedEl = layers.schedule!;
         layers.entry!.style.opacity = "1";
+        let standIn: HTMLElement | null = null;
         if (deeper) {
           // opening, the card's blank paper covers the tile's spot
           tile.style.visibility = "hidden";
           hiddenNumbers.push(tile);
+        } else {
+          // closing mirrors the open: a beat of blank, then the words
+          // re-rendered in their FINAL configuration — the tile's own
+          // layout — which the shrinking card carries into place. The
+          // stand-in wears the tile's exact classes and inner measure,
+          // so the landing is pixel-identical to the real tile beneath.
+          const tileP = tile.querySelector("p");
+          if (tileP) {
+            standIn = document.createElement("div");
+            standIn.appendChild(tileP.cloneNode(true));
+            standIn.setAttribute("aria-hidden", "true");
+            standIn.setAttribute("data-stand-in", "");
+            standIn.style.cssText =
+              `position:absolute;left:0;top:0;width:${t.width - 2}px;` +
+              "padding:10px;box-sizing:border-box;transform-origin:0 0;" +
+              "pointer-events:none;opacity:0;";
+            entryCard.appendChild(standIn);
+          }
         }
         // promote both moving surfaces to their own GPU layers: scaling
         // a paper-textured, mix-blended card is murderously expensive to
@@ -412,19 +435,20 @@ function Calendar() {
             // full text fades in
             entryContent.style.transform = `scale(${1 / sx}, ${1 / sy})`;
             entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`;
-            entryCard.style.opacity = "1";
           } else {
-            // closing: counter-scale only the axis mismatch so the net
-            // text scale is uniform (sx, sx) — the laid-out width then
-            // tracks the card's width exactly, so the right edge can
-            // never clip a glyph, and the type shrinks smoothly with
-            // the box. The last stretch crossfades the whole card onto
-            // the real tile beneath (same paper, converging boxes), so
-            // the entry's line-breaks hand over to the tile's inside a
-            // fade instead of popping on landing.
-            entryContent.style.transform = `scale(1, ${sx / sy})`;
-            entryContent.style.opacity = "1";
-            entryCard.style.opacity = `${Math.min(1, open / 0.25)}`;
+            // closing: the entry text bows out in the first beat (the
+            // flash), and the tile-configured stand-in takes the stage,
+            // width-locked to the card at a uniform scale so its right
+            // edge can never clip and it lands at exactly natural size
+            entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.85) / 0.15))}`;
+            if (standIn) {
+              const u = (c.width - 2) / (t.width - 2);
+              standIn.style.transform = `scale(${u}, ${(u * sx) / sy})`;
+              standIn.style.opacity = `${Math.min(1, Math.max(0, (0.85 - open) / 0.12))}`;
+            }
+            // the card's radius eases to the tile's so the landing swap
+            // has no corner pop
+            entryCard.style.borderRadius = `${6 + 4 * open}px`;
           }
           schedEl.style.opacity = `${1 - open}`;
         };
