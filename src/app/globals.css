@@ -217,19 +217,14 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-/* The page itself never scrolls — every scroll lives in a container
-   (the sheet's main, the calendar feeds, the entry card). Retiring the
-   root scroller also retires Safari's rubber-band, which could drag
-   the whole desk off-screen. */
-html,
-body {
-  height: 100%;
-  overflow: hidden;
-  overscroll-behavior-y: none;
-}
-
-body {
-  min-height: 100%;
+/* The desk is painted on the root: the canvas background fills any
+   overscroll area and never translates, so Safari's rubber-band (and
+   pull-to-refresh — the page is welcome to be dragged) moves the sheet
+   and chrome over a desk that holds perfectly still. Nothing actually
+   scrolls — content fits the viewport — and every real scroll lives in
+   a container (the sheet's main, the calendar feeds, the entry card),
+   each overscroll-contained so a fling inside never chains out. */
+html {
   background: var(--desk);
   /* lamplight: a pool of light upper-center, edges falling away */
   background-image: radial-gradient(
@@ -239,6 +234,25 @@ body {
     rgb(54 40 18 / 0.12) 100%
   );
   background-attachment: fixed;
+}
+
+html.dark {
+  background-image: radial-gradient(
+    120% 85% at 50% -12%,
+    rgb(255 220 160 / 0.05) 0%,
+    transparent 50%,
+    rgb(0 0 0 / 0.5) 100%
+  );
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: transparent;
   color: var(--ink);
   font-family: var(--font-serif);
   font-optical-sizing: auto;
@@ -250,20 +264,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-.dark body {
-  background-image: radial-gradient(
-    120% 85% at 50% -12%,
-    rgb(255 220 160 / 0.05) 0%,
-    transparent 50%,
-    rgb(0 0 0 / 0.5) 100%
-  );
-}
-
-/* desk grain — the tooth of the table, above color, below content */
+/* desk grain — the tooth of the table, above color, below content.
+   Oversized past the viewport: iOS drags fixed layers along with the
+   rubber-band, and the grain must never show an edge. */
 body::after {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -30%;
   z-index: 70;
   pointer-events: none;
   opacity: 0.055;

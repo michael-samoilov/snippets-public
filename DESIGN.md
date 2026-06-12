@@ -141,17 +141,24 @@ Numbers that change on action animate with `<NumberFlow>`.
 
 One centered column (`max-w-[46rem]` desk, sheet inside). On phones
 the desk is exactly one screen: the sheet takes the remaining height
-and pages scroll inside it, never the page — the paper's bottom edge
-stays above the dock. No cards, no boxes, **no iconography for
-kinds**: entries are typeset with hairline dividers and the
-`.entry-list` margin rule (an empty margin, like a legal pad's); kinds
-appear only as small-caps colored labels, chips are text-only stamps.
-The one sanctioned tile material is the calendar's (year minis and the
-book's entry tiles — `bg-paper`, hairline border, inset top
-highlight); it never leaves the calendar. The sanctioned marks are the
-wordmark's wax dot, the "Kept." StampMark, the dock's two hand-drawn
-strokes (a quill for the day's page, a calendar for the book — with
-small-caps words beneath), and the account glyph. Desktop navigation
+and pages scroll inside it — the paper's bottom edge stays above the
+dock. The page itself holds no scroll range, but it may be *dragged*:
+the desk (color, lamplight) is painted on the root canvas, which fills
+any overscroll and never translates, so Safari's rubber-band and
+pull-to-refresh move the sheet over a desk that holds perfectly still
+(the fixed grain overlay is oversized past the viewport for the same
+reason — nothing ever shows an edge). No cards, no boxes, **no
+iconography for kinds**: entries are typeset with hairline dividers
+and the `.entry-list` margin rule (an empty margin, like a legal
+pad's); kinds appear only as small-caps colored labels, chips are
+text-only stamps. The one sanctioned tile material is the calendar's
+(year minis, the book's entry tiles, and the header search pill —
+`bg-paper`, hairline border, inset top highlight); it never leaves the
+calendar. The sanctioned marks are the wordmark's wax dot, the "Kept."
+StampMark, the dock's two hand-drawn strokes (a quill for the day's
+page, a calendar for the book — with small-caps words beneath), the
+calendar header's search glass in the same line, and the account
+glyph. Desktop navigation
 is words — small-caps serif with a gliding ink underline; there are
 two pages, Today and the calendar (the collection folded into the
 book). The avatar sits on the desk's top-right edge: its menu holds
@@ -219,9 +226,17 @@ camera is over is always in the glance — climbing out of 1980 needs a
 folds away. Either way a title never names a month the feed beneath
 can't show, and when a feed's list breathes, it re-anchors by month
 and year, not by index, keeping the reader's page. The desk is exactly one screen at every size
-(html/body never scroll; every scroll lives in a container — the
-sheet's main, the feeds, the entry card). The title row always climbs one altitude and
-follows whichever feed scrolls beneath it. A **left-to-right swipe**
+(every scroll lives in a container — the sheet's main, the feeds, the
+entry card — and the page itself only rubber-bands over the
+canvas-painted desk). The title row always climbs one altitude and
+follows whichever feed scrolls beneath it; the ‹ › steppers belong to
+the grids and slide off to the right when the camera enters the book,
+returning the same way out. At the cluster's left edge sits the search
+glass: pressed, the row becomes a full-width pill of the cards'
+material (fully round ends) — the title slides off left, the buttons
+off right — with found pages floating beneath; Clear, or choosing a
+line, hands the row back by the same moves. A found line opens that
+day's page from any altitude. A **left-to-right swipe**
 (touch/pen, rightward within a 45° cone, a flick not a wander) climbs
 one altitude too: entry → book anywhere on the card; book → month and
 month → year when the swipe begins on the page itself (the blank cells

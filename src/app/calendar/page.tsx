@@ -29,10 +29,11 @@ import {
   groupByDay,
   useAllSnippets,
   useDayCounts,
+  useSearch,
 } from "@/hooks/use-snippets";
 import { addSnippet } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
-import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
+import { dayKey, dateFromDayKey, friendlyDay, marginDate } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -958,10 +959,51 @@ function Calendar() {
     }
   };
 
+  /* ── the header search: a pill that borrows the whole title row ──
+     The title slides off left, the buttons off right; Clear hands the
+     row back, reversing the same moves. */
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const found = useSearch(query, all);
+  const hits = query.trim() ? found.slice(0, 8) : [];
+
+  const openSearch = () => {
+    setSearching(true);
+    // focus synchronously, inside the gesture — iOS won't raise the
+    // keyboard for a focus that arrives by timer
+    searchInputRef.current?.focus();
+  };
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery("");
+  };
+  /** a found line opens that day's page, from whatever altitude */
+  const jumpFromSearch = (day: string) => {
+    closeSearch();
+    if (viewRef.current === "schedule") {
+      jumpTo(day);
+      return;
+    }
+    if (viewRef.current === "month") {
+      pick(day);
+      return;
+    }
+    // from the glance: stand the canvas on the month, then dive on
+    pickMonth(startOfMonth(dateFromDayKey(day)));
+    const dive = () => {
+      if (zooming.current) setTimeout(dive, 120);
+      else pick(day);
+    };
+    setTimeout(dive, 120);
+  };
+
   const showMonthLayer = view === "month" || zoom?.from === "month";
   const showYearLayer = view === "year" || zoom?.from === "year";
   const showScheduleLayer = view === "schedule" || zoom?.from === "schedule";
   const showEntryLayer = view === "entry" || zoom?.from === "entry";
+  // the steppers belong to the grids; the book turns its own pages
+  const steppers = view === "month" || view === "year";
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
@@ -969,7 +1011,18 @@ function Calendar() {
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat
           fill over the textured sheet reads as a white band */}
-      <div className="sticky top-0 z-30 flex items-baseline justify-between">
+      <div className="sticky top-0 z-30">
+      <div className="relative flex items-baseline justify-between">
+        {/* the title yields the row to the search, sliding off left —
+            a wrapper carries the move because .pressable owns the
+            button's transition property */}
+        <div
+          className={cn(
+            "min-w-0 transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            searching && "pointer-events-none -translate-x-[115%] opacity-0",
+          )}
+          aria-hidden={searching}
+        >
         {view === "year" ? (
           <h2 className="voice-display text-(length:--date-head)">{visibleYear}</h2>
         ) : (
@@ -1018,16 +1071,39 @@ function Calendar() {
             {format(visibleMonth, "yyyy")}
           </button>
         )}
+        </div>
         {/* the navigation controls have no business in a single entry —
             they fade out and yield their width so the full date never
-            wraps */}
+            wraps; the search slides the whole cluster off right */}
         <div
           className={cn(
-            "flex shrink-0 items-baseline gap-1 transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            "flex shrink-0 items-baseline gap-1 transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
             view === "entry" && "pointer-events-none w-0 overflow-hidden opacity-0",
+            searching && "pointer-events-none translate-x-[115%] opacity-0",
           )}
-          aria-hidden={view === "entry"}
+          aria-hidden={view === "entry" || searching}
         >
+          <button
+            type="button"
+            onClick={openSearch}
+            aria-label="Search entries"
+            aria-expanded={searching}
+            className="pressable self-center rounded-[5px] p-1.5 text-ink-soft hover:bg-accent hover:text-ink"
+          >
+            {/* a hand-drawn glass, in the dock strokes' own line */}
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              className="size-[1.05rem]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            >
+              <circle cx="8.8" cy="8.6" r="5.3" />
+              <path d="M12.8 12.8 17 17.2" />
+            </svg>
+          </button>
           {/* always in the row — appearing must never reflow the page */}
           <button
             type="button"
@@ -1041,33 +1117,111 @@ function Calendar() {
           >
             Today
           </button>
-          <button
-            type="button"
-            aria-label={view === "year" ? "Previous year" : "Previous month"}
-            onClick={() => stepFeed(-1)}
-            disabled={
-              view === "entry" || (view === "schedule" && !scheduleTarget(-1))
-            }
-            className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+          {/* the steppers slide off to the right when the camera enters
+              the book, and back into place on the way out */}
+          <div
+            className={cn(
+              "grid transition-[grid-template-columns] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+              steppers ? "grid-cols-[1fr]" : "grid-cols-[0fr]",
+            )}
+            aria-hidden={!steppers}
           >
-            ‹
-          </button>
-          <button
-            type="button"
-            aria-label={view === "year" ? "Next year" : "Next month"}
-            onClick={() => stepFeed(1)}
-            disabled={
-              view === "month"
-                ? isSameMonth(visibleMonth, currentMonth)
-                : view === "year"
-                  ? visibleYear >= today.getFullYear()
-                  : view === "entry" || !scheduleTarget(1)
-            }
-            className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
-          >
-            ›
-          </button>
+            <div
+              className={cn(
+                "flex min-w-0 items-baseline overflow-hidden transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                !steppers && "pointer-events-none translate-x-5 opacity-0",
+              )}
+            >
+              <button
+                type="button"
+                aria-label={view === "year" ? "Previous year" : "Previous month"}
+                onClick={() => stepFeed(-1)}
+                disabled={!steppers}
+                className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                aria-label={view === "year" ? "Next year" : "Next month"}
+                onClick={() => stepFeed(1)}
+                disabled={
+                  view === "month"
+                    ? isSameMonth(visibleMonth, currentMonth)
+                    : view === "year"
+                      ? visibleYear >= today.getFullYear()
+                      : true
+                }
+                className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+              >
+                ›
+              </button>
+            </div>
+          </div>
         </div>
+        {/* the search bar: the cards' material drawn out to a pill. It
+            grows leftward from the icon's corner to take the whole row */}
+        <div
+          className={cn(
+            "absolute -inset-y-1 right-0 z-10 transition-[width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            searching ? "w-full opacity-100" : "pointer-events-none w-12 opacity-0",
+          )}
+          aria-hidden={!searching}
+        >
+          <div className="flex h-full items-center rounded-full border border-rule-faint bg-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") closeSearch();
+                else if (e.key === "Enter" && hits[0]) jumpFromSearch(hits[0].day);
+              }}
+              placeholder="Find an entry…"
+              aria-label="Search entries"
+              tabIndex={searching ? 0 : -1}
+              className="voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+            />
+            <button
+              type="button"
+              onClick={closeSearch}
+              tabIndex={searching ? 0 : -1}
+              className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.72rem] text-ink-faint hover:bg-accent hover:text-ink"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        {/* found pages float beneath the bar */}
+        {searching && query.trim() !== "" && (
+          <div className="absolute inset-x-0 top-full z-20 mt-2">
+            <div className="float max-h-72 overflow-y-auto overscroll-contain rounded-[8px] p-1.5">
+              {hits.length === 0 ? (
+                <p className="voice-prose px-2.5 py-2 text-[0.9rem] italic text-ink-faint">
+                  Nothing kept matches.
+                </p>
+              ) : (
+                hits.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => jumpFromSearch(s.day)}
+                    className="pressable flex w-full items-baseline gap-3 rounded-[6px] px-2.5 py-2 text-left hover:bg-accent"
+                  >
+                    <span className="voice-prose line-clamp-1 min-w-0 flex-1 text-[0.92rem]">
+                      {s.title ?? s.text}
+                    </span>
+                    <span className="voice-data shrink-0 text-ink-faint">
+                      {marginDate(dateFromDayKey(s.day)).toLowerCase()}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       </div>
 
       {/* the weekday rail exists only at the month altitude; elsewhere
