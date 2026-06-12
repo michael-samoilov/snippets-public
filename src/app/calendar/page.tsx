@@ -842,16 +842,22 @@ function Calendar() {
             }
             className="voice-display pressable whitespace-nowrap rounded-[5px] text-left text-(length:--date-head) hover:text-wax"
           >
-            <span
+            {/* a drawn stroke, not a glyph: the ‹ character vanished on
+                iOS twice (zero-width) regardless of how it was sized,
+                while the dock's SVG marks render everywhere — so the
+                back chevron is ink like them, standing cap-high */}
+            <svg
               aria-hidden="true"
-              // the guillemet fills little of its em, so it's set larger
-              // than the date to stand the same height as the letters.
-              // em, not calc(var(…)): WebKit can evaluate a calc over a
-              // var holding clamp() to 0 — the chevron vanished on iOS
-              className="mr-1 text-[1.5em] leading-none text-ink-faint"
+              viewBox="0 0 10 16"
+              className="mr-1.5 inline-block h-[0.72em] w-auto -translate-y-[0.04em] text-ink-faint"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              ‹
-            </span>
+              <path d="M8 2 3 8l5 6" />
+            </svg>
             {/* the header climbs to the full date in the entry view: the
                 weekday and day-of-month wipe in from their own spots
                 while the month and year hold still */}
