@@ -157,8 +157,8 @@ pad's), and they are their words alone — title, kind, tags, time, and
 source stay in the data, feeding search, never displayed. The one sanctioned tile material is the calendar's
 (year minis, the book's entry tiles, the header search pill, and the
 book's composer — whose paint fades rightward into the bare page, an
-entry not yet written, its card spanning exactly the margin date's
-ink — `bg-paper`, hairline border, inset top highlight); it never
+entry not yet written, seated on the tile line in the tiles' own
+paddings — `bg-paper`, hairline border, inset top highlight); it never
 leaves the calendar. The sanctioned marks are the wordmark's wax dot, the "Kept."
 StampMark, the dock's two hand-drawn strokes (a quill for the day's
 page, a calendar for the book — with small-caps words beneath), the

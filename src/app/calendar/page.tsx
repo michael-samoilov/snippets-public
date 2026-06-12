@@ -2969,11 +2969,9 @@ function BackfillCapture({
   const hasText = text.trim().length > 0;
 
   return (
-    // standing alone, the card spans the date's INK, not its line
-    // boxes: from the weekday's cap top (the run box carries 4px of
-    // ascent air above it) down to the number's baseline — measured
-    // with canvas TextMetrics against the ledger's fixed type scale
-    <div className={cn(follows ? "mt-1" : "mt-[3px]")}>
+    // the composer sits on the tile line and wears the tiles' own
+    // paddings — a one-line tile waiting for words
+    <div className={cn(follows && "mt-1")}>
       {/* the card proper: paint and field only — the Keep button and
           the stamp line live below it, outside the paint (an inset-0
           coat over the whole composer once buried them) */}
@@ -3018,7 +3016,7 @@ function BackfillCapture({
             }
           }}
           className={cn(
-            "voice-prose relative block w-full resize-none overflow-hidden bg-transparent px-2.5 py-[3.5px] text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+            "voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
             // today's invitation shares today's hue, like its date across
             // the gutter; other days keep the quiet ink
             isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
