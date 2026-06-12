@@ -164,16 +164,19 @@ fades under it and the full content fades in, reversed on the way out.
 In the entry the header climbs to the full date — the weekday and
 day-of-month **wipe open from their own slots** (animated `0fr`→`1fr`
 grid columns) while the month and year hold still, so there's no
-separate date line and the Today/chevron controls shed. During
-month⇄book, any **date number standing in both altitudes flies** as a
-shared element from its grid cell to its ledger slot (originals hidden
-while their double is in the air). The flyer overlays both typefaces —
-the grid's mono and the ledger's Fraunces — and position, size, and a
-blur-masked crossfade all ride one spring value, so the type changes
-exactly at the flight's spatial midpoint rather than snapping on
-landing. Endpoints are Range text-rects, not line boxes (leading would
-read as a landing skip). Pulling back, only the day being read flies. The stage
-grows below the month; the title row always climbs one altitude and
+separate date line and the Today/chevron controls shed. **Shared
+elements fly across the camera moves.** During month⇄book, any date
+number standing in both altitudes flies from its grid cell to its
+ledger slot (pulling back, only the day being read); its flyer overlays
+both typefaces — the grid's mono and the ledger's Fraunces — and
+position, size, and the crossfade ride one spring value, so the type
+changes at the flight's spatial midpoint, not on landing (no blur — the
+flight's too quick to read one). During year⇄month, the month's
+abbreviation morphs between its year-view mini label and its hand-over
+label over the first of the month — one small-caps tag, flying and
+resizing. Originals hide while their double is in the air; endpoints are
+Range text-rects, not line boxes (leading would read as a landing skip).
+The stage grows below the month; the title row always climbs one altitude and
 follows whichever feed scrolls beneath it. The weekday rail exists
 only at the month altitude — elsewhere it folds shut (animated
 `0fr`/`1fr` grid row) so content sits flush under the title, its

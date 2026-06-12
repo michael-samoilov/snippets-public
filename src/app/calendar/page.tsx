@@ -125,6 +125,10 @@ function readFont(el: HTMLElement): FlyFont {
   };
 }
 
+function readColor(el: HTMLElement): string {
+  return getComputedStyle(el).color;
+}
+
 /** A detached, absolutely-centred number wearing a given typeface. */
 function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
   const g = document.createElement("span");
@@ -450,6 +454,24 @@ function Calendar() {
       ).finished,
     );
 
+    // the painted box of an element's text, not its line box — block
+    // boxes carry leading the glyphs don't, and the difference reads as
+    // a flyer landing low, then skipping into place
+    const textRect = (el: HTMLElement) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const r = range.getBoundingClientRect();
+      return r.width > 0 ? r : el.getBoundingClientRect();
+    };
+    const ensureFlyerBox = () => {
+      if (flyerBox) return flyerBox;
+      flyerBox = document.createElement("div");
+      flyerBox.style.cssText =
+        "position:absolute;inset:0;pointer-events:none;z-index:30;";
+      stage.appendChild(flyerBox);
+      return flyerBox;
+    };
+
     // shared-element flight: a date standing in both altitudes travels
     // from its grid cell to its ledger slot (and back) instead of
     // crossfading — the originals hide while their double is in the air
@@ -475,19 +497,7 @@ function Calendar() {
         for (const day of [...fromEls.keys()])
           if (day !== zoom.anchor) fromEls.delete(day);
       }
-      // the digits' painted box, not the element's line box — block
-      // boxes carry leading the glyphs don't, and the difference reads
-      // as the number landing low, then skipping into place
-      const textRect = (el: HTMLElement) => {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const r = range.getBoundingClientRect();
-        return r.width > 0 ? r : el.getBoundingClientRect();
-      };
-      flyerBox = document.createElement("div");
-      flyerBox.style.cssText =
-        "position:absolute;inset:0;pointer-events:none;z-index:30;";
-      stage.appendChild(flyerBox);
+      const box = ensureFlyerBox();
       for (const [day, fromEl] of fromEls) {
         const toEl = toEls.get(day);
         if (!toEl) continue;
@@ -517,7 +527,7 @@ function Calendar() {
         gTo.style.fontSize = `${fromFont.size}px`;
         gTo.style.opacity = "0";
         point.append(gFrom, gTo);
-        flyerBox.appendChild(point);
+        box.appendChild(point);
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
@@ -539,6 +549,57 @@ function Calendar() {
               const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
               gFrom.style.opacity = `${1 - k}`;
               gTo.style.opacity = `${k}`;
+            },
+          }).finished,
+        );
+      }
+    }
+
+    // the month's abbreviation morphs between its year-view mini label
+    // and its hand-over label over the first of the month — one small
+    // caps tag flying and resizing across the camera move
+    const monthPair =
+      (zoom.from === "year" && zoom.to === "month") ||
+      (zoom.from === "month" && zoom.to === "year");
+    if (monthPair) {
+      const fromEl = outgoing.querySelector<HTMLElement>(
+        `[data-flymonth="${CSS.escape(zoom.anchor)}"]`,
+      );
+      const toEl = incoming.querySelector<HTMLElement>(
+        `[data-flymonth="${CSS.escape(zoom.anchor)}"]`,
+      );
+      if (fromEl && toEl) {
+        const a = textRect(fromEl);
+        const b = textRect(toEl);
+        const ax = a.left + a.width / 2 - stageRect.left;
+        const ay = a.top + a.height / 2 - stageRect.top;
+        const bx = b.left + b.width / 2 - stageRect.left;
+        const by = b.top + b.height / 2 - stageRect.top;
+        const fromFont = readFont(fromEl);
+        const toFont = readFont(toEl);
+        const box = ensureFlyerBox();
+        const point = document.createElement("span");
+        point.dataset.flymonthFly = zoom.anchor;
+        point.style.cssText = `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
+        // same voice in both places, so one glyph that only travels and
+        // resizes — colour copied so the current month keeps its wax
+        const glyph = flyGlyph(fromEl.textContent ?? "", fromFont, readColor(fromEl));
+        glyph.style.fontSize = `${fromFont.size}px`;
+        point.appendChild(glyph);
+        box.appendChild(point);
+        fromEl.style.visibility = "hidden";
+        toEl.style.visibility = "hidden";
+        hiddenNumbers.push(fromEl, toEl);
+        moves.push(
+          animate(0, 1, {
+            type: "spring",
+            stiffness: 320,
+            damping: 34,
+            onUpdate: (t) => {
+              point.style.transform = `translate(${ax + (bx - ax) * t}px,${
+                ay + (by - ay) * t
+              }px)`;
+              glyph.style.fontSize = `${fromFont.size + (toFont.size - fromFont.size) * t}px`;
             },
           }).finished,
         );
@@ -1186,6 +1247,7 @@ function MonthBlock({
           first day — the rule beneath it is that day's own top edge */}
       <div className="relative" style={{ height: labelRowH }}>
         <span
+          data-flymonth={ym(month)}
           className={cn(
             "voice-label absolute bottom-1 text-center text-[0.82rem]",
             isCurrent ? "text-wax" : "text-ink-soft",
@@ -1513,6 +1575,7 @@ function YearFeed({
                       aria-label={format(start, "MMMM yyyy")}
                     >
                       <span
+                        data-flymonth={ym(start)}
                         className={cn(
                           "voice-label text-[0.8rem]",
                           isCurrent ? "text-wax" : "text-ink-soft",
