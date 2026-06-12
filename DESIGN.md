@@ -233,10 +233,14 @@ entry card — and the page itself only rubber-bands over the
 canvas-painted desk). The title row always climbs one altitude and
 follows whichever feed scrolls beneath it; the ‹ › steppers belong to
 the grids and slide off to the right when the camera enters the book,
-returning the same way out. At the cluster's left edge sits the search
-glass: pressed, the row becomes a full-width pill of the cards'
-material (fully round ends) — the title slides off left, the buttons
-off right. While a query stands, the stage shows **the filtered
+returning the same way out, and the Today button wipes away rightward
+and yields its width while the reader stands on today — the search
+glass slides over to the corner — returning the same way when they
+wander. The glass itself is a small circle of the cards' material
+(the same coin the avatar is struck from); pressed, that circle grows
+from its own spot out both ways into the full-row search bar — the
+title slides off left, the other buttons off right — and contracts
+back into the circle on Clear. While a query stands, the stage shows **the filtered
 book**: the same ledger and tiles, only the days that answer, opened
 at its last page (the weekday rail folds; the altitudes wait beneath,
 hidden; no animation — it re-renders with every keystroke). Pressing a

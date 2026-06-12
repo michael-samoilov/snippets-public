@@ -973,6 +973,19 @@ function Calendar() {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // the bar IS the glass's circle, grown to the row: its geometry
+  // animates between the circle's measured box and the full row
+  const titleRowRef = useRef<HTMLDivElement>(null);
+  const glassRef = useRef<HTMLButtonElement>(null);
+  const [pillBox, setPillBox] = useState<{
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
+  // seating the bar on the circle must not itself animate — only the
+  // growth after it (and the contraction back) do
+  const [pillSeating, setPillSeating] = useState(false);
   // the index is built on first open, not on every visit — the command
   // menu already keeps one for the whole app
   const hits = useSearch(query, searching ? all : undefined);
@@ -993,13 +1006,36 @@ function Calendar() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [searchGroups]);
 
+  /** where the glass circle stands right now, in the row's space —
+      visibility:hidden keeps layout, so this measures mid-search too */
+  const glassBox = () => {
+    const row = titleRowRef.current;
+    const g = glassRef.current;
+    if (!row || !g) return null;
+    const r = row.getBoundingClientRect();
+    const b = g.getBoundingClientRect();
+    return {
+      left: b.left - r.left,
+      right: r.right - b.right,
+      top: b.top - r.top,
+      bottom: r.bottom - b.bottom,
+    };
+  };
   const openSearch = () => {
-    setSearching(true);
     // focus synchronously, inside the gesture — iOS won't raise the
     // keyboard for a focus that arrives by timer
     searchInputRef.current?.focus();
+    setPillSeating(true);
+    setPillBox(glassBox()); // seat the bar on the circle, untransitioned…
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        setPillSeating(false);
+        setSearching(true); // …then let it grow
+      }),
+    );
   };
   const closeSearch = () => {
+    setPillBox(glassBox()); // contract back into the circle
     setSearching(false);
     setQuery("");
   };
@@ -1047,7 +1083,7 @@ function Calendar() {
           the page itself has to scroll. No painted background — a flat
           fill over the textured sheet reads as a white band */}
       <div className="sticky top-0 z-30">
-      <div className="relative flex items-baseline justify-between">
+      <div ref={titleRowRef} className="relative flex items-baseline justify-between">
         {/* the title yields the row to the search, sliding off left —
             a wrapper carries the move because .pressable owns the
             button's transition property */}
@@ -1109,27 +1145,33 @@ function Calendar() {
         </div>
         {/* the navigation controls have no business in a single entry —
             they fade out and yield their width so the full date never
-            wraps; the search slides the whole cluster off right */}
+            wraps. The glass stands apart: searching, it grows into the
+            bar while the rest of the cluster slides off right */}
         <div
           className={cn(
-            "flex shrink-0 items-baseline gap-1 transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            "flex shrink-0 items-baseline transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
             view === "entry" && "pointer-events-none w-0 overflow-hidden opacity-0",
-            searching && "pointer-events-none translate-x-[115%] opacity-0",
           )}
-          aria-hidden={view === "entry" || searching}
+          aria-hidden={view === "entry"}
         >
           <button
+            ref={glassRef}
             type="button"
             onClick={openSearch}
             aria-label="Search entries"
             aria-expanded={searching}
-            className="pressable self-center rounded-[5px] p-1.5 text-ink-soft hover:bg-accent hover:text-ink"
+            className={cn(
+              // the cards' material, drawn into a small circle — the
+              // same coin the avatar is struck from
+              "pressable grid size-[26px] shrink-0 place-items-center self-center rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised hover:text-ink",
+              searching && "invisible",
+            )}
           >
             {/* a hand-drawn glass, in the dock strokes' own line */}
             <svg
               aria-hidden="true"
               viewBox="0 0 20 20"
-              className="size-[1.05rem]"
+              className="size-[0.85rem]"
               fill="none"
               stroke="currentColor"
               strokeWidth="1.5"
@@ -1139,74 +1181,103 @@ function Calendar() {
               <path d="M12.8 12.8 17 17.2" />
             </svg>
           </button>
-          {/* always in the row — appearing must never reflow the page */}
-          <button
-            type="button"
-            onClick={goToday}
-            disabled={atToday || view === "entry"}
-            aria-hidden={atToday}
-            className={cn(
-              "voice-label pressable mr-2 rounded-[5px] px-2 py-1 leading-none text-wax hover:bg-accent",
-              atToday && "opacity-0",
-            )}
-          >
-            Today
-          </button>
-          {/* the steppers slide off to the right when the camera enters
-              the book, and back into place on the way out */}
           <div
             className={cn(
-              "grid transition-[grid-template-columns] duration-[var(--dur-base)] ease-[var(--ease-out)]",
-              steppers ? "grid-cols-[1fr]" : "grid-cols-[0fr]",
+              "flex items-baseline transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+              searching && "pointer-events-none translate-x-[115%] opacity-0",
             )}
-            aria-hidden={!steppers}
+            aria-hidden={searching}
           >
+            {/* standing on today, the button wipes away to the right
+                and yields its width — the glass slides over to the
+                corner; scroll away and it returns the same way */}
             <div
               className={cn(
-                "flex min-w-0 items-baseline overflow-hidden transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
-                !steppers && "pointer-events-none translate-x-5 opacity-0",
+                "grid transition-[grid-template-columns] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                atToday ? "grid-cols-[0fr]" : "grid-cols-[1fr]",
               )}
+              aria-hidden={atToday}
             >
-              <button
-                type="button"
-                aria-label={view === "year" ? "Previous year" : "Previous month"}
-                onClick={() => stepFeed(-1)}
-                disabled={!steppers}
-                className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+              <div
+                className={cn(
+                  "flex min-w-0 overflow-hidden transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                  atToday && "pointer-events-none translate-x-4 opacity-0",
+                )}
               >
-                ‹
-              </button>
-              <button
-                type="button"
-                aria-label={view === "year" ? "Next year" : "Next month"}
-                onClick={() => stepFeed(1)}
-                disabled={
-                  view === "month"
-                    ? isSameMonth(visibleMonth, currentMonth)
-                    : view === "year"
-                      ? visibleYear >= today.getFullYear()
-                      : true
-                }
-                className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+                <button
+                  type="button"
+                  onClick={goToday}
+                  disabled={atToday || view === "entry"}
+                  className="voice-label pressable ml-1 mr-1.5 rounded-[5px] px-2 py-1 leading-none text-wax hover:bg-accent"
+                >
+                  Today
+                </button>
+              </div>
+            </div>
+            {/* the steppers slide off to the right when the camera enters
+                the book, and back into place on the way out */}
+            <div
+              className={cn(
+                "grid transition-[grid-template-columns] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                steppers ? "grid-cols-[1fr]" : "grid-cols-[0fr]",
+              )}
+              aria-hidden={!steppers}
+            >
+              {/* no padding here: a 0fr track can't shrink below it,
+                  and the fold must collapse to a true zero */}
+              <div
+                className={cn(
+                  "flex min-w-0 items-baseline overflow-hidden transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                  !steppers && "pointer-events-none translate-x-5 opacity-0",
+                )}
               >
-                ›
-              </button>
+                <button
+                  type="button"
+                  aria-label={view === "year" ? "Previous year" : "Previous month"}
+                  onClick={() => stepFeed(-1)}
+                  disabled={!steppers}
+                  className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label={view === "year" ? "Next year" : "Next month"}
+                  onClick={() => stepFeed(1)}
+                  disabled={
+                    view === "month"
+                      ? isSameMonth(visibleMonth, currentMonth)
+                      : view === "year"
+                        ? visibleYear >= today.getFullYear()
+                        : true
+                  }
+                  className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
+                >
+                  ›
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        {/* the search bar: the cards' material drawn out to a pill. It
-            grows leftward from the icon's corner to take the whole row
-            — downward only for its extra height: the sticky row sits
-            flush on the scroll container's clip line, and anything
-            above it is shorn off */}
+        {/* the search bar IS the glass's circle, grown: its box
+            animates between the circle's measured spot and the whole
+            row (downward only for the extra height — the sticky row
+            sits flush on the scroll container's clip line, and
+            anything above it is shorn off) */}
         <div
           className={cn(
-            "absolute -bottom-1.5 top-0 right-0 z-10 transition-[width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
-            searching ? "w-full opacity-100" : "pointer-events-none w-12 opacity-0",
+            "absolute z-10 transition-[left,right,top,bottom,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            pillSeating && "transition-none",
+            searching ? "opacity-100" : "pointer-events-none opacity-0",
           )}
+          style={
+            searching
+              ? { left: 0, right: 0, top: 0, bottom: -6 }
+              : (pillBox ?? { left: "100%", right: 0, top: 0, bottom: 0 })
+          }
           aria-hidden={!searching}
         >
-          <div className="flex h-full items-center rounded-full border border-rule-faint bg-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
+          <div className="flex h-full items-center overflow-hidden rounded-full border border-rule-faint bg-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
             <input
               ref={searchInputRef}
               type="text"
@@ -1220,7 +1291,10 @@ function Calendar() {
               placeholder="Find an entry…"
               aria-label="Search entries"
               tabIndex={searching ? 0 : -1}
-              className="voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              className={cn(
+                "voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none transition-opacity duration-[var(--dur-fast)] placeholder:italic placeholder:text-ink-faint",
+                !searching && "opacity-0",
+              )}
             />
             <button
               type="button"
@@ -2620,53 +2694,58 @@ function BackfillCapture({
     // boxes: from the weekday's cap top (the run box carries 4px of
     // ascent air above it) down to the number's baseline — measured
     // with canvas TextMetrics against the ledger's fixed type scale
-    <div className={cn("group relative", follows ? "mt-1" : "mt-[3px]")}>
-      {/* the tile's paint, fading rightward into the bare page: an
-          entry not yet written. Focus darkens the rule, as writing
-          surfaces do */}
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
-      />
-      {/* …and while words stand in it, the paint completes: the card
-          is becoming real */}
-      <span
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
-          "border-rule-faint group-focus-within:border-rule",
-          text.length > 0 ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <textarea
-        ref={areaRef}
-        value={text}
-        rows={1}
-        placeholder={
-          isToday
-            ? "Add something from today…"
-            : isYesterday
-              ? "Add something from yesterday…"
-              : "Add something you want to remember…"
-        }
-        aria-label={`Add an entry to ${friendlyDay(day)}`}
-        onChange={(e) => {
-          setText(e.target.value);
-          autosizeArea(e.target);
-        }}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-            e.preventDefault();
-            void keep();
+    <div className={cn(follows ? "mt-1" : "mt-[3px]")}>
+      {/* the card proper: paint and field only — the Keep button and
+          the stamp line live below it, outside the paint (an inset-0
+          coat over the whole composer once buried them) */}
+      <div className="group relative">
+        {/* the tile's paint, fading rightward into the bare page: an
+            entry not yet written. Focus darkens the rule, as writing
+            surfaces do */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
+        />
+        {/* …and while words stand in it, the paint completes: the card
+            is becoming real */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
+            "border-rule-faint group-focus-within:border-rule",
+            text.length > 0 ? "opacity-100" : "opacity-0",
+          )}
+        />
+        <textarea
+          ref={areaRef}
+          value={text}
+          rows={1}
+          placeholder={
+            isToday
+              ? "Add something from today…"
+              : isYesterday
+                ? "Add something from yesterday…"
+                : "Add something you want to remember…"
           }
-        }}
-        className={cn(
-          "voice-prose relative block w-full resize-none overflow-hidden bg-transparent px-2.5 py-[3.5px] text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
-          // today's invitation shares today's hue, like its date across
-          // the gutter; other days keep the quiet ink
-          isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
-        )}
-      />
+          aria-label={`Add an entry to ${friendlyDay(day)}`}
+          onChange={(e) => {
+            setText(e.target.value);
+            autosizeArea(e.target);
+          }}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              void keep();
+            }
+          }}
+          className={cn(
+            "voice-prose relative block w-full resize-none overflow-hidden bg-transparent px-2.5 py-[3.5px] text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+            // today's invitation shares today's hue, like its date across
+            // the gutter; other days keep the quiet ink
+            isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
+          )}
+        />
+      </div>
       {hasText && (
         // pr-px: the button's 1px ring shadow sits outside its box, and
         // the column's right edge is also the stage's clip line
