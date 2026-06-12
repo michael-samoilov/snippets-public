@@ -202,7 +202,12 @@ Range text-rects, not line boxes (leading would read as a landing skip).
 The stage is **one fixed frame at every altitude**: it fills the page
 column, and its terminating hairline sits the same distance from the
 sheet's bottom as the header stands from its top — the line never
-moves between views. The desk is exactly one screen at every size
+moves between views (in the entry it goes transparent: the card's own
+bottom edge is the terminator there). The feeds' floors are laid out,
+not measured — a px container to the last offset plus a `min-h-full`
+tail — so a mid-zoom stage resize can never clamp a scroller and
+drift a flight's landing. The year glance reaches back exactly to the
+first entry's year (or last week's year on an empty book). The desk is exactly one screen at every size
 (html/body never scroll; every scroll lives in a container — the
 sheet's main, the feeds, the entry card). The title row always climbs one altitude and
 follows whichever feed scrolls beneath it. A **left-to-right swipe**

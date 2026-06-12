@@ -49,7 +49,6 @@ const ym = (d: Date) => format(d, "yyyy-MM");
    compensated scroll positions mid-flight. */
 
 const RANGE_MONTHS = 120;
-const RANGE_YEARS = 10;
 const YEAR_GAP = 24; // between year blocks
 const MINI_GAP = 8; // gap-2 between minis
 const MINI_DOT = 3;
@@ -834,6 +833,20 @@ function Calendar() {
     scheduleFeedRef.current?.goTo(key);
   };
 
+  /** the year view reaches back to the first entry's year — or, with
+      an empty book, the year of last week (early January still wants
+      to backfill December) */
+  const earliestYear = useMemo(() => {
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    let y = lastWeek.getFullYear();
+    if (all?.length) {
+      y = Math.min(y, Number(all[all.length - 1].day.slice(0, 4)) || y);
+    }
+    return y;
+  }, [all]);
+  const yearSpan = Math.max(1, today.getFullYear() - earliestYear + 1);
+
   /** days that exist in the book, for stepping it by months */
   const keptDays = useMemo(() => {
     const days = new Set(counts ? [...counts.keys()] : []);
@@ -881,8 +894,7 @@ function Calendar() {
       monthFeedRef.current?.goTo(next, true);
     } else {
       const next = visibleYear + delta;
-      if (next > today.getFullYear() || next <= today.getFullYear() - RANGE_YEARS)
-        return;
+      if (next > today.getFullYear() || next < earliestYear) return;
       setVisibleYear(next);
       yearFeedRef.current?.goTo(next, true);
     }
@@ -1038,7 +1050,12 @@ function Calendar() {
           and never moves between views */}
       <div
         ref={stageRef}
-        className="relative min-h-0 flex-1 overflow-hidden border-b border-rule-faint"
+        className={cn(
+          "relative min-h-0 flex-1 overflow-hidden border-b transition-colors duration-[var(--dur-base)]",
+          // the entry card carries its own bottom edge — the frame's
+          // line yields so the two never double up
+          view === "entry" ? "border-transparent" : "border-rule-faint",
+        )}
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
             e.preventDefault();
@@ -1089,6 +1106,7 @@ function Calendar() {
             handleRef={yearFeedRef}
             active={view === "year" && !zoom}
             today={today}
+            span={yearSpan}
             counts={counts}
             onPickMonth={pickMonth}
             onVisible={setVisibleYear}
@@ -1347,17 +1365,14 @@ function MonthFeed({
         June 2026
       </p>
       {geom && (
-        // floored one viewport past the last offset so the current month
-        // can stand flush at the top like any other — otherwise the
-        // browser clamps the landing and the feed stops short of it
+        // the floor is laid out, not measured: blocks live in a px-high
+        // container up to the last offset, and a min-h-full tail keeps
+        // one viewport of room below it IN THE SAME LAYOUT PASS as any
+        // stage resize — a mid-zoom rail collapse can no longer clamp
+        // the scroller and drift the flights' landing targets
         <div
           className="relative"
-          style={{
-            height: Math.max(
-              geom.total,
-              geom.offsets[geom.offsets.length - 1] + viewH,
-            ),
-          }}
+          style={{ height: geom.offsets[geom.offsets.length - 1] }}
         >
           {ring && (
             <motion.span
@@ -1388,6 +1403,15 @@ function MonthFeed({
             </div>
           ))}
         </div>
+      )}
+      {geom && (
+        <div
+          aria-hidden="true"
+          className="min-h-full"
+          style={{
+            height: geom.total - geom.offsets[geom.offsets.length - 1],
+          }}
+        />
       )}
     </div>
   );
@@ -1516,6 +1540,7 @@ function buildYearGeom(
   labelH: number,
   miniLabelH: number,
   currentYear: number,
+  span: number,
 ): YearGeom {
   const cols = typeof window !== "undefined" && window.innerWidth >= 640 ? 4 : 3;
   const rows = 12 / cols;
@@ -1527,7 +1552,7 @@ function buildYearGeom(
   const years: number[] = [];
   const offsets: number[] = [];
   let y = 0;
-  for (let i = RANGE_YEARS - 1; i >= 0; i--) {
+  for (let i = span - 1; i >= 0; i--) {
     years.push(currentYear - i);
     offsets.push(y);
     y += blockH + YEAR_GAP;
@@ -1539,6 +1564,7 @@ function YearFeed({
   handleRef,
   active,
   today,
+  span,
   counts,
   onPickMonth,
   onVisible,
@@ -1546,6 +1572,8 @@ function YearFeed({
   handleRef: React.MutableRefObject<YearFeedHandle | null>;
   active: boolean;
   today: Date;
+  /** how many years the glance reaches back (≥1, ends at today's) */
+  span: number;
   counts: Map<string, number> | undefined;
   onPickMonth: (m: Date) => void;
   onVisible: (y: number) => void;
@@ -1568,10 +1596,16 @@ function YearFeed({
   const geom = useMemo(
     () =>
       metrics
-        ? buildYearGeom(metrics.w, metrics.labelH, metrics.miniLabelH, currentYear)
+        ? buildYearGeom(
+            metrics.w,
+            metrics.labelH,
+            metrics.miniLabelH,
+            currentYear,
+            span,
+          )
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [metrics?.w, metrics?.labelH, metrics?.miniLabelH],
+    [metrics?.w, metrics?.labelH, metrics?.miniLabelH, span],
   );
   const geomRef = useRef<YearGeom | null>(null);
   useLayoutEffect(() => {
@@ -1704,14 +1738,10 @@ function YearFeed({
         Jan
       </span>
       {geom && (
+        // same layout-synchronous floor as the month feed
         <div
           className="relative"
-          style={{
-            height: Math.max(
-              geom.total,
-              geom.offsets[geom.offsets.length - 1] + viewH,
-            ),
-          }}
+          style={{ height: geom.offsets[geom.offsets.length - 1] }}
         >
           {geom.years.slice(from, to + 1).map((y, k) => (
             <div
@@ -1765,6 +1795,15 @@ function YearFeed({
             </div>
           ))}
         </div>
+      )}
+      {geom && (
+        <div
+          aria-hidden="true"
+          className="min-h-full"
+          style={{
+            height: geom.total - geom.offsets[geom.offsets.length - 1],
+          }}
+        />
       )}
     </div>
   );
