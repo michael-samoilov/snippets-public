@@ -27,11 +27,14 @@ export function SnippetEntry({
   stagger = 0,
   showTime = true,
   showTitle = true,
+  dense = false,
 }: {
   snippet: Snippet;
   stagger?: number;
   showTime?: boolean;
   showTitle?: boolean;
+  /** standalone (the focused card): drop the list padding + entrance, tighten leading */
+  dense?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const isQuote = snippet.kind === "quote";
@@ -59,7 +62,10 @@ export function SnippetEntry({
 
   return (
     <article
-      className="group entry-rise relative py-4 first:pt-3"
+      className={cn(
+        "group relative",
+        dense ? "" : "entry-rise py-4 first:pt-3",
+      )}
       style={{ "--stagger": Math.min(stagger, 8) } as React.CSSProperties}
     >
       {showTitle && snippet.title && (
@@ -72,6 +78,7 @@ export function SnippetEntry({
         className={cn(
           "voice-prose whitespace-pre-wrap",
           isQuote && "hang-quotes italic",
+          dense && "leading-[1.5]",
         )}
       >
         {snippet.text}

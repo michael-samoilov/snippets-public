@@ -12,6 +12,11 @@
  */
 
 :root {
+  /* the date header is the largest size that still keeps the longest
+     full date ("Wednesday, September 22, 2020") on one line — it scales
+     with the viewport on phones and caps on wider screens */
+  --date-head: clamp(1.05rem, 5vw, 1.3rem);
+
   /* ── the desk (the world around the page) ─────────────── */
   --desk: #e8dcc2;
   --desk-deep: #ddcfb0;

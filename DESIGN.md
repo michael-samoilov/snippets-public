@@ -160,11 +160,18 @@ violent). book⇄entry is *not* a camera scale but a shared element: the
 pressed tile is the same paper card you read on, so it grows to fill
 the stage (easeOutCubic, GPU-promoted via `will-change` — scaling a
 mix-blended card is murder to re-raster on the CPU) while the schedule
-fades under it and the full content fades in, reversed on the way out.
-In the entry the header climbs to the full date — the weekday and
-day-of-month **wipe open from their own slots** (animated `0fr`→`1fr`
-grid columns) while the month and year hold still, so there's no
-separate date line and the Today/chevron controls shed. **Shared
+fades under it. The content counter-scales against the box, so the
+card crops the words like a window instead of squashing the glyphs;
+opening, the full text fades in over the tile's, and closing it stays
+solid the whole way down. The card keeps the tiles' 8px breath under
+the header's hairline rather than climbing flush to it. In the entry
+the header climbs to the full date — the weekday and day-of-month
+**wipe open from their own slots** (animated `0fr`→`1fr` grid columns)
+while the month and year hold still, so there's no separate date line
+and the Today/chevron controls shed. The date header sizes to
+`--date-head: clamp(1.05rem, 5vw, 1.3rem)` — the largest size that
+keeps the longest full date ("Wednesday, September 22, 2020") on one
+line at any width. **Shared
 elements fly across the camera moves.** During month⇄book, any date
 number standing in both altitudes flies from its grid cell to its
 ledger slot (pulling back, only the day being read); its flyer overlays

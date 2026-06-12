@@ -331,7 +331,10 @@ function Calendar() {
         el.style.opacity = "";
       }
       if (entryCard) entryCard.style.transform = "";
-      if (entryContent) entryContent.style.opacity = "";
+      if (entryContent) {
+        entryContent.style.opacity = "";
+        entryContent.style.transform = "";
+      }
       for (const el of willChanged) el.style.willChange = "";
       flyerBox?.remove();
       for (const el of hiddenNumbers) el.style.visibility = "";
@@ -373,20 +376,32 @@ function Calendar() {
         // a paper-textured, mix-blended card is murderously expensive to
         // re-raster each frame on the CPU; cached layers make it cheap
         entryCard.style.willChange = "transform";
+        entryContent.style.willChange = "transform, opacity";
         schedEl.style.willChange = "opacity";
-        willChanged.push(entryCard, schedEl);
+        willChanged.push(entryCard, entryContent, schedEl);
         // a hand-rolled rAF drives the whole shared-element move off one
         // eased value (Motion's numeric animate was being cancelled after
         // a single frame here, alone among the transitions)
         const lerp = (a: number, bb: number, k: number) => a + (bb - a) * k;
+        entryContent.style.transformOrigin = "0 0";
         const apply = (open: number) => {
           // open: 0 = sitting on the tile, 1 = filling the stage
+          const sx = lerp(osx, 1, open);
+          const sy = lerp(osy, 1, open);
           entryCard.style.transform = `translate(${lerp(ox, 0, open)}px, ${lerp(
             oy,
             0,
             open,
-          )}px) scale(${lerp(osx, 1, open)}, ${lerp(osy, 1, open)})`;
-          entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`;
+          )}px) scale(${sx}, ${sy})`;
+          // the glyphs never distort: the content counter-scales against
+          // the box, so the shrinking card crops the words like a window
+          // instead of squashing them
+          entryContent.style.transform = `scale(${1 / sx}, ${1 / sy})`;
+          // opening, the full text fades in over the tile's; closing, it
+          // stays solid the whole way down so the words never vanish
+          entryContent.style.opacity = deeper
+            ? `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`
+            : "1";
           schedEl.style.opacity = `${1 - open}`;
         };
         apply(deeper ? 0 : 1);
@@ -750,7 +765,7 @@ function Calendar() {
           whichever feed is scrolling beneath it */}
       <div className="flex items-baseline justify-between">
         {view === "year" ? (
-          <h2 className="voice-display text-[1.3rem]">{visibleYear}</h2>
+          <h2 className="voice-display text-(length:--date-head)">{visibleYear}</h2>
         ) : (
           <button
             type="button"
@@ -768,7 +783,7 @@ function Calendar() {
                   ? `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
                   : "Back to the days"
             }
-            className="voice-display pressable whitespace-nowrap rounded-[5px] text-left text-[1.3rem] hover:text-wax"
+            className="voice-display pressable whitespace-nowrap rounded-[5px] text-left text-(length:--date-head) hover:text-wax"
           >
             <span aria-hidden="true" className="mr-1 text-[1rem] text-ink-faint">
               ‹
@@ -954,7 +969,9 @@ function Calendar() {
           ref={entryLayerRef}
           data-layer="entry"
           className={cn(
-            "absolute inset-0",
+            // pt-2 mirrors the schedule card's gap below its date rule,
+            // so the expanded card keeps that same breath under the title
+            "absolute inset-0 pt-2",
             !showEntryLayer && "invisible",
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
@@ -1883,7 +1900,7 @@ function ScheduleCards({
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
 
   return (
-    <ul className="flex flex-col gap-1.5">
+    <ul className="flex flex-col gap-1">
       <AnimatePresence initial={false}>
         {snippets.map((s) => (
           <motion.li
@@ -1909,7 +1926,7 @@ function ScheduleCards({
             >
               <p
                 className={cn(
-                  "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.5]",
+                  "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
                   s.kind === "quote" && "hang-quotes italic",
                 )}
               >
@@ -1938,14 +1955,14 @@ function EntryView({ snippet }: { snippet: Snippet | null }) {
     >
       <div
         data-entry-card-content
-        className="overflow-y-auto overscroll-contain p-4 [overflow-anchor:none]"
+        className="overflow-y-auto overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
         {snippet ? (
           // the clutter the tiles refuse — time, kind, tags, actions —
           // belongs here, where one entry has the reader's full attention
-          <SnippetEntry snippet={snippet} showTitle={false} />
+          <SnippetEntry snippet={snippet} showTitle={false} dense />
         ) : (
           <p className="voice-prose italic text-ink-soft">Let go.</p>
         )}
@@ -2043,7 +2060,7 @@ function BackfillCapture({
           placeholder={
             isToday
               ? "Add something from today…"
-              : "Add something you remember from this day…"
+              : "Add something you want to remember…"
           }
           aria-label={`Add an entry to ${friendlyDay(day)}`}
           onChange={(e) => {
