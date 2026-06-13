@@ -2641,6 +2641,85 @@ function ScheduleCards({
   );
 }
 
+/* ── scroll terminus: hairline + dynamic fade ────────────────────
+   The one standard treatment for a scrollable container's edges. A
+   hairline marks the foot while the container can scroll; a fade just
+   inside each edge shows there's more that way and clears once that
+   end is in view, so the final content sits crisp against the line.
+   `useScrollEdges` watches the container; the two sticky pieces drop
+   in as the first and last children of the scroller itself. */
+function useScrollEdges(
+  ref: React.RefObject<HTMLElement | null>,
+  deps: React.DependencyList = [],
+): { top: boolean; bottom: boolean } {
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const can = el.scrollHeight > el.clientHeight + 1;
+    const top = el.scrollTop > 1;
+    const bottom = can && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    setEdges((p) => (p.top === top && p.bottom === bottom ? p : { top, bottom }));
+  }, [ref]);
+  useLayoutEffect(() => {
+    measure();
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    el.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", measure);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measure, ...deps]);
+  return edges;
+}
+
+/** The head fade — first child of the scroller; shows more above. */
+function ScrollFadeHead({ show }: { show: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none sticky top-0 z-[6] -mx-4 -mb-5 h-5 bg-gradient-to-b from-paper to-transparent transition-opacity duration-200",
+        show ? "opacity-100" : "opacity-0",
+      )}
+    />
+  );
+}
+
+/** The foot — last child of the scroller: a hairline at the terminus
+    (while scrollable), a fade above it (while more is below). */
+function ScrollFadeFoot({
+  hairline,
+  fade,
+}: {
+  hairline: boolean;
+  fade: boolean;
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none sticky bottom-0 z-[6] -mx-4 -mt-5 h-5"
+    >
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
+          fade ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <div
+        className={cn(
+          "absolute inset-x-4 bottom-0 border-t border-rule-faint transition-opacity duration-200",
+          hairline ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </div>
+  );
+}
+
 /* ── the focused entry: one card, the whole stage ────────────────── */
 
 function EntryView({ snippet }: { snippet: Snippet | null }) {
@@ -2687,30 +2766,10 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // the foot hairline only appears when the words actually run past the
-  // fold — a short entry that fits needs no scroll terminus drawn
-  // edges = whether content runs ABOVE / BELOW the visible window, so a
-  // soft fade can mark "more this way" — dissolving into the crisp foot
-  // hairline only once the final content is in view
-  const [edges, setEdges] = useState({ top: false, bottom: false });
-  const measureScroll = useCallback(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const canScroll = el.scrollHeight > el.clientHeight + 1;
-    const top = el.scrollTop > 1;
-    const bottom = canScroll && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-    setEdges((prev) =>
-      prev.top === top && prev.bottom === bottom ? prev : { top, bottom },
-    );
-  }, []);
-  useLayoutEffect(() => {
-    measureScroll();
-    const el = contentRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(measureScroll);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [editing, draft, measureScroll]);
+  // the scroll terminus is the standard hairline + dynamic fade; a
+  // scrollable entry carries it, a short one that fits shows nothing
+  const edges = useScrollEdges(contentRef, [editing, draft]);
+  const scrollable = edges.top || edges.bottom;
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -2792,24 +2851,16 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           }
         }}
         aria-label={editing ? undefined : "Rewrite this entry"}
-        onScroll={measureScroll}
         className={cn(
           "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]",
-          // a scrolling entry keeps room below its last line (the bottom
-          // selection handle lives inside the clip); a short one that
-          // fits has nothing to scroll, so it sits closer to the foot
-          edges.bottom ? "pb-4" : "pb-1.5",
+          // a scrolling entry keeps a little room below its last line
+          // (the bottom selection handle lives inside the clip); a short
+          // one that fits sits close to the foot
+          edges.bottom ? "pb-2.5" : "pb-1.5",
         )}
         style={{ scrollbarWidth: "none" }}
       >
-        {/* a fade where the words run off the top, marking more above */}
-        <div
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none sticky top-0 z-[5] -mx-4 -mb-5 h-5 bg-gradient-to-b from-paper to-transparent transition-opacity duration-150",
-            edges.top ? "opacity-100" : "opacity-0",
-          )}
-        />
+        <ScrollFadeHead show={edges.top} />
         {!editing && <SnippetEntry snippet={snippet} dense />}
         {/* the field is always mounted (a hidden one can't take the
             gesture's synchronous focus); writing, it wears the exact
@@ -2843,43 +2894,49 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
               : "pointer-events-none absolute inset-x-4 top-3 h-px opacity-0",
           )}
         />
-        {/* …and where they run off the bottom, marking more below — it
-            dissolves into the foot's hairline as the end comes into view */}
-        <div
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none sticky bottom-0 z-[5] -mx-4 -mt-5 h-5 bg-gradient-to-t from-paper to-transparent transition-opacity duration-150",
-            edges.bottom ? "opacity-100" : "opacity-0",
-          )}
-        />
+        {/* the scroll terminus — a hairline at the foot, with a fade
+            above it while more words run on below; it clears once the
+            end is in view so the last line sits crisp on the line */}
+        <ScrollFadeFoot hairline={scrollable} fade={edges.bottom} />
       </div>
-      {/* the foot. Its hairline marks where the scroll ends — drawn
-          only when the words actually scroll, and only as wide as the
-          text (mx-4 = the content's own margin), not the whole card */}
       <div
         data-entry-foot
         // pressing the foot's empty band edits too — not only the words
         onClick={editing ? undefined : startEdit}
         className="shrink-0"
       >
-        {edges.top && !edges.bottom && (
-          <div aria-hidden="true" className="mx-4 border-t border-rule-faint" />
-        )}
         <div
           className={cn(
             "flex items-center px-3 pb-3",
-            editing ? "justify-between" : "justify-end",
-            edges.bottom || edges.top ? "pt-2.5" : "pt-1",
+            // when there's no terminus hairline, the buttons can sit
+            // closer up to the words
+            scrollable ? "pt-2.5" : "pt-1",
+            "justify-between",
           )}
         >
-          {editing && (
-            <WaxStamp label="Done — keep the rewrite" onClick={stopEdit} keepFocus>
+          {/* the confirm quill is always mounted so it can FADE in and
+              out — when a keyboard dismissal ends the edit it dissolves
+              rather than vanishing. Invisible, it yields its press to
+              the band beneath (which edits) */}
+          <div
+            className={cn(
+              "transition-opacity duration-200 ease-[var(--ease-out)]",
+              editing ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            aria-hidden={!editing}
+          >
+            <WaxStamp
+              label="Done — keep the rewrite"
+              onClick={stopEdit}
+              keepFocus
+              disabled={!editing}
+            >
               {/* the dock's quill, now the confirming stamp */}
               <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
               <path d="M4.4 15.6 12.6 7" />
               <path d="M4.4 15.6 3.4 17.6" />
             </WaxStamp>
-          )}
+          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -2918,6 +2975,7 @@ function WaxStamp({
   onClick,
   listening = false,
   keepFocus = false,
+  disabled = false,
   children,
 }: {
   label: string;
@@ -2925,6 +2983,8 @@ function WaxStamp({
   listening?: boolean;
   /** don't steal focus from the field on press (the mic, mid-edit) */
   keepFocus?: boolean;
+  /** faded out and inert (the confirm stamp at rest) */
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -2945,6 +3005,8 @@ function WaxStamp({
         type="button"
         aria-label={label}
         onClick={onClick}
+        disabled={disabled}
+        tabIndex={disabled ? -1 : undefined}
         onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
         className={cn(
           "relative grid size-[34px] shrink-0 place-items-center rounded-full text-paper-raised",
