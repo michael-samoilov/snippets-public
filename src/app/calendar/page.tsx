@@ -3142,7 +3142,9 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
       aria-hidden={!open}
       data-wipe={open ? "open" : "closed"}
       className={cn(
-        "inline-grid align-baseline transition-[grid-template-columns,opacity] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+        // lengthened past --dur-slow (the calc keeps it collapsing under
+        // reduced motion) so the wipe is followable rather than a blink
+        "inline-grid align-baseline transition-[grid-template-columns,opacity] duration-[calc(var(--dur-slow)*1.6)] ease-[var(--ease-out)]",
         open ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0",
       )}
     >
@@ -3262,21 +3264,14 @@ function BackfillCapture({
         />
       </div>
       {hasText && (
-        // pr-px: the button's 1px ring shadow sits outside its box, and
-        // the column's right edge is also the stage's clip line
+        // the same wax quill confirm-stamp the entry editor uses; keeping
+        // holds focus so the next thing can be typed straight away
         <div className="mt-2 flex justify-end pr-px">
-          <button
-            type="button"
-            onClick={() => void keep()}
-            className={cn(
-              "rounded-[5px] bg-paper-raised px-3 py-1.5 font-serif text-[0.9rem] text-ink",
-              "shadow-[inset_0_1px_0_var(--press-highlight),0_0_0_1px_rgb(var(--shadow-hue)/0.1),0_1px_2px_rgb(var(--shadow-hue)/0.1)]",
-              "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-              "active:translate-y-px active:scale-[0.97] active:shadow-[inset_0_1px_3px_rgb(0_0_0/0.12)]",
-            )}
-          >
-            Keep
-          </button>
+          <WaxStamp label="Keep this" onClick={() => void keep()} keepFocus>
+            <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
+            <path d="M4.4 15.6 12.6 7" />
+            <path d="M4.4 15.6 3.4 17.6" />
+          </WaxStamp>
         </div>
       )}
       {/* the "Kept." stamp floats below the field rather than reserving

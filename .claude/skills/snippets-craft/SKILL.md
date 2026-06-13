@@ -55,8 +55,8 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    marks: the wordmark's wax dot, the StampMark, the dock's two
    hand-drawn strokes (quill + calendar, small-caps words beneath),
    the calendar header's search glass, the entry card's foot marks
-   (a wax quill CONFIRM-stamp shown only while editing + an ember
-   trash — destructive red, NOT wax), and the account glyph — nothing
+   (a wax quill CONFIRM-stamp — editing an entry, or the composer once
+   it holds words — + an ember trash — destructive red, NOT wax), and the account glyph — nothing
    else. Wax (a sealing-wax BLUE) is
    semantic (recording, rule, today) and never destructive — the ember
    red (`--ember`) is destructive's alone; the marker yellow

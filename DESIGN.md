@@ -164,8 +164,8 @@ leaves the calendar. The sanctioned marks are the wordmark's wax dot, the "Kept.
 StampMark, the dock's two hand-drawn strokes (a quill for the day's
 page, a calendar for the book — with small-caps words beneath), the
 calendar header's search glass in the same line, the entry card's two
-foot marks (a pressed-wax quill confirm-stamp shown only while editing,
-and an ember trash — destructive red, deliberately not wax: wax is the
+foot marks (a pressed-wax quill confirm-stamp — shown while editing an entry,
+and on the composer once it holds words — and an ember trash — destructive red, deliberately not wax: wax is the
 writer's color, not the destroyer's), and the account glyph. Desktop navigation
 is words — small-caps serif with a gliding ink underline; there are
 two pages, Today and the calendar (the collection folded into the
