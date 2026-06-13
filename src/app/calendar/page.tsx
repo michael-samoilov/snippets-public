@@ -1390,9 +1390,12 @@ function Calendar() {
         ref={stageRef}
         className={cn(
           "relative min-h-0 flex-1 overflow-hidden border-b transition-colors duration-[var(--dur-base)]",
-          // the entry card carries its own bottom edge — the frame's
-          // line yields so the two never double up
-          view === "entry" ? "border-transparent" : "border-rule-faint",
+          // the entry card and the book each carry their own scroll
+          // terminus (hairline + fade) — the frame's line yields in
+          // those views so the two never double up
+          view === "entry" || view === "schedule"
+            ? "border-transparent"
+            : "border-rule-faint",
         )}
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
@@ -2572,6 +2575,8 @@ function ScheduleFeed({
     [rows, probe, todayKey, yesterdayKey, onOpen, today],
   );
 
+  const edges = useScrollEdges(scrollerRef, [rows]);
+
   return (
     <div
       ref={scrollerRef}
@@ -2580,7 +2585,9 @@ function ScheduleFeed({
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
+      <ScrollFadeHead show={edges.top} />
       {body}
+      <ScrollFadeFoot hairline={edges.top || edges.bottom} fade={edges.bottom} />
     </div>
   );
 }
@@ -2677,13 +2684,15 @@ function useScrollEdges(
   return edges;
 }
 
-/** The head fade — first child of the scroller; shows more above. */
+/** The head fade — first child of the scroller; shows more above. It
+    spans the scroller's content box (negative margin keeps it out of
+    the flow), so it needs no knowledge of the parent's padding. */
 function ScrollFadeHead({ show }: { show: boolean }) {
   return (
     <div
       aria-hidden="true"
       className={cn(
-        "pointer-events-none sticky top-0 z-[6] -mx-4 -mb-5 h-5 bg-gradient-to-b from-paper to-transparent transition-opacity duration-200",
+        "pointer-events-none sticky top-0 z-[6] -mb-5 h-5 bg-gradient-to-b from-paper to-transparent transition-opacity duration-200",
         show ? "opacity-100" : "opacity-0",
       )}
     />
@@ -2702,7 +2711,7 @@ function ScrollFadeFoot({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none sticky bottom-0 z-[6] -mx-4 -mt-5 h-5"
+      className="pointer-events-none sticky bottom-0 z-[6] -mt-5 h-5"
     >
       <div
         className={cn(
@@ -2712,7 +2721,7 @@ function ScrollFadeFoot({
       />
       <div
         className={cn(
-          "absolute inset-x-4 bottom-0 border-t border-rule-faint transition-opacity duration-200",
+          "absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200",
           hairline ? "opacity-100" : "opacity-0",
         )}
       />
