@@ -48,8 +48,10 @@ html {
   --wax-faint: rgb(46 86 133 / 0.32);
   /* the wax's colored ambient shadow, for seals sitting proud */
   --wax-shadow: rgb(35 68 104 / 0.45);
-  /* the marker — a real highlighter, drawn across found words */
-  --marker: rgb(255 211 66 / 0.6);
+  /* the marker — a real highlighter, drawn across found words. The
+     ink is opaque; the drawing library supplies the wetness and the
+     multiply into the paper */
+  --marker: #f6ce3c;
   /* the ember — destructive only, never an accent */
   --ember: #993b26;
   --ember-deep: #7a2c1b;
@@ -132,7 +134,7 @@ html {
   --wax-bright: #6f9fd0;
   --wax-faint: rgb(91 140 192 / 0.4);
   --wax-shadow: rgb(20 40 65 / 0.6);
-  --marker: rgb(186 142 38 / 0.4);
+  --marker: #c2952e;
   --ember: #c75b40;
   --ember-deep: #a44733;
   --gilt: #c99c45;
@@ -518,20 +520,14 @@ textarea:focus-visible,
   }
 }
 
-/* the marker is DRAWN, by rough-notation: a hand-wavering stroke per
-   wrapped line, its SVG standing beside the mark so it scrolls with
-   the words. The mark itself stays bare — the UA's yellow must not
-   double under the drawn stroke — and the stroke multiplies into the
-   paper like real ink (plain on Lamplight, where multiply dies). */
+/* the marker is DRAWN, by @highlighters: wet ink with frayed edges,
+   one band per wrapped line, mounted inside the tile so it scrolls
+   with the words, multiplied into the paper by the library itself.
+   The mark element stays bare — the UA's flat yellow must not double
+   under the drawn ink. */
 mark.snippet-mark {
   background: transparent;
   color: inherit;
-}
-svg.rough-annotation {
-  mix-blend-mode: multiply;
-}
-.dark svg.rough-annotation {
-  mix-blend-mode: normal;
 }
 
 @keyframes caret-blink {

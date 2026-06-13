@@ -56,7 +56,7 @@ Everything renders inside one conceit — **a desk under lamplight**:
 | `--rule` / `--rule-faint` | ink @ 14% / 8% | @ 16% / 9% | hairlines |
 | `--wax` / `--wax-deep` / `--wax-bright` | `#2e5685` família (sealing-wax blue) | brighter set | recording, margin rule, today; bright = specular highlight |
 | `--ember` / `--ember-deep` | `#993b26` família | brighter set | destructive only — never an accent |
-| `--marker` | translucent highlighter yellow | dim amber | found words in search, nothing else |
+| `--marker` | `#f6ce3c` (opaque marker ink) | `#c2952e` | found words in search, nothing else |
 | `--gilt` | `#a87a24` | `#c99c45` | favorites only |
 | `--kind-*` | six muted editorial inks | lightened | kind labels + marks |
 | `--sheet-shadow` / `--float-shadow` | warm layered stacks | black layered | the two elevations |
@@ -254,12 +254,14 @@ dismisses the bar too; standing words keep it open. While a query stands, the st
 book**: the same ledger and tiles, only the days that answer, opened
 at its last page (the weekday rail folds; the altitudes wait beneath,
 hidden; no animation — it re-renders with every keystroke). Found words wear **the
-marker** — a real highlighter drawn by `rough-notation`: one
-hand-wavering stroke per wrapped line (`multiline`), animated as a
-left-to-right sweep, its SVG standing beside the `mark` so it scrolls
-with the words, stroked in the marker token (resolved at draw time —
-presentation attributes can't read `var()`) and multiplied into the
-paper. A match deeper than the six-line
+marker** — a real highlighter drawn by `@highlighters/core`: wet ink
+that pools and frays, one band per wrapped line joined across the
+wrap, swept on left-to-right (suppressed under reduced motion by the
+library itself), mounted INSIDE the tile (element targets default
+their overlay to `document.body`, which would stand still while the
+filtered book scrolls — the `host` argument pins it) and multiplied
+into the paper. The ink is the marker token, opaque — the library
+supplies the translucency. A match deeper than the six-line
 clamp re-windows the preview to show it — led by EARLIER context,
 snapped to a sentence opening, behind an ellipsis (a story builds
 forward; the lines before a match explain it). Pressing a

@@ -24,7 +24,7 @@ import {
   startOfMonth,
 } from "date-fns";
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
-import { annotate } from "rough-notation";
+import { highlight as drawHighlight } from "@highlighters/core";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import {
@@ -2993,11 +2993,11 @@ function MarkedPreview({ text, query }: { text: string; query: string }) {
   return <>{nodes}</>;
 }
 
-/** One found phrase under a drawn highlighter. rough-notation inserts
-    its SVG as a sibling just before the mark, so the stroke lives in
-    the scroller and travels with the words; `multiline` draws one
-    wavering stroke per wrapped line. The stroke color is the marker
-    token, resolved here — presentation attributes can't read var(). */
+/** One found phrase under a drawn highlighter (@highlighters/core):
+    wet ink with frayed edges, one band per wrapped line, the bands
+    joined across the wrap. Its overlay mounts in the nearest
+    positioned ancestor and reflows itself on layout shifts; the ink
+    is the marker token, resolved here at draw time. */
 function RoughMark({ children }: { children: string }) {
   const ref = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -3005,17 +3005,19 @@ function RoughMark({ children }: { children: string }) {
     if (!el) return;
     const color =
       getComputedStyle(el).getPropertyValue("--marker").trim() || "#e8c558";
-    const a = annotate(el, {
-      type: "highlight",
-      multiline: true,
-      color,
-      iterations: 1,
-      padding: 2,
-      animationDuration: 380,
-      animate: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    });
-    a.show();
-    return () => a.remove();
+    const h = drawHighlight(
+      el,
+      {
+        color,
+        opacity: 0.82,
+        animation: { draw: true, duration: 380 },
+      },
+      // mount the band inside the tile itself: element targets default
+      // their overlay to document.body, which would stand still while
+      // the filtered book scrolls under it
+      el.closest("button") ?? undefined,
+    );
+    return () => h.remove();
   }, [children]);
   return (
     <mark ref={ref} className="snippet-mark">
