@@ -3209,7 +3209,7 @@ function BackfillCapture({
   return (
     // the composer sits on the tile line and wears the tiles' own
     // paddings — a one-line tile waiting for words
-    <div className={cn(follows && "mt-1")}>
+    <div className={cn("relative", follows && "mt-1")}>
       {/* the card proper: paint and field only — the Keep button and
           the stamp line live below it, outside the paint (an inset-0
           coat over the whole composer once buried them) */}
@@ -3279,12 +3279,14 @@ function BackfillCapture({
           </button>
         </div>
       )}
-      {/* the line is always reserved: un-mounting it reshaped the last
-          row, transiently clamped the scroller, and woke the spy */}
+      {/* the "Kept." stamp floats below the field rather than reserving
+          height — the composer's foot then matches any other tile's, and
+          a stamp can't reshape the row, clamp the scroller, or wake the
+          spy */}
       <p
         role="status"
         className={cn(
-          "mt-1.5 h-5 px-2.5 font-serif text-[0.85rem] not-italic text-wax",
+          "pointer-events-none absolute inset-x-0 top-full mt-1 h-5 px-2.5 font-serif text-[0.85rem] not-italic text-wax",
           stamped ? "stamp-in" : "invisible",
         )}
       >
