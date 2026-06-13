@@ -3009,18 +3009,33 @@ function RoughMark({ children }: { children: string }) {
       el,
       {
         color,
-        opacity: 0.82,
-        // the ink pools where a real tip touches down and lifts off:
-        // ends built up, the trailing fade mostly stilled, rails kept
-        // sharp with a little capillary fray
-        ink: {
-          startEndBuildup: 0.7,
-          flowFade: 0.15,
-          viscosity: 0.6,
-          feathering: 0.3,
-          streakiness: 0.3,
-          flow: 0.5,
+        opacity: 0.8,
+        // the owner's hand: a fine nib at a slight slant, generous wet
+        // flow with full streak lanes, soft capillary fray, round caps
+        // on gently wavering rails — and the parameter that matters
+        // most, touchdown/lift pooling, at full
+        tip: {
+          type: "fine",
+          angle: 5,
+          overshoot: 2,
+          overshootJitter: 0,
+          angleJitter: 0,
         },
+        ink: {
+          flow: 0.8,
+          feathering: 0.5,
+          streakiness: 1,
+          dryout: 0,
+          flowFade: 0.5,
+          startEndBuildup: 1,
+        },
+        edge: {
+          waviness: 1,
+          frequency: 40,
+          cap: "round",
+          radius: 6,
+        },
+        paper: { absorbency: 0.1 },
         animation: { draw: true, duration: 380 },
       },
       // mount the band inside the tile itself: element targets default
