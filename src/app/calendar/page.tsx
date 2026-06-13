@@ -1613,6 +1613,11 @@ function MonthFeed({
   const anchorMonthRef = useRef<Date | null>(null);
   const rafRef = useRef(0);
   const didInit = useRef(false);
+  // a programmatic smooth scroll (Today, stepping) owns the title: the
+  // press already chose the destination, so the months scrolled PAST
+  // must not each claim the header and flicker against it
+  const progTargetRef = useRef<number | null>(null);
+  const progTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const geom = useMemo(
     () =>
@@ -1698,11 +1703,22 @@ function MonthFeed({
       const idx = indexOfMonth(startOfMonth(m));
       const top = g.offsets[idx];
       setScrollY(top); // window renders the destination immediately
-      visibleIdxRef.current = -1;
       anchorMonthRef.current = g.months[idx];
-      if (idx === g.offsets.length - 1 && !smooth && spacerRef.current)
-        settleBottom(el, spacerRef.current);
-      else el.scrollTo({ top, behavior: smooth ? "smooth" : "instant" });
+      if (smooth) {
+        // hold the title on the destination until the scroll lands
+        visibleIdxRef.current = idx;
+        progTargetRef.current = top;
+        if (progTimerRef.current) clearTimeout(progTimerRef.current);
+        progTimerRef.current = setTimeout(() => {
+          progTargetRef.current = null;
+        }, 800);
+        el.scrollTo({ top, behavior: "smooth" });
+      } else {
+        visibleIdxRef.current = -1;
+        if (idx === g.offsets.length - 1 && spacerRef.current)
+          settleBottom(el, spacerRef.current);
+        else el.scrollTo({ top, behavior: "instant" });
+      }
     },
     [indexOfMonth, setScrollY],
   );
@@ -1750,6 +1766,15 @@ function MonthFeed({
           ? top
           : prev,
       );
+      if (progTargetRef.current !== null) {
+        // a Today/step scroll is animating to its target — let it run
+        // the window, but don't let the passed months touch the title
+        if (Math.abs(top - progTargetRef.current) < 4) {
+          progTargetRef.current = null;
+          if (progTimerRef.current) clearTimeout(progTimerRef.current);
+        }
+        return;
+      }
       const vi = indexAt(g.switchY, top);
       if (vi !== visibleIdxRef.current) {
         visibleIdxRef.current = vi;
@@ -2707,6 +2732,27 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
     setEditing(false);
     areaRef.current?.blur(); // confirming is dismissing the keyboard
   };
+  // iOS dismisses the keyboard (chevron-down) WITHOUT blurring the
+  // field, so onBlur never fires and the quill would linger. Watch the
+  // visual viewport: once the keyboard has been up and then grows back,
+  // the writer has put the keyboard away — end the edit.
+  const stopEditRef = useRef(stopEdit);
+  useEffect(() => {
+    stopEditRef.current = stopEdit;
+  });
+  useEffect(() => {
+    if (!editing) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let keyboardWasUp = false;
+    const onResize = () => {
+      const covered = window.innerHeight - vv.height;
+      if (covered > 120) keyboardWasUp = true;
+      else if (keyboardWasUp) stopEditRef.current();
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, [editing]);
   const letGo = async () => {
     await softDeleteSnippet(snippet.id);
     window.history.back(); // the page closes over the struck line
@@ -2735,7 +2781,13 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           }
         }}
         aria-label={editing ? undefined : "Rewrite this entry"}
-        className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]"
+        className={cn(
+          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]",
+          // a scrolling entry keeps room below its last line (the bottom
+          // selection handle lives inside the clip); a short one that
+          // fits has nothing to scroll, so it sits closer to the foot
+          scrollable ? "pb-4" : "pb-1.5",
+        )}
         style={{ scrollbarWidth: "none" }}
       >
         {!editing && <SnippetEntry snippet={snippet} dense />}
@@ -2775,14 +2827,20 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
       {/* the foot. Its hairline marks where the scroll ends — drawn
           only when the words actually scroll, and only as wide as the
           text (mx-4 = the content's own margin), not the whole card */}
-      <div data-entry-foot className="shrink-0">
+      <div
+        data-entry-foot
+        // pressing the foot's empty band edits too — not only the words
+        onClick={editing ? undefined : startEdit}
+        className="shrink-0"
+      >
         {scrollable && (
           <div aria-hidden="true" className="mx-4 border-t border-rule-faint" />
         )}
         <div
           className={cn(
-            "flex items-center px-3 pb-3 pt-2.5",
+            "flex items-center px-3 pb-3",
             editing ? "justify-between" : "justify-end",
+            scrollable ? "pt-2.5" : "pt-1",
           )}
         >
           {editing && (
@@ -2795,7 +2853,10 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           )}
           <button
             type="button"
-            onClick={() => void letGo()}
+            onClick={(e) => {
+              e.stopPropagation(); // not a press-to-edit
+              void letGo();
+            }}
             aria-label="Let this entry go"
             className="pressable grid size-[34px] place-items-center rounded-full text-ember hover:bg-ember/10"
           >
