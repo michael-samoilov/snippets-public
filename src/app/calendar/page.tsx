@@ -1102,8 +1102,6 @@ function Calendar() {
     !searchActive && (view === "schedule" || zoom?.from === "schedule");
   const showEntryLayer =
     !searchActive && (view === "entry" || zoom?.from === "entry");
-  // the steppers belong to the grids; the book turns its own pages
-  const steppers = view === "month" || view === "year";
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
@@ -1112,7 +1110,7 @@ function Calendar() {
           the page itself has to scroll. No painted background — a flat
           fill over the textured sheet reads as a white band */}
       <div className="sticky top-0 z-30">
-      <div ref={titleRowRef} className="relative flex items-baseline justify-between">
+      <div ref={titleRowRef} className="relative flex items-center justify-between">
         {/* the title yields the row to the search, sliding off left —
             a wrapper carries the move because .pressable owns the
             button's transition property */}
@@ -1178,7 +1176,7 @@ function Calendar() {
             bar while the rest of the cluster slides off right */}
         <div
           className={cn(
-            "flex shrink-0 items-baseline transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+            "flex shrink-0 items-center transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
             view === "entry" && "pointer-events-none w-0 overflow-hidden opacity-0",
           )}
           aria-hidden={view === "entry"}
@@ -1215,7 +1213,7 @@ function Calendar() {
           </button>
           <div
             className={cn(
-              "flex items-baseline transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+              "flex items-center transition-[transform,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]",
               searching && "pointer-events-none translate-x-[115%] opacity-0",
             )}
             aria-hidden={searching}
@@ -1243,58 +1241,6 @@ function Calendar() {
                   className="voice-label pressable ml-1 mr-1.5 rounded-[5px] px-2 py-1 leading-none text-wax hover:bg-accent"
                 >
                   Today
-                </button>
-              </div>
-            </div>
-            {/* the steppers slide off to the right when the camera enters
-                the book, and back into place on the way out — the
-                return rides WITH the camera move, but on a short
-                token-derived delay past the zoom's launch frames (the
-                layout transition shares the main thread with the
-                flights, and starting inside that jank gets it eaten)
-                and a longer travel, landing as the camera does */}
-            <div
-              className={cn(
-                "grid transition-[grid-template-columns] ease-[var(--ease-out)]",
-                steppers
-                  ? "grid-cols-[1fr] duration-[var(--dur-slow)] delay-[calc(var(--dur-fast)*0.66)]"
-                  : "grid-cols-[0fr] duration-[var(--dur-base)]",
-              )}
-              aria-hidden={!steppers}
-            >
-              {/* no padding here: a 0fr track can't shrink below it,
-                  and the fold must collapse to a true zero */}
-              <div
-                className={cn(
-                  "flex min-w-0 items-baseline overflow-hidden transition-[transform,opacity] ease-[var(--ease-out)]",
-                  steppers
-                    ? "duration-[var(--dur-slow)] delay-[calc(var(--dur-fast)*0.66)]"
-                    : "pointer-events-none translate-x-5 opacity-0 duration-[var(--dur-base)]",
-                )}
-              >
-                <button
-                  type="button"
-                  aria-label={view === "year" ? "Previous year" : "Previous month"}
-                  onClick={() => stepFeed(-1)}
-                  disabled={!steppers}
-                  className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  aria-label={view === "year" ? "Next year" : "Next month"}
-                  onClick={() => stepFeed(1)}
-                  disabled={
-                    view === "month"
-                      ? isSameMonth(visibleMonth, currentMonth)
-                      : view === "year"
-                        ? visibleYear >= today.getFullYear()
-                        : true
-                  }
-                  className="pressable rounded-[5px] px-2.5 py-1 font-serif text-lg leading-none text-ink-soft hover:bg-accent hover:text-ink disabled:opacity-30"
-                >
-                  ›
                 </button>
               </div>
             </div>

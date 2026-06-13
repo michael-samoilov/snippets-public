@@ -199,7 +199,7 @@ the header's hairline rather than climbing flush to it. In the entry
 the header climbs to the full date — the weekday and day-of-month
 **wipe open from their own slots** (animated `0fr`→`1fr` grid columns)
 while the month and year hold still, so there's no separate date line
-and the Today/chevron controls shed. The date header sizes to
+and the Today control sheds. The date header sizes to
 `--date-head: clamp(1.05rem, 5vw, 1.3rem)` — the largest size that
 keeps the longest full date ("Wednesday, September 22, 2020") on one
 line at any width. **Shared
@@ -237,12 +237,13 @@ and year, not by index, keeping the reader's page. The desk is exactly one scree
 (every scroll lives in a container — the sheet's main, the feeds, the
 entry card — and the page itself only rubber-bands over the
 canvas-painted desk). The title row always climbs one altitude and
-follows whichever feed scrolls beneath it; the ‹ › steppers belong to
-the grids and slide off to the right when the camera enters the book,
-returning the same way out, and the Today button wipes away rightward
-and yields its width while the reader stands on today — the search
-glass slides over to the corner — returning the same way when they
-wander. The glass itself is a circle of the cards' material, as tall
+follows whichever feed scrolls beneath it. The Today button wipes
+away rightward and yields its width while the reader stands on today —
+the search glass slides over to the corner — returning the same way
+when they wander. (Months and years still step by keyboard — PageUp/
+PageDown — but carry no on-screen chevrons; only the back chevron, to
+the left of the title, climbs an altitude.) The glass itself is a
+circle of the cards' material, as tall
 as the grown bar and centered on the title text (the same coin the
 avatar is struck from); pressed, that circle grows from its own spot
 out both ways into the full-row search bar — the title slides off
@@ -329,7 +330,7 @@ still fully stacked** (a row whose tail merely peeks has handed over)
 — so pulling back finds the ring already on the day being read. The final row is wrapped in `min-h-full` so landings
 are exact and shrinking content can never dip scrollHeight and clamp
 the reader off their page. `?d=` deep-links into the book; the month
-view drops it. PageUp/Down and chevrons step months; a wax "Today"
+view drops it. PageUp/Down step months (no on-screen chevrons); a wax "Today"
 affordance fades in whenever the view has wandered. URL carries view
 state (`?d=`). The calendar page is chromeless — no masthead, the
 title row is the page's first line — and the stage terminates in the
