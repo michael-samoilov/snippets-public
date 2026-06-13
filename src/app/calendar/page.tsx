@@ -3010,6 +3010,17 @@ function RoughMark({ children }: { children: string }) {
       {
         color,
         opacity: 0.82,
+        // the ink pools where a real tip touches down and lifts off:
+        // ends built up, the trailing fade mostly stilled, rails kept
+        // sharp with a little capillary fray
+        ink: {
+          startEndBuildup: 0.7,
+          flowFade: 0.15,
+          viscosity: 0.6,
+          feathering: 0.3,
+          streakiness: 0.3,
+          flow: 0.5,
+        },
         animation: { draw: true, duration: 380 },
       },
       // mount the band inside the tile itself: element targets default
