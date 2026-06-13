@@ -215,10 +215,15 @@ label over the first of the month — one small-caps tag, flying and
 resizing. Originals hide while their double is in the air; endpoints are
 Range text-rects, not line boxes (leading would read as a landing skip).
 The stage is **one fixed frame at every altitude**: it fills the page
-column, and its terminating hairline sits the same distance from the
-sheet's bottom as the header stands from its top — the line never
-moves between views (in the entry it goes transparent: the card's own
-bottom edge is the terminator there). The feeds' floors are laid out,
+column, the same distance from the sheet's bottom as the header stands
+from its top. Every scrollable surface marks its own terminus with the
+**standard scroll-fade** (`useScrollEdges` + `ScrollFadeHead`/
+`ScrollFadeFoot`): a hairline pinned at the foot while the surface can
+scroll, with a soft fade just inside each edge that shows there's more
+that way and clears once that end is in view, so the final content
+sits crisp on the line. The entry card, the book, and the month/year
+canvases each carry it; the frame's own old line is retired so the
+two never double up. The feeds' floors are laid out,
 not measured — a px container to the last offset plus a `min-h-full`
 tail — so a mid-zoom stage resize can never clamp a scroller and
 drift a flight's landing. The canvas alone is the deep

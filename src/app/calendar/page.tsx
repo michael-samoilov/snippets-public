@@ -1389,13 +1389,10 @@ function Calendar() {
       <div
         ref={stageRef}
         className={cn(
-          "relative min-h-0 flex-1 overflow-hidden border-b transition-colors duration-[var(--dur-base)]",
-          // the entry card and the book each carry their own scroll
-          // terminus (hairline + fade) — the frame's line yields in
-          // those views so the two never double up
-          view === "entry" || view === "schedule"
-            ? "border-transparent"
-            : "border-rule-faint",
+          // every feed now carries its own scroll terminus (the standard
+          // hairline + fade), so the frame's own line is retired — the
+          // border stays transparent to hold the 1px the layout expects
+          "relative min-h-0 flex-1 overflow-hidden border-b border-transparent",
         )}
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
@@ -1820,6 +1817,8 @@ function MonthFeed({
     };
   })();
 
+  const edges = useScrollEdges(scrollerRef, [span, metrics?.h]);
+
   return (
     <div
       ref={scrollerRef}
@@ -1828,6 +1827,7 @@ function MonthFeed({
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
+      <ScrollFadeHead show={edges.top} />
       <p
         ref={probeRef}
         aria-hidden="true"
@@ -1890,6 +1890,7 @@ function MonthFeed({
           }}
         />
       )}
+      <ScrollFadeFoot hairline={edges.top || edges.bottom} fade={edges.bottom} />
     </div>
   );
 }
@@ -2264,6 +2265,8 @@ function YearFeed({
     [geom, from, to, today, counts, onPickMonth],
   );
 
+  const edges = useScrollEdges(scrollerRef, [years, metrics?.h]);
+
   return (
     <div
       ref={scrollerRef}
@@ -2272,6 +2275,7 @@ function YearFeed({
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
+      <ScrollFadeHead show={edges.top} />
       <p
         ref={probeRef}
         aria-hidden="true"
@@ -2304,6 +2308,7 @@ function YearFeed({
           }}
         />
       )}
+      <ScrollFadeFoot hairline={edges.top || edges.bottom} fade={edges.bottom} />
     </div>
   );
 }
