@@ -1603,14 +1603,11 @@ function Calendar() {
                                 "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
                               )}
                             >
-                              <p
-                                className={cn(
-                                  "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
-                                  s.kind === "quote" && "hang-quotes italic",
-                                )}
-                              >
-                                <MarkedPreview text={s.text} query={query} />
-                              </p>
+                              <MarkedPreview
+                                text={s.text}
+                                query={query}
+                                isQuote={s.kind === "quote"}
+                              />
                             </button>
                           </li>
                         ))}
@@ -2928,10 +2925,6 @@ function joinSpoken(a: string, b: string): string {
    the lines before the match explain it; the lines after follow
    anyway in whatever clamp room remains). */
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /** the query's literal terms, longest first so overlaps mark whole */
 function queryTerms(query: string): string[] {
   return [
@@ -2941,56 +2934,169 @@ function queryTerms(query: string): string[] {
   ].sort((a, b) => b.length - a.length);
 }
 
-/** where any term first literally appears, or -1 (fuzzy-only match) */
-function firstMatchIndex(text: string, terms: string[]): number {
+/** Every literal occurrence of the query, merged and in order — a term
+    can recur many times in a long entry, so the count is capped. */
+function allOccurrences(text: string, terms: string[]): Array<[number, number]> {
   const lower = text.toLowerCase();
-  let best = -1;
+  const hits: Array<[number, number]> = [];
   for (const t of terms) {
-    const i = lower.indexOf(t);
-    if (i >= 0 && (best < 0 || i < best)) best = i;
-  }
-  return best;
-}
-
-/** A match deeper than the clamp can show re-windows the preview:
-    stand a couple of lines before the match — at a sentence opening
-    if one is near, else a word — and lead with an ellipsis. ~160
-    chars is a conservative six-line budget at the tile's measure. */
-function previewWindow(text: string, matchIdx: number): { text: string; led: boolean } {
-  if (matchIdx <= 160) return { text, led: false };
-  const earliest = matchIdx - 150;
-  const latest = matchIdx - 30;
-  let start = -1;
-  for (const sep of [". ", "! ", "? ", "\n"]) {
-    const i = text.lastIndexOf(sep, latest);
-    if (i >= earliest && i + sep.length > start) start = i + sep.length;
-  }
-  if (start < 0) {
-    const sp = text.indexOf(" ", matchIdx - 90);
-    start = sp >= 0 && sp < matchIdx ? sp + 1 : matchIdx - 90;
-  }
-  return { text: text.slice(start), led: true };
-}
-
-/** the tile's words with every literal term under the marker */
-function MarkedPreview({ text, query }: { text: string; query: string }) {
-  const nodes = useMemo(() => {
-    const terms = queryTerms(query);
-    if (!terms.length) return [text];
-    const at = firstMatchIndex(text, terms);
-    const windowed = at >= 0 ? previewWindow(text, at) : { text, led: false };
-    const re = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
-    const parts = windowed.text.split(re);
-    const out: React.ReactNode[] = windowed.led ? ["… "] : [];
-    for (let i = 0; i < parts.length; i++) {
-      if (!parts[i]) continue;
-      out.push(
-        i % 2 === 1 ? <RoughMark key={i}>{parts[i]}</RoughMark> : parts[i],
-      );
+    let i = lower.indexOf(t);
+    while (i >= 0 && hits.length < 80) {
+      hits.push([i, i + t.length]);
+      i = lower.indexOf(t, i + t.length);
     }
-    return out;
-  }, [text, query]);
-  return <>{nodes}</>;
+  }
+  hits.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const h of hits) {
+    const last = merged[merged.length - 1];
+    if (last && h[0] <= last[1]) last[1] = Math.max(last[1], h[1]);
+    else merged.push([h[0], h[1]]);
+  }
+  return merged;
+}
+
+const PREVIEW_LINES = 6;
+
+/** The tile's words, found terms under the marker. The preview is a
+    true six-line window onto the entry, MEASURED at the tile's real
+    wrap, not estimated from a character budget:
+    - if the first match already shows in the first six lines, the
+      window stays at the top and only the occurrences ON those lines
+      are marked — matches further down are neither shown nor drawn;
+    - otherwise the window slides down a whole line at a time until the
+      match is inside it (kept a line off the bottom for slack), the
+      cut lines replaced by a leading ellipsis.
+    The highlighter mounts inside the clipped window, so a band for an
+    off-window match can never float free of its text. */
+function MarkedPreview({
+  text,
+  query,
+  isQuote,
+}: {
+  text: string;
+  query: string;
+  isQuote: boolean;
+}) {
+  const terms = useMemo(() => queryTerms(query), [query]);
+  const occ = useMemo(
+    () => (terms.length ? allOccurrences(text, terms) : []),
+    [text, terms],
+  );
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const pRef = useRef<HTMLParagraphElement>(null);
+  const [layout, setLayout] = useState<null | {
+    key: string;
+    slice: number;
+    lead: boolean;
+    marks: Array<[number, number]>;
+  }>(null);
+  const key = `${text} ${query}`;
+
+  // measure the real wrap from the full-text render, then window it
+  useLayoutEffect(() => {
+    if (!occ.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (layout) setLayout(null);
+      return;
+    }
+    if (layout && layout.key === key) return; // already settled for this key
+    const p = pRef.current;
+    const node = p?.firstChild; // the measuring pass renders one text node
+    if (!p || !node) return;
+    const cs = getComputedStyle(p);
+    let lh = parseFloat(cs.lineHeight);
+    if (!lh || Number.isNaN(lh)) lh = parseFloat(cs.fontSize) * 1.42;
+    const len = text.length;
+    const topAt = (off: number) => {
+      const r = document.createRange();
+      r.setStart(node, Math.min(off, len));
+      r.setEnd(node, Math.min(off + 1, len));
+      const rects = r.getClientRects();
+      return (rects.length ? rects[0] : r.getBoundingClientRect()).top;
+    };
+    const base = topAt(0);
+    const lineOf = (off: number) => Math.round((topAt(off) - base) / lh);
+
+    const firstLine = lineOf(occ[0][0]);
+    let slice = 0;
+    let lead = false;
+    if (firstLine > PREVIEW_LINES - 1) {
+      // slide down so the first match rests a line off the bottom — the
+      // slack absorbs the leading ellipsis's own reflow of line one
+      const target = Math.max(0, firstLine - (PREVIEW_LINES - 2));
+      let lo = 0;
+      let hi = len;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (lineOf(mid) >= target) hi = mid;
+        else lo = mid + 1;
+      }
+      while (lo < len && /\s/.test(text[lo])) lo++;
+      slice = lo;
+      lead = true;
+    }
+    const floor = slice ? lineOf(slice) : 0;
+    const marks: Array<[number, number]> = [];
+    for (const [s, e] of occ) {
+      if (s < slice) continue; // above the window — cut away
+      if (lineOf(s) > floor + PREVIEW_LINES - 1) continue; // below it — unmarked
+      marks.push([s - slice, e - slice]);
+    }
+    setLayout({ key, slice, lead, marks });
+  }, [key, occ, layout, text]);
+
+  // the lines rewrap only when the width changes — re-measure then
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === w) return;
+      w = el.clientWidth;
+      setLayout(null);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const measured = layout !== null && layout.key === key;
+  let body: React.ReactNode;
+  if (!occ.length) {
+    body = text;
+  } else if (!measured) {
+    body = text; // the measuring pass: full text, a single text node
+  } else {
+    const sliced = text.slice(layout.slice);
+    const nodes: React.ReactNode[] = layout.lead ? ["… "] : [];
+    let cur = 0;
+    layout.marks.forEach(([s, e], i) => {
+      if (s > cur) nodes.push(sliced.slice(cur, s));
+      nodes.push(<RoughMark key={i}>{sliced.slice(s, e)}</RoughMark>);
+      cur = e;
+    });
+    if (cur < sliced.length) nodes.push(sliced.slice(cur));
+    body = nodes;
+  }
+
+  return (
+    <div
+      ref={wrapRef}
+      data-mark-clip
+      className="relative overflow-hidden"
+      style={{ maxHeight: `calc(0.9rem * 1.42 * ${PREVIEW_LINES})` }}
+    >
+      <p
+        ref={pRef}
+        className={cn(
+          "voice-prose whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+          isQuote && "hang-quotes italic",
+        )}
+      >
+        {body}
+      </p>
+    </div>
+  );
 }
 
 /** One found phrase under a drawn highlighter (@highlighters/core):
@@ -3038,10 +3144,13 @@ function RoughMark({ children }: { children: string }) {
         paper: { absorbency: 0.1 },
         animation: { draw: true, duration: 380 },
       },
-      // mount the band inside the tile itself: element targets default
-      // their overlay to document.body, which would stand still while
-      // the filtered book scrolls under it
-      el.closest("button") ?? undefined,
+      // mount the band inside the clipped preview window: element
+      // targets default their overlay to document.body (which would
+      // stand still while the filtered book scrolls), and the clip box
+      // shears off any band that strays past the six visible lines
+      (el.closest("[data-mark-clip]") as HTMLElement | null) ??
+        el.closest("button") ??
+        undefined,
     );
     return () => h.remove();
   }, [children]);
