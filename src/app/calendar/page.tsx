@@ -2661,6 +2661,20 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // the foot hairline only appears when the words actually run past the
+  // fold — a short entry that fits needs no scroll terminus drawn
+  const [scrollable, setScrollable] = useState(false);
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const measure = () =>
+      setScrollable(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editing, draft]);
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -2704,6 +2718,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   return (
     <>
       <div
+        ref={contentRef}
         data-entry-card-content
         // pressing the words opens them — a focusable div, NOT a
         // role=button, so the global selection lock doesn't apply and a
@@ -2730,6 +2745,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         <textarea
           ref={areaRef}
           value={draft}
+          rows={1}
           onChange={(e) => {
             setDraft(e.target.value);
             autosizeArea(e.target);
@@ -2743,7 +2759,11 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           aria-label="The entry’s words"
           tabIndex={editing ? 0 : -1}
           className={cn(
-            "voice-prose resize-none overflow-hidden whitespace-pre-wrap bg-transparent leading-[1.5] outline-none [overflow-wrap:anywhere]",
+            // block (not the textarea's default inline-block) so it
+            // sits in no baseline line-box — its height then matches the
+            // prose it replaces exactly, and edit-toggling never resizes
+            // the card around the text
+            "voice-prose block resize-none overflow-hidden whitespace-pre-wrap bg-transparent leading-[1.5] outline-none [overflow-wrap:anywhere]",
             // hidden: inset-x-4 (not left-4 + w-full) so its box can't
             // poke past the right padding and force a sideways scroll
             editing
@@ -2752,43 +2772,48 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           )}
         />
       </div>
-      {/* the foot stands below a hairline that marks where the scroll
-          ends, with room so the seal never kisses the edge */}
-      <div
-        data-entry-foot
-        className={cn(
-          "flex shrink-0 items-center border-t border-rule-faint px-3 pb-3 pt-2.5",
-          editing ? "justify-between" : "justify-end",
+      {/* the foot. Its hairline marks where the scroll ends — drawn
+          only when the words actually scroll, and only as wide as the
+          text (mx-4 = the content's own margin), not the whole card */}
+      <div data-entry-foot className="shrink-0">
+        {scrollable && (
+          <div aria-hidden="true" className="mx-4 border-t border-rule-faint" />
         )}
-      >
-        {editing && (
-          <WaxStamp label="Done — keep the rewrite" onClick={stopEdit} keepFocus>
-            {/* the dock's quill, now the confirming stamp */}
-            <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
-            <path d="M4.4 15.6 12.6 7" />
-            <path d="M4.4 15.6 3.4 17.6" />
-          </WaxStamp>
-        )}
-        <button
-          type="button"
-          onClick={() => void letGo()}
-          aria-label="Let this entry go"
-          className="pressable grid size-[34px] place-items-center rounded-full text-ember hover:bg-ember/10"
+        <div
+          className={cn(
+            "flex items-center px-3 pb-3 pt-2.5",
+            editing ? "justify-between" : "justify-end",
+          )}
         >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="size-[1.05rem]"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          {editing && (
+            <WaxStamp label="Done — keep the rewrite" onClick={stopEdit} keepFocus>
+              {/* the dock's quill, now the confirming stamp */}
+              <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
+              <path d="M4.4 15.6 12.6 7" />
+              <path d="M4.4 15.6 3.4 17.6" />
+            </WaxStamp>
+          )}
+          <button
+            type="button"
+            onClick={() => void letGo()}
+            aria-label="Let this entry go"
+            className="pressable grid size-[34px] place-items-center rounded-full text-ember hover:bg-ember/10"
           >
-            <path d="M3.8 5.6h12.4M8 5.4V3.6h4v1.8M5.4 5.8l.9 10a1.6 1.6 0 0 0 1.6 1.4h4.2a1.6 1.6 0 0 0 1.6-1.4l.9-10" />
-            <path d="M8.3 8.6v5.6M11.7 8.6v5.6" />
-          </svg>
-        </button>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 20 20"
+              className="size-[1.05rem]"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3.8 5.6h12.4M8 5.4V3.6h4v1.8M5.4 5.8l.9 10a1.6 1.6 0 0 0 1.6 1.4h4.2a1.6 1.6 0 0 0 1.6-1.4l.9-10" />
+              <path d="M8.3 8.6v5.6M11.7 8.6v5.6" />
+            </svg>
+          </button>
+        </div>
       </div>
     </>
   );
