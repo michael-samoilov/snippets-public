@@ -164,9 +164,9 @@ leaves the calendar. The sanctioned marks are the wordmark's wax dot, the "Kept.
 StampMark, the dock's two hand-drawn strokes (a quill for the day's
 page, a calendar for the book — with small-caps words beneath), the
 calendar header's search glass in the same line, the entry card's two
-foot marks (a pressed-wax stamp bearing the quill — the microphone,
-while writing — and a quiet ink trash, deliberately not wax: wax is
-the writer's color, not the destroyer's), and the account glyph. Desktop navigation
+foot marks (a pressed-wax quill confirm-stamp shown only while editing,
+and an ember trash — destructive red, deliberately not wax: wax is the
+writer's color, not the destroyer's), and the account glyph. Desktop navigation
 is words — small-caps serif with a gliding ink underline; there are
 two pages, Today and the calendar (the collection folded into the
 book). The avatar sits on the desk's top-right edge: its menu holds
@@ -313,14 +313,19 @@ their text at reading density (0.9rem/1.5, clamped at six lines) — no
 title, no time, no kind, no tags, no menu — **an entry is its words,
 everywhere**: title, kind, tags, time, and source live in the data
 (they feed search and the future) but are never displayed. Pressing a
-tile dives to the **focused entry**: the whole text, and at the
-card's foot two marks only — the wax quill stamp that opens the words
-for rewriting *in place* (the words themselves become the field, same
-metrics, caret at the end, keyboard up; the stamp becomes a wax
-microphone that speaks into the entry, as on the day's page; leaving
-the field keeps the change), and across from it a quiet ink trash
-that lets the entry go (soft delete, undo in the toast, the page
-closing over the struck line). Today is always present — blank, it
+tile dives to the **focused entry**: the whole text, read in peace.
+**Pressing the words** opens them for rewriting *in place* — the words
+themselves become the field, same metrics, caret at the end, keyboard
+up (a focusable div, not a `role=button`, so a long-press still
+selects and copies). Only then does a wax quill **confirm-stamp**
+appear at the card's foot; pressing it — or dismissing the keyboard —
+keeps the change. Across from it, always, a single **ember trash**
+(destructive red, no stamp) lets the entry go (soft delete, undo in
+the toast, the page closing over the struck line). The foot stands
+below a hairline marking where the scroll ends, and the card's lit top
+edge is held on an overlay ABOVE the scrolling ink, so the depth never
+darkens away under the words. Diving back out, the foot fades in the
+first beat rather than riding the whole camera move. Today is always present — blank, it
 offers "Add something from today…", stamped at the real moment; the
 page the reader opened (`probe`) keeps its composer too, past days
 stamping at noon. The views are one instrument: tapping

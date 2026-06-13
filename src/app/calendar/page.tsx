@@ -39,7 +39,6 @@ import {
   softDeleteSnippet,
   updateSnippet,
 } from "@/lib/db";
-import { useSpeech } from "@/hooks/use-speech";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
@@ -382,6 +381,11 @@ function Calendar() {
     const entryContent = entryLayerRef.current?.querySelector<HTMLElement>(
       "[data-entry-card-content]",
     );
+    // the foot row (stamp + trash) shouldn't ride the whole zoom — it
+    // fades fast at the very start and is gone for the rest of the move
+    const entryFoot = entryLayerRef.current?.querySelector<HTMLElement>(
+      "[data-entry-foot]",
+    );
 
     const finish = () => {
       // keep the departed layer hidden across the gap between these
@@ -405,6 +409,7 @@ function Calendar() {
         entryContent.style.opacity = "";
         entryContent.style.transform = "";
       }
+      if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
       flyerBox?.remove();
       for (const el of hiddenNumbers) el.style.visibility = "";
@@ -474,6 +479,10 @@ function Calendar() {
         entryContent.style.willChange = "transform, opacity";
         schedEl.style.willChange = "opacity";
         willChanged.push(entryCard, entryContent, schedEl);
+        if (entryFoot) {
+          entryFoot.style.willChange = "opacity";
+          willChanged.push(entryFoot);
+        }
         // a hand-rolled rAF drives the whole shared-element move off one
         // eased value (Motion's numeric animate was being cancelled after
         // a single frame here, alone among the transitions)
@@ -510,6 +519,8 @@ function Calendar() {
             entryCard.style.borderRadius = `${6 + 4 * open}px`;
           }
           schedEl.style.opacity = `${1 - open}`;
+          if (entryFoot)
+            entryFoot.style.opacity = `${Math.min(1, Math.max(0, (open - 0.85) / 0.15))}`;
         };
         apply(deeper ? 0 : 1);
         const DUR = 440;
@@ -2618,7 +2629,7 @@ function EntryView({ snippet }: { snippet: Snippet | null }) {
     // the card's own bottom rule marking where the scroll terminates
     <div
       data-entry-card
-      className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
+      className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
       style={{ transformOrigin: "0 0" }}
     >
       {snippet ? (
@@ -2628,53 +2639,44 @@ function EntryView({ snippet }: { snippet: Snippet | null }) {
           <p className="voice-prose italic text-ink-soft">Let go.</p>
         </div>
       )}
+      {/* the card's lit top edge, kept ABOVE the scrolling ink: the ink
+          multiplies into the paper, so left below it the words would
+          darken the highlight away as they pass — the depth cue must
+          read at every scroll position */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] shadow-[inset_0_1px_0_var(--press-highlight)]"
+      />
     </div>
   );
 }
 
 /**
- * The entry's words, and two marks at the card's foot: the wax quill
- * that opens the words for rewriting in place (becoming a wax
- * microphone while you write, as on the day's page), and a quiet ink
- * trash that lets the entry go. Editing looks exactly like writing in
- * the composer — the words themselves become the field.
+ * The entry's words. Pressing them opens them for rewriting in place —
+ * the words themselves become the field — and a wax quill stamp at the
+ * foot confirms (the same as dismissing the keyboard). A quiet ember
+ * trash, across from it, lets the entry go.
  */
 function EntryBody({ snippet }: { snippet: Snippet }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
 
-  const speech = useSpeech((spoken) => {
-    setDraft((prev) => {
-      const next = joinSpoken(prev, spoken);
-      requestAnimationFrame(() => {
-        const el = areaRef.current;
-        if (el) {
-          el.focus();
-          el.setSelectionRange(el.value.length, el.value.length);
-          autosizeArea(el);
-        }
-      });
-      return next;
-    });
-  });
-  const listening = speech.status === "listening";
-  useEffect(() => {
-    if (!speech.failure) return;
-    toast("Voice didn’t take here.", {
-      description: "Write the change instead — nothing was lost.",
-    });
-  }, [speech.failure]);
-  // a recording must not outlive the card
-  useEffect(() => {
-    return () => speech.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  const save = async () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== snippet.text) {
+      try {
+        await updateSnippet(snippet.id, { text: trimmed });
+      } catch {
+        toast("That didn’t take — try again.");
+      }
+    }
+  };
   const startEdit = () => {
+    if (editing) return;
     setDraft(snippet.text);
-    // focus the (already mounted, invisible) field synchronously, in
-    // the gesture — iOS won't raise the keyboard for a deferred focus
+    // focus synchronously, inside the tap — iOS won't raise the
+    // keyboard for a focus that arrives by timer
     const el = areaRef.current;
     if (el) {
       el.value = snippet.text;
@@ -2686,23 +2688,12 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
       if (areaRef.current) autosizeArea(areaRef.current);
     });
   };
-  const save = async () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== snippet.text) {
-      try {
-        await updateSnippet(snippet.id, { text: trimmed });
-      } catch {
-        toast("That didn’t take — try again.");
-      }
-    }
-  };
   const stopEdit = () => {
-    if (listening) speech.stop();
     void save();
     setEditing(false);
+    areaRef.current?.blur(); // confirming is dismissing the keyboard
   };
   const letGo = async () => {
-    if (listening) speech.stop();
     await softDeleteSnippet(snippet.id);
     window.history.back(); // the page closes over the struck line
     toast("Let go.", {
@@ -2714,11 +2705,23 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
     <>
       <div
         data-entry-card-content
-        // pb-4: iOS draws selection handles inside the scroller's clip
-        // box — the last line's bottom handle needs standing room
-        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none]"
+        // pressing the words opens them — a focusable div, NOT a
+        // role=button, so the global selection lock doesn't apply and a
+        // long-press can still select and copy. overflow-x hidden +
+        // wrap-anywhere keep a long token from scrolling sideways
+        tabIndex={editing ? -1 : 0}
+        onClick={editing ? undefined : startEdit}
+        onKeyDown={(e) => {
+          if (editing) {
+            if (e.key === "Escape") stopEdit();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            startEdit();
+          }
+        }}
+        aria-label={editing ? undefined : "Rewrite this entry"}
+        className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pb-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]"
         style={{ scrollbarWidth: "none" }}
-        tabIndex={-1}
       >
         {!editing && <SnippetEntry snippet={snippet} dense />}
         {/* the field is always mounted (a hidden one can't take the
@@ -2735,31 +2738,32 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
             if (e.key === "Escape") stopEdit();
           }}
           onBlur={() => {
-            if (editing && !listening) stopEdit();
+            if (editing) stopEdit();
           }}
           aria-label="The entry’s words"
           tabIndex={editing ? 0 : -1}
           className={cn(
-            "voice-prose w-full resize-none overflow-hidden whitespace-pre-wrap bg-transparent leading-[1.5] outline-none",
-            !editing && "pointer-events-none absolute left-4 top-3 h-px opacity-0",
+            "voice-prose resize-none overflow-hidden whitespace-pre-wrap bg-transparent leading-[1.5] outline-none [overflow-wrap:anywhere]",
+            // hidden: inset-x-4 (not left-4 + w-full) so its box can't
+            // poke past the right padding and force a sideways scroll
+            editing
+              ? "w-full"
+              : "pointer-events-none absolute inset-x-4 top-3 h-px opacity-0",
           )}
         />
       </div>
-      <div className="flex shrink-0 items-center justify-between px-3 pb-2.5 pt-0">
-        {editing ? (
-          <WaxStamp
-            label={listening ? "Stop listening" : "Speak into this entry"}
-            onClick={() => (listening ? speech.stop() : speech.start())}
-            listening={listening}
-            keepFocus
-          >
-            {/* a microphone, drawn in the dock strokes' line */}
-            <rect x="7.4" y="2.6" width="5.2" height="9.2" rx="2.6" />
-            <path d="M4.6 9.4a5.4 5.4 0 0 0 10.8 0M10 14.8v2.6" />
-          </WaxStamp>
-        ) : (
-          <WaxStamp label="Rewrite this entry" onClick={startEdit}>
-            {/* the dock's quill */}
+      {/* the foot stands below a hairline that marks where the scroll
+          ends, with room so the seal never kisses the edge */}
+      <div
+        data-entry-foot
+        className={cn(
+          "flex shrink-0 items-center border-t border-rule-faint px-3 pb-3 pt-2.5",
+          editing ? "justify-between" : "justify-end",
+        )}
+      >
+        {editing && (
+          <WaxStamp label="Done — keep the rewrite" onClick={stopEdit} keepFocus>
+            {/* the dock's quill, now the confirming stamp */}
             <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
             <path d="M4.4 15.6 12.6 7" />
             <path d="M4.4 15.6 3.4 17.6" />
@@ -2769,7 +2773,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           type="button"
           onClick={() => void letGo()}
           aria-label="Let this entry go"
-          className="pressable grid size-[34px] place-items-center rounded-full text-ink-faint hover:bg-accent hover:text-ink"
+          className="pressable grid size-[34px] place-items-center rounded-full text-ember hover:bg-ember/10"
         >
           <svg
             aria-hidden="true"
@@ -2858,11 +2862,6 @@ function WaxStamp({
   );
 }
 
-function joinSpoken(a: string, b: string): string {
-  if (!a.trim()) return b;
-  if (!b.trim()) return a;
-  return `${a.replace(/\s+$/, "")} ${b}`;
-}
 
 /* ── the found words, marked ──────────────────────────────────────
    A search tile shows its match under a real highlighter, and if the
