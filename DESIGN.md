@@ -321,9 +321,11 @@ selects and copies). Only then does a wax quill **confirm-stamp**
 appear at the card's foot; pressing it — or dismissing the keyboard —
 keeps the change. Across from it, always, a single **ember trash**
 (destructive red, no stamp) lets the entry go (soft delete, undo in
-the toast, the page closing over the struck line). The foot stands
-below a hairline marking where the scroll ends, and the card's lit top
-edge is held on an overlay ABOVE the scrolling ink, so the depth never
+the toast, the page closing over the struck line). The words fade softly where
+they run off the top or bottom of the card — a "more this way" cue
+that dissolves into the crisp foot hairline only once the final line
+is in view (no fade, no more to scroll). The card's lit top edge is
+held on an overlay ABOVE the scrolling ink, so the depth never
 darkens away under the words. Diving back out, the foot fades in the
 first beat rather than riding the whole camera move. Today is always present — blank, it
 offers "Add something from today…", stamped at the real moment; the

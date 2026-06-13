@@ -2689,17 +2689,28 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   const contentRef = useRef<HTMLDivElement>(null);
   // the foot hairline only appears when the words actually run past the
   // fold — a short entry that fits needs no scroll terminus drawn
-  const [scrollable, setScrollable] = useState(false);
-  useLayoutEffect(() => {
+  // edges = whether content runs ABOVE / BELOW the visible window, so a
+  // soft fade can mark "more this way" — dissolving into the crisp foot
+  // hairline only once the final content is in view
+  const [edges, setEdges] = useState({ top: false, bottom: false });
+  const measureScroll = useCallback(() => {
     const el = contentRef.current;
     if (!el) return;
-    const measure = () =>
-      setScrollable(el.scrollHeight > el.clientHeight + 1);
-    measure();
-    const ro = new ResizeObserver(measure);
+    const canScroll = el.scrollHeight > el.clientHeight + 1;
+    const top = el.scrollTop > 1;
+    const bottom = canScroll && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    setEdges((prev) =>
+      prev.top === top && prev.bottom === bottom ? prev : { top, bottom },
+    );
+  }, []);
+  useLayoutEffect(() => {
+    measureScroll();
+    const el = contentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measureScroll);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [editing, draft]);
+  }, [editing, draft, measureScroll]);
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -2781,15 +2792,24 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           }
         }}
         aria-label={editing ? undefined : "Rewrite this entry"}
+        onScroll={measureScroll}
         className={cn(
           "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]",
           // a scrolling entry keeps room below its last line (the bottom
           // selection handle lives inside the clip); a short one that
           // fits has nothing to scroll, so it sits closer to the foot
-          scrollable ? "pb-4" : "pb-1.5",
+          edges.bottom ? "pb-4" : "pb-1.5",
         )}
         style={{ scrollbarWidth: "none" }}
       >
+        {/* a fade where the words run off the top, marking more above */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none sticky top-0 z-[5] -mx-4 -mb-5 h-5 bg-gradient-to-b from-paper to-transparent transition-opacity duration-150",
+            edges.top ? "opacity-100" : "opacity-0",
+          )}
+        />
         {!editing && <SnippetEntry snippet={snippet} dense />}
         {/* the field is always mounted (a hidden one can't take the
             gesture's synchronous focus); writing, it wears the exact
@@ -2823,6 +2843,15 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
               : "pointer-events-none absolute inset-x-4 top-3 h-px opacity-0",
           )}
         />
+        {/* …and where they run off the bottom, marking more below — it
+            dissolves into the foot's hairline as the end comes into view */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none sticky bottom-0 z-[5] -mx-4 -mt-5 h-5 bg-gradient-to-t from-paper to-transparent transition-opacity duration-150",
+            edges.bottom ? "opacity-100" : "opacity-0",
+          )}
+        />
       </div>
       {/* the foot. Its hairline marks where the scroll ends — drawn
           only when the words actually scroll, and only as wide as the
@@ -2833,14 +2862,14 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         onClick={editing ? undefined : startEdit}
         className="shrink-0"
       >
-        {scrollable && (
+        {edges.top && !edges.bottom && (
           <div aria-hidden="true" className="mx-4 border-t border-rule-faint" />
         )}
         <div
           className={cn(
             "flex items-center px-3 pb-3",
             editing ? "justify-between" : "justify-end",
-            scrollable ? "pt-2.5" : "pt-1",
+            edges.bottom || edges.top ? "pt-2.5" : "pt-1",
           )}
         >
           {editing && (
