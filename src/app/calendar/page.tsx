@@ -1833,7 +1833,6 @@ function MonthFeedBase({
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
-      <ScrollFadeHead show={edges.top} />
       <p
         ref={probeRef}
         aria-hidden="true"
@@ -1896,7 +1895,7 @@ function MonthFeedBase({
           }}
         />
       )}
-      <ScrollFadeFoot hairline={edges.top || edges.bottom} fade={edges.bottom} />
+      <ScrollTerminus show={edges.top || edges.bottom} />
     </div>
   );
 }
@@ -2289,7 +2288,6 @@ function YearFeedBase({
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
-      <ScrollFadeHead show={edges.top} />
       <p
         ref={probeRef}
         aria-hidden="true"
@@ -2322,7 +2320,7 @@ function YearFeedBase({
           }}
         />
       )}
-      <ScrollFadeFoot hairline={edges.top || edges.bottom} fade={edges.bottom} />
+      <ScrollTerminus show={edges.top || edges.bottom} />
     </div>
   );
 }
@@ -2633,9 +2631,8 @@ function ScheduleFeed({
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
-      <ScrollFadeHead show={edges.top} />
       {body}
-      <ScrollFadeFoot hairline={edges.top || edges.bottom} fade={edges.bottom} />
+      <ScrollTerminus show={edges.top || edges.bottom} />
     </div>
   );
 }
@@ -2696,13 +2693,12 @@ function ScheduleCards({
   );
 }
 
-/* ── scroll terminus: hairline + dynamic fade ────────────────────
-   The one standard treatment for a scrollable container's edges. A
-   hairline marks the foot while the container can scroll; a fade just
-   inside each edge shows there's more that way and clears once that
-   end is in view, so the final content sits crisp against the line.
-   `useScrollEdges` watches the container; the two sticky pieces drop
-   in as the first and last children of the scroller itself. */
+/* ── scroll terminus: the foot hairline ──────────────────────────
+   The one standard treatment for a scrollable container's end. A
+   hairline marks the foot while the container can scroll and clears
+   once everything fits, so a boundary is shown only when there's more
+   to reach. `useScrollEdges` watches the container; the sticky piece
+   drops in as the last child of the scroller itself. */
 function useScrollEdges(
   ref: React.RefObject<HTMLElement | null>,
   deps: React.DependencyList = [],
@@ -2754,64 +2750,28 @@ function useScrollEdges(
   return edges;
 }
 
-/** The head fade — first child of the scroller; shows more above. It
-    spans the scroller's content box (negative margin keeps it out of
-    the flow), so it needs no knowledge of the parent's padding.
-    `tone` picks the surface it dissolves into: the textured sheet
-    (the canvases and the book) sits a shade off pure paper, so its
-    head fade follows; the entry card is plain stock, so it stays paper. */
-function ScrollFadeHead({
-  show,
-  tone = "sheet",
-}: {
-  show: boolean;
-  tone?: "sheet" | "card";
-}) {
+/** The scroll terminus — last child of the scroller: a hairline that
+    marks the foot while the container can scroll, and clears once
+    everything fits. The scroller's height is fractional, so the sticky
+    line lands a sub-pixel above the real clip; a solid cap tucked just
+    beneath it seals that sliver so no scrolled content can peek under
+    the line. */
+function ScrollTerminus({ show }: { show: boolean }) {
   return (
     <div
       aria-hidden="true"
-      className={cn(
-        "pointer-events-none sticky top-0 z-[6] -mb-8 h-8 bg-gradient-to-b to-transparent transition-opacity duration-200",
-        tone === "card" ? "from-paper" : "from-fade-head",
-        show ? "opacity-100" : "opacity-0",
-      )}
-    />
-  );
-}
-
-/** The foot — last child of the scroller: a hairline at the terminus
-    (while scrollable), a fade above it (while more is below). The
-    scroller's height is fractional, so the sticky line lands a
-    sub-pixel above the real clip; a solid cap tucked just beneath the
-    line seals that sliver so no scrolled content can peek under it. */
-function ScrollFadeFoot({
-  hairline,
-  fade,
-}: {
-  hairline: boolean;
-  fade: boolean;
-}) {
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none sticky bottom-0 z-[6] -mt-8 h-8"
+      className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px"
     >
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
-          fade ? "opacity-100" : "opacity-0",
-        )}
-      />
-      <div
-        className={cn(
           "absolute inset-x-0 top-full h-2 bg-paper transition-opacity duration-200",
-          hairline ? "opacity-100" : "opacity-0",
+          show ? "opacity-100" : "opacity-0",
         )}
       />
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200",
-          hairline ? "opacity-100" : "opacity-0",
+          show ? "opacity-100" : "opacity-0",
         )}
       />
     </div>
@@ -2958,7 +2918,6 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         )}
         style={{ scrollbarWidth: "none" }}
       >
-        <ScrollFadeHead show={edges.top} tone="card" />
         {!editing && <SnippetEntry snippet={snippet} dense />}
         {/* the field is always mounted (a hidden one can't take the
             gesture's synchronous focus); writing, it wears the exact
@@ -2992,10 +2951,9 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
               : "pointer-events-none absolute inset-x-4 top-3 h-px opacity-0",
           )}
         />
-        {/* the scroll terminus — a hairline at the foot, with a fade
-            above it while more words run on below; it clears once the
-            end is in view so the last line sits crisp on the line */}
-        <ScrollFadeFoot hairline={scrollable} fade={edges.bottom} />
+        {/* the scroll terminus — a hairline at the foot while the words
+            run on below; it clears once the entry fits */}
+        <ScrollTerminus show={scrollable} />
       </div>
       <div
         data-entry-foot

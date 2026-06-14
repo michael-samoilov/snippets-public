@@ -217,21 +217,16 @@ Range text-rects, not line boxes (leading would read as a landing skip).
 The stage is **one fixed frame at every altitude**: it fills the page
 column, the same distance from the sheet's bottom as the header stands
 from its top. Every scrollable surface marks its own terminus with the
-**standard scroll-fade** (`useScrollEdges` + `ScrollFadeHead`/
-`ScrollFadeFoot`): a hairline pinned at the foot while the surface can
-scroll, with a soft fade just inside each edge that shows there's more
-that way and clears once that end is in view, so the final content
-sits crisp on the line. Each fade dissolves into the surface it sits
-on, not the brighter card stock: the head sits over the *textured*
-sheet, which the paper shader pulls a shade off pure paper (the
-`--fade-head` tone — recessed under the lamplight pool in Paper,
-lifted in Lamplight), while the foot — where the texture's mask has
-cleared — and the entry card's own stock stay plain paper. The foot
-tucks a hair of solid paper just beneath its line to seal the
-scroller's fractional bottom, so no scrolled content peeks under the
-terminus. The entry card, the book, and the month/year
-canvases each carry it; the frame's own old line is retired so the
-two never double up. The feeds' floors are laid out,
+**standard scroll terminus** (`useScrollEdges` + `ScrollTerminus`): a
+hairline pinned at the foot while the surface can scroll, clearing
+once everything fits, so a boundary is drawn only when there's more to
+reach. It tucks a hair of solid paper just beneath its line to seal
+the scroller's fractional bottom, so no scrolled content peeks under
+the terminus. (Soft edge-fades were tried and removed — the texture's
+own gradient made them read as bands against the sheet; the bare
+hairline is the cleaner mark.) The entry card, the book, and the
+month/year canvases each carry it; the frame's own old line is retired
+so the two never double up. The feeds' floors are laid out,
 not measured — a px container to the last offset plus a `min-h-full`
 tail — so a mid-zoom stage resize can never clamp a scroller and
 drift a flight's landing. The canvas alone is the deep
