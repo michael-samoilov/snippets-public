@@ -2757,15 +2757,34 @@ function useScrollEdges(
 
 /** The scroll terminus — last child of the scroller: a hairline pinned
     at the very foot while more content lies below, cleared once the
-    last of it is in view. Just the line, sitting on the bottom edge:
-    nothing sits below it, so an overscroll rubber-band reveals only the
-    bare sheet, never a stray fill. */
-function ScrollTerminus({ show }: { show: boolean }) {
+    last of it is in view. It sits on the bottom edge with nothing
+    beneath, so an overscroll rubber-band reveals only the bare sheet.
+
+    `fade` adds a soft dissolve just above the line — the entry card,
+    whose words run long, wants a gentler hand-off than the calendar's
+    bare rule. It rides the same `show`, clearing with the line once the
+    words reach their end. (The card is plain stock, so the fade is
+    paper; the textured canvases get the bare hairline alone.) */
+function ScrollTerminus({
+  show,
+  fade = false,
+}: {
+  show: boolean;
+  fade?: boolean;
+}) {
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px"
     >
+      {fade && (
+        <div
+          className={cn(
+            "absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
+            show ? "opacity-100" : "opacity-0",
+          )}
+        />
+      )}
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200",
@@ -2947,9 +2966,9 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
               : "pointer-events-none absolute inset-x-4 top-3 h-px opacity-0",
           )}
         />
-        {/* the scroll terminus — a hairline at the foot while the words
-            run on below; it clears once the entry fits */}
-        <ScrollTerminus show={edges.bottom} />
+        {/* the scroll terminus — a hairline with a soft fade above it
+            while the words run on below; both clear at the last line */}
+        <ScrollTerminus show={edges.bottom} fade />
       </div>
       <div
         data-entry-foot

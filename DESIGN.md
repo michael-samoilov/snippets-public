@@ -222,13 +222,16 @@ hairline pinned at the foot edge while more content lies below it,
 clearing once the last of it is in view (or everything already fit),
 so the line is drawn only when there's more to reach. It sits on the
 very bottom edge with the content clipping beneath it and nothing
-below — an overscroll rubber-band reveals only the bare sheet. (Soft
-edge-fades, and a paper cap to seal the scroller's fractional bottom,
-were both tried and removed — the texture made the fades read as
-bands, and the cap flashed on overscroll; the bare hairline is the
-cleaner mark.) The entry card, the book, and the
-month/year canvases each carry it; the frame's own old line is retired
-so the two never double up. The feeds' floors are laid out,
+below — an overscroll rubber-band reveals only the bare sheet. The
+entry card alone adds a soft paper fade just above its line while more
+words lie below (its long prose wants a gentler hand-off, and its
+plain stock takes the fade cleanly); the fade rides the same state, so
+it clears with the line at the last word. The textured canvases and
+the book keep the bare hairline — over the sheet a fade read as a band
+against the texture, and a paper cap once used to seal the fractional
+bottom flashed on overscroll, so there the line alone is the cleaner
+mark. The entry card, the book, and the month/year canvases each carry
+it; the frame's own old line is retired so the two never double up. The feeds' floors are laid out,
 not measured — a px container to the last offset plus a `min-h-full`
 tail — so a mid-zoom stage resize can never clamp a scroller and
 drift a flight's landing. The canvas alone is the deep
