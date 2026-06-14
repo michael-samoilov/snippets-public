@@ -2760,11 +2760,18 @@ function useScrollEdges(
     last of it is in view. It sits on the bottom edge with nothing
     beneath, so an overscroll rubber-band reveals only the bare sheet.
 
-    `fade` adds a soft dissolve just above the line — the entry card,
-    whose words run long, wants a gentler hand-off than the calendar's
-    bare rule. It rides the same `show`, clearing with the line once the
-    words reach their end. (The card is plain stock, so the fade is
-    paper; the textured canvases get the bare hairline alone.) */
+    `fade` is the entry card's treatment — its long words want a gentler
+    hand-off than the calendar's bare rule. It adds two things, both
+    riding the same `show` so they clear with the line at the last word:
+    a soft dissolve just above the line, and a 1px paper cap just below
+    it that seals the scroller's fractional sub-pixel bottom (so no
+    sliver of the next line peeks under the rule). The cap is exactly
+    1px — any taller and the absolutely-positioned box would add enough
+    scroll overflow to make a short entry think it scrolls. Both are
+    safe only here: the card is plain paper, so an overscroll rubber-band
+    reveals paper on paper. The textured canvases get the bare hairline
+    alone — over the sheet a fade reads as a band and the cap would
+    flash on overscroll. */
 function ScrollTerminus({
   show,
   fade = false,
@@ -2778,12 +2785,20 @@ function ScrollTerminus({
       className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px"
     >
       {fade && (
-        <div
-          className={cn(
-            "absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
-            show ? "opacity-100" : "opacity-0",
-          )}
-        />
+        <>
+          <div
+            className={cn(
+              "absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
+              show ? "opacity-100" : "opacity-0",
+            )}
+          />
+          <div
+            className={cn(
+              "absolute inset-x-0 top-full h-px bg-paper transition-opacity duration-200",
+              show ? "opacity-100" : "opacity-0",
+            )}
+          />
+        </>
       )}
       <div
         className={cn(
