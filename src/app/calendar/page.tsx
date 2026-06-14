@@ -4,6 +4,7 @@ import {
   Fragment,
   Suspense,
   memo,
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -355,13 +356,18 @@ function Calendar() {
     [pathname, runZoom],
   );
 
-  /** the reader's place in the book drives selection, title, and URL */
+  /** the reader's place in the book drives selection, title, and URL.
+      These follow the scroll but needn't block it — a transition lets
+      the fling paint while React reconciles the title/ring off the
+      critical path, so the start of a scroll stays smooth. */
   const onScheduleDay = useCallback(
     (key: string) => {
-      setSelected(key);
-      const m = startOfMonth(dateFromDayKey(key));
-      setVisibleMonth((prev) => (isSameMonth(prev, m) ? prev : m));
-      setVisibleYear(m.getFullYear());
+      startTransition(() => {
+        setSelected(key);
+        const m = startOfMonth(dateFromDayKey(key));
+        setVisibleMonth((prev) => (isSameMonth(prev, m) ? prev : m));
+        setVisibleYear(m.getFullYear());
+      });
       if (urlTimer.current) clearTimeout(urlTimer.current);
       urlTimer.current = setTimeout(() => {
         window.history.replaceState(null, "", `${pathname}?d=${key}`);
@@ -2458,7 +2464,7 @@ function MiniMonth({
  * don't exist — except the page the reader explicitly opened
  * (`probe`), which offers its composer.
  */
-function ScheduleFeed({
+function ScheduleFeedBase({
   handleRef,
   active,
   today,
@@ -2763,6 +2769,19 @@ function ScheduleCards({
     </ul>
   );
 }
+const ScheduleFeed = memo(
+  ScheduleFeedBase,
+  // `selected` only seeds the book's first position (the spy drives it
+  // thereafter), so a change to it alone — every day the reader scrolls
+  // past — needn't re-render the whole book; the title alone re-renders
+  (p, n) =>
+    p.handleRef === n.handleRef &&
+    p.active === n.active &&
+    p.today === n.today &&
+    p.all === n.all &&
+    p.onVisible === n.onVisible &&
+    p.onOpen === n.onOpen,
+);
 
 /* ── scroll terminus: the foot hairline ──────────────────────────
    The one standard treatment for a scrollable container's end. A
@@ -2879,7 +2898,7 @@ function ScrollTerminus({
 
 /* ── the focused entry: one card, the whole stage ────────────────── */
 
-function EntryView({ snippet }: { snippet: Snippet | null }) {
+function EntryViewBase({ snippet }: { snippet: Snippet | null }) {
   // one tile, grown to fill the stage — the same paper material as the
   // schedule card it expanded from, so the FLIP reads as that very card
   // opening. The zoom drives [data-entry-card]'s box and fades the
@@ -2911,6 +2930,10 @@ function EntryView({ snippet }: { snippet: Snippet | null }) {
     </div>
   );
 }
+// the focused entry is null while the reader is in the book, so this
+// skips the scroll-spy's re-renders — only a real change of entry
+// (or focus) brings it back
+const EntryView = memo(EntryViewBase);
 
 /**
  * The entry's words. Pressing them opens them for rewriting in place —
