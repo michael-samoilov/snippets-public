@@ -1134,6 +1134,18 @@ function Calendar() {
     runZoom("year", "schedule", day);
   };
 
+  /** a found card opens straight into its own page — the entry view —
+      with its book page synthesized beneath, so the card dives open from
+      that page and backing out climbs entry → book → canvas */
+  const openEntryFromSearch = (s: Snippet) => {
+    closeSearch();
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    window.history.replaceState(null, "", pathname);
+    window.history.pushState(null, "", `${pathname}?d=${s.day}`);
+    scheduleFeedRef.current?.goTo(s.day); // the page behind the dive
+    openEntry(s.id); // sets the entry, pushes ?d&e, zooms the book → card
+  };
+
   // while the filtered book stands in the stage, the altitudes wait
   // beneath, hidden
   const showMonthLayer =
@@ -1587,7 +1599,7 @@ function Calendar() {
                           <li key={s.id}>
                             <button
                               type="button"
-                              onClick={() => jumpFromSearch(s.day)}
+                              onClick={() => openEntryFromSearch(s)}
                               className={cn(
                                 "pressable block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
                                 "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
