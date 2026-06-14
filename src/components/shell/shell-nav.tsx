@@ -14,6 +14,21 @@ function isActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
 }
 
+/** Pressing "Calendar" while already on the calendar page shouldn't be a
+ *  dead tap: climb the camera back to the canvas (month) altitude. The
+ *  page listens for this and runs the zoom; let the link navigate
+ *  normally from anywhere else. */
+function navClick(
+  href: string,
+  pathname: string,
+  e: React.MouseEvent,
+): void {
+  if (href === "/calendar" && pathname.startsWith("/calendar")) {
+    e.preventDefault();
+    window.dispatchEvent(new Event("calendar:home"));
+  }
+}
+
 const underlineSpring = { type: "spring", stiffness: 480, damping: 40 } as const;
 
 /** Desktop: small-caps serif links; an ink underline glides between them. */
@@ -27,6 +42,7 @@ export function ShellNav() {
           <Link
             key={href}
             href={href}
+            onClick={(e) => navClick(href, pathname, e)}
             aria-current={active ? "page" : undefined}
             className={cn(
               "voice-label pressable relative pb-1",
@@ -108,6 +124,7 @@ export function ShellTabs() {
             <Link
               key={href}
               href={href}
+              onClick={(e) => navClick(href, pathname, e)}
               aria-current={active ? "page" : undefined}
               aria-label={label}
               className={cn(

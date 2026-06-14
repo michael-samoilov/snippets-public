@@ -758,6 +758,37 @@ function Calendar() {
     [runZoom],
   );
 
+  // "Calendar" in the dock, pressed while already on the page, climbs the
+  // camera back to the canvas (month) altitude from wherever it is. The
+  // glance drops straight down; the book and entry sit on real history
+  // entries, so we walk back up through them (the entry's zoom only goes
+  // entry⇄book, so the climb home from an entry takes two pops — the
+  // effect below continues it once each zoom settles).
+  const homeward = useRef(false);
+  const goToCanvas = useCallback(() => {
+    if (zooming.current) return;
+    const cur = viewRef.current;
+    if (cur === "month") return; // already the canvas
+    if (cur === "year") {
+      pickMonth(startOfMonth(visibleMonthRef.current));
+      return;
+    }
+    homeward.current = true;
+    window.history.back();
+  }, [pickMonth]);
+
+  useEffect(() => {
+    const onHome = () => goToCanvas();
+    window.addEventListener("calendar:home", onHome);
+    return () => window.removeEventListener("calendar:home", onHome);
+  }, [goToCanvas]);
+
+  useEffect(() => {
+    if (!homeward.current || zoom) return; // let each zoom settle first
+    if (view === "month") homeward.current = false; // arrived
+    else if (view === "schedule") window.history.back(); // book → canvas
+  }, [view, zoom]);
+
   /* climbing out happens through the history stack: UI back affordances
      call history.back(), and the popstate handler runs the zoom — so the
      browser's own back gesture and ours are the same action */
