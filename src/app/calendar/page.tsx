@@ -2756,13 +2756,23 @@ function useScrollEdges(
 
 /** The head fade — first child of the scroller; shows more above. It
     spans the scroller's content box (negative margin keeps it out of
-    the flow), so it needs no knowledge of the parent's padding. */
-function ScrollFadeHead({ show }: { show: boolean }) {
+    the flow), so it needs no knowledge of the parent's padding.
+    `tone` picks the surface it dissolves into: the textured sheet
+    (the canvases and the book) sits a shade off pure paper, so its
+    head fade follows; the entry card is plain stock, so it stays paper. */
+function ScrollFadeHead({
+  show,
+  tone = "sheet",
+}: {
+  show: boolean;
+  tone?: "sheet" | "card";
+}) {
   return (
     <div
       aria-hidden="true"
       className={cn(
-        "pointer-events-none sticky top-0 z-[6] -mb-5 h-5 bg-gradient-to-b from-paper to-transparent transition-opacity duration-200",
+        "pointer-events-none sticky top-0 z-[6] -mb-8 h-8 bg-gradient-to-b to-transparent transition-opacity duration-200",
+        tone === "card" ? "from-paper" : "from-fade-head",
         show ? "opacity-100" : "opacity-0",
       )}
     />
@@ -2770,7 +2780,10 @@ function ScrollFadeHead({ show }: { show: boolean }) {
 }
 
 /** The foot — last child of the scroller: a hairline at the terminus
-    (while scrollable), a fade above it (while more is below). */
+    (while scrollable), a fade above it (while more is below). The
+    scroller's height is fractional, so the sticky line lands a
+    sub-pixel above the real clip; a solid cap tucked just beneath the
+    line seals that sliver so no scrolled content can peek under it. */
 function ScrollFadeFoot({
   hairline,
   fade,
@@ -2781,12 +2794,18 @@ function ScrollFadeFoot({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none sticky bottom-0 z-[6] -mt-5 h-5"
+      className="pointer-events-none sticky bottom-0 z-[6] -mt-8 h-8"
     >
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 top-0 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
           fade ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <div
+        className={cn(
+          "absolute inset-x-0 top-full h-2 bg-paper transition-opacity duration-200",
+          hairline ? "opacity-100" : "opacity-0",
         )}
       />
       <div
@@ -2939,7 +2958,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         )}
         style={{ scrollbarWidth: "none" }}
       >
-        <ScrollFadeHead show={edges.top} />
+        <ScrollFadeHead show={edges.top} tone="card" />
         {!editing && <SnippetEntry snippet={snippet} dense />}
         {/* the field is always mounted (a hidden one can't take the
             gesture's synchronous focus); writing, it wears the exact
