@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ShellNav, ShellTabs } from "@/components/shell/shell-nav";
 import { ProfileMenu } from "@/components/shell/profile-menu";
 import { Sheet } from "@/components/shell/sheet";
+import { SheetScroll } from "@/components/shell/sheet-scroll";
 import { CommandMenu } from "@/components/command-menu";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -55,17 +56,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* the sheet of paper */}
       <Sheet className="flex min-h-0 flex-1 flex-col px-5 pb-2 pt-6 sm:px-10 sm:pb-3 sm:pt-9">
-        <main
-          // overflow-x hidden, explicitly: setting only overflow-y makes
-          // the other axis auto per spec, and iOS pans it sideways on a
-          // diagonal swipe — the page then sits "clipped" at scrollLeft>0
-          // -mx/px cancel visually but move the clip boundary out, so focus
-          // rings and selection shadows at the content edge survive the
-          // scroll container (the Settings swatch ring was shorn)
-          className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 sm:pb-6 [scrollbar-width:none]"
-        >
+        {/* overflow-x hidden, explicitly: setting only overflow-y makes
+            the other axis auto per spec, and iOS pans it sideways on a
+            diagonal swipe — the page then sits "clipped" at scrollLeft>0
+            -mx/px cancel visually but move the clip boundary out, so focus
+            rings and selection shadows at the content edge survive the
+            scroll container (the Settings swatch ring was shorn) */}
+        <SheetScroll className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 sm:pb-6 [scrollbar-width:none]">
           {children}
-        </main>
+        </SheetScroll>
       </Sheet>
 
       <ShellTabs />

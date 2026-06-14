@@ -217,20 +217,23 @@ Range text-rects, not line boxes (leading would read as a landing skip).
 The stage is **one fixed frame at every altitude**: it fills the page
 column, the same distance from the sheet's bottom as the header stands
 from its top. Every scrollable surface marks its own terminus with the
-**standard scroll terminus** (`useScrollEdges` + `ScrollTerminus`): a
-hairline pinned at the foot edge while more content lies below it,
-clearing once the last of it is in view (or everything already fit),
-so the line is drawn only when there's more to reach. It sits on the
-very bottom edge with the content clipping beneath it and nothing
-below — an overscroll rubber-band reveals only the bare sheet. The
-entry card alone gets a softer treatment for its long prose: a paper
-fade just above the line, and a paper cap just below it that seals the
-scroller's fractional sub-pixel bottom so no sliver of the next line
-peeks under the rule. Both ride the same state, clearing with the line
-at the last word, and both are safe only on the card's plain stock —
-over the textured sheet a fade reads as a band and the cap flashes on
-overscroll, so the canvases and the book keep the bare hairline. The
-entry card, the book, and the month/year canvases each carry it; the
+**standard scroll terminus** (`components/ui/scroll-terminus`:
+`useScrollEdges` + `ScrollTerminus`/`ScrollTerminusHead`): a hairline
+pinned at an edge while content lies clipped past it, clearing once
+that end is in view (or everything already fit), so a line is drawn
+only when there's more to reach. It sits on the very edge with the
+content clipping beneath it and nothing past it — an overscroll
+rubber-band reveals only the bare sheet. The entry card alone gets a
+softer treatment for its long prose: a paper fade just above the line,
+and a paper cap just below it that seals the scroller's fractional
+sub-pixel bottom so no sliver of the next line peeks under the rule.
+Both ride the same state, clearing with the line at the last word, and
+both are safe only on the card's plain stock — over the textured sheet
+a fade reads as a band and the cap flashes on overscroll, so the
+canvases and the book keep the bare hairline. The entry card, the
+book, and the month/year canvases each carry the foot line; the Today
+page, which scrolls in the sheet itself, marks both ends (head + foot)
+the same distance — the header's inset — from the sheet's edges. The
 frame's own old line is retired so the two never double up. The feeds' floors are laid out,
 not measured — a px container to the last offset plus a `min-h-full`
 tail — so a mid-zoom stage resize can never clamp a scroller and
