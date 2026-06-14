@@ -1421,6 +1421,7 @@ function Calendar() {
           <MonthFeed
             handleRef={monthFeedRef}
             active={view === "month" && !zoom}
+            frozen={!showMonthLayer}
             today={today}
             span={monthSpan}
             counts={counts}
@@ -1444,6 +1445,7 @@ function Calendar() {
           <YearFeed
             handleRef={yearFeedRef}
             active={view === "year" && !zoom}
+            frozen={!showYearLayer}
             today={today}
             years={glanceYears}
             counts={counts}
@@ -1583,7 +1585,7 @@ function Calendar() {
 
 /* ── the month feed ─────────────────────────────────────────────── */
 
-function MonthFeed({
+function MonthFeedBase({
   handleRef,
   active,
   today,
@@ -1602,6 +1604,10 @@ function MonthFeed({
   selected: string;
   onPick: (key: string) => void;
   onVisible: (m: Date) => void;
+  /** fully hidden (not this altitude, not in a zoom) — memo skips
+      re-renders while frozen, so a book scroll never re-renders the
+      invisible canvas; it re-renders the moment it's shown again */
+  frozen?: boolean;
 }) {
   const currentMonth = startOfMonth(today);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1894,6 +1900,10 @@ function MonthFeed({
     </div>
   );
 }
+const MonthFeed = memo(
+  MonthFeedBase,
+  (p, n) => p.frozen === true && n.frozen === true,
+);
 
 const MonthBlock = memo(function MonthBlock({
   month,
@@ -2036,7 +2046,7 @@ function buildYearGeom(
   return { years, offsets, total: y - YEAR_GAP + 32, cols, miniW, miniH, labelH, blockH };
 }
 
-function YearFeed({
+function YearFeedBase({
   handleRef,
   active,
   today,
@@ -2054,6 +2064,10 @@ function YearFeed({
   counts: Map<string, number> | undefined;
   onPickMonth: (m: Date) => void;
   onVisible: (y: number) => void;
+  /** fully hidden (not this altitude, not in a zoom) — memo skips
+      re-renders while frozen, so a book scroll never re-renders the
+      invisible glance; it re-renders the moment it's shown again */
+  frozen?: boolean;
 }) {
   const currentYear = today.getFullYear();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -2313,6 +2327,11 @@ function YearFeed({
   );
 }
 
+const YearFeed = memo(
+  YearFeedBase,
+  (p, n) => p.frozen === true && n.frozen === true,
+);
+
 /** Twelve tiny constellations: a dot per day, ink where something was
  *  kept. Always six rows so every mini is the same height — the zoom's
  *  geometry depends on it. */
@@ -2402,6 +2421,25 @@ function ScheduleFeed({
   const pendingRef = useRef<string | null>(null);
   const rafRef = useRef(0);
   const didInit = useRef(false);
+  // the rows' geometry, read ONCE per layout and cached — the scroll
+  // spy then finds the stacked day from scrollTop alone, never reading
+  // ~90 rows' offsets on the scroll path (that first read forced the
+  // whole document's first layout — the stall on the opening scroll)
+  const rowGeomRef = useRef<
+    Array<{ day: string; top: number; bottom: number; headH: number }>
+  >([]);
+  const measureRows = useCallback(() => {
+    const geom: Array<{ day: string; top: number; bottom: number; headH: number }> =
+      [];
+    for (const [day, row] of rowRefs.current) {
+      const headH =
+        (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? 48;
+      const top = row.offsetTop;
+      geom.push({ day, top, bottom: top + row.offsetHeight, headH });
+    }
+    geom.sort((a, b) => a.top - b.top);
+    rowGeomRef.current = geom;
+  }, []);
 
   const rows = useMemo(() => {
     if (!all) return null;
@@ -2448,20 +2486,27 @@ function ScheduleFeed({
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
     if (!rows) return;
+    // cache the rows' geometry now (this is the layout pass that would
+    // otherwise be forced by the first scroll) and keep it fresh as the
+    // viewport resizes
+    measureRows();
     if (!didInit.current) {
       didInit.current = true;
       scrollToRow(selected);
       pendingRef.current = null;
-      return;
-    }
-    if (pendingRef.current) {
+    } else if (pendingRef.current) {
       // one settle only — a stale pending must never replay a jump
       scrollToRow(pendingRef.current);
       pendingRef.current = null;
     }
+    const el = scrollerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measureRows);
+    ro.observe(el);
+    return () => ro.disconnect();
     // `selected` only seeds the very first position
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, scrollToRow]);
+  }, [rows, scrollToRow, measureRows]);
 
   const onScroll = () => {
     if (rafRef.current) return;
@@ -2472,16 +2517,14 @@ function ScheduleFeed({
       const top = el.scrollTop;
       // the reader's day is the topmost whose margin date is still
       // fully stacked — a row whose tail merely peeks under the rail
-      // has already handed over (its date has slid off the pin)
+      // has already handed over (its date has slid off the pin).
+      // Computed from cached geometry, so the scroll path reads only
+      // scrollTop, never the rows' offsets
       let cur: string | null = null;
-      let curTop = Infinity;
-      for (const [day, row] of rowRefs.current) {
-        const headH =
-          (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? 48;
-        const t = row.offsetTop;
-        if (t + row.offsetHeight >= top + headH && t < curTop) {
-          curTop = t;
-          cur = day;
+      for (const g of rowGeomRef.current) {
+        if (g.bottom >= top + g.headH) {
+          cur = g.day; // geometry is sorted by top; the first match wins
+          break;
         }
       }
       if (cur && cur !== spyRef.current) {
@@ -2665,27 +2708,49 @@ function useScrollEdges(
   deps: React.DependencyList = [],
 ): { top: boolean; bottom: boolean } {
   const [edges, setEdges] = useState({ top: false, bottom: false });
-  const measure = useCallback(() => {
+  // the container's heights only change on resize or a content change
+  // (the deps); caching them keeps the scroll path off layout entirely
+  const sizeRef = useRef({ scrollH: 0, clientH: 0 });
+  const rafRef = useRef(0);
+  const compute = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const can = el.scrollHeight > el.clientHeight + 1;
+    const { scrollH, clientH } = sizeRef.current;
+    const can = scrollH > clientH + 1;
     const top = el.scrollTop > 1;
-    const bottom = can && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    const bottom = can && el.scrollTop + clientH < scrollH - 1;
     setEdges((p) => (p.top === top && p.bottom === bottom ? p : { top, bottom }));
   }, [ref]);
-  useLayoutEffect(() => {
-    measure();
+  const refresh = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(measure);
+    sizeRef.current = { scrollH: el.scrollHeight, clientH: el.clientHeight };
+    compute();
+  }, [compute, ref]);
+  // scroll only reads scrollTop, and only once per frame — never a
+  // synchronous layout read or setState on the scroll event itself, so
+  // the first touch of a fling can't stall
+  const onScroll = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      compute();
+    });
+  }, [compute]);
+  useLayoutEffect(() => {
+    refresh();
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(refresh);
     ro.observe(el);
-    el.addEventListener("scroll", measure, { passive: true });
+    el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       ro.disconnect();
-      el.removeEventListener("scroll", measure);
+      el.removeEventListener("scroll", onScroll);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measure, ...deps]);
+  }, [refresh, onScroll, ...deps]);
   return edges;
 }
 
