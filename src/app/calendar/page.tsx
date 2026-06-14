@@ -240,6 +240,13 @@ function Calendar() {
     to: View;
     anchor: string;
   }>(null);
+  // all four altitudes are kept mounted so a zoom always has both layers
+  // to fly between — but mounting all four on the first paint (the book
+  // builds every row) stalls the arrival and starves the dock's ink
+  // animation, so the move into the page reads as a skip. Mount only the
+  // altitude we land on; warm the rest in once the thread is free (and
+  // at once if a zoom needs them sooner).
+  const [warm, setWarm] = useState(false);
   const [selected, setSelected] = useState(initialDay);
   /** what the title shows — follows the feeds' scroll */
   const [visibleMonth, setVisibleMonth] = useState(() =>
@@ -315,10 +322,21 @@ function Calendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // bring the off-screen altitudes in just after the arrival settles —
+  // past the dock's ink glide (a ~250ms spring), so their build (the
+  // book's rows) lands off the transition and the ink never skips. A
+  // fixed beat, not requestIdleCallback: idle can fall mid-animation on
+  // a fast device, which is exactly when we must not mount.
+  useEffect(() => {
+    const id = setTimeout(() => setWarm(true), 350);
+    return () => clearTimeout(id);
+  }, []);
+
   /* ── the zoom: one camera move between altitudes ──────────────── */
 
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
     if (zooming.current) return;
+    setWarm(true); // a camera move needs both layers mounted now
     zooming.current = true;
     setZoom({ from, to, anchor });
     setView(to);
@@ -1461,20 +1479,22 @@ function Calendar() {
             (zoom || !showMonthLayer) && "pointer-events-none",
           )}
         >
-          <MonthFeed
-            handleRef={monthFeedRef}
-            active={view === "month" && !zoom}
-            frozen={!showMonthLayer}
-            today={today}
-            span={monthSpan}
-            counts={counts}
-            selected={selected}
-            onPick={pick}
-            onVisible={(m) => {
-              setVisibleMonth(m);
-              setVisibleYear(m.getFullYear());
-            }}
-          />
+          {(view === "month" || warm) && (
+            <MonthFeed
+              handleRef={monthFeedRef}
+              active={view === "month" && !zoom}
+              frozen={!showMonthLayer}
+              today={today}
+              span={monthSpan}
+              counts={counts}
+              selected={selected}
+              onPick={pick}
+              onVisible={(m) => {
+                setVisibleMonth(m);
+                setVisibleYear(m.getFullYear());
+              }}
+            />
+          )}
         </div>
         <div
           ref={yearLayerRef}
@@ -1485,16 +1505,18 @@ function Calendar() {
             (zoom || !showYearLayer) && "pointer-events-none",
           )}
         >
-          <YearFeed
-            handleRef={yearFeedRef}
-            active={view === "year" && !zoom}
-            frozen={!showYearLayer}
-            today={today}
-            years={glanceYears}
-            counts={counts}
-            onPickMonth={pickMonth}
-            onVisible={setVisibleYear}
-          />
+          {(view === "year" || warm) && (
+            <YearFeed
+              handleRef={yearFeedRef}
+              active={view === "year" && !zoom}
+              frozen={!showYearLayer}
+              today={today}
+              years={glanceYears}
+              counts={counts}
+              onPickMonth={pickMonth}
+              onVisible={setVisibleYear}
+            />
+          )}
         </div>
         <div
           ref={scheduleLayerRef}
@@ -1511,15 +1533,17 @@ function Calendar() {
             (zoom || !showScheduleLayer) && "pointer-events-none",
           )}
         >
-          <ScheduleFeed
-            handleRef={scheduleFeedRef}
-            active={view === "schedule" && !zoom}
-            today={today}
-            selected={selected}
-            all={all}
-            onVisible={onScheduleDay}
-            onOpen={openEntry}
-          />
+          {(view === "schedule" || warm) && (
+            <ScheduleFeed
+              handleRef={scheduleFeedRef}
+              active={view === "schedule" && !zoom}
+              today={today}
+              selected={selected}
+              all={all}
+              onVisible={onScheduleDay}
+              onOpen={openEntry}
+            />
+          )}
         </div>
         <div
           ref={entryLayerRef}
@@ -1535,7 +1559,7 @@ function Calendar() {
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
         >
-          <EntryView snippet={focused} />
+          {(view === "entry" || warm) && <EntryView snippet={focused} />}
         </div>
         {/* the filtered book: while a query stands, the stage shows the
             schedule of matching pages — same ledger, same tiles, only
