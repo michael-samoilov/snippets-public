@@ -218,13 +218,15 @@ The stage is **one fixed frame at every altitude**: it fills the page
 column, the same distance from the sheet's bottom as the header stands
 from its top. Every scrollable surface marks its own terminus with the
 **standard scroll terminus** (`useScrollEdges` + `ScrollTerminus`): a
-hairline pinned at the foot while the surface can scroll, clearing
-once everything fits, so a boundary is drawn only when there's more to
-reach. It tucks a hair of solid paper just beneath its line to seal
-the scroller's fractional bottom, so no scrolled content peeks under
-the terminus. (Soft edge-fades were tried and removed — the texture's
-own gradient made them read as bands against the sheet; the bare
-hairline is the cleaner mark.) The entry card, the book, and the
+hairline pinned at the foot edge while more content lies below it,
+clearing once the last of it is in view (or everything already fit),
+so the line is drawn only when there's more to reach. It sits on the
+very bottom edge with the content clipping beneath it and nothing
+below — an overscroll rubber-band reveals only the bare sheet. (Soft
+edge-fades, and a paper cap to seal the scroller's fractional bottom,
+were both tried and removed — the texture made the fades read as
+bands, and the cap flashed on overscroll; the bare hairline is the
+cleaner mark.) The entry card, the book, and the
 month/year canvases each carry it; the frame's own old line is retired
 so the two never double up. The feeds' floors are laid out,
 not measured — a px container to the last offset plus a `min-h-full`

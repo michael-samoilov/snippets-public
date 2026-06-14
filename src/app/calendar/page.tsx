@@ -1895,7 +1895,7 @@ function MonthFeedBase({
           }}
         />
       )}
-      <ScrollTerminus show={edges.top || edges.bottom} />
+      <ScrollTerminus show={edges.bottom} />
     </div>
   );
 }
@@ -2324,7 +2324,7 @@ function YearFeedBase({
           }}
         />
       )}
-      <ScrollTerminus show={edges.top || edges.bottom} />
+      <ScrollTerminus show={edges.bottom} />
     </div>
   );
 }
@@ -2636,7 +2636,7 @@ function ScheduleFeed({
       tabIndex={-1}
     >
       {body}
-      <ScrollTerminus show={edges.top || edges.bottom} />
+      <ScrollTerminus show={edges.bottom} />
     </div>
   );
 }
@@ -2699,10 +2699,11 @@ function ScheduleCards({
 
 /* ── scroll terminus: the foot hairline ──────────────────────────
    The one standard treatment for a scrollable container's end. A
-   hairline marks the foot while the container can scroll and clears
-   once everything fits, so a boundary is shown only when there's more
-   to reach. `useScrollEdges` watches the container; the sticky piece
-   drops in as the last child of the scroller itself. */
+   hairline marks the foot while more content lies below it, and clears
+   once the last of it is in view (or everything already fit), so the
+   line is shown only when there's more to reach. `useScrollEdges`
+   watches the container; the sticky piece drops in as the last child
+   of the scroller itself. */
 function useScrollEdges(
   ref: React.RefObject<HTMLElement | null>,
   deps: React.DependencyList = [],
@@ -2755,10 +2756,10 @@ function useScrollEdges(
 }
 
 /** The scroll terminus — last child of the scroller: a hairline pinned
-    at the very foot while the container can scroll, cleared once
-    everything fits. Just the line, sitting on the bottom edge: nothing
-    sits below it, so an overscroll rubber-band reveals only the bare
-    sheet, never a stray fill. */
+    at the very foot while more content lies below, cleared once the
+    last of it is in view. Just the line, sitting on the bottom edge:
+    nothing sits below it, so an overscroll rubber-band reveals only the
+    bare sheet, never a stray fill. */
 function ScrollTerminus({ show }: { show: boolean }) {
   return (
     <div
@@ -2821,10 +2822,9 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // the standard scroll terminus: a scrollable entry carries the foot
-  // hairline, a short one that fits its words shows nothing
+  // the standard scroll terminus: the foot hairline shows while more
+  // words lie below, and clears at the last line (or if they all fit)
   const edges = useScrollEdges(contentRef, [editing, draft]);
-  const scrollable = edges.top || edges.bottom;
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -2949,7 +2949,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         />
         {/* the scroll terminus — a hairline at the foot while the words
             run on below; it clears once the entry fits */}
-        <ScrollTerminus show={scrollable} />
+        <ScrollTerminus show={edges.bottom} />
       </div>
       <div
         data-entry-foot
