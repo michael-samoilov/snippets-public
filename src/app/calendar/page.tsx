@@ -1390,7 +1390,7 @@ function Calendar() {
         ref={stageRef}
         className={cn(
           // every feed now carries its own scroll terminus (the standard
-          // hairline + fade), so the frame's own line is retired — the
+          // foot hairline), so the frame's own line is retired — the
           // border stays transparent to hold the 1px the layout expects
           "relative min-h-0 flex-1 overflow-hidden border-b border-transparent",
         )}
@@ -1934,8 +1934,12 @@ const MonthBlock = memo(function MonthBlock({
       <div className="relative" style={{ height: labelRowH }}>
         <span
           data-flymonth={ym(month)}
+          // bottom-[3.25px], not bottom-1: the small-caps have no
+          // descenders, so they ride high in the line box; the nudge
+          // optically centres the lettering between the rail and the
+          // rule rather than centring its (taller) line box
           className={cn(
-            "voice-label absolute bottom-1 text-center text-[0.82rem]",
+            "voice-label absolute bottom-[3.25px] text-center text-[0.82rem]",
             isCurrent ? "text-wax" : "text-ink-soft",
           )}
           style={{ left: leadingBlanks * cell, width: cell }}
@@ -2750,24 +2754,17 @@ function useScrollEdges(
   return edges;
 }
 
-/** The scroll terminus — last child of the scroller: a hairline that
-    marks the foot while the container can scroll, and clears once
-    everything fits. The scroller's height is fractional, so the sticky
-    line lands a sub-pixel above the real clip; a solid cap tucked just
-    beneath it seals that sliver so no scrolled content can peek under
-    the line. */
+/** The scroll terminus — last child of the scroller: a hairline pinned
+    at the very foot while the container can scroll, cleared once
+    everything fits. Just the line, sitting on the bottom edge: nothing
+    sits below it, so an overscroll rubber-band reveals only the bare
+    sheet, never a stray fill. */
 function ScrollTerminus({ show }: { show: boolean }) {
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px"
     >
-      <div
-        className={cn(
-          "absolute inset-x-0 top-full h-2 bg-paper transition-opacity duration-200",
-          show ? "opacity-100" : "opacity-0",
-        )}
-      />
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200",
@@ -2824,8 +2821,8 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // the scroll terminus is the standard hairline + dynamic fade; a
-  // scrollable entry carries it, a short one that fits shows nothing
+  // the standard scroll terminus: a scrollable entry carries the foot
+  // hairline, a short one that fits its words shows nothing
   const edges = useScrollEdges(contentRef, [editing, draft]);
   const scrollable = edges.top || edges.bottom;
 
@@ -2909,13 +2906,12 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
           }
         }}
         aria-label={editing ? undefined : "Rewrite this entry"}
-        className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]",
-          // a scrolling entry keeps a little room below its last line
-          // (the bottom selection handle lives inside the clip); a short
-          // one that fits sits close to the foot
-          edges.bottom ? "pb-2.5" : "pb-1.5",
-        )}
+        // flex-initial (basis auto), NOT flex-1 (basis 0): the card is
+        // max-h, so a short entry must size to its words and show them
+        // all; only a long one shrinks to fill the stage and scrolls.
+        // No bottom padding, so the terminus hairline rides the true
+        // bottom edge and the words clip cleanly beneath it.
+        className="relative min-h-0 flex-initial overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]"
         style={{ scrollbarWidth: "none" }}
       >
         {!editing && <SnippetEntry snippet={snippet} dense />}
@@ -2962,13 +2958,10 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         className="shrink-0"
       >
         <div
-          className={cn(
-            "flex items-center px-3 pb-3",
-            // when there's no terminus hairline, the buttons can sit
-            // closer up to the words
-            scrollable ? "pt-2.5" : "pt-1",
-            "justify-between",
-          )}
+          // constant padding: the foot never changes the card's height
+          // as the terminus comes and goes (it sets the gap from the
+          // words/hairline down to the marks)
+          className="flex items-center justify-between px-3 pb-3 pt-2.5"
         >
           {/* the confirm quill is always mounted so it can FADE in and
               out — when a keyboard dismissal ends the edit it dissolves
