@@ -61,8 +61,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             diagonal swipe — the page then sits "clipped" at scrollLeft>0
             -mx/px cancel visually but move the clip boundary out, so focus
             rings and selection shadows at the content edge survive the
-            scroll container (the Settings swatch ring was shorn) */}
-        <SheetScroll className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-4 sm:pb-6 [scrollbar-width:none]">
+            scroll container (the Settings swatch ring was shorn).
+            mb (not pb) for the bottom gap: a sticky foot is constrained
+            to the content box, so bottom padding would leave a strip of
+            scrollport below the terminus where content shows past it —
+            a margin ends the scroller exactly at the line instead. */}
+        <SheetScroll className="-mx-2 mb-4 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 sm:mb-6 [scrollbar-width:none]">
           {children}
         </SheetScroll>
       </Sheet>
