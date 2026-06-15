@@ -13,6 +13,7 @@ import {
   type SpeechSegment,
 } from "@/hooks/use-speech";
 import { StampMark } from "@/components/stamp-mark";
+import { WaxStamp } from "@/components/capture/wax-stamp";
 import { cn } from "@/lib/utils";
 
 function joinText(a: string, b: string): string {
@@ -127,7 +128,8 @@ export function Capture() {
       el.value = "";
       autosize(el);
     }
-    navigator.vibrate?.(8);
+    // a tick on press, then a firmer thud timed to the wax landing (~300ms)
+    navigator.vibrate?.([6, 294, 14]);
     // the confirmation stamps beside the action, not in a toast
     setStampCount((n) => n + 1);
     setStampVisible(true);
@@ -146,7 +148,8 @@ export function Capture() {
 
   return (
     <section aria-label="Capture a snippet">
-      {/* the writing surface */}
+      {/* the writing surface, and the seal a keep presses onto it */}
+      <div className="relative">
       {liveWords ? (
         <div
           aria-live="polite"
@@ -204,6 +207,21 @@ export function Capture() {
           className="voice-prose min-h-[5.75rem] w-full resize-none overflow-hidden bg-transparent pt-1 text-[1.125rem] outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
         />
       )}
+
+      {/* the keep seals the page: the same wax, caught mid-press */}
+      <AnimatePresence>
+        {stampVisible && (
+          <motion.div
+            key={stampCount}
+            aria-hidden="true"
+            exit={{ opacity: 0, transition: { duration: 0.18 } }}
+            className="pointer-events-none absolute inset-0 z-20 grid place-items-center"
+          >
+            <WaxStamp playKey={stampCount} size={96} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div>
 
       {/* controls */}
       <div className="mt-4 flex items-center gap-4 border-t border-rule-faint pt-4">
