@@ -23,14 +23,22 @@ export function useScrollEdges(
   deps: DependencyList = [],
 ): { top: boolean; bottom: boolean } {
   const [edges, setEdges] = useState({ top: false, bottom: false });
-  // the container's heights only change on resize or a content change
-  // (the deps); caching them keeps the scroll path off layout entirely
-  const sizeRef = useRef({ scrollH: 0, clientH: 0 });
+  // the scroll content's height changes only on resize or a content
+  // change (the deps), so it's cached — that keeps the heavy read
+  // (scrollHeight, which can force a layout of a long feed) off the
+  // scroll path
+  const scrollHRef = useRef(0);
   const rafRef = useRef(0);
   const compute = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const { scrollH, clientH } = sizeRef.current;
+    // clientHeight is read live — it's a cheap box read, the same kind
+    // as the scrollTop just below. iOS grows the scroller as the address
+    // bar hides on the way down, *after* the cache was taken; a stale
+    // height would leave the foot lit at the very bottom (and only clear
+    // on overscroll), so the viewport height must be current here.
+    const clientH = el.clientHeight;
+    const scrollH = scrollHRef.current;
     const can = scrollH > clientH + 1;
     const top = el.scrollTop > 1;
     const bottom = can && el.scrollTop + clientH < scrollH - 1;
@@ -39,7 +47,7 @@ export function useScrollEdges(
   const refresh = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    sizeRef.current = { scrollH: el.scrollHeight, clientH: el.clientHeight };
+    scrollHRef.current = el.scrollHeight;
     compute();
   }, [compute, ref]);
   // scroll only reads scrollTop, and only once per frame — never a
