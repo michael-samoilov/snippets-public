@@ -16,21 +16,21 @@ function readNum(key: string, fallback: number): number {
 }
 
 const DEFAULTS: WaxTuning = {
-  dur: 0.52,
-  dropY: 15,
-  startScale: 0.4,
-  squashX: 1.18,
-  squashY: 0.82,
-  rotate: 3,
+  dur: 0.6,
+  spreadFrom: 0.84,
+  domeFrom: 1.12,
+  squashY: 0.86,
+  pressAt: 0.46,
+  dwellAt: 0.6,
 };
 
 const KNOBS: Array<{ key: keyof WaxTuning; min: number; max: number; step: number }> = [
-  { key: "dur", min: 0.3, max: 1.0, step: 0.02 },
-  { key: "dropY", min: 0, max: 40, step: 1 },
-  { key: "startScale", min: 0.1, max: 0.9, step: 0.05 },
-  { key: "squashX", min: 1.0, max: 1.4, step: 0.01 },
-  { key: "squashY", min: 0.6, max: 1.0, step: 0.01 },
-  { key: "rotate", min: 0, max: 12, step: 0.5 },
+  { key: "dur", min: 0.3, max: 1.2, step: 0.02 },
+  { key: "spreadFrom", min: 0.5, max: 1.0, step: 0.02 },
+  { key: "domeFrom", min: 1.0, max: 1.35, step: 0.02 },
+  { key: "squashY", min: 0.65, max: 1.0, step: 0.01 },
+  { key: "pressAt", min: 0.25, max: 0.7, step: 0.02 },
+  { key: "dwellAt", min: 0.4, max: 0.88, step: 0.02 },
 ];
 
 export default function StampLab() {

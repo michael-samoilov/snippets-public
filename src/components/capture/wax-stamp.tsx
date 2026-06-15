@@ -4,50 +4,49 @@ import { motion, useReducedMotion, type Transition } from "motion/react";
 import { cn } from "@/lib/utils";
 
 /* ── the wax stamp ────────────────────────────────────────────────
-   The seal we already have (the record button's blue wax) caught in the
-   act of pressing: it falls onto the page, grows, lands with a squash,
-   and the impressed "S" sets as the wax cools. The same material as
-   `Seal` — radial face, grooved rim, a colored shadow sitting proud —
-   so a keep reads as the same seal, transformed.
+   Not a coin that drops and bounces — wax that is pressed. Wax is
+   plastic, not elastic: it deforms and stays. So the motion is a press,
+   in three acts:
 
-   Built from transform/opacity/filter only. The drop shadow is its own
-   layer (never an animated box-shadow); the impact ripple reuses the
-   `seal-ring` motif. A keep is a once-a-thought celebration, so it runs
-   ~520ms — longer than the 260ms UI budget by intent, the way the
-   reference does, but every meaningful beat lands by ~460ms. Replays
-   when `playKey` changes; collapses to a plain fade under reduced
-   motion. */
+     1. a molten blob sits on the page — domed, glossy, no impression
+     2. the die comes down: the blob is driven flat and spreads outward
+        (it accelerates in and stops hard — no rebound), held a beat
+        under pressure while it darkens in the die's shadow
+     3. the die lifts: the impression (the rim groove and the "S") is
+        revealed as it clears, the gloss cools to satin, the wax relaxes
+        up to its set height and holds
 
-const EASE_OUT = [0.23, 1, 0.32, 1] as const;
-const EASE_IMPACT = [0.45, 0, 0.2, 1] as const; // snappier press
+   The same wax material as the record `Seal`. Built from transform/
+   opacity/filter only; reuses the wax tokens; collapses to a plain fade
+   under reduced motion. Replays when `playKey` changes. */
+
+const EASE_PLACE = [0.23, 1, 0.32, 1] as const; // the blob arriving
+const EASE_PRESS = [0.5, 0, 0.85, 0.28] as const; // weighty, accelerates, hard stop
+const EASE_LIFT = [0.16, 1, 0.3, 1] as const; // die withdraws, wax settles (no overshoot)
 
 export type WaxTuning = {
-  /** total seconds of the press (entrance → settle). */
+  /** total seconds of the press. */
   dur: number;
-  /** px the seal falls from. */
-  dropY: number;
-  /** scale it appears at (never 0). */
-  startScale: number;
-  /** widest stretch at impact. */
-  squashX: number;
-  /** flattest squash at impact. */
+  /** start diameter (scaleX) of the molten blob. */
+  spreadFrom: number;
+  /** start height (scaleY) of the domed blob. */
+  domeFrom: number;
+  /** flattest scaleY at peak pressure. */
   squashY: number;
-  /** peak hand-stamped tilt, degrees. */
-  rotate: number;
+  /** fraction of `dur` where the die seats. */
+  pressAt: number;
+  /** fraction of `dur` where the die starts to lift. */
+  dwellAt: number;
 };
 
 const DEFAULTS: WaxTuning = {
-  dur: 0.52,
-  dropY: 15,
-  startScale: 0.4,
-  squashX: 1.18,
-  squashY: 0.82,
-  rotate: 3,
+  dur: 0.6,
+  spreadFrom: 0.84,
+  domeFrom: 1.12,
+  squashY: 0.86,
+  pressAt: 0.46,
+  dwellAt: 0.6,
 };
-
-// proportional beats (fractions of `dur`): appear, grown-at-paper,
-// impact squash, rebound, settle
-const T = [0, 0.12, 0.58, 0.73, 0.85, 1] as const;
 
 export type WaxStampProps = {
   /** increment once per keep; any change replays the press. */
@@ -71,55 +70,64 @@ export function WaxStamp({
   const reduce = useReducedMotion();
   const t = { ...DEFAULTS, ...tuning };
 
-  // shared transition for the body's keyframe arrays
+  // the press timeline: place · seat · dwell · set
+  const TT = [0, 0.12, t.pressAt, t.dwellAt, 1];
+  const segEase = [EASE_PLACE, EASE_PRESS, "linear", EASE_LIFT] as const;
+
+  // ── the wax body: spreads wide and flat under the die, then relaxes
+  // up to its set height. scaleX is monotonic (it spreads and stays);
+  // scaleY squishes then relaxes — neither crosses its rest value, so
+  // there is no bounce.
   const bodyTransition: Transition = reduce
-    ? { duration: 0.12, ease: "linear" }
-    : {
-        duration: t.dur,
-        times: [...T],
-        ease: [EASE_OUT, EASE_OUT, EASE_IMPACT, EASE_OUT, EASE_OUT],
-      };
-
+    ? { duration: 0.14, ease: "linear" }
+    : { duration: t.dur, times: TT, ease: [...segEase] };
   const body = reduce
-    ? { opacity: [0, 1] }
+    ? { opacity: [0, 1], scaleX: 1, scaleY: 1, y: 0, filter: "blur(0px)" }
     : {
-        opacity: [0, 1, 1, 1, 1, 1],
-        y: [-t.dropY, -t.dropY * 0.7, 0, 2, 0, 0],
-        scaleX: [t.startScale, t.startScale * 1.5, 1.06, t.squashX, 0.97, 1],
-        scaleY: [t.startScale, t.startScale * 1.5, 1.06, t.squashY, 1.04, 1],
-        rotate: [-t.rotate, -t.rotate * 0.66, -0.5, t.rotate * 0.33, 0.3, 0],
-        filter: [
-          "blur(2px)",
-          "blur(1px)",
-          "blur(0px)",
-          "blur(0px)",
-          "blur(0px)",
-          "blur(0px)",
-        ],
+        opacity: [0, 1, 1, 1, 1],
+        scaleX: [t.spreadFrom, t.spreadFrom + 0.02, 1, 1, 1],
+        scaleY: [t.domeFrom, t.domeFrom - 0.02, t.squashY, t.squashY, 1],
+        y: [0, 0, 1.5, 1.5, 0],
+        filter: ["blur(1.2px)", "blur(0.6px)", "blur(0px)", "blur(0px)", "blur(0px)"],
       };
 
-  // the "S" sets after the disc lands (the reference's "emboss resolves")
-  const faceTransition: Transition = reduce
-    ? { duration: 0.12, ease: "linear" }
-    : { duration: t.dur, times: [0, 0.55, 0.9], ease: EASE_OUT };
-  const face = reduce
-    ? { opacity: [0, 1] }
+  // ── the die's shadow: the wax darkens as the die seats over it, and
+  // brightens as it withdraws (the reveal)
+  const dieTransition: Transition = reduce
+    ? { duration: 0.14, ease: "linear" }
+    : { duration: t.dur, times: TT, ease: [...segEase] };
+  const die = reduce
+    ? { opacity: 0 }
+    : { opacity: [0, 0.08, 0.34, 0.34, 0] };
+
+  // ── the impression: rim groove + the "S", revealed as the die lifts
+  const reliefTransition: Transition = reduce
+    ? { duration: 0.14, ease: "linear" }
+    : { duration: t.dur, times: [0, t.dwellAt, 0.95], ease: EASE_LIFT };
+  const relief = reduce
+    ? { opacity: [0, 1], scale: 1, filter: "blur(0px)" }
     : {
         opacity: [0, 0, 1],
-        scale: [1.04, 1.04, 1],
-        filter: ["blur(1.5px)", "blur(1.5px)", "blur(0px)"],
+        scale: [1.05, 1.05, 1],
+        filter: ["blur(1.6px)", "blur(1.6px)", "blur(0px)"],
       };
 
-  // contact shadow: grows with the fall, spreads at impact, settles soft
+  // ── the gloss: wet molten wax cools to a satin set
+  const specTransition: Transition = reduce
+    ? { duration: 0.14, ease: "linear" }
+    : { duration: t.dur, times: [0, t.pressAt, 1], ease: EASE_LIFT };
+  const spec = reduce ? { opacity: 0.38 } : { opacity: [0.62, 0.52, 0.38] };
+
+  // ── the contact shadow spreads under pressure and stays spread
   const shadowTransition: Transition = reduce
-    ? { duration: 0.12, ease: "linear" }
-    : { duration: t.dur, times: [0, 0.58, 0.73, 1], ease: EASE_OUT };
+    ? { duration: 0.14, ease: "linear" }
+    : { duration: t.dur, times: TT, ease: [...segEase] };
   const shadow = reduce
-    ? { opacity: [0, 0.45] }
+    ? { opacity: [0, 0.42], scaleX: 1, scaleY: 1 }
     : {
-        opacity: [0.22, 0.5, 0.62, 0.45],
-        scaleX: [0.4, 1, 1.25, 1],
-        scaleY: [0.4, 1, 1.1, 1],
+        opacity: [0.18, 0.26, 0.55, 0.55, 0.42],
+        scaleX: [0.7, 0.74, 1.16, 1.16, 1.06],
+        scaleY: [0.6, 0.64, 1.12, 1.12, 1.02],
       };
 
   return (
@@ -127,21 +135,16 @@ export function WaxStamp({
       key={playKey}
       aria-hidden="true"
       className={cn("relative grid place-items-center", className)}
-      style={{
-        width: size,
-        height: size,
-        overflow: "visible",
-        isolation: "isolate",
-      }}
+      style={{ width: size, height: size, overflow: "visible", isolation: "isolate" }}
     >
       {/* contact / drop shadow — its own layer, static blur */}
       <motion.span
         className="pointer-events-none absolute rounded-full"
         style={{
           left: "50%",
-          top: "76%",
-          width: "72%",
-          height: "16%",
+          top: "78%",
+          width: "74%",
+          height: "15%",
           x: "-50%",
           background: "var(--wax-shadow)",
           filter: "blur(6px)",
@@ -152,32 +155,14 @@ export function WaxStamp({
         transition={shadowTransition}
       />
 
-      {/* impact ripple — wax squeezing out (reuses the seal-ring feel) */}
-      {!reduce && (
-        <motion.span
-          className="pointer-events-none absolute inset-0 rounded-full"
-          style={{
-            border: "1.5px solid var(--wax-faint)",
-            transformOrigin: "center",
-            willChange: "transform, opacity",
-          }}
-          animate={{ scale: [0.85, 0.85, 0.95, 1.6], opacity: [0, 0, 0.5, 0] }}
-          transition={{
-            duration: t.dur,
-            times: [0, 0.55, 0.64, 1],
-            ease: EASE_OUT,
-          }}
-        />
-      )}
-
-      {/* the seal body: disc + grooved rim + the impressed letter */}
+      {/* the wax body */}
       <motion.svg
         viewBox="0 0 100 100"
         className="relative block"
         style={{
           width: "100%",
           height: "100%",
-          transformOrigin: "50% 88%",
+          transformOrigin: "50% 92%",
           willChange: "transform, filter, opacity",
         }}
         animate={body}
@@ -189,50 +174,59 @@ export function WaxStamp({
             <stop offset="46%" stopColor="var(--wax)" />
             <stop offset="100%" stopColor="var(--wax-deep)" />
           </radialGradient>
-          {/* roundness: top highlight fading to a lower-edge shadow */}
           <linearGradient id="wax-relief" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgb(255 255 255 / 0.28)" />
             <stop offset="32%" stopColor="rgb(255 255 255 / 0)" />
             <stop offset="68%" stopColor="rgb(0 0 0 / 0)" />
             <stop offset="100%" stopColor="rgb(0 0 0 / 0.22)" />
           </linearGradient>
-          {/* a soft specular catch, upper-left (a radial — no filter) */}
           <radialGradient id="wax-spec" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="rgb(255 255 255 / 0.5)" />
             <stop offset="100%" stopColor="rgb(255 255 255 / 0)" />
           </radialGradient>
+          {/* the die's shadow falls from above */}
+          <linearGradient id="wax-die" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(0 0 0 / 0.6)" />
+            <stop offset="62%" stopColor="rgb(0 0 0 / 0)" />
+          </linearGradient>
         </defs>
 
-        {/* proud base — the wax squeezed past the die */}
+        {/* proud base — wax squeezed past the die (spreads with the body) */}
         <circle cx="50" cy="50" r="48" fill="var(--wax-deep)" />
         {/* lit face */}
         <circle cx="50" cy="50" r="46.5" fill="url(#wax-face)" />
-        {/* relief overlay (top highlight + bottom shadow) */}
+        {/* roundness */}
         <circle cx="50" cy="50" r="46.5" fill="url(#wax-relief)" />
-        {/* specular catch-light, upper-left */}
-        <ellipse cx="37" cy="31" rx="21" ry="14" fill="url(#wax-spec)" />
-        {/* grooved rim: a recessed ring with an inner top highlight */}
-        <circle
-          cx="50"
-          cy="50"
-          r="39"
-          fill="none"
-          stroke="var(--wax-deep)"
-          strokeWidth="2.5"
-          opacity="0.45"
+        {/* specular catch-light, cooling wet → satin */}
+        <motion.ellipse
+          cx="37"
+          cy="31"
+          rx="21"
+          ry="14"
+          fill="url(#wax-spec)"
+          animate={spec}
+          transition={specTransition}
         />
-        <circle
+        {/* the die's shadow over the wax while it is seated */}
+        <motion.circle
           cx="50"
           cy="50"
-          r="37.6"
-          fill="none"
-          stroke="var(--press-highlight)"
-          strokeWidth="1"
+          r="46.5"
+          fill="url(#wax-die)"
+          animate={die}
+          transition={dieTransition}
         />
 
-        {/* the impressed "S" — light glyph on wax (as StampMark's mark),
-            with a soft shadow below-right so it sits proud */}
-        <motion.g animate={face} transition={faceTransition} style={{ transformOrigin: "center" }}>
+        {/* the impression: rim groove + the "S", revealed on the lift */}
+        <motion.g
+          animate={relief}
+          transition={reliefTransition}
+          style={{ transformOrigin: "center" }}
+        >
+          {/* grooved rim: a recessed ring with an inner top highlight */}
+          <circle cx="50" cy="50" r="39" fill="none" stroke="var(--wax-deep)" strokeWidth="2.5" opacity="0.45" />
+          <circle cx="50" cy="50" r="37.6" fill="none" stroke="var(--press-highlight)" strokeWidth="1" />
+          {/* the "S" — light glyph (as StampMark's mark), shadow below-right */}
           <text
             x="50.8"
             y="51.2"
