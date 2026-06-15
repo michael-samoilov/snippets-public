@@ -189,6 +189,37 @@ export function WaxStamp({
             <stop offset="0%" stopColor="rgb(0 0 0 / 0.6)" />
             <stop offset="62%" stopColor="rgb(0 0 0 / 0)" />
           </linearGradient>
+          {/* a real bevel: the letter is the same wax, raised and lit
+              from the upper-left — a crevice shadow lower-right, a
+              specular highlight on the lit edges. No contrasting fill;
+              the impression reads through light alone, as pressed wax
+              does. */}
+          <filter id="wax-emboss" x="-35%" y="-35%" width="170%" height="170%">
+            {/* crevice shadow the raised letter casts into the field */}
+            <feGaussianBlur in="SourceAlpha" stdDeviation="0.9" result="sb" />
+            <feOffset in="sb" dx="0.5" dy="0.9" result="so" />
+            <feFlood floodColor="#091420" floodOpacity="0.55" result="sc" />
+            <feComposite in="sc" in2="so" operator="in" result="cast" />
+            {/* a slope from the letter's alpha, lit from upper-left */}
+            <feGaussianBlur in="SourceAlpha" stdDeviation="1.2" result="slope" />
+            <feSpecularLighting
+              in="slope"
+              surfaceScale="3"
+              specularConstant="0.8"
+              specularExponent="13"
+              lightingColor="#ffffff"
+              result="hi"
+            >
+              <feDistantLight azimuth="225" elevation="58" />
+            </feSpecularLighting>
+            <feComposite in="hi" in2="SourceAlpha" operator="in" result="hiClip" />
+            {/* stack: cast shadow · the wax letter · the lit edges */}
+            <feMerge>
+              <feMergeNode in="cast" />
+              <feMergeNode in="SourceGraphic" />
+              <feMergeNode in="hiClip" />
+            </feMerge>
+          </filter>
         </defs>
 
         {/* proud base — wax squeezed past the die (spreads with the body) */}
@@ -226,24 +257,14 @@ export function WaxStamp({
           {/* grooved rim: a recessed ring with an inner top highlight */}
           <circle cx="50" cy="50" r="39" fill="none" stroke="var(--wax-deep)" strokeWidth="2.5" opacity="0.45" />
           <circle cx="50" cy="50" r="37.6" fill="none" stroke="var(--press-highlight)" strokeWidth="1" />
-          {/* the "S" — light glyph (as StampMark's mark), shadow below-right */}
-          <text
-            x="50.8"
-            y="51.2"
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="var(--wax-deep)"
-            opacity="0.5"
-            style={{ fontFamily: "var(--font-serif)", fontWeight: 600, fontSize: 58 }}
-          >
-            {glyph}
-          </text>
+          {/* the "S", raised in the same wax and lit from upper-left */}
           <text
             x="50"
             y="50"
             textAnchor="middle"
             dominantBaseline="central"
-            fill="var(--paper-raised)"
+            fill="url(#wax-face)"
+            filter="url(#wax-emboss)"
             style={{ fontFamily: "var(--font-serif)", fontWeight: 600, fontSize: 58 }}
           >
             {glyph}
