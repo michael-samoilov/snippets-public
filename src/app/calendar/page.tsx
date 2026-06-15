@@ -1634,8 +1634,10 @@ function Calendar() {
                             <button
                               type="button"
                               onClick={() => openEntryFromSearch(s)}
+                              // isolate: bake the marked ink's blend so the
+                              // filtered book scrolls without re-blending
                               className={cn(
-                                "pressable block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                                "pressable isolate block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
                                 "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
                               )}
                             >
@@ -2753,8 +2755,13 @@ function ScheduleCards({
               type="button"
               data-entry={s.id}
               onClick={() => onOpen(s.id)}
+              // isolate: the card's ink multiplies into its own opaque
+              // paper (the texture is occluded), so the blend is constant
+              // — isolating it lets the browser bake it once and translate
+              // on scroll instead of re-blending the prose every frame
+              // against the fixed sheet (the book's scroll-start jank)
               className={cn(
-                "pressable block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                "pressable isolate block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
                 "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
               )}
             >
