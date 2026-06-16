@@ -61,18 +61,19 @@ type Beat = {
 // Nothing crosses its rest value, so there is no bounce.
 function stateAt(t: number): Beat {
   // the bead grows, then the wax spreads outward (uniformly) as the die
-  // presses on the z-axis — a radial spread, never a vertical squash.
+  // presses on the z-axis — a radial spread, never a vertical squash. The
+  // coin forms first; the impression then presses in gradually.
   const grow = eo(win(t, 0, 0.22));
-  const s = lp(0.12, 0.86, grow) + 0.14 * sm(win(t, 0.22, 0.46));
+  const s = lp(0.12, 0.86, grow) + 0.14 * sm(win(t, 0.22, 0.5));
   const dy = lp(-98, 0, eo(win(t, 0, 0.26)));
   return {
     sx: s,
     sy: s,
     dy,
-    ballO: 1 - win(t, 0.24, 0.36),
-    sealO: win(t, 0.26, 0.38),
-    embO: win(t, 0.38, 0.52),
-    es: lp(0.86, 1, sm(win(t, 0.38, 0.58))),
+    ballO: 1 - win(t, 0.3, 0.44),
+    sealO: win(t, 0.32, 0.46),
+    embO: win(t, 0.48, 0.68),
+    es: lp(0.82, 1, sm(win(t, 0.48, 0.72))),
   };
 }
 
@@ -137,7 +138,7 @@ export function WaxStamp({
     }
     let raf = 0;
     const t0 = performance.now();
-    const DUR = 900;
+    const DUR = 1020;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
       if (t >= 1) {
