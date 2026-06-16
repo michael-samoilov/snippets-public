@@ -73,7 +73,7 @@ type Beat = { s: number; dy: number; ballO: number; sealO: number; lobe: number;
 // vertical squash: the die presses on z, so the wax spreads radially.
 function stateAt(t: number): Beat {
   const grow = eo(win(t, 0.05, 0.22));
-  const s = lp(0.12, 0.4, grow) + 0.6 * sm(win(t, 0.2, 0.4));
+  const s = lp(0.1, 0.34, grow) + 0.66 * sm(win(t, 0.2, 0.4));
   const dy = lp(-98, 0, eo(win(t, 0, 0.3)));
   const press = win(t, 0.42, 1.0);
   return {
@@ -176,11 +176,11 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           </clipPath>
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="2.8" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="8" specularConstant="0.85" specularExponent="9" lightingColor="#eaf1ff" result="sp">
+            <feGaussianBlur in="ht" stdDeviation="3.2" result="hb" />
+            <feSpecularLighting in="hb" surfaceScale="7" specularConstant="0.8" specularExponent="9" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="37" />
             </feSpecularLighting>
-            <feDiffuseLighting in="hb" surfaceScale="8" diffuseConstant="1.5" lightingColor={lit} result="df">
+            <feDiffuseLighting in="hb" surfaceScale="7" diffuseConstant="1.55" lightingColor={lit} result="df">
               <feDistantLight azimuth="235" elevation="37" />
             </feDiffuseLighting>
             <feColorMatrix in="df" type="saturate" values="1.18" result="dfR" />
