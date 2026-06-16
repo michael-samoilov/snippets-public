@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
 
 // organic lobe harmonics: blob radius = R·(1 + lobe·Σ a·cos(kθ+p))
 const HARM: ReadonlyArray<readonly [number, number, number]> = [
-  [5, 0.0345, 3.4178],
-  [6, 0.0388, 3.7926],
-  [7, 0.0472, 0.4115],
+  [5, 0.052, 3.4178],
+  [6, 0.04, 3.7926],
+  [7, 0.03, 0.4115],
 ];
 const R = 102;
 const M = 216;
@@ -157,11 +157,11 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
       <svg viewBox="-112 -112 224 224" width="100%" height="100%" style={{ overflow: "visible" }}>
         <defs>
           <radialGradient id={`mass-${uid}`} cx="50%" cy="50%" r="56%">
-            <stop offset="0%" stopColor="#b4b4b4" />
-            <stop offset="48%" stopColor="#c2c2c2" />
-            <stop offset="72%" stopColor="#dcdcdc" />
-            <stop offset="87%" stopColor="#f2f2f2" />
-            <stop offset="95%" stopColor="#a6a6a6" />
+            <stop offset="0%" stopColor="#b0b0b0" />
+            <stop offset="50%" stopColor="#bcbcbc" />
+            <stop offset="74%" stopColor="#dcdcdc" />
+            <stop offset="88%" stopColor="#f4f4f4" />
+            <stop offset="95%" stopColor="#aeaeae" />
             <stop offset="100%" stopColor="#1e1e1e" />
           </radialGradient>
           <radialGradient id={`ballS-${uid}`} cx="38%" cy="32%" r="70%">
@@ -177,12 +177,17 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           </clipPath>
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="3.0" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="9" specularConstant="1.1" specularExponent="14" lightingColor="#eaf1ff" result="sp">
-              <feDistantLight azimuth="235" elevation="37" />
+            <feGaussianBlur in="ht" stdDeviation="2.5" result="hb0" />
+            <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="3" result="nz" />
+            <feComponentTransfer in="nz" result="nzl">
+              <feFuncA type="linear" slope="0.008" intercept="0" />
+            </feComponentTransfer>
+            <feComposite in="hb0" in2="nzl" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="hb" />
+            <feSpecularLighting in="hb" surfaceScale="11" specularConstant="1.6" specularExponent="16" lightingColor="#eaf1ff" result="sp">
+              <feDistantLight azimuth="235" elevation="31" />
             </feSpecularLighting>
-            <feDiffuseLighting in="hb" surfaceScale="9" diffuseConstant="1.45" lightingColor={lit} result="df">
-              <feDistantLight azimuth="235" elevation="37" />
+            <feDiffuseLighting in="hb" surfaceScale="11" diffuseConstant="1.34" lightingColor={lit} result="df">
+              <feDistantLight azimuth="235" elevation="31" />
             </feDiffuseLighting>
             <feColorMatrix in="df" type="saturate" values="1.18" result="dfR" />
             <feComponentTransfer in="dfR" result="dfC">
