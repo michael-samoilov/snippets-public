@@ -83,18 +83,20 @@ const DEFAULT_COLORS: Colors = {
   shadow: "#0a1a2e",
 };
 
-type Beat = { scale: number; dome: number; relief: number; lobe: number; o: number };
+type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; o: number };
 function stateAt(t: number): Beat {
-  // physical press (~1.71s), area-conserving in spirit: a low matte puddle sits
-  // until the die contacts it (~t0.13); then the die presses — the field flattens
-  // and the relief emerges (conform), and the displaced wax is pushed outward,
-  // growing the lip + lobes past the die edge (lobe); then it settles and holds.
+  // physical press (~1.71s): a low matte circle, then the die presses. The die
+  // only imprints where it has reached the wax — a contact front (cf) spreading
+  // from the centre outward — so the emblem (centre) appears first and the ridge
+  // (near the die's edge) imprints LAST, not before the edge has touched. The
+  // displaced wax is pushed outward, growing the lip + lobes (lobe); then settles.
   return {
     o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
     scale: 1,                                       // starts full size — no grow
-    dome: 1 - sm(win(t, 0.06, 0.5)),                // ball flattens GRADUALLY (~100–850ms)
-    relief: sm(win(t, 0.09, 0.54)),                 // field/ridge/emboss conform gradually
+    dome: 1 - sm(win(t, 0.06, 0.5)),                // circle flattens gradually (~100–850ms)
+    relief: sm(win(t, 0.09, 0.54)),                 // lip displacement / field conform
     lobe: sm(win(t, 0.12, 0.58)),                   // lip pushed outward, lobes appear gradually
+    cf: (MOAT_R + 0.05) * sm(win(t, 0.08, 0.6)),    // contact front: centre → die edge
   };
 }
 
@@ -166,7 +168,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
       if (k.o <= 0.003) return;
       // one continuous object: a convex wax drop that flattens into the puck and
       // takes the impression — same height-field lighting throughout.
-      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, colors.current);
+      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, k.cf, colors.current);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
       ctx.save();
       ctx.globalAlpha = k.o;
@@ -228,7 +230,7 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
 // compute the lit seal into B.img (alpha 0 outside the silhouette)
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; img: ImageData },
-  dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, col: Colors,
+  dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly;
@@ -248,9 +250,12 @@ function paintSeal(
       const a = clamp((edge + 0.55 - r) / 1.05);
       msk[i] = a;
       if (a <= 0) { hgt[i] = 0; continue; }
+      // contact front: the die has imprinted only out to radius cf (·MR), spreading
+      // from the centre, so the emblem appears first and the ridge imprints last.
+      const cl = clamp((cf + 0.05 - r / MR) / 0.1);
       let h: number;
       if (r < moatR) {
-        h = FIELDH + RIDGE_AMP * relief * Math.exp(-(((r - ridgeR) / ridgeW) ** 2));
+        h = FIELDH + RIDGE_AMP * cl * Math.exp(-(((r - ridgeR) / ridgeW) ** 2));
       } else {
         const t = clamp((r - moatR) / (edge - moatR));
         const crestH = FIELDH + (CREST_BASE + CREST_LUMP * lumpFn(th) - FIELDH) * relief;
@@ -263,7 +268,7 @@ function paintSeal(
         }
       }
       const rn = r / edge;
-      hgt[i] = h + GLYPH_AMP * relief * gly[i] + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - rn * rn));
+      hgt[i] = h + GLYPH_AMP * cl * gly[i] + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - rn * rn));
     }
   }
   // pass 2 — lighting
