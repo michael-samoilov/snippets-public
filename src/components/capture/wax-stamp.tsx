@@ -34,17 +34,17 @@ const LIP_LO = 0.94, LIP_HI = 1.075; // profile → per-lobe lip height 0..1
 const FIELD_R = 0.68, RIDGE_R = 0.745, MOAT_R = 0.8;
 const FIELDH = 0.45;          // field AND moat baseline
 const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
-const CREST_BASE = 0.78, CREST_LUMP = 0.36; // trough crest ≈ ridge; lobes higher
-const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
-const GLYPH_AMP = 0.48;
+const CREST_BASE = 0.82, CREST_LUMP = 0.38; // trough crest ≈ ridge; lobes higher
+const CREST_FRAC = 0.56, OUT_POW = 3.1;     // crest position; donut roll shape
+const GLYPH_AMP = 0.54;
 const DOME_AMP = 8;           // a low rounded circle (button-like), NOT a sphere
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
 const SS = 4.5;               // height→slope: high relief so it reads glossy, not flat
 const LX = -0.52, LY = -0.52, LZ = 0.54;
-const AMBIENT = 0.23, DIFF = 1.05;
-const SPEC_STR = 1.3, SHIN = 18, SPEC_RIM = 3.3, ENV = 0.28, HICAP = 0.99;
+const AMBIENT = 0.19, DIFF = 1.06;
+const SPEC_STR = 1.35, SHIN = 19, SPEC_RIM = 3.7, ENV = 0.33, HICAP = 0.99;
 
 const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const win = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -245,7 +245,7 @@ function paintSeal(
       // silhouette grows from the puddle circle out to the lobed final as the wax
       // is squished outward past the die — the lip and lobes are pushed out.
       const edge = MR * lp(PUD_EDGE, profileAt(th), lobe);
-      const a = clamp((edge + 0.75 - r) / 1.5);
+      const a = clamp((edge + 0.55 - r) / 1.05);
       msk[i] = a;
       if (a <= 0) { hgt[i] = 0; continue; }
       let h: number;
