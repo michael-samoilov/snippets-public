@@ -177,7 +177,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
             <feGaussianBlur in="ht" stdDeviation="8" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="12" specularConstant="1.85" specularExponent="15" lightingColor="#eaf1ff" result="sp">
+            <feSpecularLighting in="hb" surfaceScale="13" specularConstant="2.0" specularExponent="18" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="31" />
             </feSpecularLighting>
             <feDiffuseLighting in="hb" surfaceScale="11" diffuseConstant="1.34" lightingColor={lit} result="df">
