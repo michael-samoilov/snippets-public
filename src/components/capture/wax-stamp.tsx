@@ -92,9 +92,9 @@ function stateAt(t: number): Beat {
   return {
     o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
     scale: 1,                                       // starts full size — no grow
-    dome: 1 - sm(win(t, 0.14, 0.21)),               // ball flattens to a disc by ~360ms
-    relief: clamp(0.92 * eo(win(t, 0.165, 0.29)) + 0.08 * sm(win(t, 0.3, 0.55))), // relief crisp by ~500ms
-    lobe: sm(win(t, 0.18, 0.32)),                   // lip pushed outward, lobes appear (~306–545ms)
+    dome: 1 - sm(win(t, 0.06, 0.5)),                // ball flattens GRADUALLY (~100–850ms)
+    relief: sm(win(t, 0.09, 0.54)),                 // field/ridge/emboss conform gradually
+    lobe: sm(win(t, 0.12, 0.58)),                   // lip pushed outward, lobes appear gradually
   };
 }
 
