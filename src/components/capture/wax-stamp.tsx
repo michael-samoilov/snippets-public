@@ -37,6 +37,8 @@ const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.66, CREST_LUMP = 0.32; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
 const GLYPH_AMP = 0.34;
+const DOME_AMP = 6;           // low molten puddle (gentle, matte) that flattens out
+const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
 const SS = 2.35;              // height→slope (scaled per-pixel below)
@@ -81,19 +83,18 @@ const DEFAULT_COLORS: Colors = {
   shadow: "#0a1a2e",
 };
 
-type Beat = { relief: number; scale: number; dropY: number; beadO: number; sealO: number };
+type Beat = { scale: number; dome: number; relief: number; lobe: number; o: number };
 function stateAt(t: number): Beat {
-  // bead drops & grows → spreads into a puck (radial, no squash) → the
-  // relief presses in and emerges → settles.
-  const drop = eo(win(t, 0, 0.26));
-  const spread = eo(win(t, 0.24, 0.52));
-  const settle = Math.sin(win(t, 0.5, 0.92) * Math.PI) * 0.03; // tiny overshoot
+  // physical press (~1.71s), area-conserving in spirit: a low matte puddle sits
+  // until the die contacts it (~t0.13); then the die presses — the field flattens
+  // and the relief emerges (conform), and the displaced wax is pushed outward,
+  // growing the lip + lobes past the die edge (lobe); then it settles and holds.
   return {
-    relief: eo(win(t, 0.4, 0.96)),
-    scale: lp(0.64, 1.0, spread) + settle,
-    dropY: lp(-0.7, 0, drop),       // fraction of mean radius
-    beadO: 1 - win(t, 0.24, 0.36),
-    sealO: win(t, 0.26, 0.4),
+    o: clamp(win(t, 0, 0.05)),                      // puddle fades in
+    scale: 1,                                       // grow deferred for now
+    dome: 1 - sm(win(t, 0.13, 0.4)),                // puddle flattens after contact
+    relief: clamp(0.85 * eo(win(t, 0.13, 0.38)) + 0.15 * sm(win(t, 0.38, 0.62))),
+    lobe: sm(win(t, 0.17, 0.5)),                    // lip pushed outward, lobes appear
   };
 }
 
@@ -158,43 +159,18 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
 
     const draw = (k: Beat) => {
       ctx.clearRect(0, 0, dim, dim);
-      const cx = dim / 2, cy = dim * 0.46;
-      // bead (a lit sphere) during the drop
-      if (k.beadO > 0.003) {
-        const br = MR * (0.5 + 0.42 * k.scale);
-        const by = cy + k.dropY * MR;
-        ctx.save();
-        ctx.globalAlpha = k.beadO * 0.4;
-        ctx.fillStyle = colors.current.shadow;
-        ctx.beginPath();
-        ctx.ellipse(cx + br * 0.06, by + br * 0.96, br * 0.85, br * 0.26, 0, 0, TAU);
-        ctx.filter = "blur(0px)";
-        ctx.fill();
-        ctx.globalAlpha = k.beadO;
-        const g = ctx.createRadialGradient(cx - br * 0.32, by - br * 0.36, br * 0.1, cx, by, br);
-        const [wr, wg, wb] = colors.current.wax;
-        const hi = lighten01(colors.current.wax, 0.62);
-        g.addColorStop(0, `rgb(${hi[0] * 255} ${hi[1] * 255} ${hi[2] * 255})`);
-        g.addColorStop(0.5, `rgb(${wr * 255} ${wg * 255} ${wb * 255})`);
-        g.addColorStop(1, `rgb(${wr * 140} ${wg * 140} ${wb * 140})`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(cx, by, br, 0, TAU);
-        ctx.fill();
-        ctx.restore();
-      }
-      // the seal
-      if (k.sealO > 0.003) {
-        paintSeal(B, dim, MR * k.scale, cy + (k.dropY * 0.25) * MR, k.relief, colors.current);
-        B.off.getContext("2d")!.putImageData(B.img, 0, 0);
-        ctx.save();
-        ctx.globalAlpha = k.sealO;
-        ctx.shadowColor = colors.current.shadow;
-        ctx.shadowBlur = MR * 0.14 * k.scale;
-        ctx.shadowOffsetY = MR * 0.11 * k.scale;
-        ctx.drawImage(B.off, 0, 0);
-        ctx.restore();
-      }
+      if (k.o <= 0.003) return;
+      // one continuous object: a convex wax drop that flattens into the puck and
+      // takes the impression — same height-field lighting throughout.
+      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, colors.current);
+      B.off.getContext("2d")!.putImageData(B.img, 0, 0);
+      ctx.save();
+      ctx.globalAlpha = k.o;
+      ctx.shadowColor = colors.current.shadow;
+      ctx.shadowBlur = MR * (0.09 + 0.05 * k.scale);
+      ctx.shadowOffsetY = MR * (0.05 + 0.06 * k.scale);
+      ctx.drawImage(B.off, 0, 0);
+      ctx.restore();
     };
 
     let raf = 0;
@@ -205,7 +181,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
 
     if (reduce.current) { draw(stateAt(1)); return cleanup; }
     const t0 = performance.now();
-    const DUR = 1250;
+    const DUR = 1700;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
       if (t >= 1) { draw(stateAt(1)); return; }
@@ -248,7 +224,7 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
 // compute the lit seal into B.img (alpha 0 outside the silhouette)
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; img: ImageData },
-  dim: number, MR: number, cy: number, relief: number, col: Colors,
+  dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, col: Colors,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly;
@@ -262,7 +238,9 @@ function paintSeal(
       const X = px - cx;
       const r = Math.hypot(X, Y);
       const th = Math.atan2(Y, X);
-      const edge = MR * (1 + (profileAt(th) - 1) * relief);
+      // silhouette grows from the puddle circle out to the lobed final as the wax
+      // is squished outward past the die — the lip and lobes are pushed out.
+      const edge = MR * lp(PUD_EDGE, profileAt(th), lobe);
       const a = clamp((edge + 0.75 - r) / 1.5);
       msk[i] = a;
       if (a <= 0) { hgt[i] = 0; continue; }
@@ -280,7 +258,8 @@ function paintSeal(
           h = crestH * Math.pow(Math.max(0, 1 - Math.pow(s, OUT_POW)), 1 / OUT_POW);
         }
       }
-      hgt[i] = h + GLYPH_AMP * relief * gly[i];
+      const rn = r / edge;
+      hgt[i] = h + GLYPH_AMP * relief * gly[i] + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - rn * rn));
     }
   }
   // pass 2 — lighting
@@ -290,6 +269,7 @@ function paintSeal(
   let hx = lx, hy = ly, hz = lz + 1;
   const hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
   const ss = SS * (MR / 100);
+  const specDamp = 1 - 0.55 * dome;   // a molten puddle is matte; the pressed seal is glossy
   const [wr, wg, wb] = col.wax;
   const [sr, sg, sb] = col.spec;
   for (let py = 1; py < dim - 1; py++) {
@@ -306,7 +286,7 @@ function paintSeal(
       const ndh = Math.max(0, nx * hx + ny * hy + nz * hz);
       const spec = Math.pow(ndh, SHIN);
       const slope = Math.hypot(dx, dy);
-      const gloss = SPEC_STR * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5));
+      const gloss = SPEC_STR * specDamp * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5));
       const env = 1 + ENV * ((cy - py) / dim);
       const lf = (AMBIENT + DIFF * ndl) * env;
       let R = wr * lf + sr * spec * gloss;
