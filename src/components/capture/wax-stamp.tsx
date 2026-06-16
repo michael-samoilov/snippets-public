@@ -37,7 +37,7 @@ const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.66, CREST_LUMP = 0.32; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
 const GLYPH_AMP = 0.34;
-const DOME_AMP = 6;           // low molten puddle (gentle, matte) that flattens out
+const DOME_AMP = 11;          // rounded (but matte) bead/puddle that flattens out
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
@@ -90,11 +90,11 @@ function stateAt(t: number): Beat {
   // and the relief emerges (conform), and the displaced wax is pushed outward,
   // growing the lip + lobes past the die edge (lobe); then it settles and holds.
   return {
-    o: clamp(win(t, 0, 0.05)),                      // puddle fades in
-    scale: 1,                                       // grow deferred for now
-    dome: 1 - sm(win(t, 0.13, 0.4)),                // puddle flattens after contact
-    relief: clamp(0.85 * eo(win(t, 0.13, 0.38)) + 0.15 * sm(win(t, 0.38, 0.62))),
-    lobe: sm(win(t, 0.17, 0.5)),                    // lip pushed outward, lobes appear
+    o: clamp(win(t, 0, 0.03)),                      // bead appears
+    scale: lp(0.12, 1.0, eo(win(t, 0.03, 0.45))),   // tiny bead grows (matched to reference)
+    dome: 1 - sm(win(t, 0.14, 0.21)),               // ball flattens to a disc by ~360ms
+    relief: clamp(0.85 * eo(win(t, 0.17, 0.3)) + 0.15 * sm(win(t, 0.31, 0.5))), // relief sets ~290–510ms+
+    lobe: sm(win(t, 0.18, 0.32)),                   // lip pushed outward, lobes appear (~306–545ms)
   };
 }
 
@@ -269,7 +269,7 @@ function paintSeal(
   let hx = lx, hy = ly, hz = lz + 1;
   const hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
   const ss = SS * (MR / 100);
-  const specDamp = 1 - 0.55 * dome;   // a molten puddle is matte; the pressed seal is glossy
+  const specDamp = 1 - 0.5 * dome;    // a molten bead has soft sheen; the pressed seal is glossy
   const [wr, wg, wb] = col.wax;
   const [sr, sg, sb] = col.spec;
   for (let py = 1; py < dim - 1; py++) {
