@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
 
 // organic lobe harmonics: blob radius = R·(1 + lobe·Σ a·cos(kθ+p))
 const HARM: ReadonlyArray<readonly [number, number, number]> = [
-  [5, 0.01917, 3.4178],
-  [6, 0.02156, 3.7926],
-  [7, 0.02621, 0.4115],
+  [5, 0.0345, 3.4178],
+  [6, 0.0388, 3.7926],
+  [7, 0.0472, 0.4115],
 ];
 const R = 102;
 const M = 216;
@@ -157,10 +157,11 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
       <svg viewBox="-112 -112 224 224" width="100%" height="100%" style={{ overflow: "visible" }}>
         <defs>
           <radialGradient id={`mass-${uid}`} cx="50%" cy="50%" r="56%">
-            <stop offset="0%" stopColor="#cccccc" />
-            <stop offset="42%" stopColor="#cacaca" />
-            <stop offset="70%" stopColor="#bcbcbc" />
-            <stop offset="88%" stopColor="#969696" />
+            <stop offset="0%" stopColor="#b4b4b4" />
+            <stop offset="48%" stopColor="#c2c2c2" />
+            <stop offset="72%" stopColor="#dcdcdc" />
+            <stop offset="87%" stopColor="#f2f2f2" />
+            <stop offset="95%" stopColor="#a6a6a6" />
             <stop offset="100%" stopColor="#1e1e1e" />
           </radialGradient>
           <radialGradient id={`ballS-${uid}`} cx="38%" cy="32%" r="70%">
@@ -176,11 +177,11 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           </clipPath>
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="3.2" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="7" specularConstant="0.8" specularExponent="9" lightingColor="#eaf1ff" result="sp">
+            <feGaussianBlur in="ht" stdDeviation="3.0" result="hb" />
+            <feSpecularLighting in="hb" surfaceScale="9" specularConstant="1.1" specularExponent="14" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="37" />
             </feSpecularLighting>
-            <feDiffuseLighting in="hb" surfaceScale="7" diffuseConstant="1.55" lightingColor={lit} result="df">
+            <feDiffuseLighting in="hb" surfaceScale="9" diffuseConstant="1.45" lightingColor={lit} result="df">
               <feDistantLight azimuth="235" elevation="37" />
             </feDiffuseLighting>
             <feColorMatrix in="df" type="saturate" values="1.18" result="dfR" />
@@ -205,9 +206,8 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
             <g clipPath={`url(#${sil})`} filter={`url(#${fId})`}>
               <path ref={massPath} fill={`url(#mass-${uid})`} d="" />
               <g ref={impress} opacity="0">
-                <circle r="70" fill="#6f6f6f" />
-                <circle r="80" fill="none" stroke="#2c2c2c" strokeWidth="2" />
-                <circle r="74" fill="none" stroke="#f2f2f2" strokeWidth="1.2" />
+                <circle r="68" fill="#6f6f6f" />
+                <circle r="78" fill="none" stroke="#2c2c2c" strokeWidth="2.2" />
                 {icon ?? (
                   <text
                     x="0"
