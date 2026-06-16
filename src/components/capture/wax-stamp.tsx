@@ -60,21 +60,19 @@ type Beat = {
 // the press timeline: drop & grow → flatten wide → impress → settle.
 // Nothing crosses its rest value, so there is no bounce.
 function stateAt(t: number): Beat {
-  const grow = eo(win(t, 0, 0.2));
-  const s = lp(0.12, 1, grow);
-  const pr = sm(win(t, 0.16, 0.3));
-  const rec = sm(win(t, 0.3, 0.52));
-  const sx = s * (1 + 0.25 * pr * (1 - rec));
-  const sy = s * (1 - 0.36 * pr * (1 - rec));
-  const dy = lp(-98, 0, eo(win(t, 0, 0.24)));
+  // the bead grows, then the wax spreads outward (uniformly) as the die
+  // presses on the z-axis — a radial spread, never a vertical squash.
+  const grow = eo(win(t, 0, 0.22));
+  const s = lp(0.12, 0.86, grow) + 0.14 * sm(win(t, 0.22, 0.46));
+  const dy = lp(-98, 0, eo(win(t, 0, 0.26)));
   return {
-    sx,
-    sy,
+    sx: s,
+    sy: s,
     dy,
-    ballO: 1 - win(t, 0.22, 0.32),
-    sealO: win(t, 0.24, 0.34),
-    embO: win(t, 0.36, 0.5),
-    es: lp(0.88, 1, sm(win(t, 0.36, 0.56))),
+    ballO: 1 - win(t, 0.24, 0.36),
+    sealO: win(t, 0.26, 0.38),
+    embO: win(t, 0.38, 0.52),
+    es: lp(0.86, 1, sm(win(t, 0.38, 0.58))),
   };
 }
 
@@ -179,11 +177,11 @@ export function WaxStamp({
             <path d={BLOB} />
           </clipPath>
           <radialGradient id={`mass-${uid}`} cx="50%" cy="50%" r="52%">
-            <stop offset="0%" stopColor="#aaaaaa" />
-            <stop offset="50%" stopColor="#c4c4c4" />
-            <stop offset="74%" stopColor="#e6e6e6" />
-            <stop offset="86%" stopColor="#f4f4f4" />
-            <stop offset="94%" stopColor="#cfcfcf" />
+            <stop offset="0%" stopColor="#9a9a9a" />
+            <stop offset="55%" stopColor="#a8a8a8" />
+            <stop offset="78%" stopColor="#d8d8d8" />
+            <stop offset="90%" stopColor="#f6f6f6" />
+            <stop offset="96%" stopColor="#cccccc" />
             <stop offset="100%" stopColor="#1e1e1e" />
           </radialGradient>
 
@@ -202,7 +200,7 @@ export function WaxStamp({
               result="ht"
               values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0"
             />
-            <feGaussianBlur in="ht" stdDeviation="5.5" result="hb" />
+            <feGaussianBlur in="ht" stdDeviation="3.4" result="hb" />
             <feSpecularLighting
               in="hb"
               surfaceScale="12"
@@ -291,9 +289,9 @@ export function WaxStamp({
           <g ref={seal} opacity="0">
             <g clipPath={`url(#${sil})`} filter={`url(#${fId})`}>
               <path d={BLOB} fill={`url(#mass-${uid})`} />
-              <circle r="52" fill="#9c9c9c" />
-              <circle r="68" fill="none" stroke="#535353" strokeWidth="10" />
-              <circle r="57" fill="none" stroke="#dadada" strokeWidth="3" />
+              <circle r="70" fill="#9c9c9c" />
+              <circle r="79" fill="none" stroke="#343434" strokeWidth="4" />
+              <circle r="73" fill="none" stroke="#f0f0f0" strokeWidth="2" />
             </g>
             <g ref={emb} opacity="0" filter={`url(#${sId})`}>
               {icon ?? (
