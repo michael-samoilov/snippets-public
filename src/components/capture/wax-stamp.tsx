@@ -146,6 +146,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
   }, [playKey]);
 
   const fId = `wb-${uid}`;
+  const sId = `imp-${uid}`;
   const sil = `sil-${uid}`;
 
   return (
@@ -157,12 +158,8 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
       <svg viewBox="-112 -112 224 224" width="100%" height="100%" style={{ overflow: "visible" }}>
         <defs>
           <radialGradient id={`mass-${uid}`} cx="50%" cy="50%" r="56%">
-            <stop offset="0%" stopColor="#b0b0b0" />
-            <stop offset="50%" stopColor="#bcbcbc" />
-            <stop offset="74%" stopColor="#dcdcdc" />
-            <stop offset="88%" stopColor="#f4f4f4" />
-            <stop offset="95%" stopColor="#aeaeae" />
-            <stop offset="100%" stopColor="#1e1e1e" />
+            <stop offset="0%" stopColor="#e6e6e6" />
+            <stop offset="100%" stopColor="#262626" />
           </radialGradient>
           <radialGradient id={`ballS-${uid}`} cx="38%" cy="32%" r="70%">
             <stop offset="0%" stopColor="#cfe0f4" />
@@ -177,12 +174,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           </clipPath>
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="2.5" result="hb0" />
-            <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="3" result="nz" />
-            <feComponentTransfer in="nz" result="nzl">
-              <feFuncA type="linear" slope="0.008" intercept="0" />
-            </feComponentTransfer>
-            <feComposite in="hb0" in2="nzl" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="hb" />
+            <feGaussianBlur in="ht" stdDeviation="8" result="hb" />
             <feSpecularLighting in="hb" surfaceScale="11" specularConstant="1.6" specularExponent="16" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="31" />
             </feSpecularLighting>
@@ -200,6 +192,25 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
             <feBlend in="bodyc" in2="spc" mode="screen" result="shiny" />
             <feDropShadow in="shiny" dx="0" dy="9" stdDeviation="8" floodColor="#0a1a2e" floodOpacity="0.34" />
           </filter>
+          <filter id={sId} x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+            <feColorMatrix in="SourceGraphic" type="matrix" result="iht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
+            <feGaussianBlur in="iht" stdDeviation="0.7" result="ihb" />
+            <feSpecularLighting in="ihb" surfaceScale="6" specularConstant="1.5" specularExponent="22" lightingColor="#eaf1ff" result="isp">
+              <feDistantLight azimuth="235" elevation="31" />
+            </feSpecularLighting>
+            <feDiffuseLighting in="ihb" surfaceScale="6" diffuseConstant="1.34" lightingColor={lit} result="idf">
+              <feDistantLight azimuth="235" elevation="31" />
+            </feDiffuseLighting>
+            <feColorMatrix in="idf" type="saturate" values="1.18" result="idfR" />
+            <feComponentTransfer in="idfR" result="idfC">
+              <feFuncR type="gamma" exponent="1.28" />
+              <feFuncG type="gamma" exponent="1.18" />
+              <feFuncB type="gamma" exponent="0.92" />
+            </feComponentTransfer>
+            <feComposite in="idfC" in2="SourceAlpha" operator="in" result="ibc" />
+            <feComposite in="isp" in2="SourceAlpha" operator="in" result="isc" />
+            <feBlend in="ibc" in2="isc" mode="screen" />
+          </filter>
         </defs>
 
         <g ref={stage} transform="scale(0.12)">
@@ -208,18 +219,19 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
             <circle r="100" fill={`url(#ballS-${uid})`} />
           </g>
           <g ref={seal} opacity="0">
-            <g clipPath={`url(#${sil})`} filter={`url(#${fId})`}>
-              <path ref={massPath} fill={`url(#mass-${uid})`} d="" />
-              <g ref={impress} opacity="0">
-                <circle r="68" fill="#6f6f6f" />
-                <circle r="78" fill="none" stroke="#2c2c2c" strokeWidth="2.2" />
+            <g clipPath={`url(#${sil})`}>
+              <g filter={`url(#${fId})`}>
+                <path ref={massPath} fill={`url(#mass-${uid})`} d="" />
+              </g>
+              <g ref={impress} opacity="0" filter={`url(#${sId})`}>
+                <circle r="74" fill="none" stroke="#ededed" strokeWidth="3.2" />
                 {icon ?? (
                   <text
                     x="0"
                     y="2"
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fill="#e2e2e2"
+                    fill="#ededed"
                     style={{ fontFamily: "var(--font-serif)", fontWeight: 700, fontSize: 104 }}
                   >
                     {glyph}
