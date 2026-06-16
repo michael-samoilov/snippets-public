@@ -223,9 +223,9 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           <g ref={seal} opacity="0">
             <g clipPath={`url(#${sil})`}>
               <g filter={`url(#${fId})`}>
-                <path ref={massPath} fill="#a6a6a6" d="" />
-                <path ref={rimPath} fill="none" stroke="#f2f2f2" strokeWidth="13" d="" />
-                <circle r="56" fill="#7c7c7c" />
+                <path ref={massPath} fill="#9a9a9a" d="" />
+                <path ref={rimPath} fill="none" stroke="#f4f4f4" strokeWidth="9" d="" />
+                <circle r="54" fill="#6f6f6f" />
               </g>
               <g ref={impress} opacity="0" filter={`url(#${sId})`}>
                 <circle r="74" fill="none" stroke="#ededed" strokeWidth="3.2" />
