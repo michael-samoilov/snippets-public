@@ -37,7 +37,7 @@ const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.78, CREST_LUMP = 0.36; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
 const GLYPH_AMP = 0.48;
-const DOME_AMP = 16;          // rounded bead/puddle (sphere-ish) that flattens out
+const DOME_AMP = 8;           // a low rounded circle (button-like), NOT a sphere
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
@@ -273,7 +273,7 @@ function paintSeal(
   let hx = lx, hy = ly, hz = lz + 1;
   const hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
   const ss = SS * (MR / 100);
-  const specDamp = 1 - 0.32 * dome;   // bead is moderately glossy (matches the reference), seal glossy
+  const specDamp = 1 - 0.6 * dome;    // pre-press circle is low-sheen (matte-ish); pressed seal glossy
   const [wr, wg, wb] = col.wax;
   const [sr, sg, sb] = col.spec;
   for (let py = 1; py < dim - 1; py++) {
