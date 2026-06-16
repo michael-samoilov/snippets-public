@@ -25,9 +25,10 @@ import { cn } from "@/lib/utils";
 
 // organic lobe harmonics: blob radius = R·(1 + lobe·Σ a·cos(kθ+p))
 const HARM: ReadonlyArray<readonly [number, number, number]> = [
-  [5, 0.052, 3.4178],
-  [6, 0.04, 3.7926],
-  [7, 0.03, 0.4115],
+  [4, 0.024, 1.4],
+  [5, 0.026, 3.4178],
+  [6, 0.019, 3.7926],
+  [7, 0.014, 0.4115],
 ];
 const R = 102;
 const M = 216;
