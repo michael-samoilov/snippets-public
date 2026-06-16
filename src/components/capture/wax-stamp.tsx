@@ -1,250 +1,324 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 /* ── the wax stamp ────────────────────────────────────────────────
-   A pressed wax seal, rendered the way a 3D one is and animated as a
-   real press. The body is a grayscale height field lit by SVG diffuse +
-   specular lighting (curved rim globes go glossy, the flat field stays
-   matte); the diffuse light is tinted from the live `--wax` tokens, so
-   it themes for Paper and Lamplight. The impression (a thin moat, a thin
-   ring and the glyph) lives in the same height field and its relief
-   grows from nothing, so the stamp genuinely presses in rather than
-   fading on. The silhouette is an organic wax drop that the press
-   spreads further into lobes. Any icon works — it's lit from its own
-   alpha. Replays when `playKey` changes; collapses to the settled seal
-   under reduced motion. */
+   A pressed wax seal, rendered as a real 3-D one: a per-pixel height
+   field (flat pressed field → a thin raised ridge → a moat at field
+   level → a rounded lip that rolls over like the outside of a donut,
+   undulating into ~6 irregular lobes) lit with Lambert diffuse +
+   Blinn-Phong specular. Highlights stay a pale tint and shadows stay a
+   deep tint of the same wax — never white, never black. The silhouette
+   profile, the lobe count (a k=6/k=4 Fourier pair) and the lip/field
+   proportions are measured from a real wax seal. The glyph is embossed
+   into the same field so it is lit identically. Colour comes from the
+   live `--wax*` tokens, so it themes for Paper and Lamplight.
 
-// organic lobe harmonics: blob radius = R·(1 + lobe·Σ a·cos(kθ+p))
-const HARM: ReadonlyArray<readonly [number, number, number]> = [
-  [4, 0.024, 1.4],
-  [5, 0.026, 3.4178],
-  [6, 0.019, 3.7926],
-  [7, 0.014, 0.4115],
+   A keep plays the press: a bead drops and grows, spreads into a puck
+   with no vertical squash (the die presses on z, the wax spreads
+   radially), then the relief emerges — ridge, moat, lip and glyph rise
+   out of the flat puck — and settles. Replays when `playKey` changes;
+   collapses to the settled seal under reduced motion. */
+
+// silhouette r(θ)/rmean — Fourier fit of a real seal (6 lobes, k=4 varies
+// their size). [harmonic, aCos, bSin]
+const A0 = 1.0002;
+const FH: ReadonlyArray<readonly [number, number, number]> = [
+  [1, 0.0002, 0.0017], [2, -0.0044, -0.0012], [3, -0.002, -0.0043],
+  [4, -0.0059, -0.0176], [5, -0.0046, -0.0062], [6, -0.0462, 0.0121], [7, 0.0012, -0.0032],
 ];
-const R = 102;
-const M = 216;
-const TAU = Math.PI * 2;
+const LIP_LO = 0.94, LIP_HI = 1.075; // profile → per-lobe lip height 0..1
 
-function blobD(lobe: number): string {
-  const p: [number, number][] = [];
-  for (let i = 0; i < M; i++) {
-    const th = (TAU * i) / M;
-    let f = 1;
-    for (const [k, a, ph] of HARM) f += lobe * a * Math.cos(k * th + ph);
-    const r = R * f;
-    p.push([Math.cos(th) * r, Math.sin(th) * r]);
-  }
-  let d = `M ${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)} `;
-  for (let i = 0; i < M; i += 3) {
-    const a = p[(i - 3 + M) % M], b = p[i], c = p[(i + 3) % M], e = p[(i + 6) % M];
-    d += `C ${(b[0] + (c[0] - a[0]) / 6).toFixed(1)} ${(b[1] + (c[1] - a[1]) / 6).toFixed(1)} ${(c[0] - (e[0] - b[0]) / 6).toFixed(1)} ${(c[1] - (e[1] - b[1]) / 6).toFixed(1)} ${c[0].toFixed(1)} ${c[1].toFixed(1)} `;
-  }
-  return d + "Z";
-}
+// radial structure (fractions of mean radius) + heights (0..1)
+const FIELD_R = 0.68, RIDGE_R = 0.745, MOAT_R = 0.8;
+const FIELDH = 0.45;          // field AND moat baseline
+const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
+const CREST_BASE = 0.66, CREST_LUMP = 0.32; // trough crest ≈ ridge; lobes higher
+const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
+const GLYPH_AMP = 0.34;
+
+// lighting
+const SS = 2.35;              // height→slope (scaled per-pixel below)
+const LX = -0.52, LY = -0.52, LZ = 0.68;
+const AMBIENT = 0.32, DIFF = 0.95;
+const SPEC_STR = 0.9, SHIN = 16, SPEC_RIM = 2.9, ENV = 0.12, HICAP = 0.96;
 
 const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const win = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
-const eo = (t: number) => 1 - Math.pow(1 - t, 3);
 const sm = (t: number) => t * t * (3 - 2 * t);
+const eo = (t: number) => 1 - Math.pow(1 - t, 3);
 const lp = (a: number, b: number, t: number) => a + (b - a) * t;
+const TAU = Math.PI * 2;
 
-function lighten(hex: string, amt: number): string {
-  const m = hex.trim().replace("#", "");
-  if (m.length < 6) return hex;
-  const r = parseInt(m.slice(0, 2), 16),
-    g = parseInt(m.slice(2, 4), 16),
-    b = parseInt(m.slice(4, 6), 16);
-  const mix = (c: number) => Math.round(c + (255 - c) * amt);
-  return `rgb(${mix(r)} ${mix(g)} ${mix(b)})`;
+function profileAt(th: number): number {
+  let v = A0;
+  for (const [k, a, b] of FH) v += a * Math.cos(k * th) + b * Math.sin(k * th);
+  return v;
+}
+function lumpFn(th: number): number {
+  return clamp((profileAt(th) - LIP_LO) / (LIP_HI - LIP_LO));
 }
 
-type Beat = { s: number; dy: number; ballO: number; sealO: number; lobe: number; impress: number };
+type Rgb = [number, number, number];
+function hexToRgb01(hex: string): Rgb {
+  const m = hex.trim().replace("#", "");
+  if (m.length < 6) return [0.3, 0.4, 0.55];
+  return [
+    parseInt(m.slice(0, 2), 16) / 255,
+    parseInt(m.slice(2, 4), 16) / 255,
+    parseInt(m.slice(4, 6), 16) / 255,
+  ];
+}
+function lighten01(c: Rgb, amt: number): Rgb {
+  return [c[0] + (1 - c[0]) * amt, c[1] + (1 - c[1]) * amt, c[2] + (1 - c[2]) * amt];
+}
 
-// drop & grow a bead → spread it into an organic puck → the impression
-// presses in (relief grows linearly) while lobes deepen → settle. No
-// vertical squash: the die presses on z, so the wax spreads radially.
+type Colors = { wax: Rgb; spec: Rgb; shadow: string };
+const DEFAULT_COLORS: Colors = {
+  wax: hexToRgb01("#2e5685"),
+  spec: lighten01(hexToRgb01("#3d6b9e"), 0.6),
+  shadow: "#0a1a2e",
+};
+
+type Beat = { relief: number; scale: number; dropY: number; beadO: number; sealO: number };
 function stateAt(t: number): Beat {
-  const grow = eo(win(t, 0.05, 0.22));
-  const s = lp(0.1, 0.34, grow) + 0.66 * sm(win(t, 0.2, 0.4));
-  const dy = lp(-98, 0, eo(win(t, 0, 0.3)));
-  const press = win(t, 0.42, 1.0);
+  // bead drops & grows → spreads into a puck (radial, no squash) → the
+  // relief presses in and emerges → settles.
+  const drop = eo(win(t, 0, 0.26));
+  const spread = eo(win(t, 0.24, 0.52));
+  const settle = Math.sin(win(t, 0.5, 0.92) * Math.PI) * 0.03; // tiny overshoot
   return {
-    s,
-    dy,
-    ballO: 1 - win(t, 0.24, 0.34),
-    sealO: win(t, 0.26, 0.36),
-    lobe: 0.4 + 0.6 * press,
-    impress: press,
+    relief: eo(win(t, 0.4, 0.96)),
+    scale: lp(0.64, 1.0, spread) + settle,
+    dropY: lp(-0.7, 0, drop),       // fraction of mean radius
+    beadO: 1 - win(t, 0.24, 0.36),
+    sealO: win(t, 0.26, 0.4),
   };
 }
 
 export type WaxStampProps = {
   /** increment once per keep; any change replays the press. */
   playKey: number;
-  /** seal diameter, px. Defaults to the Seal button's 64. */
+  /** seal diameter, px. */
   size?: number;
-  /** the letter pressed into the wax (used when `icon` is absent). */
+  /** the letter pressed into the wax. */
   glyph?: string;
-  /** an arbitrary impression: light-grey SVG shapes (filled or stroked)
-      on a 0-centered, ~150-wide field — brighter = raised. Overrides
-      `glyph`. The relief is lit from its alpha, so any icon works. */
-  icon?: ReactNode;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: WaxStampProps) {
-  const uid = useId().replace(/:/g, "");
+export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStampProps) {
+  const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
-  const stage = useRef<SVGGElement>(null);
-  const ball = useRef<SVGGElement>(null);
-  const seal = useRef<SVGGElement>(null);
-  const massPath = useRef<SVGPathElement>(null);
-  const clipP = useRef<SVGPathElement>(null);
-  const impress = useRef<SVGGElement>(null);
+  const colors = useRef<Colors>(DEFAULT_COLORS);
+  // scratch buffers, (re)allocated when the backing size changes
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; off: HTMLCanvasElement; img: ImageData } | null>(null);
 
-  const [lit, setLit] = useState("#6a96c8");
   useLayoutEffect(() => {
-    const bright = getComputedStyle(document.documentElement).getPropertyValue("--wax-bright").trim();
-    if (bright) setLit(lighten(bright, 0.16));
+    const cs = getComputedStyle(document.documentElement);
+    const wax = cs.getPropertyValue("--wax").trim();
+    const bright = cs.getPropertyValue("--wax-bright").trim();
+    const shadow = cs.getPropertyValue("--wax-shadow").trim();
+    if (wax) {
+      colors.current = {
+        wax: hexToRgb01(wax),
+        spec: lighten01(hexToRgb01(bright || wax), 0.6),
+        shadow: shadow || colors.current.shadow,
+      };
+    }
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }, []);
 
   useEffect(() => {
-    const st = stage.current, b = ball.current, s = seal.current,
-      mp = massPath.current, cp = clipP.current, im = impress.current;
-    if (!st || !b || !s || !mp || !cp || !im) return;
-    const set = (k: Beat) => {
-      st.setAttribute("transform", `translate(0 ${k.dy.toFixed(1)}) scale(${k.s.toFixed(3)})`);
-      b.setAttribute("opacity", k.ballO.toFixed(3));
-      s.setAttribute("opacity", k.sealO.toFixed(3));
-      const d = blobD(k.lobe);
-      mp.setAttribute("d", d);
-      cp.setAttribute("d", d);
-      im.setAttribute("opacity", k.impress.toFixed(3));
+    const cv = canvas.current;
+    if (!cv) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dim = Math.round(size * dpr);
+    cv.width = dim;
+    cv.height = dim;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+
+    // (re)allocate scratch for this backing size
+    if (!buf.current || buf.current.dim !== dim) {
+      const off = document.createElement("canvas");
+      off.width = dim; off.height = dim;
+      buf.current = {
+        dim,
+        hgt: new Float32Array(dim * dim),
+        msk: new Float32Array(dim * dim),
+        gly: new Float32Array(dim * dim),
+        off,
+        img: ctx.createImageData(dim, dim),
+      };
+      bakeGlyph(buf.current.gly, dim, glyph);
+    }
+    const B = buf.current;
+    const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
+
+    const draw = (k: Beat) => {
+      ctx.clearRect(0, 0, dim, dim);
+      const cx = dim / 2, cy = dim * 0.46;
+      // bead (a lit sphere) during the drop
+      if (k.beadO > 0.003) {
+        const br = MR * (0.5 + 0.42 * k.scale);
+        const by = cy + k.dropY * MR;
+        ctx.save();
+        ctx.globalAlpha = k.beadO * 0.4;
+        ctx.fillStyle = colors.current.shadow;
+        ctx.beginPath();
+        ctx.ellipse(cx + br * 0.06, by + br * 0.96, br * 0.85, br * 0.26, 0, 0, TAU);
+        ctx.filter = "blur(0px)";
+        ctx.fill();
+        ctx.globalAlpha = k.beadO;
+        const g = ctx.createRadialGradient(cx - br * 0.32, by - br * 0.36, br * 0.1, cx, by, br);
+        const [wr, wg, wb] = colors.current.wax;
+        const hi = lighten01(colors.current.wax, 0.62);
+        g.addColorStop(0, `rgb(${hi[0] * 255} ${hi[1] * 255} ${hi[2] * 255})`);
+        g.addColorStop(0.5, `rgb(${wr * 255} ${wg * 255} ${wb * 255})`);
+        g.addColorStop(1, `rgb(${wr * 140} ${wg * 140} ${wb * 140})`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, by, br, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
+      // the seal
+      if (k.sealO > 0.003) {
+        paintSeal(B, dim, MR * k.scale, cy + (k.dropY * 0.25) * MR, k.relief, colors.current);
+        B.off.getContext("2d")!.putImageData(B.img, 0, 0);
+        ctx.save();
+        ctx.globalAlpha = k.sealO;
+        ctx.shadowColor = colors.current.shadow;
+        ctx.shadowBlur = MR * 0.14 * k.scale;
+        ctx.shadowOffsetY = MR * 0.11 * k.scale;
+        ctx.drawImage(B.off, 0, 0);
+        ctx.restore();
+      }
     };
-    if (reduce.current) { set(stateAt(1)); return; }
+
     let raf = 0;
+    // TODO(remove before ship): deterministic seek for visual capture
+    type SeekWin = Window & { __stampSeek?: (t: number) => void };
+    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t))); };
+    const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
+
+    if (reduce.current) { draw(stateAt(1)); return cleanup; }
     const t0 = performance.now();
-    const DUR = 1200;
+    const DUR = 1250;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
-      if (t >= 1) { set(stateAt(1)); return; }
-      set(stateAt(t));
+      if (t >= 1) { draw(stateAt(1)); return; }
+      draw(stateAt(t));
       raf = requestAnimationFrame(frame);
     };
-    set(stateAt(0));
+    draw(stateAt(0));
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
-  }, [playKey]);
-
-  const fId = `wb-${uid}`;
-  const sId = `imp-${uid}`;
-  const sil = `sil-${uid}`;
+    return cleanup;
+  }, [playKey, size, glyph]);
 
   return (
-    <span
+    <canvas
+      ref={canvas}
       aria-hidden="true"
-      className={cn("relative block", className)}
-      style={{ width: size, height: size, overflow: "visible", isolation: "isolate" }}
-    >
-      <svg viewBox="-112 -112 224 224" width="100%" height="100%" style={{ overflow: "visible" }}>
-        <defs>
-          <radialGradient id={`mass-${uid}`} cx="50%" cy="50%" r="56%">
-            <stop offset="0%" stopColor="#e6e6e6" />
-            <stop offset="100%" stopColor="#262626" />
-          </radialGradient>
-          <radialGradient id={`ballS-${uid}`} cx="38%" cy="32%" r="70%">
-            <stop offset="0%" stopColor="#cfe0f4" />
-            <stop offset="42%" stopColor="var(--wax)" />
-            <stop offset="100%" stopColor="var(--wax-deep)" />
-          </radialGradient>
-          <filter id={`ballsh-${uid}`} x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="5" />
-          </filter>
-          <clipPath id={sil}>
-            <path ref={clipP} d="" />
-          </clipPath>
-          <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
-            <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="3.5" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="13" specularConstant="2.0" specularExponent="18" lightingColor="#eaf1ff" result="sp">
-              <feDistantLight azimuth="235" elevation="31" />
-            </feSpecularLighting>
-            <feDiffuseLighting in="hb" surfaceScale="11" diffuseConstant="1.34" lightingColor={lit} result="df">
-              <feDistantLight azimuth="235" elevation="31" />
-            </feDiffuseLighting>
-            <feColorMatrix in="df" type="saturate" values="1.18" result="dfR" />
-            <feComponentTransfer in="dfR" result="dfC">
-              <feFuncR type="gamma" exponent="1.28" />
-              <feFuncG type="gamma" exponent="1.18" />
-              <feFuncB type="gamma" exponent="0.92" />
-            </feComponentTransfer>
-            <feComposite in="dfC" in2="SourceAlpha" operator="in" result="bodyc" />
-            <feComposite in="sp" in2="SourceAlpha" operator="in" result="spc" />
-            <feBlend in="bodyc" in2="spc" mode="screen" result="shiny" />
-            <feDropShadow in="shiny" dx="0" dy="9" stdDeviation="8" floodColor="#0a1a2e" floodOpacity="0.34" />
-          </filter>
-          <filter id={sId} x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
-            <feColorMatrix in="SourceGraphic" type="matrix" result="iht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="iht" stdDeviation="0.7" result="ihb" />
-            <feSpecularLighting in="ihb" surfaceScale="6" specularConstant="1.5" specularExponent="22" lightingColor="#eaf1ff" result="isp">
-              <feDistantLight azimuth="235" elevation="31" />
-            </feSpecularLighting>
-            <feDiffuseLighting in="ihb" surfaceScale="6" diffuseConstant="1.34" lightingColor={lit} result="idf">
-              <feDistantLight azimuth="235" elevation="31" />
-            </feDiffuseLighting>
-            <feColorMatrix in="idf" type="saturate" values="1.18" result="idfR" />
-            <feComponentTransfer in="idfR" result="idfC">
-              <feFuncR type="gamma" exponent="1.28" />
-              <feFuncG type="gamma" exponent="1.18" />
-              <feFuncB type="gamma" exponent="0.92" />
-            </feComponentTransfer>
-            <feComposite in="idfC" in2="SourceAlpha" operator="in" result="ibc" />
-            <feComposite in="isp" in2="SourceAlpha" operator="in" result="isc" />
-            <feBlend in="ibc" in2="isc" mode="screen" />
-          </filter>
-        </defs>
-
-        <g ref={stage} transform="scale(0.12)">
-          <g ref={ball}>
-            <ellipse cx="6" cy="98" rx="54" ry="13" fill="var(--wax-shadow)" opacity="0.4" filter={`url(#ballsh-${uid})`} />
-            <circle r="100" fill={`url(#ballS-${uid})`} />
-          </g>
-          <g ref={seal} opacity="0">
-            <g clipPath={`url(#${sil})`}>
-              <g filter={`url(#${fId})`}>
-                <path ref={massPath} fill="#9a9a9a" d="" />
-                <circle r="80" fill="none" stroke="#565656" strokeWidth="3" />
-                <circle r="74" fill="none" stroke="#ececec" strokeWidth="2" />
-              </g>
-              <g ref={impress} opacity="0" filter={`url(#${sId})`}>
-                <circle r="74" fill="none" stroke="#ededed" strokeWidth="3.2" />
-                {icon ?? (
-                  <text
-                    x="0"
-                    y="2"
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill="#ededed"
-                    style={{ fontFamily: "var(--font-serif)", fontWeight: 700, fontSize: 104 }}
-                  >
-                    {glyph}
-                  </text>
-                )}
-              </g>
-            </g>
-          </g>
-        </g>
-      </svg>
-    </span>
+      className={cn("block", className)}
+      style={{ width: size, height: size, overflow: "visible" }}
+    />
   );
+}
+
+// rasterise the glyph once → an alpha mask used as embossed relief
+function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
+  out.fill(0);
+  if (!glyph) return;
+  const gc = document.createElement("canvas");
+  gc.width = dim; gc.height = dim;
+  const gx = gc.getContext("2d");
+  if (!gx) return;
+  gx.fillStyle = "#fff";
+  gx.textAlign = "center";
+  gx.textBaseline = "middle";
+  gx.filter = `blur(${dim * 0.006}px)`;
+  gx.font = `700 ${Math.round(dim * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
+  gx.fillText(glyph, dim / 2, dim / 2 + dim * 0.01);
+  const d = gx.getImageData(0, 0, dim, dim).data;
+  for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
+}
+
+// compute the lit seal into B.img (alpha 0 outside the silhouette)
+function paintSeal(
+  B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; img: ImageData },
+  dim: number, MR: number, cy: number, relief: number, col: Colors,
+) {
+  const cx = dim / 2;
+  const hgt = B.hgt, msk = B.msk, gly = B.gly;
+  const fieldR = FIELD_R * MR, ridgeR = RIDGE_R * MR, moatR = MOAT_R * MR;
+  const ridgeW = RIDGE_W * (MR / 100);
+  // pass 1 — height field + AA silhouette mask
+  for (let py = 0; py < dim; py++) {
+    const Y = py - cy;
+    for (let px = 0; px < dim; px++) {
+      const i = py * dim + px;
+      const X = px - cx;
+      const r = Math.hypot(X, Y);
+      const th = Math.atan2(Y, X);
+      const edge = MR * (1 + (profileAt(th) - 1) * relief);
+      const a = clamp((edge + 0.75 - r) / 1.5);
+      msk[i] = a;
+      if (a <= 0) { hgt[i] = 0; continue; }
+      let h: number;
+      if (r < moatR) {
+        h = FIELDH + RIDGE_AMP * relief * Math.exp(-(((r - ridgeR) / ridgeW) ** 2));
+      } else {
+        const t = clamp((r - moatR) / (edge - moatR));
+        const crestH = FIELDH + (CREST_BASE + CREST_LUMP * lumpFn(th) - FIELDH) * relief;
+        if (t < CREST_FRAC) {
+          const s = t / CREST_FRAC;
+          h = FIELDH + (crestH - FIELDH) * sm(s);
+        } else {
+          const s = (t - CREST_FRAC) / (1 - CREST_FRAC);
+          h = crestH * Math.pow(Math.max(0, 1 - Math.pow(s, OUT_POW)), 1 / OUT_POW);
+        }
+      }
+      hgt[i] = h + GLYPH_AMP * relief * gly[i];
+    }
+  }
+  // pass 2 — lighting
+  const d = B.img.data;
+  d.fill(0);
+  const Llen = Math.hypot(LX, LY, LZ), lx = LX / Llen, ly = LY / Llen, lz = LZ / Llen;
+  let hx = lx, hy = ly, hz = lz + 1;
+  const hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
+  const ss = SS * (MR / 100);
+  const [wr, wg, wb] = col.wax;
+  const [sr, sg, sb] = col.spec;
+  for (let py = 1; py < dim - 1; py++) {
+    for (let px = 1; px < dim - 1; px++) {
+      const i = py * dim + px;
+      const a = msk[i];
+      if (a <= 0.003) continue;
+      const o = i * 4;
+      const dx = (hgt[i + 1] - hgt[i - 1]) * 0.5 * ss;
+      const dy = (hgt[i + dim] - hgt[i - dim]) * 0.5 * ss;
+      let nx = -dx, ny = -dy, nz = 1;
+      const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
+      const ndl = Math.max(0, nx * lx + ny * ly + nz * lz);
+      const ndh = Math.max(0, nx * hx + ny * hy + nz * hz);
+      const spec = Math.pow(ndh, SHIN);
+      const slope = Math.hypot(dx, dy);
+      const gloss = SPEC_STR * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5));
+      const env = 1 + ENV * ((cy - py) / dim);
+      const lf = (AMBIENT + DIFF * ndl) * env;
+      let R = wr * lf + sr * spec * gloss;
+      let G = wg * lf + sg * spec * gloss;
+      let Bl = wb * lf + sb * spec * gloss;
+      R = Math.min(clamp(R), HICAP);
+      G = Math.min(clamp(G), HICAP);
+      Bl = Math.min(clamp(Bl), HICAP * 0.98);
+      d[o] = Math.round(Math.pow(R, 1 / 1.6) * 255);
+      d[o + 1] = Math.round(Math.pow(G, 1 / 1.6) * 255);
+      d[o + 2] = Math.round(Math.pow(Bl, 1 / 1.6) * 255);
+      d[o + 3] = Math.round(a * 255);
+    }
+  }
 }
