@@ -107,7 +107,6 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
   const ball = useRef<SVGGElement>(null);
   const seal = useRef<SVGGElement>(null);
   const massPath = useRef<SVGPathElement>(null);
-  const rimPath = useRef<SVGPathElement>(null);
   const clipP = useRef<SVGPathElement>(null);
   const impress = useRef<SVGGElement>(null);
 
@@ -120,8 +119,8 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
 
   useEffect(() => {
     const st = stage.current, b = ball.current, s = seal.current,
-      mp = massPath.current, cp = clipP.current, rp = rimPath.current, im = impress.current;
-    if (!st || !b || !s || !mp || !cp || !rp || !im) return;
+      mp = massPath.current, cp = clipP.current, im = impress.current;
+    if (!st || !b || !s || !mp || !cp || !im) return;
     const set = (k: Beat) => {
       st.setAttribute("transform", `translate(0 ${k.dy.toFixed(1)}) scale(${k.s.toFixed(3)})`);
       b.setAttribute("opacity", k.ballO.toFixed(3));
@@ -129,7 +128,6 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
       const d = blobD(k.lobe);
       mp.setAttribute("d", d);
       cp.setAttribute("d", d);
-      rp.setAttribute("d", d);
       im.setAttribute("opacity", k.impress.toFixed(3));
     };
     if (reduce.current) { set(stateAt(1)); return; }
@@ -176,7 +174,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           </clipPath>
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="8" result="hb" />
+            <feGaussianBlur in="ht" stdDeviation="3.5" result="hb" />
             <feSpecularLighting in="hb" surfaceScale="13" specularConstant="2.0" specularExponent="18" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="31" />
             </feSpecularLighting>
@@ -223,9 +221,9 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           <g ref={seal} opacity="0">
             <g clipPath={`url(#${sil})`}>
               <g filter={`url(#${fId})`}>
-                <path ref={massPath} fill="#9c9c9c" d="" />
-                <path ref={rimPath} fill="none" stroke="#ffffff" strokeWidth="11" d="" />
-                <circle r="52" fill="#767676" />
+                <path ref={massPath} fill="#9a9a9a" d="" />
+                <circle r="80" fill="none" stroke="#565656" strokeWidth="3" />
+                <circle r="74" fill="none" stroke="#ececec" strokeWidth="2" />
               </g>
               <g ref={impress} opacity="0" filter={`url(#${sId})`}>
                 <circle r="74" fill="none" stroke="#ededed" strokeWidth="3.2" />
