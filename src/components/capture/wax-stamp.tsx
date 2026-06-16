@@ -37,7 +37,7 @@ const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.66, CREST_LUMP = 0.32; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
 const GLYPH_AMP = 0.34;
-const DOME_AMP = 11;          // rounded (but matte) bead/puddle that flattens out
+const DOME_AMP = 16;          // rounded bead/puddle (sphere-ish) that flattens out
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
@@ -116,11 +116,15 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
   const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; off: HTMLCanvasElement; img: ImageData } | null>(null);
 
   useLayoutEffect(() => {
+    // dev-only colour override for same-colour reference comparison (removed before ship)
+    const ov = (window as Window & { __waxOverride?: Colors }).__waxOverride;
     const cs = getComputedStyle(document.documentElement);
     const wax = cs.getPropertyValue("--wax").trim();
     const bright = cs.getPropertyValue("--wax-bright").trim();
     const shadow = cs.getPropertyValue("--wax-shadow").trim();
-    if (wax) {
+    if (ov) {
+      colors.current = ov;
+    } else if (wax) {
       colors.current = {
         wax: hexToRgb01(wax),
         spec: lighten01(hexToRgb01(bright || wax), 0.6),
@@ -269,7 +273,7 @@ function paintSeal(
   let hx = lx, hy = ly, hz = lz + 1;
   const hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
   const ss = SS * (MR / 100);
-  const specDamp = 1 - 0.5 * dome;    // a molten bead has soft sheen; the pressed seal is glossy
+  const specDamp = 1 - 0.32 * dome;   // bead is moderately glossy (matches the reference), seal glossy
   const [wr, wg, wb] = col.wax;
   const [sr, sg, sb] = col.spec;
   for (let py = 1; py < dim - 1; py++) {
