@@ -34,17 +34,17 @@ const LIP_LO = 0.94, LIP_HI = 1.075; // profile → per-lobe lip height 0..1
 const FIELD_R = 0.68, RIDGE_R = 0.745, MOAT_R = 0.8;
 const FIELDH = 0.45;          // field AND moat baseline
 const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
-const CREST_BASE = 0.66, CREST_LUMP = 0.32; // trough crest ≈ ridge; lobes higher
+const CREST_BASE = 0.78, CREST_LUMP = 0.36; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 2.4;     // crest position; donut roll shape
-const GLYPH_AMP = 0.34;
+const GLYPH_AMP = 0.48;
 const DOME_AMP = 16;          // rounded bead/puddle (sphere-ish) that flattens out
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
-const SS = 2.35;              // height→slope (scaled per-pixel below)
-const LX = -0.52, LY = -0.52, LZ = 0.68;
-const AMBIENT = 0.32, DIFF = 0.95;
-const SPEC_STR = 0.9, SHIN = 16, SPEC_RIM = 2.9, ENV = 0.12, HICAP = 0.96;
+const SS = 4.5;               // height→slope: high relief so it reads glossy, not flat
+const LX = -0.52, LY = -0.52, LZ = 0.54;
+const AMBIENT = 0.23, DIFF = 1.05;
+const SPEC_STR = 1.3, SHIN = 18, SPEC_RIM = 3.3, ENV = 0.28, HICAP = 0.99;
 
 const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const win = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -79,7 +79,7 @@ function lighten01(c: Rgb, amt: number): Rgb {
 type Colors = { wax: Rgb; spec: Rgb; shadow: string };
 const DEFAULT_COLORS: Colors = {
   wax: hexToRgb01("#2e5685"),
-  spec: lighten01(hexToRgb01("#3d6b9e"), 0.6),
+  spec: lighten01(hexToRgb01("#3d6b9e"), 0.72),
   shadow: "#0a1a2e",
 };
 
@@ -127,7 +127,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
     } else if (wax) {
       colors.current = {
         wax: hexToRgb01(wax),
-        spec: lighten01(hexToRgb01(bright || wax), 0.6),
+        spec: lighten01(hexToRgb01(bright || wax), 0.72),
         shadow: shadow || colors.current.shadow,
       };
     }
@@ -291,7 +291,9 @@ function paintSeal(
       const spec = Math.pow(ndh, SHIN);
       const slope = Math.hypot(dx, dy);
       const gloss = SPEC_STR * specDamp * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5));
-      const env = 1 + ENV * ((cy - py) / dim);
+      // diagonal form shadow: brighter toward the upper-left light, deeper amber
+      // toward the lower-right — gives the seal global 3-D depth like the reference
+      const env = 1 + ENV * (((cx - px) + (cy - py)) / dim);
       const lf = (AMBIENT + DIFF * ndl) * env;
       let R = wr * lf + sr * spec * gloss;
       let G = wg * lf + sg * spec * gloss;
@@ -299,9 +301,9 @@ function paintSeal(
       R = Math.min(clamp(R), HICAP);
       G = Math.min(clamp(G), HICAP);
       Bl = Math.min(clamp(Bl), HICAP * 0.98);
-      d[o] = Math.round(Math.pow(R, 1 / 1.6) * 255);
-      d[o + 1] = Math.round(Math.pow(G, 1 / 1.6) * 255);
-      d[o + 2] = Math.round(Math.pow(Bl, 1 / 1.6) * 255);
+      d[o] = Math.round(Math.pow(R, 1 / 1.38) * 255);
+      d[o + 1] = Math.round(Math.pow(G, 1 / 1.38) * 255);
+      d[o + 2] = Math.round(Math.pow(Bl, 1 / 1.38) * 255);
       d[o + 3] = Math.round(a * 255);
     }
   }
