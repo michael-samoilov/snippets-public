@@ -177,7 +177,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
             <feGaussianBlur in="ht" stdDeviation="8" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="11" specularConstant="1.6" specularExponent="16" lightingColor="#eaf1ff" result="sp">
+            <feSpecularLighting in="hb" surfaceScale="12" specularConstant="1.85" specularExponent="15" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="31" />
             </feSpecularLighting>
             <feDiffuseLighting in="hb" surfaceScale="11" diffuseConstant="1.34" lightingColor={lit} result="df">
@@ -223,9 +223,9 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           <g ref={seal} opacity="0">
             <g clipPath={`url(#${sil})`}>
               <g filter={`url(#${fId})`}>
-                <path ref={massPath} fill="#9a9a9a" d="" />
-                <path ref={rimPath} fill="none" stroke="#f4f4f4" strokeWidth="9" d="" />
-                <circle r="54" fill="#6f6f6f" />
+                <path ref={massPath} fill="#9c9c9c" d="" />
+                <path ref={rimPath} fill="none" stroke="#ffffff" strokeWidth="11" d="" />
+                <circle r="52" fill="#767676" />
               </g>
               <g ref={impress} opacity="0" filter={`url(#${sId})`}>
                 <circle r="74" fill="none" stroke="#ededed" strokeWidth="3.2" />
