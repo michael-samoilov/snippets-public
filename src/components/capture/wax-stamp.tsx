@@ -90,8 +90,8 @@ function stateAt(t: number): Beat {
   // and the relief emerges (conform), and the displaced wax is pushed outward,
   // growing the lip + lobes past the die edge (lobe); then it settles and holds.
   return {
-    o: clamp(win(t, 0, 0.03)),                      // bead appears
-    scale: lp(0.12, 1.0, eo(win(t, 0.03, 0.45))),   // tiny bead grows (matched to reference)
+    o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
+    scale: 1,                                       // starts full size — no grow
     dome: 1 - sm(win(t, 0.14, 0.21)),               // ball flattens to a disc by ~360ms
     relief: clamp(0.92 * eo(win(t, 0.165, 0.29)) + 0.08 * sm(win(t, 0.3, 0.55))), // relief crisp by ~500ms
     lobe: sm(win(t, 0.18, 0.32)),                   // lip pushed outward, lobes appear (~306–545ms)
