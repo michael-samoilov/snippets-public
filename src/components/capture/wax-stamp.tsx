@@ -107,6 +107,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
   const ball = useRef<SVGGElement>(null);
   const seal = useRef<SVGGElement>(null);
   const massPath = useRef<SVGPathElement>(null);
+  const rimPath = useRef<SVGPathElement>(null);
   const clipP = useRef<SVGPathElement>(null);
   const impress = useRef<SVGGElement>(null);
 
@@ -119,8 +120,8 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
 
   useEffect(() => {
     const st = stage.current, b = ball.current, s = seal.current,
-      mp = massPath.current, cp = clipP.current, im = impress.current;
-    if (!st || !b || !s || !mp || !cp || !im) return;
+      mp = massPath.current, cp = clipP.current, rp = rimPath.current, im = impress.current;
+    if (!st || !b || !s || !mp || !cp || !rp || !im) return;
     const set = (k: Beat) => {
       st.setAttribute("transform", `translate(0 ${k.dy.toFixed(1)}) scale(${k.s.toFixed(3)})`);
       b.setAttribute("opacity", k.ballO.toFixed(3));
@@ -128,6 +129,7 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
       const d = blobD(k.lobe);
       mp.setAttribute("d", d);
       cp.setAttribute("d", d);
+      rp.setAttribute("d", d);
       im.setAttribute("opacity", k.impress.toFixed(3));
     };
     if (reduce.current) { set(stateAt(1)); return; }
@@ -221,7 +223,9 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
           <g ref={seal} opacity="0">
             <g clipPath={`url(#${sil})`}>
               <g filter={`url(#${fId})`}>
-                <path ref={massPath} fill={`url(#mass-${uid})`} d="" />
+                <path ref={massPath} fill="#a6a6a6" d="" />
+                <path ref={rimPath} fill="none" stroke="#f2f2f2" strokeWidth="13" d="" />
+                <circle r="56" fill="#7c7c7c" />
               </g>
               <g ref={impress} opacity="0" filter={`url(#${sId})`}>
                 <circle r="74" fill="none" stroke="#ededed" strokeWidth="3.2" />
