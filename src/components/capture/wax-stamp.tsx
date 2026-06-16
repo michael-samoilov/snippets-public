@@ -163,24 +163,24 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
             <stop offset="88%" stopColor="#969696" />
             <stop offset="100%" stopColor="#1e1e1e" />
           </radialGradient>
-          <radialGradient id={`ball-${uid}`} cx="42%" cy="36%" r="60%">
-            <stop offset="0%" stopColor="#fafafa" />
-            <stop offset="46%" stopColor="#ececec" />
-            <stop offset="70%" stopColor="#cacaca" />
-            <stop offset="86%" stopColor="#969696" />
-            <stop offset="95%" stopColor="#565656" />
-            <stop offset="100%" stopColor="#0c0c0c" />
+          <radialGradient id={`ballS-${uid}`} cx="38%" cy="32%" r="70%">
+            <stop offset="0%" stopColor="#cfe0f4" />
+            <stop offset="42%" stopColor="var(--wax)" />
+            <stop offset="100%" stopColor="var(--wax-deep)" />
           </radialGradient>
+          <filter id={`ballsh-${uid}`} x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="5" />
+          </filter>
           <clipPath id={sil}>
             <path ref={clipP} d="" />
           </clipPath>
           <filter id={fId} x="-55%" y="-55%" width="210%" height="210%" colorInterpolationFilters="sRGB">
             <feColorMatrix in="SourceGraphic" type="matrix" result="ht" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.33 0.34 0.33 0 0" />
-            <feGaussianBlur in="ht" stdDeviation="2.2" result="hb" />
-            <feSpecularLighting in="hb" surfaceScale="9" specularConstant="1.9" specularExponent="18" lightingColor="#eaf1ff" result="sp">
+            <feGaussianBlur in="ht" stdDeviation="2.6" result="hb" />
+            <feSpecularLighting in="hb" surfaceScale="8" specularConstant="0.85" specularExponent="9" lightingColor="#eaf1ff" result="sp">
               <feDistantLight azimuth="235" elevation="37" />
             </feSpecularLighting>
-            <feDiffuseLighting in="hb" surfaceScale="9" diffuseConstant="1.3" lightingColor={lit} result="df">
+            <feDiffuseLighting in="hb" surfaceScale="8" diffuseConstant="1.5" lightingColor={lit} result="df">
               <feDistantLight azimuth="235" elevation="37" />
             </feDiffuseLighting>
             <feColorMatrix in="df" type="saturate" values="1.18" result="dfR" />
@@ -198,7 +198,8 @@ export function WaxStamp({ playKey, size = 64, glyph = "S", icon, className }: W
 
         <g ref={stage} transform="scale(0.12)">
           <g ref={ball}>
-            <circle r="102" fill={`url(#ball-${uid})`} filter={`url(#${fId})`} />
+            <ellipse cx="6" cy="98" rx="54" ry="13" fill="var(--wax-shadow)" opacity="0.4" filter={`url(#ballsh-${uid})`} />
+            <circle r="100" fill={`url(#ballS-${uid})`} />
           </g>
           <g ref={seal} opacity="0">
             <g clipPath={`url(#${sil})`} filter={`url(#${fId})`}>
