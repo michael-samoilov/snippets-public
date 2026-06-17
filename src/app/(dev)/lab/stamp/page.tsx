@@ -31,7 +31,7 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 16 · 2026-06-17 · puck flatness slider";
+const BUILD = "build 17 · 2026-06-17 · confirmed values collapsed";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -40,7 +40,7 @@ export default function StampLab() {
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
   const [bounce, setBounce] = useState(1.5);
   const [rotate, setRotate] = useState(15);
-  const [puck, setPuck] = useState(0.65);
+  const [puck, setPuck] = useState(1);
   const [autoplay, setAutoplay] = useState(false);
   const [linger, setLinger] = useState(1000);
   const [exitMs, setExitMs] = useState(200);
@@ -65,6 +65,7 @@ export default function StampLab() {
         {BUILD}
       </span>
 
+      {/* active exploration */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-1.5">
           {ICONS.map((ic) => (
@@ -76,21 +77,6 @@ export default function StampLab() {
         <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className={chip(false)}>
           {dark ? "Lamplight" : "Paper"}
         </button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="voice-label text-ink-faint">ease</span>
-        {EASES.map((e) => (
-          <button key={e} type="button" onClick={() => setEase(e)} className={chip(ease === e)}>
-            {e}
-          </button>
-        ))}
-        <span className="voice-label ml-3 text-ink-faint">exit</span>
-        {EXITS.map((x) => (
-          <button key={x} type="button" onClick={() => setExit(x)} className={chip(exit === x)}>
-            {x}
-          </button>
-        ))}
         <button type="button" onClick={() => setAutoplay((v) => !v)} className={chip(autoplay)}>
           autoplay {autoplay ? "on" : "off"}
         </button>
@@ -123,31 +109,52 @@ export default function StampLab() {
           <span className="voice-data w-24">size {size}</span>
           <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
         </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-24">bounce {bounce.toFixed(1)}×</span>
-          <input type="range" min={0} max={2.6} step={0.1} value={bounce} onChange={(e) => setBounce(+e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-24">rotate {rotate}°</span>
-          <input type="range" min={0} max={60} step={5} value={rotate} onChange={(e) => setRotate(+e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
-          <input type="range" min={0} max={1} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-28">linger {linger}ms</span>
-          <input type="range" min={0} max={3000} step={100} value={linger} onChange={(e) => setLinger(+e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-28">exit {exitMs}ms</span>
-          <input type="range" min={120} max={1200} step={30} value={exitMs} onChange={(e) => setExitMs(+e.target.value)} />
-        </label>
         <button type="button" data-replay onClick={replay} className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper">
           Replay
         </button>
         <span className="voice-data">play #{playKey}</span>
       </div>
+
+      {/* confirmed values — collapsed; the summary shows them at a glance */}
+      <details className="rounded-[8px] border border-rule-faint bg-paper px-4 py-2.5">
+        <summary className="voice-label cursor-pointer select-none text-ink-soft">
+          confirmed — spring · front · bounce {bounce.toFixed(1)}× · rotate {rotate}° · puck {puck.toFixed(2)} · linger {linger}ms · exit {exit} {exitMs}ms
+        </summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="voice-label text-ink-faint">ease</span>
+            {EASES.map((e) => (
+              <button key={e} type="button" onClick={() => setEase(e)} className={chip(ease === e)}>{e}</button>
+            ))}
+            <span className="voice-label ml-3 text-ink-faint">exit</span>
+            {EXITS.map((x) => (
+              <button key={x} type="button" onClick={() => setExit(x)} className={chip(exit === x)}>{x}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-24">bounce {bounce.toFixed(1)}×</span>
+              <input type="range" min={0} max={2.6} step={0.1} value={bounce} onChange={(e) => setBounce(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-24">rotate {rotate}°</span>
+              <input type="range" min={0} max={60} step={5} value={rotate} onChange={(e) => setRotate(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
+              <input type="range" min={0} max={1} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-28">linger {linger}ms</span>
+              <input type="range" min={0} max={3000} step={100} value={linger} onChange={(e) => setLinger(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-28">exit {exitMs}ms</span>
+              <input type="range" min={120} max={1200} step={30} value={exitMs} onChange={(e) => setExitMs(+e.target.value)} />
+            </label>
+          </div>
+        </div>
+      </details>
 
       <button
         type="button"
