@@ -122,12 +122,29 @@ const DEFAULT_COLORS: Colors = {
   shadow: "#0a1a2e",
 };
 
+// a wax colour: base, a brighter tone for the specular, and a deep drop shadow.
+export type Tint = { wax: string; bright: string; shadow: string };
+// resolve the seal colours: an explicit tint wins, else the dev override, else
+// the live --wax* tokens (so it themes for Paper/Lamplight).
+function resolveColors(tint?: Tint): Colors {
+  if (tint) return { wax: hexToRgb01(tint.wax), spec: lighten01(hexToRgb01(tint.bright), 0.5), shadow: tint.shadow };
+  const ov = (window as Window & { __waxOverride?: Colors }).__waxOverride;
+  if (ov) return ov;
+  const cs = getComputedStyle(document.documentElement);
+  const wax = cs.getPropertyValue("--wax").trim();
+  const bright = cs.getPropertyValue("--wax-bright").trim();
+  const shadow = cs.getPropertyValue("--wax-shadow").trim();
+  return wax
+    ? { wax: hexToRgb01(wax), spec: lighten01(hexToRgb01(bright || wax), 0.5), shadow: shadow || DEFAULT_COLORS.shadow }
+    : DEFAULT_COLORS;
+}
+
 type Variant = "pop" | "spring";
 type Ease = "even" | "front" | "snap";
 // remap the timeline so the press (first half) runs faster, leaving more settle/hold
 const easeT = (t: number, e: Ease) =>
   e === "front" ? 1 - Math.pow(1 - t, 2.3) : e === "snap" ? 1 - Math.pow(1 - t, 3.6) : t;
-type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number };
+type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number; oy: number };
 function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate: number): Beat {
   const tp = easeT(t, ease); // front-loaded timeline for the press beats
   // physical press (~1.71s): a low matte circle, then the die presses. The die
@@ -143,7 +160,33 @@ function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate
     lobe: sm(win(tp, 0.12, 0.58)),                  // lip pushed outward, lobes appear
     cf: (MOAT_R + 0.05) * sm(win(tp, 0.08, 0.6)),   // contact front: centre → die edge
     rot: (rotate * Math.PI / 180) * (1 - eob(win(tp, 0.04, 0.62))), // entrance twist, settling upright
+    oy: 0,
   };
+}
+
+// ── full lifecycle (lab preview) ──────────────────────────────────
+// a wax drop expands into the resting dome, waits, is pressed, lingers at the
+// settled seal, then exits; loops. Lets us tune the linger + exit by feel.
+type Exit = "fade" | "rise" | "shrink" | "grow";
+const DROP_MS = 420, IDLE_MS = 360, PRESS_MS = 1150;
+const domeBeat = (scale: number, o: number): Beat =>
+  ({ scale, o, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0 });
+function cycleBeat(
+  e: number, variant: Variant, ease: Ease, bounce: number, rotate: number,
+  lingerMs: number, exitMs: number, exit: Exit,
+): Beat {
+  const tIdle = DROP_MS + IDLE_MS, tPress = tIdle + PRESS_MS, tLinger = tPress + lingerMs;
+  if (e < DROP_MS) return domeBeat(lp(0.2, 1, eo(e / DROP_MS)), clamp(e / 150)); // drop expands in
+  if (e < tIdle) return domeBeat(1, 1);                                          // rests, waiting
+  if (e < tPress) { const b = stateAt((e - tIdle) / PRESS_MS, variant, ease, bounce, rotate); b.o = 1; return b; }
+  if (e < tLinger) { const b = stateAt(1, variant, ease, bounce, rotate); b.o = 1; return b; } // linger
+  const p = clamp((e - tLinger) / exitMs);                                       // exit
+  const b = stateAt(1, variant, ease, bounce, rotate);
+  b.o = 1 - eo(p);
+  if (exit === "shrink") b.scale *= 1 - 0.28 * p;
+  else if (exit === "grow") b.scale *= 1 + 0.22 * p;
+  else if (exit === "rise") b.oy = -0.55 * eo(p);
+  return b;
 }
 
 export type WaxStampProps = {
@@ -161,10 +204,20 @@ export type WaxStampProps = {
   bounce?: number;
   /** entrance twist in degrees (the wax is rotated as the die presses, then settles). */
   rotate?: number;
+  /** lab: loop the full idle→press→linger→exit→drop lifecycle to tune it. */
+  loop?: boolean;
+  /** lab: ms to hold the settled seal before it exits. */
+  lingerMs?: number;
+  /** lab: ms for the exit animation. */
+  exitMs?: number;
+  /** lab: exit style — fade, rise, shrink, grow. */
+  exit?: Exit;
+  /** override the wax colour (else reads the live --wax* tokens). */
+  tint?: Tint;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, loop = false, lingerMs = 1200, exitMs = 450, exit = "fade", tint, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const colors = useRef<Colors>(DEFAULT_COLORS);
@@ -172,23 +225,9 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
   const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
 
   useLayoutEffect(() => {
-    // dev-only colour override for same-colour reference comparison (removed before ship)
-    const ov = (window as Window & { __waxOverride?: Colors }).__waxOverride;
-    const cs = getComputedStyle(document.documentElement);
-    const wax = cs.getPropertyValue("--wax").trim();
-    const bright = cs.getPropertyValue("--wax-bright").trim();
-    const shadow = cs.getPropertyValue("--wax-shadow").trim();
-    if (ov) {
-      colors.current = ov;
-    } else if (wax) {
-      colors.current = {
-        wax: hexToRgb01(wax),
-        spec: lighten01(hexToRgb01(bright || wax), 0.5),
-        shadow: shadow || colors.current.shadow,
-      };
-    }
+    colors.current = resolveColors(tint); // tint > dev override > --wax* tokens
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }, []);
+  }, [tint]);
 
   useEffect(() => {
     const cv = canvas.current;
@@ -217,22 +256,23 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     }
     const B = buf.current;
     if (B.baked !== glyph) { bakeGlyph(B.gly, B.glyR, dim, glyph); B.baked = glyph; } // re-bake on glyph change
+    colors.current = resolveColors(tint); // refresh (theme/tint may have changed)
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
     // Seeded by playKey so the lab's two seals match within a play, every replay differs.
     const prof = makeProfile(mulberry32(Math.imul(playKey, 0x9e3779b1) >>> 0));
 
-    const draw = (k: Beat) => {
+    const draw = (k: Beat, p: Profile = prof) => {
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
       // one continuous object: a convex wax drop that flattens into the puck and
       // takes the impression — same height-field lighting throughout.
-      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, k.cf, colors.current, prof);
+      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, k.cf, colors.current, p);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
       ctx.save();
       ctx.globalAlpha = k.o;
       // entrance twist: the wax is rotated as the stamp presses, settling upright
-      ctx.translate(dim / 2, dim * 0.46);
+      ctx.translate(dim / 2, dim * 0.46 + k.oy * MR);
       ctx.rotate(k.rot);
       ctx.translate(-dim / 2, -dim * 0.46);
       ctx.shadowColor = colors.current.shadow;
@@ -242,14 +282,34 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       ctx.restore();
     };
 
+    const cycleTotal = DROP_MS + IDLE_MS + PRESS_MS + lingerMs + exitMs;
     let raf = 0;
     // TODO(remove before ship): deterministic seek for visual capture
     type SeekWin = Window & { __stampSeek?: (t: number) => void };
-    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t), variant, ease, bounce, rotate)); };
+    (window as SeekWin).__stampSeek = (t) => {
+      cancelAnimationFrame(raf);
+      draw(loop
+        ? cycleBeat(clamp(t) * cycleTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
+        : stateAt(clamp(t), variant, ease, bounce, rotate));
+    };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
     if (reduce.current) { draw(stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
     const t0 = performance.now();
+
+    if (loop) { // lab: continuous idle→press→linger→exit→drop lifecycle
+      let cyc = -1, cProf = prof; // a fresh seal each loop, to show the variety
+      const frame = (now: number) => {
+        const el = now - t0;
+        const ci = Math.floor(el / cycleTotal);
+        if (ci !== cyc) { cyc = ci; cProf = makeProfile(mulberry32(Math.imul(playKey + ci * 101, 0x9e3779b1) >>> 0)); }
+        draw(cycleBeat(el % cycleTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit), cProf);
+        raf = requestAnimationFrame(frame);
+      };
+      raf = requestAnimationFrame(frame);
+      return cleanup;
+    }
+
     const DUR = 1150;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
@@ -260,7 +320,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, loop, lingerMs, exitMs, exit, tint]);
 
   return (
     <canvas
@@ -321,6 +381,15 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, dim: number, glyph: st
     check() {
       gx.lineWidth = 1.9;
       gx.stroke(new Path2D("M4.6 10.6 L8.6 14.8 L15.4 5.6"));
+    },
+    // candidate category glyphs (lab preview)
+    spark() {
+      gx.fill(new Path2D("M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z"));
+    },
+    eye() {
+      gx.lineWidth = 1.7;
+      gx.stroke(new Path2D("M2.6 10 Q10 4 17.4 10 Q10 16 2.6 10 Z"));
+      gx.beginPath(); gx.arc(10, 10, 2.5, 0, Math.PI * 2); gx.fill();
     },
   };
   if (glyph === "S") {
