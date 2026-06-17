@@ -134,7 +134,7 @@ export function Capture() {
     setStampCount((n) => n + 1);
     setStampVisible(true);
     if (stampTimer.current) clearTimeout(stampTimer.current);
-    stampTimer.current = setTimeout(() => setStampVisible(false), 1850);
+    stampTimer.current = setTimeout(() => setStampVisible(false), 1300);
 
     const snippet = await addSnippet({
       text: trimmed,

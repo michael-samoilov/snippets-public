@@ -9,12 +9,15 @@ import { WaxStamp } from "@/components/capture/wax-stamp";
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(180);
+  const icon = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("icon") ?? "S"
+    : "S";
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="voice-label">wax-stamp lab</h1>
       <div className="grid place-items-center rounded-[10px] border border-rule-faint bg-paper py-16">
-        <WaxStamp playKey={playKey} size={size} />
+        <WaxStamp playKey={playKey} size={size} glyph={icon} />
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button

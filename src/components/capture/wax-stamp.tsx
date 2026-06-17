@@ -43,7 +43,7 @@ const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past
 // lighting
 const SS = 4.5;               // height→slope: high relief so it reads glossy, not flat
 const LX = -0.52, LY = -0.52, LZ = 0.54;
-const AMBIENT = 0.19, DIFF = 1.06;
+const AMBIENT = 0.26, DIFF = 1.18;
 const SPEC_STR = 1.35, SHIN = 19, SPEC_RIM = 3.7, ENV = 0.33, HICAP = 0.99;
 
 const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -53,6 +53,14 @@ const eo = (t: number) => 1 - Math.pow(1 - t, 3);
 const eob = (t: number) => { t = clamp(t); const c = 2.0; return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2; }; // ease-out-back (overshoot)
 const lp = (a: number, b: number, t: number) => a + (b - a) * t;
 const TAU = Math.PI * 2;
+
+// scale "juice" variations (dev-switchable via window.__waxVar; removed before ship)
+let SCALE_VAR = 0;
+const popScale = (t: number) => 1 + 0.028 * Math.sin(clamp(win(t, 0.05, 0.3)) * Math.PI); // small impact pop
+const springScale = (t: number) => { // springs inward, bounces outward, settles
+  const p = clamp((t - 0.02) / 0.74);
+  return p <= 0 ? 1 : 1 - 0.16 * Math.exp(-2.1 * p) * Math.sin(6.6 * p);
+};
 
 function profileAt(th: number): number {
   let v = A0;
@@ -80,7 +88,7 @@ function lighten01(c: Rgb, amt: number): Rgb {
 type Colors = { wax: Rgb; spec: Rgb; shadow: string };
 const DEFAULT_COLORS: Colors = {
   wax: hexToRgb01("#2e5685"),
-  spec: lighten01(hexToRgb01("#3d6b9e"), 0.72),
+  spec: lighten01(hexToRgb01("#3d6b9e"), 0.5),
   shadow: "#0a1a2e",
 };
 
@@ -93,7 +101,7 @@ function stateAt(t: number): Beat {
   // displaced wax is pushed outward, growing the lip + lobes (lobe); then settles.
   return {
     o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
-    scale: 1 + 0.028 * Math.sin(clamp(win(t, 0.05, 0.3)) * Math.PI), // a juicy impact "pop"
+    scale: SCALE_VAR === 1 ? springScale(t) : popScale(t), // juicy scale (pop or spring)
     dome: 1 - sm(win(t, 0.06, 0.5)),                // circle flattens gradually (~100–850ms)
     relief: sm(win(t, 0.09, 0.54)),                 // lip displacement / field conform
     lobe: sm(win(t, 0.12, 0.58)),                   // lip pushed outward, lobes appear gradually
@@ -131,7 +139,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
     } else if (wax) {
       colors.current = {
         wax: hexToRgb01(wax),
-        spec: lighten01(hexToRgb01(bright || wax), 0.72),
+        spec: lighten01(hexToRgb01(bright || wax), 0.5),
         shadow: shadow || colors.current.shadow,
       };
     }
@@ -187,13 +195,14 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
 
     let raf = 0;
     // TODO(remove before ship): deterministic seek for visual capture
-    type SeekWin = Window & { __stampSeek?: (t: number) => void };
+    type SeekWin = Window & { __stampSeek?: (t: number) => void; __waxVar?: (v: number) => void };
     (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t))); };
+    (window as SeekWin).__waxVar = (v) => { SCALE_VAR = v; };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
     if (reduce.current) { draw(stateAt(1)); return cleanup; }
     const t0 = performance.now();
-    const DUR = 1700;
+    const DUR = 1150;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
       if (t >= 1) { draw(stateAt(1)); return; }
@@ -215,7 +224,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
   );
 }
 
-// rasterise the glyph once → an alpha mask used as embossed relief
+// rasterise the glyph/icon once → an alpha mask used as embossed relief
 function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   out.fill(0);
   if (!glyph) return;
@@ -223,12 +232,37 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   gc.width = dim; gc.height = dim;
   const gx = gc.getContext("2d");
   if (!gx) return;
-  gx.fillStyle = "#fff";
-  gx.textAlign = "center";
-  gx.textBaseline = "middle";
   gx.filter = `blur(${dim * 0.006}px)`;
-  gx.font = `700 ${Math.round(dim * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
-  gx.fillText(glyph, dim / 2, dim * 0.46); // centred on the seal centre (cy = 0.46·dim)
+  gx.fillStyle = "#fff"; gx.strokeStyle = "#fff";
+  gx.lineCap = "round"; gx.lineJoin = "round"; gx.lineWidth = dim * 0.05;
+  const cx = dim / 2, cy = dim * 0.46, S = dim; // centred on the seal centre
+  if (glyph === "check") {
+    gx.beginPath();
+    gx.moveTo(cx - 0.15 * S, cy + 0.0 * S);
+    gx.lineTo(cx - 0.03 * S, cy + 0.13 * S);
+    gx.lineTo(cx + 0.17 * S, cy - 0.14 * S);
+    gx.stroke();
+  } else if (glyph === "mic") {
+    const bw = 0.15 * S, bh = 0.21 * S, by = cy - 0.06 * S;
+    gx.beginPath(); gx.roundRect(cx - bw / 2, by - bh / 2, bw, bh, bw / 2); gx.stroke();
+    gx.beginPath(); gx.arc(cx, by + 0.01 * S, 0.13 * S, 0.18 * Math.PI, 0.82 * Math.PI); gx.stroke();
+    gx.beginPath(); gx.moveTo(cx, by + 0.14 * S); gx.lineTo(cx, cy + 0.17 * S); gx.stroke();
+    gx.beginPath(); gx.moveTo(cx - 0.09 * S, cy + 0.17 * S); gx.lineTo(cx + 0.09 * S, cy + 0.17 * S); gx.stroke();
+  } else if (glyph === "quill") {
+    gx.beginPath();
+    gx.moveTo(cx - 0.16 * S, cy + 0.17 * S);
+    gx.quadraticCurveTo(cx - 0.1 * S, cy - 0.15 * S, cx + 0.16 * S, cy - 0.17 * S);
+    gx.quadraticCurveTo(cx + 0.0 * S, cy + 0.02 * S, cx - 0.16 * S, cy + 0.17 * S);
+    gx.stroke();
+    gx.beginPath();
+    gx.moveTo(cx - 0.16 * S, cy + 0.17 * S);
+    gx.lineTo(cx + 0.1 * S, cy - 0.13 * S);
+    gx.stroke();
+  } else {
+    gx.textAlign = "center"; gx.textBaseline = "middle";
+    gx.font = `700 ${Math.round(dim * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
+    gx.fillText(glyph, cx, cy);
+  }
   const d = gx.getImageData(0, 0, dim, dim).data;
   for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
 }
@@ -312,9 +346,9 @@ function paintSeal(
       R = Math.min(clamp(R), HICAP);
       G = Math.min(clamp(G), HICAP);
       Bl = Math.min(clamp(Bl), HICAP * 0.98);
-      d[o] = Math.round(Math.pow(R, 1 / 1.38) * 255);
-      d[o + 1] = Math.round(Math.pow(G, 1 / 1.38) * 255);
-      d[o + 2] = Math.round(Math.pow(Bl, 1 / 1.38) * 255);
+      d[o] = Math.round(Math.pow(R, 1 / 1.08) * 255);
+      d[o + 1] = Math.round(Math.pow(G, 1 / 1.08) * 255);
+      d[o + 2] = Math.round(Math.pow(Bl, 1 / 1.08) * 255);
       d[o + 3] = Math.round(a * 255);
     }
   }
