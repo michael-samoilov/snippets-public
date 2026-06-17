@@ -92,21 +92,26 @@ const DEFAULT_COLORS: Colors = {
 };
 
 type Variant = "pop" | "spring";
+type Ease = "even" | "front" | "snap";
+// remap the timeline so the press (first half) runs faster, leaving more settle/hold
+const easeT = (t: number, e: Ease) =>
+  e === "front" ? 1 - Math.pow(1 - t, 2.3) : e === "snap" ? 1 - Math.pow(1 - t, 3.6) : t;
 type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number };
-function stateAt(t: number, variant: Variant): Beat {
+function stateAt(t: number, variant: Variant, ease: Ease): Beat {
+  const tp = easeT(t, ease); // front-loaded timeline for the press beats
   // physical press (~1.71s): a low matte circle, then the die presses. The die
   // only imprints where it has reached the wax — a contact front (cf) spreading
   // from the centre outward — so the emblem (centre) appears first and the ridge
   // (near the die's edge) imprints LAST, not before the edge has touched. The
   // displaced wax is pushed outward, growing the lip + lobes (lobe); then settles.
   return {
-    o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
-    scale: variant === "spring" ? springScale(t) : popScale(t), // juicy scale (pop or spring)
-    dome: 1 - sm(win(t, 0.06, 0.5)),                // circle flattens gradually (~100–850ms)
-    relief: sm(win(t, 0.09, 0.54)),                 // lip displacement / field conform
-    lobe: sm(win(t, 0.12, 0.58)),                   // lip pushed outward, lobes appear gradually
-    cf: (MOAT_R + 0.05) * sm(win(t, 0.08, 0.6)),    // contact front: centre → die edge
-    rot: 0.5 * (1 - eob(win(t, 0.04, 0.62))),       // ~28° twist as it presses, settling upright
+    o: clamp(win(t, 0, 0.03)),                      // fade-in on real time
+    scale: variant === "spring" ? springScale(tp) : popScale(tp), // juicy scale (pop or spring)
+    dome: 1 - sm(win(tp, 0.06, 0.5)),               // circle flattens
+    relief: sm(win(tp, 0.09, 0.54)),                // lip displacement / field conform
+    lobe: sm(win(tp, 0.12, 0.58)),                  // lip pushed outward, lobes appear
+    cf: (MOAT_R + 0.05) * sm(win(tp, 0.08, 0.6)),   // contact front: centre → die edge
+    rot: 0.5 * (1 - eob(win(tp, 0.04, 0.62))),      // ~28° twist, settling upright
   };
 }
 
@@ -119,10 +124,12 @@ export type WaxStampProps = {
   glyph?: string;
   /** the scale "juice": a small impact pop, or a spring in→out. */
   variant?: Variant;
+  /** timeline shaping: "even", or front-loaded so the press runs faster. */
+  ease?: Ease;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", ease = "front", className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const colors = useRef<Colors>(DEFAULT_COLORS);
@@ -199,22 +206,22 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", cla
     let raf = 0;
     // TODO(remove before ship): deterministic seek for visual capture
     type SeekWin = Window & { __stampSeek?: (t: number) => void };
-    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t), variant)); };
+    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t), variant, ease)); };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
-    if (reduce.current) { draw(stateAt(1, variant)); return cleanup; }
+    if (reduce.current) { draw(stateAt(1, variant, ease)); return cleanup; }
     const t0 = performance.now();
     const DUR = 1150;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
-      if (t >= 1) { draw(stateAt(1, variant)); return; }
-      draw(stateAt(t, variant));
+      if (t >= 1) { draw(stateAt(1, variant, ease)); return; }
+      draw(stateAt(t, variant, ease));
       raf = requestAnimationFrame(frame);
     };
-    draw(stateAt(0, variant));
+    draw(stateAt(0, variant, ease));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant]);
+  }, [playKey, size, glyph, variant, ease]);
 
   return (
     <canvas

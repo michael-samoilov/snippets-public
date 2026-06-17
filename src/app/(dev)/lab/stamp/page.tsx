@@ -9,11 +9,13 @@ import { WaxStamp } from "@/components/capture/wax-stamp";
 
 const ICONS = ["S", "quill", "mic", "calendar", "check"];
 const VARIANTS = ["pop", "spring"] as const;
+const EASES = ["even", "front", "snap"] as const;
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(180);
   const [icon, setIcon] = useState("S");
+  const [ease, setEase] = useState<(typeof EASES)[number]>("front");
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
 
@@ -37,6 +39,13 @@ export default function StampLab() {
         <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className={chip(false)}>
           {dark ? "Lamplight" : "Paper"}
         </button>
+        <div className="flex flex-wrap gap-1.5">
+          {EASES.map((e) => (
+            <button key={e} type="button" onClick={() => setEase(e)} className={chip(ease === e)}>
+              {e}
+            </button>
+          ))}
+        </div>
         <label className="flex items-center gap-2 text-[0.85rem]">
           <span className="voice-data w-20">size {size}</span>
           <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
@@ -55,7 +64,7 @@ export default function StampLab() {
       <div className="grid grid-cols-2 gap-5">
         {VARIANTS.map((v) => (
           <div key={v} className="grid place-items-center gap-3 rounded-[10px] border border-rule-faint bg-paper py-14">
-            <WaxStamp playKey={playKey} size={size} glyph={icon} variant={v} />
+            <WaxStamp playKey={playKey} size={size} glyph={icon} variant={v} ease={ease} />
             <span className="voice-label">{v}</span>
           </div>
         ))}
