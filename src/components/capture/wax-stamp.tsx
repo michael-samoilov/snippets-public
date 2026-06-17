@@ -34,7 +34,9 @@ const FIELDH = 0.45;          // field AND moat baseline
 const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.82, CREST_LUMP = 0.38; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 3.1;     // crest position; donut roll shape
-const GLYPH_AMP = 0.85;       // raised relief: taller than the ridge, deep shadow rims
+const GLYPH_AMP = 0.55;       // base plateau height (gives the crisp, steep edges)
+const GLYPH_CROWN = 0.8;      // domed crown on top → reads as raised VOLUME, not a flat plateau
+const GLYPH_ROUND = 0.022;    // crown blur (×dim): rounds the crown into a dome
 const DOME_AMP = 8;           // a low rounded circle (button-like), NOT a sphere
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
@@ -162,7 +164,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", eas
   const reduce = useRef(false);
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
-  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; off: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
 
   useLayoutEffect(() => {
     // dev-only colour override for same-colour reference comparison (removed before ship)
@@ -202,13 +204,14 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", eas
         hgt: new Float32Array(dim * dim),
         msk: new Float32Array(dim * dim),
         gly: new Float32Array(dim * dim),
+        glyR: new Float32Array(dim * dim),
         off,
         img: ctx.createImageData(dim, dim),
         baked: "",
       };
     }
     const B = buf.current;
-    if (B.baked !== glyph) { bakeGlyph(B.gly, dim, glyph); B.baked = glyph; } // re-bake on glyph change
+    if (B.baked !== glyph) { bakeGlyph(B.gly, B.glyR, dim, glyph); B.baked = glyph; } // re-bake on glyph change
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
     // Seeded by playKey so the lab's two seals match within a play, every replay differs.
@@ -277,8 +280,8 @@ const S_PATH =
 // rasterise the glyph/icon once → an alpha mask used as embossed relief.
 // Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
 // crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
-function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
-  out.fill(0);
+function bakeGlyph(out: Float32Array, outR: Float32Array, dim: number, glyph: string) {
+  out.fill(0); outR.fill(0);
   if (!glyph) return;
   const OV = 3, big = dim * OV;          // oversample factor + working resolution
   const gc = document.createElement("canvas");
@@ -337,17 +340,10 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
     gx.font = `italic 560 ${Math.round(big * 0.46)}px ${fam || "Fraunces"}, Georgia, "Times New Roman", serif`;
     gx.fillText(glyph, cx, cy);
   }
-  // downsample to backing res: high-quality averaging anti-aliases the edges,
-  // a whisper of blur keeps the relief lighting from biting on the last hard pixel.
-  const dc = document.createElement("canvas");
-  dc.width = dim; dc.height = dim;
-  const dx = dc.getContext("2d");
-  if (!dx) return;
-  dx.filter = `blur(${dim * 0.0035}px)`;
-  dx.imageSmoothingEnabled = true;
-  dx.imageSmoothingQuality = "high";
-  // recentre on the seal's centre from the glyph's actual ink bounds — a font's
-  // "middle" baseline and an icon's viewBox aren't centred on their own glyph.
+  // recentre on the seal's centre from the glyph's actual ink bounds (a font's
+  // "middle" baseline and an icon's viewBox aren't centred on their own glyph),
+  // then resolve two masks from the same oversampled draw: a crisp one for the
+  // edges, and a rounded one used to dome the crown so the relief reads as volume.
   const src = gx.getImageData(0, 0, big, big).data;
   let minX = big, minY = big, maxX = 0, maxY = 0, any = false;
   for (let y = 0; y < big; y += OV) {
@@ -361,6 +357,22 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   }
   const tx = any ? dim / 2 - (minX + maxX) / (2 * OV) : 0;
   const ty = any ? dim * 0.46 - (minY + maxY) / (2 * OV) : 0;
+  resolveMask(out, gc, dim, big, dim * 0.0035, tx, ty);   // crisp edges (whisper of blur)
+  resolveMask(outR, gc, dim, big, dim * GLYPH_ROUND, tx, ty); // rounded → domed crown
+}
+
+// downsample the oversampled glyph into a dim×dim alpha mask with a given blur,
+// recentred by (tx,ty); high-quality averaging anti-aliases the edges.
+function resolveMask(
+  out: Float32Array, gc: HTMLCanvasElement, dim: number, big: number, blurPx: number, tx: number, ty: number,
+) {
+  const dc = document.createElement("canvas");
+  dc.width = dim; dc.height = dim;
+  const dx = dc.getContext("2d");
+  if (!dx) return;
+  dx.filter = `blur(${blurPx}px)`;
+  dx.imageSmoothingEnabled = true;
+  dx.imageSmoothingQuality = "high";
   dx.drawImage(gc, 0, 0, big, big, tx, ty, dim, dim);
   const d = dx.getImageData(0, 0, dim, dim).data;
   for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
@@ -368,11 +380,11 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
 
 // compute the lit seal into B.img (alpha 0 outside the silhouette)
 function paintSeal(
-  B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; img: ImageData },
+  B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; img: ImageData },
   dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors, prof: Profile,
 ) {
   const cx = dim / 2;
-  const hgt = B.hgt, msk = B.msk, gly = B.gly;
+  const hgt = B.hgt, msk = B.msk, gly = B.gly, glyR = B.glyR;
   const fieldR = FIELD_R * MR, ridgeR = RIDGE_R * MR, moatR = MOAT_R * MR;
   const ridgeW = RIDGE_W * (MR / 100);
   // pass 1 — height field + AA silhouette mask
@@ -409,7 +421,10 @@ function paintSeal(
         }
       }
       const rn = r / edge;
-      hgt[i] = h + GLYPH_AMP * cl * gly[i] + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - rn * rn));
+      // glyph: crisp-edged plateau (gly) lifted by a rounded crown (glyR) so it
+      // reads as raised volume, not a flat-topped engraving that blends with the field.
+      const glyphH = cl * gly[i] * (GLYPH_AMP + GLYPH_CROWN * glyR[i]);
+      hgt[i] = h + glyphH + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - rn * rn));
     }
   }
   // pass 2 — lighting

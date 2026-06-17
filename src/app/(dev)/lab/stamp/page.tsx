@@ -11,7 +11,7 @@ const ICONS = ["S", "quill", "mic", "calendar", "check"];
 const VARIANTS = ["pop", "spring"] as const;
 const EASES = ["even", "front", "snap"] as const;
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 7 · 2026-06-17 · deep relief + bouncy spring (default)";
+const BUILD = "build 8 · 2026-06-17 · domed glyph crown (volume)";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
