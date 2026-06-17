@@ -1,45 +1,64 @@
 "use client";
 
-/* TEMPORARY dev harness for iterating the wax-stamp press. Not linked
-   anywhere; removed before the feature ships. Replays on demand. */
+/* TEMPORARY dev harness for iterating and comparing the wax-stamp press.
+   Not linked anywhere; removed before the feature ships. */
 
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { WaxStamp } from "@/components/capture/wax-stamp";
+
+const ICONS = ["S", "quill", "mic", "calendar", "check"];
+const VARIANTS = ["pop", "spring"] as const;
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(180);
-  const icon = typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("icon") ?? "S"
-    : "S";
+  const [icon, setIcon] = useState("S");
+  const { theme, setTheme } = useTheme();
+  const dark = theme === "dark";
+
+  const chip = (active: boolean) =>
+    `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${
+      active ? "bg-wax text-paper" : "bg-paper text-ink border border-rule-faint"
+    }`;
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="voice-label">wax-stamp lab</h1>
-      <div className="grid place-items-center rounded-[10px] border border-rule-faint bg-paper py-16">
-        <WaxStamp playKey={playKey} size={size} glyph={icon} />
-      </div>
+      <h1 className="voice-label">wax-stamp lab — compare</h1>
+
       <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {ICONS.map((ic) => (
+            <button key={ic} type="button" onClick={() => setIcon(ic)} className={chip(icon === ic)}>
+              {ic}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className={chip(false)}>
+          {dark ? "Lamplight" : "Paper"}
+        </button>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-20">size {size}</span>
+          <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
+        </label>
         <button
           type="button"
           data-replay
           onClick={() => setPlayKey((n) => n + 1)}
           className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper"
         >
-          Replay
+          Replay both
         </button>
         <span className="voice-data">play #{playKey}</span>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-20">size {size}</span>
-          <input
-            type="range"
-            min={48}
-            max={240}
-            step={4}
-            value={size}
-            onChange={(e) => setSize(+e.target.value)}
-          />
-        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-5">
+        {VARIANTS.map((v) => (
+          <div key={v} className="grid place-items-center gap-3 rounded-[10px] border border-rule-faint bg-paper py-14">
+            <WaxStamp playKey={playKey} size={size} glyph={icon} variant={v} />
+            <span className="voice-label">{v}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

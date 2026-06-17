@@ -54,8 +54,7 @@ const eob = (t: number) => { t = clamp(t); const c = 2.0; return 1 + (c + 1) * (
 const lp = (a: number, b: number, t: number) => a + (b - a) * t;
 const TAU = Math.PI * 2;
 
-// scale "juice" variations (dev-switchable via window.__waxVar; removed before ship)
-let SCALE_VAR = 0;
+// scale "juice" variations, chosen per-instance via the `variant` prop
 const popScale = (t: number) => 1 + 0.028 * Math.sin(clamp(win(t, 0.05, 0.3)) * Math.PI); // small impact pop
 const springScale = (t: number) => { // springs inward, bounces outward, settles
   const p = clamp((t - 0.02) / 0.74);
@@ -92,8 +91,9 @@ const DEFAULT_COLORS: Colors = {
   shadow: "#0a1a2e",
 };
 
+type Variant = "pop" | "spring";
 type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number };
-function stateAt(t: number): Beat {
+function stateAt(t: number, variant: Variant): Beat {
   // physical press (~1.71s): a low matte circle, then the die presses. The die
   // only imprints where it has reached the wax — a contact front (cf) spreading
   // from the centre outward — so the emblem (centre) appears first and the ridge
@@ -101,7 +101,7 @@ function stateAt(t: number): Beat {
   // displaced wax is pushed outward, growing the lip + lobes (lobe); then settles.
   return {
     o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
-    scale: SCALE_VAR === 1 ? springScale(t) : popScale(t), // juicy scale (pop or spring)
+    scale: variant === "spring" ? springScale(t) : popScale(t), // juicy scale (pop or spring)
     dome: 1 - sm(win(t, 0.06, 0.5)),                // circle flattens gradually (~100–850ms)
     relief: sm(win(t, 0.09, 0.54)),                 // lip displacement / field conform
     lobe: sm(win(t, 0.12, 0.58)),                   // lip pushed outward, lobes appear gradually
@@ -115,17 +115,19 @@ export type WaxStampProps = {
   playKey: number;
   /** seal diameter, px. */
   size?: number;
-  /** the letter pressed into the wax. */
+  /** the letter or icon pressed into the wax (e.g. "S", "quill", "mic"). */
   glyph?: string;
+  /** the scale "juice": a small impact pop, or a spring in→out. */
+  variant?: Variant;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
-  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; off: HTMLCanvasElement; img: ImageData } | null>(null);
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; off: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
 
   useLayoutEffect(() => {
     // dev-only colour override for same-colour reference comparison (removed before ship)
@@ -167,10 +169,11 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
         gly: new Float32Array(dim * dim),
         off,
         img: ctx.createImageData(dim, dim),
+        baked: "",
       };
-      bakeGlyph(buf.current.gly, dim, glyph);
     }
     const B = buf.current;
+    if (B.baked !== glyph) { bakeGlyph(B.gly, dim, glyph); B.baked = glyph; } // re-bake on glyph change
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
 
     const draw = (k: Beat) => {
@@ -195,24 +198,23 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
 
     let raf = 0;
     // TODO(remove before ship): deterministic seek for visual capture
-    type SeekWin = Window & { __stampSeek?: (t: number) => void; __waxVar?: (v: number) => void };
-    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t))); };
-    (window as SeekWin).__waxVar = (v) => { SCALE_VAR = v; };
+    type SeekWin = Window & { __stampSeek?: (t: number) => void };
+    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t), variant)); };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
-    if (reduce.current) { draw(stateAt(1)); return cleanup; }
+    if (reduce.current) { draw(stateAt(1, variant)); return cleanup; }
     const t0 = performance.now();
     const DUR = 1150;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
-      if (t >= 1) { draw(stateAt(1)); return; }
-      draw(stateAt(t));
+      if (t >= 1) { draw(stateAt(1, variant)); return; }
+      draw(stateAt(t, variant));
       raf = requestAnimationFrame(frame);
     };
-    draw(stateAt(0));
+    draw(stateAt(0, variant));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph]);
+  }, [playKey, size, glyph, variant]);
 
   return (
     <canvas
@@ -232,32 +234,43 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   gc.width = dim; gc.height = dim;
   const gx = gc.getContext("2d");
   if (!gx) return;
-  gx.filter = `blur(${dim * 0.006}px)`;
+  gx.filter = `blur(${dim * 0.005}px)`;
   gx.fillStyle = "#fff"; gx.strokeStyle = "#fff";
-  gx.lineCap = "round"; gx.lineJoin = "round"; gx.lineWidth = dim * 0.05;
-  const cx = dim / 2, cy = dim * 0.46, S = dim; // centred on the seal centre
-  if (glyph === "check") {
-    gx.beginPath();
-    gx.moveTo(cx - 0.15 * S, cy + 0.0 * S);
-    gx.lineTo(cx - 0.03 * S, cy + 0.13 * S);
-    gx.lineTo(cx + 0.17 * S, cy - 0.14 * S);
-    gx.stroke();
-  } else if (glyph === "mic") {
-    const bw = 0.15 * S, bh = 0.21 * S, by = cy - 0.06 * S;
-    gx.beginPath(); gx.roundRect(cx - bw / 2, by - bh / 2, bw, bh, bw / 2); gx.stroke();
-    gx.beginPath(); gx.arc(cx, by + 0.01 * S, 0.13 * S, 0.18 * Math.PI, 0.82 * Math.PI); gx.stroke();
-    gx.beginPath(); gx.moveTo(cx, by + 0.14 * S); gx.lineTo(cx, cy + 0.17 * S); gx.stroke();
-    gx.beginPath(); gx.moveTo(cx - 0.09 * S, cy + 0.17 * S); gx.lineTo(cx + 0.09 * S, cy + 0.17 * S); gx.stroke();
-  } else if (glyph === "quill") {
-    gx.beginPath();
-    gx.moveTo(cx - 0.16 * S, cy + 0.17 * S);
-    gx.quadraticCurveTo(cx - 0.1 * S, cy - 0.15 * S, cx + 0.16 * S, cy - 0.17 * S);
-    gx.quadraticCurveTo(cx + 0.0 * S, cy + 0.02 * S, cx - 0.16 * S, cy + 0.17 * S);
-    gx.stroke();
-    gx.beginPath();
-    gx.moveTo(cx - 0.16 * S, cy + 0.17 * S);
-    gx.lineTo(cx + 0.1 * S, cy - 0.13 * S);
-    gx.stroke();
+  gx.lineCap = "round"; gx.lineJoin = "round";
+  const cx = dim / 2, cy = dim * 0.46;
+  // the app's own icons (shell-nav quill/calendar, the record mic) live in a
+  // 0–20 viewBox with stroke-width ~1.5 — reuse them verbatim, centred & scaled
+  // into the seal field with a fine stroke.
+  const APP_ICONS: Record<string, () => void> = {
+    quill() {
+      gx.lineWidth = 1.7;
+      for (const dd of [
+        "M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z",
+        "M4.4 15.6 12.6 7", "M4.4 15.6 3.4 17.6",
+      ]) gx.stroke(new Path2D(dd));
+    },
+    mic() {
+      gx.beginPath(); gx.roundRect(7.4, 2.6, 5.2, 9.2, 2.6); gx.fill();
+      gx.lineWidth = 1.8;
+      gx.stroke(new Path2D("M4.6 9.8 a5.4 5.4 0 0 0 10.8 0"));
+      gx.stroke(new Path2D("M10 15.2 V17.6"));
+    },
+    calendar() {
+      gx.lineWidth = 1.7;
+      gx.beginPath(); gx.roundRect(3.2, 4.6, 13.6, 12, 2.2); gx.stroke();
+      gx.stroke(new Path2D("M6.8 2.8v3.4M13.2 2.8v3.4M3.2 9h13.6"));
+    },
+    check() {
+      gx.lineWidth = 1.9;
+      gx.stroke(new Path2D("M4.6 10.6 L8.6 14.8 L15.4 5.6"));
+    },
+  };
+  if (APP_ICONS[glyph]) {
+    const sc = (0.48 * dim) / 20;            // fit the 0–20 viewBox into the field
+    gx.save();
+    gx.translate(cx, cy); gx.scale(sc, sc); gx.translate(-10, -10);
+    APP_ICONS[glyph]();
+    gx.restore();
   } else {
     gx.textAlign = "center"; gx.textBaseline = "middle";
     gx.font = `700 ${Math.round(dim * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
