@@ -50,6 +50,7 @@ const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const win = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
 const sm = (t: number) => t * t * (3 - 2 * t);
 const eo = (t: number) => 1 - Math.pow(1 - t, 3);
+const eob = (t: number) => { t = clamp(t); const c = 2.0; return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2; }; // ease-out-back (overshoot)
 const lp = (a: number, b: number, t: number) => a + (b - a) * t;
 const TAU = Math.PI * 2;
 
@@ -83,7 +84,7 @@ const DEFAULT_COLORS: Colors = {
   shadow: "#0a1a2e",
 };
 
-type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; o: number };
+type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number };
 function stateAt(t: number): Beat {
   // physical press (~1.71s): a low matte circle, then the die presses. The die
   // only imprints where it has reached the wax — a contact front (cf) spreading
@@ -92,11 +93,12 @@ function stateAt(t: number): Beat {
   // displaced wax is pushed outward, growing the lip + lobes (lobe); then settles.
   return {
     o: clamp(win(t, 0, 0.03)),                      // already a full-size circle (the button)
-    scale: 1,                                       // starts full size — no grow
+    scale: 1 + 0.028 * Math.sin(clamp(win(t, 0.05, 0.3)) * Math.PI), // a juicy impact "pop"
     dome: 1 - sm(win(t, 0.06, 0.5)),                // circle flattens gradually (~100–850ms)
     relief: sm(win(t, 0.09, 0.54)),                 // lip displacement / field conform
     lobe: sm(win(t, 0.12, 0.58)),                   // lip pushed outward, lobes appear gradually
     cf: (MOAT_R + 0.05) * sm(win(t, 0.08, 0.6)),    // contact front: centre → die edge
+    rot: 0.5 * (1 - eob(win(t, 0.04, 0.62))),       // ~28° twist as it presses, settling upright
   };
 }
 
@@ -172,6 +174,10 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", className }: WaxStam
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
       ctx.save();
       ctx.globalAlpha = k.o;
+      // entrance twist: the wax is rotated as the stamp presses, settling upright
+      ctx.translate(dim / 2, dim * 0.46);
+      ctx.rotate(k.rot);
+      ctx.translate(-dim / 2, -dim * 0.46);
       ctx.shadowColor = colors.current.shadow;
       ctx.shadowBlur = MR * (0.09 + 0.05 * k.scale);
       ctx.shadowOffsetY = MR * (0.05 + 0.06 * k.scale);
@@ -222,7 +228,7 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   gx.textBaseline = "middle";
   gx.filter = `blur(${dim * 0.006}px)`;
   gx.font = `700 ${Math.round(dim * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
-  gx.fillText(glyph, dim / 2, dim / 2 + dim * 0.01);
+  gx.fillText(glyph, dim / 2, dim * 0.46); // centred on the seal centre (cy = 0.46·dim)
   const d = gx.getImageData(0, 0, dim, dim).data;
   for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
 }
