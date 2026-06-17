@@ -217,7 +217,7 @@ export function Capture() {
             exit={{ opacity: 0, transition: { duration: 0.18 } }}
             className="pointer-events-none absolute inset-0 z-20 grid place-items-center"
           >
-            <WaxStamp playKey={stampCount} size={96} />
+            <WaxStamp playKey={stampCount} size={96} variant="spring" />
           </motion.div>
         )}
       </AnimatePresence>

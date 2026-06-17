@@ -34,7 +34,7 @@ const FIELDH = 0.45;          // field AND moat baseline
 const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.82, CREST_LUMP = 0.38; // trough crest ≈ ridge; lobes higher
 const CREST_FRAC = 0.56, OUT_POW = 3.1;     // crest position; donut roll shape
-const GLYPH_AMP = 0.54;
+const GLYPH_AMP = 0.85;       // raised relief: taller than the ridge, deep shadow rims
 const DOME_AMP = 8;           // a low rounded circle (button-like), NOT a sphere
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
@@ -55,9 +55,10 @@ const TAU = Math.PI * 2;
 
 // scale "juice" variations, chosen per-instance via the `variant` prop
 const popScale = (t: number) => 1 + 0.028 * Math.sin(clamp(win(t, 0.05, 0.3)) * Math.PI); // small impact pop
-const springScale = (t: number) => { // springs inward, bounces outward, settles
-  const p = clamp((t - 0.02) / 0.74);
-  return p <= 0 ? 1 : 1 - 0.16 * Math.exp(-2.1 * p) * Math.sin(6.6 * p);
+const springScale = (t: number) => { // springs inward, bounces outward, settles (lively)
+  const p = clamp((t - 0.02) / 0.82);
+  if (p <= 0 || p >= 1) return 1;        // (1-p) envelope guarantees a clean settle at 1
+  return 1 - 0.2 * Math.exp(-1.15 * p) * (1 - p) * Math.sin(12.5 * p);
 };
 
 // a tiny seeded PRNG so each press is deterministic per playKey (both lab seals
