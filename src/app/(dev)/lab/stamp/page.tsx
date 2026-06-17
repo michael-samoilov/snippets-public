@@ -10,6 +10,8 @@ import { WaxStamp } from "@/components/capture/wax-stamp";
 const ICONS = ["S", "quill", "mic", "calendar", "check"];
 const VARIANTS = ["pop", "spring"] as const;
 const EASES = ["even", "front", "snap"] as const;
+// bump this string every push so it's obvious on-screen which build is live
+const BUILD = "build 7 · 2026-06-17 · deep relief + bouncy spring (default)";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -27,6 +29,9 @@ export default function StampLab() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="voice-label">wax-stamp lab — compare</h1>
+      <span className="inline-block self-start rounded bg-wax px-2 py-1 font-mono text-[0.72rem] text-paper">
+        {BUILD}
+      </span>
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-1.5">
