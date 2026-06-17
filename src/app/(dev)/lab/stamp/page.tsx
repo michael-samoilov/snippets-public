@@ -14,6 +14,7 @@ const EXITS = ["fade", "rise", "shrink", "grow"] as const;
 // are an exploration for the categorisation moonshot, sandboxed to the lab).
 const TINTS: { name: string; tint?: Tint }[] = [
   { name: "navy" }, // theme default (--wax token)
+  { name: "red", tint: { wax: "#a23a32", bright: "#cc5e4f", shadow: "#380c08" } },
   { name: "amber", tint: { wax: "#9a6a2e", bright: "#c4923f", shadow: "#34200a" } },
   { name: "terracotta", tint: { wax: "#9c4f38", bright: "#c47356", shadow: "#371307" } },
   { name: "plum", tint: { wax: "#6a3a6e", bright: "#8f5a93", shadow: "#27122b" } },
@@ -21,7 +22,7 @@ const TINTS: { name: string; tint?: Tint }[] = [
   { name: "slate", tint: { wax: "#46506a", bright: "#67728f", shadow: "#171b27" } },
 ];
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 12 · 2026-06-17 · rests as a dome, tap to stamp";
+const BUILD = "build 13 · 2026-06-17 · press feedback, white label, layered shadow";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -35,6 +36,7 @@ export default function StampLab() {
   const [exitMs, setExitMs] = useState(450);
   const [exit, setExit] = useState<(typeof EXITS)[number]>("fade");
   const [tintName, setTintName] = useState("navy");
+  const [pressed, setPressed] = useState(false);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
   const replay = () => setPlayKey((n) => n + 1);
@@ -126,9 +128,11 @@ export default function StampLab() {
 
       <button
         type="button"
-        onClick={replay}
-        title="tap the seal to replay"
-        className="mt-2 grid cursor-pointer place-items-center rounded-[12px] border border-rule-faint bg-paper py-16"
+        onPointerDown={() => setPressed(true)}
+        onPointerUp={() => { setPressed(false); replay(); }}
+        onPointerLeave={() => setPressed(false)}
+        title="press and release to stamp"
+        className="mt-2 grid cursor-pointer touch-none select-none place-items-center rounded-[12px] border border-rule-faint bg-paper py-16"
       >
         <WaxStamp
           key={`${theme}-${tintName}`}
@@ -144,6 +148,7 @@ export default function StampLab() {
           exitMs={exitMs}
           exit={exit}
           tint={tint}
+          pressed={pressed}
         />
       </button>
     </div>

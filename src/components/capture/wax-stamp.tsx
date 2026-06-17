@@ -124,10 +124,16 @@ const DEFAULT_COLORS: Colors = {
 
 // a wax colour: base, a brighter tone for the specular, and a deep drop shadow.
 export type Tint = { wax: string; bright: string; shadow: string };
+// highlight stays a PALE TINT, never near-white: lighten the bright tone but cap
+// each channel, so a light base (e.g. Lamplight's pale blue) doesn't blow out.
+const paleSpec = (hex: string): Rgb => {
+  const c = lighten01(hexToRgb01(hex), 0.5);
+  return [Math.min(c[0], 0.84), Math.min(c[1], 0.84), Math.min(c[2], 0.85)];
+};
 // resolve the seal colours: an explicit tint wins, else the dev override, else
 // the live --wax* tokens (so it themes for Paper/Lamplight).
 function resolveColors(tint?: Tint): Colors {
-  if (tint) return { wax: hexToRgb01(tint.wax), spec: lighten01(hexToRgb01(tint.bright), 0.5), shadow: tint.shadow };
+  if (tint) return { wax: hexToRgb01(tint.wax), spec: paleSpec(tint.bright), shadow: tint.shadow };
   const ov = (window as Window & { __waxOverride?: Colors }).__waxOverride;
   if (ov) return ov;
   const cs = getComputedStyle(document.documentElement);
@@ -135,8 +141,22 @@ function resolveColors(tint?: Tint): Colors {
   const bright = cs.getPropertyValue("--wax-bright").trim();
   const shadow = cs.getPropertyValue("--wax-shadow").trim();
   return wax
-    ? { wax: hexToRgb01(wax), spec: lighten01(hexToRgb01(bright || wax), 0.5), shadow: shadow || DEFAULT_COLORS.shadow }
+    ? { wax: hexToRgb01(wax), spec: paleSpec(bright || wax), shadow: shadow || DEFAULT_COLORS.shadow }
     : DEFAULT_COLORS;
+}
+
+// layered drop shadow (× MR): [blur, offsetY, alpha] — a soft, elevated stack:
+// wide ambient → mid → tight contact, so the seal reads as lifted off the paper.
+const SHADOW_LAYERS: ReadonlyArray<readonly [number, number, number]> = [
+  [0.28, 0.135, 0.12], [0.13, 0.075, 0.18], [0.05, 0.03, 0.3],
+];
+// shadow colour at a given alpha, from either a hex or an rgb()/rgba() token.
+function shadowRgba(c: string, a: number): string {
+  let r = 18, g = 28, b = 45;
+  const hex = c.match(/#([0-9a-fA-F]{6})/);
+  if (hex) { r = parseInt(hex[1].slice(0, 2), 16); g = parseInt(hex[1].slice(2, 4), 16); b = parseInt(hex[1].slice(4, 6), 16); }
+  else { const m = c.match(/(\d+)[ ,]+(\d+)[ ,]+(\d+)/); if (m) { r = +m[1]; g = +m[2]; b = +m[3]; } }
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
 type Variant = "pop" | "spring";
@@ -148,7 +168,7 @@ type PlayMode = "press" | "loop" | "tap";
 // remap the timeline so the press (first half) runs faster, leaving more settle/hold
 const easeT = (t: number, e: Ease) =>
   e === "front" ? 1 - Math.pow(1 - t, 2.3) : e === "snap" ? 1 - Math.pow(1 - t, 3.6) : t;
-type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number; oy: number };
+type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number; oy: number; iconWhite: number };
 function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate: number): Beat {
   const tp = easeT(t, ease); // front-loaded timeline for the press beats
   // physical press (~1.71s): a low matte circle, then the die presses. The die
@@ -165,6 +185,7 @@ function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate
     cf: (MOAT_R + 0.05) * sm(win(tp, 0.08, 0.6)),   // contact front: centre → die edge
     rot: (rotate * Math.PI / 180) * (1 - eob(win(tp, 0.04, 0.62))), // entrance twist, settling upright
     oy: 0,
+    iconWhite: 1 - sm(win(tp, 0.05, 0.26)),         // white label gives way to the embossed stamp
   };
 }
 
@@ -173,8 +194,12 @@ function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate
 // settled seal, then exits; loops. Lets us tune the linger + exit by feel.
 type Exit = "fade" | "rise" | "shrink" | "grow";
 const DROP_MS = 420, IDLE_MS = 360, PRESS_MS = 1150;
-const domeBeat = (scale: number, o: number): Beat =>
-  ({ scale, o, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0 });
+// the resting/dropping dome (no relief); shows the glyph as a white label (iconWhite).
+const domeBeat = (scale: number, o: number, iconWhite = 1): Beat =>
+  ({ scale, o, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0, iconWhite });
+// held-down feedback: the dome presses toward the paper — smaller, dipped down,
+// its shadow tightening (via the scale) — without yet taking the impression.
+const pushedBeat = (): Beat => ({ scale: 0.89, o: 1, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0.09, iconWhite: 1 });
 function cycleBeat(
   e: number, variant: Variant, ease: Ease, bounce: number, rotate: number,
   lingerMs: number, exitMs: number, exit: Exit,
@@ -237,16 +262,18 @@ export type WaxStampProps = {
   exit?: Exit;
   /** override the wax colour (else reads the live --wax* tokens). */
   tint?: Tint;
+  /** lab/tap: held-down feedback while the thumb is on the button (before release). */
+  pressed?: boolean;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, mode = "press", lingerMs = 1200, exitMs = 450, exit = "fade", tint, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, mode = "press", lingerMs = 1200, exitMs = 450, exit = "fade", tint, pressed = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
-  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
 
   useLayoutEffect(() => {
     colors.current = resolveColors(tint); // tint > dev override > --wax* tokens
@@ -265,44 +292,67 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
 
     // (re)allocate scratch for this backing size
     if (!buf.current || buf.current.dim !== dim) {
-      const off = document.createElement("canvas");
-      off.width = dim; off.height = dim;
+      const mk = () => { const c = document.createElement("canvas"); c.width = dim; c.height = dim; return c; };
       buf.current = {
         dim,
         hgt: new Float32Array(dim * dim),
         msk: new Float32Array(dim * dim),
         gly: new Float32Array(dim * dim),
         glyR: new Float32Array(dim * dim),
-        off,
+        off: mk(),
+        comp: mk(),     // composite: layered shadow + body + white icon label
+        iconImg: mk(),  // the glyph in white, for the resting-dome label
         img: ctx.createImageData(dim, dim),
         baked: "",
       };
     }
     const B = buf.current;
-    if (B.baked !== glyph) { bakeGlyph(B.gly, B.glyR, dim, glyph); B.baked = glyph; } // re-bake on glyph change
+    if (B.baked !== glyph) {
+      bakeGlyph(B.gly, B.glyR, dim, glyph); B.baked = glyph; // re-bake on glyph change
+      const ig = B.iconImg.getContext("2d")!;               // the glyph in white, for the dome label
+      const im = ig.createImageData(dim, dim);
+      for (let i = 0; i < dim * dim; i++) { im.data[i * 4] = 255; im.data[i * 4 + 1] = 255; im.data[i * 4 + 2] = 255; im.data[i * 4 + 3] = Math.round(B.gly[i] * 255); }
+      ig.putImageData(im, 0, 0);
+    }
     colors.current = resolveColors(tint); // refresh (theme/tint may have changed)
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
     // Seeded by playKey so the lab's two seals match within a play, every replay differs.
     const prof = makeProfile(mulberry32(Math.imul(playKey, 0x9e3779b1) >>> 0));
 
+    const cy = dim * 0.46;
     const draw = (k: Beat, p: Profile = prof) => {
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
-      // one continuous object: a convex wax drop that flattens into the puck and
-      // takes the impression — same height-field lighting throughout.
-      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, k.cf, colors.current, p);
+      // one continuous object at a FIXED size (scale is a transform below, so the
+      // glyph scales with the seal as one unit) — same height-field lighting throughout.
+      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
+
+      // composite (full alpha): layered drop shadow, the seal body, then the white
+      // glyph label on the resting dome — so one fade/transform carries everything.
+      const cc = B.comp.getContext("2d")!;
+      cc.clearRect(0, 0, dim, dim);
+      cc.save();
+      for (const [blur, soy, al] of SHADOW_LAYERS) {
+        cc.shadowColor = shadowRgba(colors.current.shadow, al);
+        cc.shadowBlur = MR * blur;
+        cc.shadowOffsetY = MR * soy;
+        cc.drawImage(B.off, 0, 0);
+      }
+      cc.restore();
+      if (k.iconWhite > 0.004) {
+        cc.save(); cc.globalAlpha = 0.9 * k.iconWhite; cc.drawImage(B.iconImg, 0, 0); cc.restore();
+      }
+
       ctx.save();
       ctx.globalAlpha = k.o;
-      // entrance twist: the wax is rotated as the stamp presses, settling upright
-      ctx.translate(dim / 2, dim * 0.46 + k.oy * MR);
+      // place + entrance twist + uniform scale (seal, glyph, shadow move as one)
+      ctx.translate(dim / 2, cy + k.oy * MR);
       ctx.rotate(k.rot);
-      ctx.translate(-dim / 2, -dim * 0.46);
-      ctx.shadowColor = colors.current.shadow;
-      ctx.shadowBlur = MR * (0.09 + 0.05 * k.scale);
-      ctx.shadowOffsetY = MR * (0.05 + 0.06 * k.scale);
-      ctx.drawImage(B.off, 0, 0);
+      ctx.scale(k.scale, k.scale);
+      ctx.translate(-dim / 2, -cy);
+      ctx.drawImage(B.comp, 0, 0);
       ctx.restore();
     };
 
@@ -339,6 +389,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     if (mode === "tap") { // rest as the dome; play one lifecycle when tapped (playKey change)
       const tapped = lastKey.current !== null && lastKey.current !== playKey;
       lastKey.current = playKey;
+      if (pressed) { draw(pushedBeat()); return cleanup; }   // thumb is down — held feedback
       if (!tapped) { draw(domeBeat(1, 1)); return cleanup; } // mount / non-tap dep change → just rest
       const frame = (now: number) => {
         const e = now - t0;
@@ -360,7 +411,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, pressed]);
 
   return (
     <canvas
@@ -583,9 +634,13 @@ function paintSeal(
   let hx = lx, hy = ly, hz = lz + 1;
   const hl = Math.hypot(hx, hy, hz); hx /= hl; hy /= hl; hz /= hl;
   const ss = SS * (MR / 100);
-  const specDamp = 1 - 0.6 * dome;    // pre-press circle is low-sheen (matte-ish); pressed seal glossy
   const [wr, wg, wb] = col.wax;
   const [sr, sg, sb] = col.spec;
+  // a bright base (e.g. Lamplight's pale blue) has little headroom, so a full
+  // specular blows out → harsh. Damp the gloss as the base gets lighter.
+  const baseLuma = 0.3 * wr + 0.59 * wg + 0.11 * wb;
+  const lumaDamp = 1 - 0.6 * clamp((baseLuma - 0.34) / 0.34);
+  const specDamp = (1 - 0.6 * dome) * lumaDamp; // pre-press circle low-sheen; bright base less glossy
   for (let py = 1; py < dim - 1; py++) {
     for (let px = 1; px < dim - 1; px++) {
       const i = py * dim + px;
