@@ -11,15 +11,18 @@ const ICONS = ["S", "quill", "mic", "calendar", "check"];
 const VARIANTS = ["pop", "spring"] as const;
 const EASES = ["even", "front", "snap"] as const;
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 9 · 2026-06-17 · JS blur (iOS-safe domed crown)";
+const BUILD = "build 10 · 2026-06-17 · bounce + rotation sliders, tap-to-replay";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(180);
   const [icon, setIcon] = useState("S");
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
+  const [bounce, setBounce] = useState(1);
+  const [rotate, setRotate] = useState(30);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
+  const replay = () => setPlayKey((n) => n + 1);
 
   const chip = (active: boolean) =>
     `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${
@@ -51,14 +54,25 @@ export default function StampLab() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-20">size {size}</span>
+          <span className="voice-data w-24">size {size}</span>
           <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-24">bounce {bounce.toFixed(1)}×</span>
+          <input type="range" min={0} max={2.6} step={0.1} value={bounce} onChange={(e) => setBounce(+e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-24">rotate {rotate}°</span>
+          <input type="range" min={0} max={60} step={5} value={rotate} onChange={(e) => setRotate(+e.target.value)} />
         </label>
         <button
           type="button"
           data-replay
-          onClick={() => setPlayKey((n) => n + 1)}
+          onClick={replay}
           className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper"
         >
           Replay both
@@ -68,10 +82,16 @@ export default function StampLab() {
 
       <div className="grid grid-cols-2 gap-5">
         {VARIANTS.map((v) => (
-          <div key={v} className="grid place-items-center gap-3 rounded-[10px] border border-rule-faint bg-paper py-14">
-            <WaxStamp playKey={playKey} size={size} glyph={icon} variant={v} ease={ease} />
+          <button
+            key={v}
+            type="button"
+            onClick={replay}
+            title="tap the seal to replay"
+            className="grid cursor-pointer place-items-center gap-3 rounded-[10px] border border-rule-faint bg-paper py-14"
+          >
+            <WaxStamp playKey={playKey} size={size} glyph={icon} variant={v} ease={ease} bounce={bounce} rotate={rotate} />
             <span className="voice-label">{v}</span>
-          </div>
+          </button>
         ))}
       </div>
     </div>

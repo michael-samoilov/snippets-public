@@ -57,10 +57,10 @@ const TAU = Math.PI * 2;
 
 // scale "juice" variations, chosen per-instance via the `variant` prop
 const popScale = (t: number) => 1 + 0.028 * Math.sin(clamp(win(t, 0.05, 0.3)) * Math.PI); // small impact pop
-const springScale = (t: number) => { // springs inward, bounces outward, settles (lively)
+const springScale = (t: number, amp: number) => { // springs inward, bounces outward, settles (lively)
   const p = clamp((t - 0.02) / 0.82);
   if (p <= 0 || p >= 1) return 1;        // (1-p) envelope guarantees a clean settle at 1
-  return 1 - 0.2 * Math.exp(-1.15 * p) * (1 - p) * Math.sin(12.5 * p);
+  return 1 - amp * Math.exp(-1.15 * p) * (1 - p) * Math.sin(12.5 * p);
 };
 
 // a tiny seeded PRNG so each press is deterministic per playKey (both lab seals
@@ -81,7 +81,8 @@ type Profile = (th: number) => number;
 // sizes and spacing), and a random overall rotation. Remapped so the trough/peak
 // extents stay [LIP_LO, LIP_HI] — about the same as the measured seal every time.
 function makeProfile(rand: () => number): Profile {
-  const N = 5 + Math.floor(rand() * 3);   // 5..7 lobes
+  const u = rand();
+  const N = u < 3 / 6 ? 5 : u < 5 / 6 ? 6 : 7;   // 5..7 lobes, weighted 3:2:1
   const phase = rand() * TAU;             // overall rotation
   const aLo = 0.18 + rand() * 0.16;       // k=N-1: varies lobe sizes
   const aHi = 0.12 + rand() * 0.14;       // k=N+1: varies lobe spacing
@@ -127,7 +128,7 @@ type Ease = "even" | "front" | "snap";
 const easeT = (t: number, e: Ease) =>
   e === "front" ? 1 - Math.pow(1 - t, 2.3) : e === "snap" ? 1 - Math.pow(1 - t, 3.6) : t;
 type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number };
-function stateAt(t: number, variant: Variant, ease: Ease): Beat {
+function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate: number): Beat {
   const tp = easeT(t, ease); // front-loaded timeline for the press beats
   // physical press (~1.71s): a low matte circle, then the die presses. The die
   // only imprints where it has reached the wax — a contact front (cf) spreading
@@ -136,12 +137,12 @@ function stateAt(t: number, variant: Variant, ease: Ease): Beat {
   // displaced wax is pushed outward, growing the lip + lobes (lobe); then settles.
   return {
     o: clamp(win(t, 0, 0.03)),                      // fade-in on real time
-    scale: variant === "spring" ? springScale(tp) : popScale(tp), // juicy scale (pop or spring)
+    scale: variant === "spring" ? springScale(tp, 0.2 * bounce) : popScale(tp), // juicy scale (pop or spring)
     dome: 1 - sm(win(tp, 0.06, 0.5)),               // circle flattens
     relief: sm(win(tp, 0.09, 0.54)),                // lip displacement / field conform
     lobe: sm(win(tp, 0.12, 0.58)),                  // lip pushed outward, lobes appear
     cf: (MOAT_R + 0.05) * sm(win(tp, 0.08, 0.6)),   // contact front: centre → die edge
-    rot: 0.5 * (1 - eob(win(tp, 0.04, 0.62))),      // ~28° twist, settling upright
+    rot: (rotate * Math.PI / 180) * (1 - eob(win(tp, 0.04, 0.62))), // entrance twist, settling upright
   };
 }
 
@@ -156,10 +157,14 @@ export type WaxStampProps = {
   variant?: Variant;
   /** timeline shaping: "even", or front-loaded so the press runs faster. */
   ease?: Ease;
+  /** spring liveliness multiplier (1 = default); higher = bouncier. */
+  bounce?: number;
+  /** entrance twist in degrees (the wax is rotated as the die presses, then settles). */
+  rotate?: number;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", ease = "front", className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const colors = useRef<Colors>(DEFAULT_COLORS);
@@ -240,22 +245,22 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", eas
     let raf = 0;
     // TODO(remove before ship): deterministic seek for visual capture
     type SeekWin = Window & { __stampSeek?: (t: number) => void };
-    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t), variant, ease)); };
+    (window as SeekWin).__stampSeek = (t) => { cancelAnimationFrame(raf); draw(stateAt(clamp(t), variant, ease, bounce, rotate)); };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
-    if (reduce.current) { draw(stateAt(1, variant, ease)); return cleanup; }
+    if (reduce.current) { draw(stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
     const t0 = performance.now();
     const DUR = 1150;
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
-      if (t >= 1) { draw(stateAt(1, variant, ease)); return; }
-      draw(stateAt(t, variant, ease));
+      if (t >= 1) { draw(stateAt(1, variant, ease, bounce, rotate)); return; }
+      draw(stateAt(t, variant, ease, bounce, rotate));
       raf = requestAnimationFrame(frame);
     };
-    draw(stateAt(0, variant, ease));
+    draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate]);
 
   return (
     <canvas
