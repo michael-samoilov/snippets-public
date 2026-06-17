@@ -22,7 +22,7 @@ const TINTS: { name: string; tint?: Tint }[] = [
   { name: "slate", tint: { wax: "#46506a", bright: "#67728f", shadow: "#171b27" } },
 ];
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 13 · 2026-06-17 · press feedback, white label, layered shadow";
+const BUILD = "build 14 · 2026-06-17 · sharp label, continuous press→release";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);

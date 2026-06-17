@@ -194,12 +194,23 @@ function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate
 // settled seal, then exits; loops. Lets us tune the linger + exit by feel.
 type Exit = "fade" | "rise" | "shrink" | "grow";
 const DROP_MS = 420, IDLE_MS = 360, PRESS_MS = 1150;
+const PRESSED_SCALE = 0.89, PRESSED_OY = 0.09; // how far the dome presses toward the paper
 // the resting/dropping dome (no relief); shows the glyph as a white label (iconWhite).
 const domeBeat = (scale: number, o: number, iconWhite = 1): Beat =>
   ({ scale, o, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0, iconWhite });
-// held-down feedback: the dome presses toward the paper — smaller, dipped down,
-// its shadow tightening (via the scale) — without yet taking the impression.
-const pushedBeat = (): Beat => ({ scale: 0.89, o: 1, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0.09, iconWhite: 1 });
+// press-down (q: 0→1): the dome presses toward the paper AND pre-rotates to the
+// press's start angle, so the lift-off continues from here with no jump.
+const pushdownBeat = (q: number, rotate: number): Beat =>
+  ({ scale: lp(1, PRESSED_SCALE, q), o: 1, dome: 1, relief: 0, lobe: 0, cf: 0,
+    rot: (rotate * Math.PI / 180) * q, oy: PRESSED_OY * q, iconWhite: 1 });
+// release: scale grows continuously from the pressed size outward (no jump back to
+// full size first), overshooting a touch with `bounce`, then settles at 1.
+const releaseScale = (tp: number, bounce: number) => {
+  const p = clamp(tp / 0.85);
+  if (p >= 1) return 1;
+  const grow = PRESSED_SCALE + (1 - PRESSED_SCALE) * eo(p);
+  return grow + bounce * 0.11 * Math.exp(-2.4 * p) * (1 - p) * Math.sin(6.2 * p);
+};
 function cycleBeat(
   e: number, variant: Variant, ease: Ease, bounce: number, rotate: number,
   lingerMs: number, exitMs: number, exit: Exit,
@@ -230,7 +241,14 @@ function tapBeat(
   lingerMs: number, exitMs: number, exit: Exit,
 ): Beat {
   const tLinger = PRESS_MS + lingerMs, tExit = tLinger + exitMs;
-  if (e < PRESS_MS) { const b = stateAt(e / PRESS_MS, variant, ease, bounce, rotate); b.o = 1; return b; } // press
+  if (e < PRESS_MS) { // press: grow + lift continuously from the pressed-down size
+    const tp = easeT(e / PRESS_MS, ease);
+    const b = stateAt(e / PRESS_MS, variant, ease, bounce, rotate);
+    b.o = 1;
+    b.scale = releaseScale(tp, bounce);
+    b.oy = PRESSED_OY * (1 - eo(clamp(tp / 0.45)));
+    return b;
+  }
   if (e < tLinger) { const b = stateAt(1, variant, ease, bounce, rotate); b.o = 1; return b; }            // linger
   if (e < tExit) { const b = stateAt(1, variant, ease, bounce, rotate); applyExit(b, exit, clamp((e - tLinger) / exitMs)); return b; }
   const p = clamp((e - tExit) / DROP_MS);                                                                  // a fresh drop returns
@@ -307,13 +325,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       };
     }
     const B = buf.current;
-    if (B.baked !== glyph) {
-      bakeGlyph(B.gly, B.glyR, dim, glyph); B.baked = glyph; // re-bake on glyph change
-      const ig = B.iconImg.getContext("2d")!;               // the glyph in white, for the dome label
-      const im = ig.createImageData(dim, dim);
-      for (let i = 0; i < dim * dim; i++) { im.data[i * 4] = 255; im.data[i * 4 + 1] = 255; im.data[i * 4 + 2] = 255; im.data[i * 4 + 3] = Math.round(B.gly[i] * 255); }
-      ig.putImageData(im, 0, 0);
-    }
+    if (B.baked !== glyph) { bakeGlyph(B.gly, B.glyR, B.iconImg, dim, glyph); B.baked = glyph; } // re-bake on glyph change
     colors.current = resolveColors(tint); // refresh (theme/tint may have changed)
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
@@ -389,7 +401,15 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     if (mode === "tap") { // rest as the dome; play one lifecycle when tapped (playKey change)
       const tapped = lastKey.current !== null && lastKey.current !== playKey;
       lastKey.current = playKey;
-      if (pressed) { draw(pushedBeat()); return cleanup; }   // thumb is down — held feedback
+      if (pressed) { // thumb is down — ease into the pressed-down (pre-rotated) state and hold
+        const frame = (now: number) => {
+          const q = clamp((now - t0) / 150);
+          draw(pushdownBeat(eo(q), rotate));
+          if (q < 1) raf = requestAnimationFrame(frame);
+        };
+        raf = requestAnimationFrame(frame);
+        return cleanup;
+      }
       if (!tapped) { draw(domeBeat(1, 1)); return cleanup; } // mount / non-tap dep change → just rest
       const frame = (now: number) => {
         const e = now - t0;
@@ -436,8 +456,9 @@ const S_PATH =
 // rasterise the glyph/icon once → an alpha mask used as embossed relief.
 // Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
 // crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
-function bakeGlyph(out: Float32Array, outR: Float32Array, dim: number, glyph: string) {
+function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasElement, dim: number, glyph: string) {
   out.fill(0); outR.fill(0);
+  iconImg.getContext("2d")!.clearRect(0, 0, dim, dim);
   if (!glyph) return;
   const OV = 3, big = dim * OV;          // oversample factor + working resolution
   const gc = document.createElement("canvas");
@@ -529,6 +550,14 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, dim: number, glyph: st
   resolveMask(base, gc, dim, big, tx, ty);
   blurMask(base, out, dim, dim * 0.004, 1);          // crisp edges (whisper)
   blurMask(base, outR, dim, dim * GLYPH_ROUND, 3);   // rounded → domed crown
+  // crisp white label from the AA base (NOT the softened relief mask) — sharp, not blurry
+  const ig = iconImg.getContext("2d")!;
+  const im = ig.createImageData(dim, dim);
+  for (let i = 0; i < dim * dim; i++) {
+    const a = base[i]; im.data[i * 4] = 255; im.data[i * 4 + 1] = 255; im.data[i * 4 + 2] = 255;
+    im.data[i * 4 + 3] = a > 0 ? Math.round((a > 1 ? 1 : a) * 255) : 0;
+  }
+  ig.putImageData(im, 0, 0);
 }
 
 // downsample the oversampled glyph into a dim×dim alpha mask, recentred by
