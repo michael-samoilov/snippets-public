@@ -357,25 +357,59 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, dim: number, glyph: st
   }
   const tx = any ? dim / 2 - (minX + maxX) / (2 * OV) : 0;
   const ty = any ? dim * 0.46 - (minY + maxY) / (2 * OV) : 0;
-  resolveMask(out, gc, dim, big, dim * 0.0035, tx, ty);   // crisp edges (whisper of blur)
-  resolveMask(outR, gc, dim, big, dim * GLYPH_ROUND, tx, ty); // rounded → domed crown
+  // one AA downscale (oversample averaging — NOT canvas ctx.filter, which iOS
+  // Safari silently ignores, leaving the crown un-domed → a flat, shallow glyph),
+  // then blur in JS so the crisp and domed masks come out identical everywhere.
+  const base = new Float32Array(dim * dim);
+  resolveMask(base, gc, dim, big, tx, ty);
+  blurMask(base, out, dim, dim * 0.004, 1);          // crisp edges (whisper)
+  blurMask(base, outR, dim, dim * GLYPH_ROUND, 3);   // rounded → domed crown
 }
 
-// downsample the oversampled glyph into a dim×dim alpha mask with a given blur,
-// recentred by (tx,ty); high-quality averaging anti-aliases the edges.
+// downsample the oversampled glyph into a dim×dim alpha mask, recentred by
+// (tx,ty); high-quality averaging anti-aliases the edges.
 function resolveMask(
-  out: Float32Array, gc: HTMLCanvasElement, dim: number, big: number, blurPx: number, tx: number, ty: number,
+  out: Float32Array, gc: HTMLCanvasElement, dim: number, big: number, tx: number, ty: number,
 ) {
   const dc = document.createElement("canvas");
   dc.width = dim; dc.height = dim;
   const dx = dc.getContext("2d");
   if (!dx) return;
-  dx.filter = `blur(${blurPx}px)`;
   dx.imageSmoothingEnabled = true;
   dx.imageSmoothingQuality = "high";
   dx.drawImage(gc, 0, 0, big, big, tx, ty, dim, dim);
   const d = dx.getImageData(0, 0, dim, dim).data;
   for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
+}
+
+// separable box blur (multi-pass ≈ Gaussian) on a dim×dim mask, src→dst — done in
+// JS, not ctx.filter, so the domed crown renders on every browser including iOS.
+function blurMask(src: Float32Array, dst: Float32Array, dim: number, radius: number, passes: number) {
+  const r = Math.max(0, Math.round(radius));
+  if (r === 0) { dst.set(src); return; }
+  const inv = 1 / (2 * r + 1);
+  const tmp = new Float32Array(dim * dim);
+  let a = src;
+  for (let pass = 0; pass < passes; pass++) {
+    for (let y = 0; y < dim; y++) {              // horizontal a→tmp
+      const row = y * dim;
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += a[row + Math.min(dim - 1, Math.max(0, k))];
+      for (let x = 0; x < dim; x++) {
+        tmp[row + x] = acc * inv;
+        acc += a[row + Math.min(dim - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < dim; x++) {              // vertical tmp→dst
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += tmp[Math.min(dim - 1, Math.max(0, k)) * dim + x];
+      for (let y = 0; y < dim; y++) {
+        dst[y * dim + x] = acc * inv;
+        acc += tmp[Math.min(dim - 1, y + r + 1) * dim + x] - tmp[Math.max(0, y - r) * dim + x];
+      }
+    }
+    a = dst;                                      // subsequent passes blur dst in place
+  }
 }
 
 // compute the lit seal into B.img (alpha 0 outside the silhouette)
