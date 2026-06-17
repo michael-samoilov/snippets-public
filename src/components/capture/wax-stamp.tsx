@@ -141,6 +141,10 @@ function resolveColors(tint?: Tint): Colors {
 
 type Variant = "pop" | "spring";
 type Ease = "even" | "front" | "snap";
+// "press": play the press once on mount/playKey, then hold the settled seal (the
+// shipped keep confirmation). "loop": auto-cycle the whole lifecycle (lab).
+// "tap": rest as the dome; play one full lifecycle when playKey changes (lab).
+type PlayMode = "press" | "loop" | "tap";
 // remap the timeline so the press (first half) runs faster, leaving more settle/hold
 const easeT = (t: number, e: Ease) =>
   e === "front" ? 1 - Math.pow(1 - t, 2.3) : e === "snap" ? 1 - Math.pow(1 - t, 3.6) : t;
@@ -182,11 +186,30 @@ function cycleBeat(
   if (e < tLinger) { const b = stateAt(1, variant, ease, bounce, rotate); b.o = 1; return b; } // linger
   const p = clamp((e - tLinger) / exitMs);                                       // exit
   const b = stateAt(1, variant, ease, bounce, rotate);
+  applyExit(b, exit, p);
+  return b;
+}
+
+function applyExit(b: Beat, exit: Exit, p: number) {
   b.o = 1 - eo(p);
   if (exit === "shrink") b.scale *= 1 - 0.28 * p;
   else if (exit === "grow") b.scale *= 1 + 0.22 * p;
   else if (exit === "rise") b.oy = -0.55 * eo(p);
-  return b;
+}
+
+// one tap-triggered play from the resting dome: press → linger → exit → a new
+// drop expands back into the resting dome. (Returns the resting dome past the end.)
+const TAP_TOTAL = (lingerMs: number, exitMs: number) => PRESS_MS + lingerMs + exitMs + DROP_MS;
+function tapBeat(
+  e: number, variant: Variant, ease: Ease, bounce: number, rotate: number,
+  lingerMs: number, exitMs: number, exit: Exit,
+): Beat {
+  const tLinger = PRESS_MS + lingerMs, tExit = tLinger + exitMs;
+  if (e < PRESS_MS) { const b = stateAt(e / PRESS_MS, variant, ease, bounce, rotate); b.o = 1; return b; } // press
+  if (e < tLinger) { const b = stateAt(1, variant, ease, bounce, rotate); b.o = 1; return b; }            // linger
+  if (e < tExit) { const b = stateAt(1, variant, ease, bounce, rotate); applyExit(b, exit, clamp((e - tLinger) / exitMs)); return b; }
+  const p = clamp((e - tExit) / DROP_MS);                                                                  // a fresh drop returns
+  return domeBeat(lp(0.2, 1, eo(p)), clamp((e - tExit) / 150));
 }
 
 export type WaxStampProps = {
@@ -204,8 +227,8 @@ export type WaxStampProps = {
   bounce?: number;
   /** entrance twist in degrees (the wax is rotated as the die presses, then settles). */
   rotate?: number;
-  /** lab: loop the full idle→press→linger→exit→drop lifecycle to tune it. */
-  loop?: boolean;
+  /** play behaviour: "press" (default, ship), "loop" or "tap" (lab). */
+  mode?: PlayMode;
   /** lab: ms to hold the settled seal before it exits. */
   lingerMs?: number;
   /** lab: ms for the exit animation. */
@@ -217,9 +240,10 @@ export type WaxStampProps = {
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, loop = false, lingerMs = 1200, exitMs = 450, exit = "fade", tint, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, mode = "press", lingerMs = 1200, exitMs = 450, exit = "fade", tint, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
+  const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
   const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
@@ -283,21 +307,23 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     };
 
     const cycleTotal = DROP_MS + IDLE_MS + PRESS_MS + lingerMs + exitMs;
+    const tapTotal = TAP_TOTAL(lingerMs, exitMs);
     let raf = 0;
     // TODO(remove before ship): deterministic seek for visual capture
     type SeekWin = Window & { __stampSeek?: (t: number) => void };
     (window as SeekWin).__stampSeek = (t) => {
       cancelAnimationFrame(raf);
-      draw(loop
-        ? cycleBeat(clamp(t) * cycleTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
-        : stateAt(clamp(t), variant, ease, bounce, rotate));
+      const tt = clamp(t);
+      draw(mode === "loop" ? cycleBeat(tt * cycleTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
+        : mode === "tap" ? tapBeat(tt * tapTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
+        : stateAt(tt, variant, ease, bounce, rotate));
     };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
-    if (reduce.current) { draw(stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
+    if (reduce.current) { draw(mode === "tap" ? domeBeat(1, 1) : stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
     const t0 = performance.now();
 
-    if (loop) { // lab: continuous idle→press→linger→exit→drop lifecycle
+    if (mode === "loop") { // lab: continuous idle→press→linger→exit→drop lifecycle
       let cyc = -1, cProf = prof; // a fresh seal each loop, to show the variety
       const frame = (now: number) => {
         const el = now - t0;
@@ -310,7 +336,21 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       return cleanup;
     }
 
-    const DUR = 1150;
+    if (mode === "tap") { // rest as the dome; play one lifecycle when tapped (playKey change)
+      const tapped = lastKey.current !== null && lastKey.current !== playKey;
+      lastKey.current = playKey;
+      if (!tapped) { draw(domeBeat(1, 1)); return cleanup; } // mount / non-tap dep change → just rest
+      const frame = (now: number) => {
+        const e = now - t0;
+        if (e >= tapTotal) { draw(domeBeat(1, 1)); return; }  // settle back to the resting dome
+        draw(tapBeat(e, variant, ease, bounce, rotate, lingerMs, exitMs, exit));
+        raf = requestAnimationFrame(frame);
+      };
+      raf = requestAnimationFrame(frame);
+      return cleanup;
+    }
+
+    const DUR = 1150; // mode === "press": the shipped keep confirmation
     const frame = (now: number) => {
       const t = (now - t0) / DUR;
       if (t >= 1) { draw(stateAt(1, variant, ease, bounce, rotate)); return; }
@@ -320,7 +360,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, loop, lingerMs, exitMs, exit, tint]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint]);
 
   return (
     <canvas
@@ -512,7 +552,8 @@ function paintSeal(
       if (a <= 0) { hgt[i] = 0; continue; }
       // contact front: the die has imprinted only out to radius cf (·MR), spreading
       // from the centre, so the emblem appears first and the ridge imprints last.
-      const cl = clamp((cf + 0.05 - r / MR) / 0.1);
+      // At rest (cf 0) this is 0 everywhere — a clean dome, no centre dot.
+      const cl = clamp((cf - r / MR) / 0.1);
       let h: number;
       if (r < moatR) {
         h = FIELDH + RIDGE_AMP * cl * Math.exp(-(((r - ridgeR) / ridgeW) ** 2));

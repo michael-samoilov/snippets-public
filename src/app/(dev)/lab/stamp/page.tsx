@@ -21,7 +21,7 @@ const TINTS: { name: string; tint?: Tint }[] = [
   { name: "slate", tint: { wax: "#46506a", bright: "#67728f", shadow: "#171b27" } },
 ];
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 11 · 2026-06-17 · lifecycle loop, linger/exit, colour preview";
+const BUILD = "build 12 · 2026-06-17 · rests as a dome, tap to stamp";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -30,7 +30,7 @@ export default function StampLab() {
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
   const [bounce, setBounce] = useState(1);
   const [rotate, setRotate] = useState(30);
-  const [loop, setLoop] = useState(true);
+  const [autoplay, setAutoplay] = useState(false);
   const [linger, setLinger] = useState(1200);
   const [exitMs, setExitMs] = useState(450);
   const [exit, setExit] = useState<(typeof EXITS)[number]>("fade");
@@ -78,8 +78,8 @@ export default function StampLab() {
             {x}
           </button>
         ))}
-        <button type="button" onClick={() => setLoop((v) => !v)} className={chip(loop)}>
-          loop {loop ? "on" : "off"}
+        <button type="button" onClick={() => setAutoplay((v) => !v)} className={chip(autoplay)}>
+          autoplay {autoplay ? "on" : "off"}
         </button>
       </div>
 
@@ -139,7 +139,7 @@ export default function StampLab() {
           ease={ease}
           bounce={bounce}
           rotate={rotate}
-          loop={loop}
+          mode={autoplay ? "loop" : "tap"}
           lingerMs={linger}
           exitMs={exitMs}
           exit={exit}
