@@ -11,36 +11,46 @@ const ICONS = ["S", "quill", "mic", "calendar", "check", "spark", "eye"];
 const EASES = ["even", "front", "snap"] as const;
 const EXITS = ["fade", "rise", "shrink", "grow"] as const;
 // candidate stamp colours to preview (the app ships ONE semantic wax blue; these
-// are an exploration for the categorisation moonshot, sandboxed to the lab).
-const TINTS: { name: string; tint?: Tint }[] = [
-  { name: "navy" }, // theme default (--wax token)
-  { name: "red", tint: { wax: "#a23a32", bright: "#cc5e4f", shadow: "#380c08" } },
-  { name: "amber", tint: { wax: "#9a6a2e", bright: "#c4923f", shadow: "#34200a" } },
-  { name: "terracotta", tint: { wax: "#9c4f38", bright: "#c47356", shadow: "#371307" } },
-  { name: "plum", tint: { wax: "#6a3a6e", bright: "#8f5a93", shadow: "#27122b" } },
-  { name: "teal", tint: { wax: "#2e6a5e", bright: "#3f9385", shadow: "#0a3029" } },
-  { name: "slate", tint: { wax: "#46506a", bright: "#67728f", shadow: "#171b27" } },
-];
+// are an exploration for the categorisation moonshot, sandboxed to the lab). Each
+// hue comes in a deep tone (rich, navy-like) and a soft pastel tone.
+const HUES = ["navy", "red", "amber", "teal", "plum", "rose"] as const;
+const DEEP: Record<string, Tint | undefined> = {
+  navy: undefined, // theme --wax token (already deep navy)
+  red: { wax: "#7e2c27", bright: "#a8534a", shadow: "#2a0a07" },
+  amber: { wax: "#7a5320", bright: "#a8803c", shadow: "#281805" },
+  teal: { wax: "#225247", bright: "#3a8475", shadow: "#082420" },
+  plum: { wax: "#4f2c54", bright: "#7a4a80", shadow: "#1e1022" },
+  rose: { wax: "#7c3e2c", bright: "#a86048", shadow: "#2a0f08" },
+};
+const PASTEL: Record<string, Tint> = {
+  navy: { wax: "#9bb6da", bright: "#bcd0e8", shadow: "#3c587c" },
+  red: { wax: "#d99e96", bright: "#e9c2bc", shadow: "#6e3a34" },
+  amber: { wax: "#d8bd86", bright: "#ebd9ac", shadow: "#6e5424" },
+  teal: { wax: "#97c4b6", bright: "#bedfd3", shadow: "#2c5048" },
+  plum: { wax: "#b89cc9", bright: "#d2c0de", shadow: "#4e3a58" },
+  rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
+};
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 14 · 2026-06-17 · sharp label, continuous press→release";
+const BUILD = "build 15 · 2026-06-17 · deep + pastel colours, flatter puck";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(160);
   const [icon, setIcon] = useState("S");
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
-  const [bounce, setBounce] = useState(1);
-  const [rotate, setRotate] = useState(30);
+  const [bounce, setBounce] = useState(1.5);
+  const [rotate, setRotate] = useState(15);
   const [autoplay, setAutoplay] = useState(false);
-  const [linger, setLinger] = useState(1200);
-  const [exitMs, setExitMs] = useState(450);
-  const [exit, setExit] = useState<(typeof EXITS)[number]>("fade");
-  const [tintName, setTintName] = useState("navy");
+  const [linger, setLinger] = useState(1000);
+  const [exitMs, setExitMs] = useState(200);
+  const [exit, setExit] = useState<(typeof EXITS)[number]>("grow");
+  const [hue, setHue] = useState<(typeof HUES)[number]>("navy");
+  const [tone, setTone] = useState<"deep" | "pastel">("deep");
   const [pressed, setPressed] = useState(false);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
   const replay = () => setPlayKey((n) => n + 1);
-  const tint = TINTS.find((t) => t.name === tintName)?.tint;
+  const tint = tone === "deep" ? DEEP[hue] : PASTEL[hue];
 
   const chip = (active: boolean) =>
     `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${
@@ -85,17 +95,25 @@ export default function StampLab() {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="voice-label text-ink-faint">colour</span>
-        {TINTS.map((t) => (
-          <button
-            key={t.name}
-            type="button"
-            onClick={() => setTintName(t.name)}
-            title={t.name}
-            className={`size-7 rounded-full border ${tintName === t.name ? "border-ink ring-2 ring-wax" : "border-rule-faint"}`}
-            style={{ background: t.tint?.wax ?? "var(--wax)" }}
-          />
+      <div className="flex flex-col gap-2">
+        {(["deep", "pastel"] as const).map((tn) => (
+          <div key={tn} className="flex flex-wrap items-center gap-2">
+            <span className="voice-label w-14 text-ink-faint">{tn}</span>
+            {HUES.map((h) => {
+              const t = tn === "deep" ? DEEP[h] : PASTEL[h];
+              const active = hue === h && tone === tn;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => { setHue(h); setTone(tn); }}
+                  title={`${h} ${tn}`}
+                  className={`size-7 rounded-full border ${active ? "border-ink ring-2 ring-wax" : "border-rule-faint"}`}
+                  style={{ background: t?.wax ?? "var(--wax)" }}
+                />
+              );
+            })}
+          </div>
         ))}
       </div>
 
@@ -135,7 +153,7 @@ export default function StampLab() {
         className="mt-2 grid cursor-pointer touch-none select-none place-items-center rounded-[12px] border border-rule-faint bg-paper py-16"
       >
         <WaxStamp
-          key={`${theme}-${tintName}`}
+          key={`${theme}-${hue}-${tone}`}
           playKey={playKey}
           size={size}
           glyph={icon}

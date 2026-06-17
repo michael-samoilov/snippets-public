@@ -37,7 +37,8 @@ const CREST_FRAC = 0.56, OUT_POW = 3.1;     // crest position; donut roll shape
 const GLYPH_AMP = 0.55;       // base plateau height (gives the crisp, steep edges)
 const GLYPH_CROWN = 0.8;      // domed crown on top → reads as raised VOLUME, not a flat plateau
 const GLYPH_ROUND = 0.022;    // crown blur (×dim): rounds the crown into a dome
-const DOME_AMP = 8;           // a low rounded circle (button-like), NOT a sphere
+const DOME_AMP = 4.8;         // resting glob height — a flattened wax puck, not a globe
+const DOME_POW = 4.2;         // >2 flattens the top + rounds the shoulder (puck, not hemisphere)
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
@@ -285,7 +286,7 @@ export type WaxStampProps = {
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1, rotate = 30, mode = "press", lingerMs = 1200, exitMs = 450, exit = "fade", tint, pressed = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 15, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, pressed = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -653,7 +654,8 @@ function paintSeal(
       // glyph: crisp-edged plateau (gly) lifted by a rounded crown (glyR) so it
       // reads as raised volume, not a flat-topped engraving that blends with the field.
       const glyphH = cl * gly[i] * (GLYPH_AMP + GLYPH_CROWN * glyR[i]);
-      hgt[i] = h + glyphH + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - rn * rn));
+      // flattened-puck dome: flat-ish top, shoulder rounds off at the edge (DOME_POW)
+      hgt[i] = h + glyphH + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - Math.pow(rn, DOME_POW)));
     }
   }
   // pass 2 — lighting
