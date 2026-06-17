@@ -37,8 +37,10 @@ const CREST_FRAC = 0.56, OUT_POW = 3.1;     // crest position; donut roll shape
 const GLYPH_AMP = 0.55;       // base plateau height (gives the crisp, steep edges)
 const GLYPH_CROWN = 0.8;      // domed crown on top → reads as raised VOLUME, not a flat plateau
 const GLYPH_ROUND = 0.022;    // crown blur (×dim): rounds the crown into a dome
-const DOME_AMP = 4.8;         // resting glob height — a flattened wax puck, not a globe
-const DOME_POW = 4.2;         // >2 flattens the top + rounds the shoulder (puck, not hemisphere)
+// resting glob shape: a `puck` factor (0 = round globe, 1 = flat puck) maps to
+// dome height + top-flatness between these globe→puck endpoints.
+const DOME_AMP_HI = 9, DOME_AMP_LO = 2.5;  // height: globe → flat
+const DOME_POW_LO = 2, DOME_POW_HI = 5;    // top: hemisphere → flat-top
 const PUD_EDGE = 0.86;        // puddle radius (×MR); the lip squishes out past this
 
 // lighting
@@ -281,12 +283,14 @@ export type WaxStampProps = {
   exit?: Exit;
   /** override the wax colour (else reads the live --wax* tokens). */
   tint?: Tint;
+  /** resting-glob flatness: 0 = round globe, 1 = flat puck. */
+  puck?: number;
   /** lab/tap: held-down feedback while the thumb is on the button (before release). */
   pressed?: boolean;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 15, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, pressed = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 15, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 0.65, pressed = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -332,6 +336,8 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
     // Seeded by playKey so the lab's two seals match within a play, every replay differs.
     const prof = makeProfile(mulberry32(Math.imul(playKey, 0x9e3779b1) >>> 0));
+    // resting-glob shape: puck 0 → round globe, 1 → flat puck
+    const domeAmp = lp(DOME_AMP_HI, DOME_AMP_LO, puck), domePow = lp(DOME_POW_LO, DOME_POW_HI, puck);
 
     const cy = dim * 0.46;
     const draw = (k: Beat, p: Profile = prof) => {
@@ -339,7 +345,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       if (k.o <= 0.003) return;
       // one continuous object at a FIXED size (scale is a transform below, so the
       // glyph scales with the seal as one unit) — same height-field lighting throughout.
-      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p);
+      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
 
       // composite (full alpha): layered drop shadow, the seal body, then the white
@@ -432,7 +438,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, pressed]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, pressed]);
 
   return (
     <canvas
@@ -611,6 +617,7 @@ function blurMask(src: Float32Array, dst: Float32Array, dim: number, radius: num
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; img: ImageData },
   dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors, prof: Profile,
+  domeAmp: number, domePow: number,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly, glyR = B.glyR;
@@ -654,8 +661,8 @@ function paintSeal(
       // glyph: crisp-edged plateau (gly) lifted by a rounded crown (glyR) so it
       // reads as raised volume, not a flat-topped engraving that blends with the field.
       const glyphH = cl * gly[i] * (GLYPH_AMP + GLYPH_CROWN * glyR[i]);
-      // flattened-puck dome: flat-ish top, shoulder rounds off at the edge (DOME_POW)
-      hgt[i] = h + glyphH + dome * DOME_AMP * Math.sqrt(Math.max(0, 1 - Math.pow(rn, DOME_POW)));
+      // resting glob: height domeAmp, top-flatness domePow (>2 = flatter puck top)
+      hgt[i] = h + glyphH + dome * domeAmp * Math.sqrt(Math.max(0, 1 - Math.pow(rn, domePow)));
     }
   }
   // pass 2 — lighting

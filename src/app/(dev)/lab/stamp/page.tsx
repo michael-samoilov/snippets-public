@@ -31,7 +31,7 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 15 · 2026-06-17 · deep + pastel colours, flatter puck";
+const BUILD = "build 16 · 2026-06-17 · puck flatness slider";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -40,6 +40,7 @@ export default function StampLab() {
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
   const [bounce, setBounce] = useState(1.5);
   const [rotate, setRotate] = useState(15);
+  const [puck, setPuck] = useState(0.65);
   const [autoplay, setAutoplay] = useState(false);
   const [linger, setLinger] = useState(1000);
   const [exitMs, setExitMs] = useState(200);
@@ -131,6 +132,10 @@ export default function StampLab() {
           <input type="range" min={0} max={60} step={5} value={rotate} onChange={(e) => setRotate(+e.target.value)} />
         </label>
         <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
+          <input type="range" min={0} max={1} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
           <span className="voice-data w-28">linger {linger}ms</span>
           <input type="range" min={0} max={3000} step={100} value={linger} onChange={(e) => setLinger(+e.target.value)} />
         </label>
@@ -166,6 +171,7 @@ export default function StampLab() {
           exitMs={exitMs}
           exit={exit}
           tint={tint}
+          puck={puck}
           pressed={pressed}
         />
       </button>
