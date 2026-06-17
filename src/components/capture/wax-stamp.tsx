@@ -7,11 +7,13 @@ import { cn } from "@/lib/utils";
    A pressed wax seal, rendered as a real 3-D one: a per-pixel height
    field (flat pressed field → a thin raised ridge → a moat at field
    level → a rounded lip that rolls over like the outside of a donut,
-   undulating into ~6 irregular lobes) lit with Lambert diffuse +
+   undulating into irregular lobes) lit with Lambert diffuse +
    Blinn-Phong specular. Highlights stay a pale tint and shadows stay a
-   deep tint of the same wax — never white, never black. The silhouette
-   profile, the lobe count (a k=6/k=4 Fourier pair) and the lip/field
-   proportions are measured from a real wax seal. The glyph is embossed
+   deep tint of the same wax — never white, never black. Every press
+   generates its own silhouette (5–7 lobes, random rotation and spacing)
+   within the trough/peak extents measured from a real wax seal, so no
+   two seals are identical. The lip/field proportions are measured too.
+   The glyph is embossed
    into the same field so it is lit identically. Colour comes from the
    live `--wax*` tokens, so it themes for Paper and Lamplight.
 
@@ -21,14 +23,10 @@ import { cn } from "@/lib/utils";
    out of the flat puck — and settles. Replays when `playKey` changes;
    collapses to the settled seal under reduced motion. */
 
-// silhouette r(θ)/rmean — Fourier fit of a real seal (6 lobes, k=4 varies
-// their size). [harmonic, aCos, bSin]
-const A0 = 1.0002;
-const FH: ReadonlyArray<readonly [number, number, number]> = [
-  [1, 0.0002, 0.0017], [2, -0.0044, -0.0012], [3, -0.002, -0.0043],
-  [4, -0.0059, -0.0176], [5, -0.0046, -0.0062], [6, -0.0462, 0.0121], [7, 0.0012, -0.0032],
-];
-const LIP_LO = 0.94, LIP_HI = 1.075; // profile → per-lobe lip height 0..1
+// silhouette r(θ)/rmean — measured from a real seal as ~6 lobes spanning
+// [LIP_LO, LIP_HI]. Rather than one fixed Fourier fit, every press generates its
+// own profile in that family (see makeProfile) so no two seals are identical.
+const LIP_LO = 0.94, LIP_HI = 1.075; // trough/peak silhouette radius; also lump 0..1
 
 // radial structure (fractions of mean radius) + heights (0..1)
 const FIELD_R = 0.68, RIDGE_R = 0.745, MOAT_R = 0.8;
@@ -61,13 +59,41 @@ const springScale = (t: number) => { // springs inward, bounces outward, settles
   return p <= 0 ? 1 : 1 - 0.16 * Math.exp(-2.1 * p) * Math.sin(6.6 * p);
 };
 
-function profileAt(th: number): number {
-  let v = A0;
-  for (const [k, a, b] of FH) v += a * Math.cos(k * th) + b * Math.sin(k * th);
-  return v;
+// a tiny seeded PRNG so each press is deterministic per playKey (both lab seals
+// match within a play) yet every new keep reshuffles the seal.
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
-function lumpFn(th: number): number {
-  return clamp((profileAt(th) - LIP_LO) / (LIP_HI - LIP_LO));
+
+type Profile = (th: number) => number;
+// build a per-press silhouette r(θ): N∈[5,7] lobes from a dominant harmonic k=N,
+// plus smaller neighbours k=N±1 with random amplitude+phase (→ irregular lobe
+// sizes and spacing), and a random overall rotation. Remapped so the trough/peak
+// extents stay [LIP_LO, LIP_HI] — about the same as the measured seal every time.
+function makeProfile(rand: () => number): Profile {
+  const N = 5 + Math.floor(rand() * 3);   // 5..7 lobes
+  const phase = rand() * TAU;             // overall rotation
+  const aLo = 0.18 + rand() * 0.16;       // k=N-1: varies lobe sizes
+  const aHi = 0.12 + rand() * 0.14;       // k=N+1: varies lobe spacing
+  const pLo = rand() * TAU, pHi = rand() * TAU;
+  const raw = (th: number) =>
+    Math.cos(N * (th - phase)) +
+    aLo * Math.cos((N - 1) * th - pLo) +
+    aHi * Math.cos((N + 1) * th - pHi);
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < 720; i++) {
+    const v = raw((i / 720) * TAU);
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+  }
+  const span = mx - mn || 1;
+  return (th: number) => LIP_LO + ((raw(th) - mn) / span) * (LIP_HI - LIP_LO);
 }
 
 type Rgb = [number, number, number];
@@ -182,13 +208,16 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", eas
     const B = buf.current;
     if (B.baked !== glyph) { bakeGlyph(B.gly, dim, glyph); B.baked = glyph; } // re-bake on glyph change
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
+    // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
+    // Seeded by playKey so the lab's two seals match within a play, every replay differs.
+    const prof = makeProfile(mulberry32(Math.imul(playKey, 0x9e3779b1) >>> 0));
 
     const draw = (k: Beat) => {
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
       // one continuous object: a convex wax drop that flattens into the puck and
       // takes the impression — same height-field lighting throughout.
-      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, k.cf, colors.current);
+      paintSeal(B, dim, MR * k.scale, dim * 0.46, k.relief, k.lobe, k.dome, k.cf, colors.current, prof);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
       ctx.save();
       ctx.globalAlpha = k.o;
@@ -233,18 +262,20 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", eas
   );
 }
 
-// rasterise the glyph/icon once → an alpha mask used as embossed relief
+// rasterise the glyph/icon once → an alpha mask used as embossed relief.
+// Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
+// crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
 function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   out.fill(0);
   if (!glyph) return;
+  const OV = 3, big = dim * OV;          // oversample factor + working resolution
   const gc = document.createElement("canvas");
-  gc.width = dim; gc.height = dim;
+  gc.width = big; gc.height = big;
   const gx = gc.getContext("2d");
   if (!gx) return;
-  gx.filter = `blur(${dim * 0.005}px)`;
   gx.fillStyle = "#fff"; gx.strokeStyle = "#fff";
   gx.lineCap = "round"; gx.lineJoin = "round";
-  const cx = dim / 2, cy = dim * 0.46;
+  const cx = big / 2, cy = big * 0.46;
   // the app's own icons (shell-nav quill/calendar, the record mic) live in a
   // 0–20 viewBox with stroke-width ~1.5 — reuse them verbatim, centred & scaled
   // into the seal field with a fine stroke.
@@ -273,24 +304,34 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
     },
   };
   if (APP_ICONS[glyph]) {
-    const sc = (0.48 * dim) / 20;            // fit the 0–20 viewBox into the field
+    const sc = (0.48 * big) / 20;            // fit the 0–20 viewBox into the field
     gx.save();
     gx.translate(cx, cy); gx.scale(sc, sc); gx.translate(-10, -10);
     APP_ICONS[glyph]();
     gx.restore();
   } else {
     gx.textAlign = "center"; gx.textBaseline = "middle";
-    gx.font = `700 ${Math.round(dim * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
+    gx.font = `700 ${Math.round(big * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
     gx.fillText(glyph, cx, cy);
   }
-  const d = gx.getImageData(0, 0, dim, dim).data;
+  // downsample to backing res: high-quality averaging anti-aliases the edges,
+  // a whisper of blur keeps the relief lighting from biting on the last hard pixel.
+  const dc = document.createElement("canvas");
+  dc.width = dim; dc.height = dim;
+  const dx = dc.getContext("2d");
+  if (!dx) return;
+  dx.filter = `blur(${dim * 0.0035}px)`;
+  dx.imageSmoothingEnabled = true;
+  dx.imageSmoothingQuality = "high";
+  dx.drawImage(gc, 0, 0, dim, dim);
+  const d = dx.getImageData(0, 0, dim, dim).data;
   for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
 }
 
 // compute the lit seal into B.img (alpha 0 outside the silhouette)
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; img: ImageData },
-  dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors,
+  dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors, prof: Profile,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly;
@@ -306,7 +347,8 @@ function paintSeal(
       const th = Math.atan2(Y, X);
       // silhouette grows from the puddle circle out to the lobed final as the wax
       // is squished outward past the die — the lip and lobes are pushed out.
-      const edge = MR * lp(PUD_EDGE, profileAt(th), lobe);
+      const p = prof(th);
+      const edge = MR * lp(PUD_EDGE, p, lobe);
       const a = clamp((edge + 0.55 - r) / 1.05);
       msk[i] = a;
       if (a <= 0) { hgt[i] = 0; continue; }
@@ -318,7 +360,8 @@ function paintSeal(
         h = FIELDH + RIDGE_AMP * cl * Math.exp(-(((r - ridgeR) / ridgeW) ** 2));
       } else {
         const t = clamp((r - moatR) / (edge - moatR));
-        const crestH = FIELDH + (CREST_BASE + CREST_LUMP * lumpFn(th) - FIELDH) * relief;
+        const lump = clamp((p - LIP_LO) / (LIP_HI - LIP_LO));
+        const crestH = FIELDH + (CREST_BASE + CREST_LUMP * lump - FIELDH) * relief;
         if (t < CREST_FRAC) {
           const s = t / CREST_FRAC;
           h = FIELDH + (crestH - FIELDH) * sm(s);
