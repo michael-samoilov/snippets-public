@@ -43,6 +43,7 @@ const SS = 4.5;               // height→slope: high relief so it reads glossy,
 const LX = -0.52, LY = -0.52, LZ = 0.54;
 const AMBIENT = 0.26, DIFF = 1.18;
 const SPEC_STR = 1.35, SHIN = 19, SPEC_RIM = 3.7, ENV = 0.33, HICAP = 0.99;
+const SPEC_AA = 5;            // roughen (roll specular off) on steep walls → no edge sparkle
 
 const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const win = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -262,6 +263,16 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "pop", eas
   );
 }
 
+// The masthead "Snippets" reads friendly because Fraunces renders at a small
+// optical size; the seal "S" must match it. Canvas can't set the opsz axis (and
+// an SVG <img> ignores it too), so we bake the italic Fraunces "S" pre-instanced
+// at opsz≈22 (wght 600, WONK 1) as a vector outline — font units, 2000 UPM, Y-up
+// (flip for canvas). Centre of its ink bounds is (S_CX, S_CY).
+const GLYPH_UPM = 2000;
+const S_CX = 661.3, S_CY = 701.5;
+const S_PATH =
+  "M575 -23Q489 -23 432 -7Q374 10 339 32Q304 54 283 71Q262 87 250 87Q237 87 220 72Q203 57 184 36Q164 16 145 1Q126 -14 108 -14Q80 -14 66 1Q53 16 56 48L100 401Q103 435 119 453Q134 471 158 471Q181 471 196 455Q211 439 223 407L245 302Q264 191 339 134Q414 76 517 76Q581 76 631 100Q680 123 710 165Q740 207 749 264Q764 350 719 424Q675 499 543 582Q392 678 329 777Q266 876 282 1009Q294 1120 360 1215Q427 1310 545 1368Q664 1426 832 1426Q976 1426 1074 1380Q1172 1334 1221 1262Q1271 1189 1267 1109Q1265 1053 1236 1016Q1207 979 1156 979Q1114 979 1088 1002Q1062 1026 1045 1079L1025 1156Q1002 1248 947 1292Q893 1336 814 1336Q739 1336 683 1307Q627 1277 594 1227Q561 1177 553 1115Q540 1023 588 947Q635 871 761 784Q882 704 946 633Q1010 562 1032 490Q1053 417 1043 334Q1032 228 970 147Q908 67 806 22Q705 -23 575 -23Z";
+
 // rasterise the glyph/icon once → an alpha mask used as embossed relief.
 // Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
 // crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
@@ -303,15 +314,26 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
       gx.stroke(new Path2D("M4.6 10.6 L8.6 14.8 L15.4 5.6"));
     },
   };
-  if (APP_ICONS[glyph]) {
+  if (glyph === "S") {
+    // friendly opsz≈22 italic Fraunces "S", baked from its vector outline so it
+    // matches the masthead regardless of canvas's lack of opsz control.
+    const s = (0.46 * big) / GLYPH_UPM;
+    gx.save();
+    gx.translate(cx, cy); gx.scale(s, -s); gx.translate(-S_CX, -S_CY);
+    gx.fill(new Path2D(S_PATH));
+    gx.restore();
+  } else if (APP_ICONS[glyph]) {
     const sc = (0.48 * big) / 20;            // fit the 0–20 viewBox into the field
     gx.save();
     gx.translate(cx, cy); gx.scale(sc, sc); gx.translate(-10, -10);
     APP_ICONS[glyph]();
     gx.restore();
   } else {
+    // other letters: canvas text (Fraunces italic) — no opsz control, but the
+    // default and only shipped glyph is "S", handled above.
+    const fam = getComputedStyle(document.documentElement).getPropertyValue("--font-fraunces").trim();
     gx.textAlign = "center"; gx.textBaseline = "middle";
-    gx.font = `700 ${Math.round(big * 0.42)}px Fraunces, Georgia, "Times New Roman", serif`;
+    gx.font = `italic 560 ${Math.round(big * 0.46)}px ${fam || "Fraunces"}, Georgia, "Times New Roman", serif`;
     gx.fillText(glyph, cx, cy);
   }
   // downsample to backing res: high-quality averaging anti-aliases the edges,
@@ -323,7 +345,22 @@ function bakeGlyph(out: Float32Array, dim: number, glyph: string) {
   dx.filter = `blur(${dim * 0.0035}px)`;
   dx.imageSmoothingEnabled = true;
   dx.imageSmoothingQuality = "high";
-  dx.drawImage(gc, 0, 0, dim, dim);
+  // recentre on the seal's centre from the glyph's actual ink bounds — a font's
+  // "middle" baseline and an icon's viewBox aren't centred on their own glyph.
+  const src = gx.getImageData(0, 0, big, big).data;
+  let minX = big, minY = big, maxX = 0, maxY = 0, any = false;
+  for (let y = 0; y < big; y += OV) {
+    for (let x = 0; x < big; x += OV) {
+      if (src[(y * big + x) * 4 + 3] > 8) {
+        any = true;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+  }
+  const tx = any ? dim / 2 - (minX + maxX) / (2 * OV) : 0;
+  const ty = any ? dim * 0.46 - (minY + maxY) / (2 * OV) : 0;
+  dx.drawImage(gc, 0, 0, big, big, tx, ty, dim, dim);
   const d = dx.getImageData(0, 0, dim, dim).data;
   for (let i = 0; i < dim * dim; i++) out[i] = d[i * 4 + 3] / 255;
 }
@@ -398,7 +435,12 @@ function paintSeal(
       const ndh = Math.max(0, nx * hx + ny * hy + nz * hz);
       const spec = Math.pow(ndh, SHIN);
       const slope = Math.hypot(dx, dy);
-      const gloss = SPEC_STR * specDamp * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5));
+      // geometric specular AA: a near-vertical wall (the glyph emboss, the outer
+      // lip roll) packs the sharp highlight into sub-pixel width, so it sparkles
+      // and the edge reads "pixelated". Roughen — roll the specular off as slope
+      // climbs — so steep edges stay defined by the (sharp) diffuse shadow, not glitter.
+      const aa = 1 / (1 + SPEC_AA * slope * slope);
+      const gloss = SPEC_STR * specDamp * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5)) * aa;
       // diagonal form shadow: brighter toward the upper-left light, deeper amber
       // toward the lower-right — gives the seal global 3-D depth like the reference
       const env = 1 + ENV * (((cx - px) + (cy - py)) / dim);
