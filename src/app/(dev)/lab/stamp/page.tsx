@@ -39,7 +39,7 @@ const PASTEL: Record<string, Tint> = {
   silver: { wax: "#c6ccd4", bright: "#eef2f7", shadow: "#565d66" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 27 · 2026-06-18 · silver hue + metallic speckle";
+const BUILD = "build 28 · 2026-06-18 · glint rework + separate cloud slider";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -52,6 +52,7 @@ export default function StampLab() {
   const [puck, setPuck] = useState(1);
   const [iconScale, setIconScale] = useState(0.4);
   const [speckle, setSpeckle] = useState(0.6);
+  const [cloud, setCloud] = useState(0.6);
   const [autoplay, setAutoplay] = useState(false);
   const [linger, setLinger] = useState(1000);
   const [exitMs, setExitMs] = useState(200);
@@ -140,6 +141,10 @@ export default function StampLab() {
           <input type="range" min={0.26} max={0.54} step={0.02} value={iconScale} onChange={(e) => setIconScale(+e.target.value)} />
         </label>
         <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-28">cloud {cloud.toFixed(2)}</span>
+          <input type="range" min={0} max={1} step={0.05} value={cloud} onChange={(e) => setCloud(+e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
           <span className="voice-data w-28">speckle {speckle.toFixed(2)}</span>
           <input type="range" min={0} max={1} step={0.05} value={speckle} onChange={(e) => setSpeckle(+e.target.value)} />
           <span className="voice-data text-ink-faint">{METAL_HUES.includes(hue) ? "metal" : "—"}</span>
@@ -213,6 +218,7 @@ export default function StampLab() {
           iconScale={iconScale}
           pressed={pressed}
           speckle={speckle}
+          cloud={cloud}
         />
       </button>
     </div>
