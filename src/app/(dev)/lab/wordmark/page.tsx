@@ -17,12 +17,15 @@ const LIGHT_BLUE = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
 // fade the seal's right edge so "nippets" reads against the paper, not the wax.
 const FADE_MASK = "linear-gradient(to right, #000 50%, rgba(0,0,0,0.12) 97%)";
 
-type Treatment = "white-emboss" | "wax" | "white-flat";
+type Treatment = "white-emboss" | "ink-emboss" | "wax" | "white-flat";
 const TREATMENTS: { key: Treatment; label: string }[] = [
   { key: "white-emboss", label: "white embossed" },
+  { key: "ink-emboss", label: "ink embossed" },
   { key: "wax", label: "wax embossed" },
   { key: "white-flat", label: "white on dome" },
 ];
+// the embossed S in the text's ink colour, per theme (matches "nippets").
+const INK = { light: "#241e15", dark: "#eae1cd" };
 
 // the seal-S then "nippets" pulled left over its right edge by `overlap`.
 function Mark({
@@ -34,6 +37,7 @@ function Mark({
   const sealPx = Math.round(fontPx * sealRatio);
   const mode = treatment === "white-flat" ? "tap" : "press";
   const whiteGlyph = treatment === "white-emboss";
+  const glyphColor = treatment === "ink-emboss" ? (themeKey === "dark" ? INK.dark : INK.light) : undefined;
   const still = !animate || treatment === "white-flat";
   return (
     <span
@@ -52,6 +56,7 @@ function Mark({
           mode={mode}
           still={still}
           whiteGlyph={whiteGlyph}
+          glyphColor={glyphColor}
           tint={lightBlue ? LIGHT_BLUE : undefined}
           variant="spring"
         />

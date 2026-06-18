@@ -325,12 +325,14 @@ export type WaxStampProps = {
   still?: boolean;
   /** render the embossed glyph white (keeps its relief) instead of wax-coloured. */
   whiteGlyph?: boolean;
+  /** render the embossed glyph in this colour (hex) — overrides whiteGlyph (e.g. the ink). */
+  glyphColor?: string;
   /** how much of the seal the "S"/letter fills (0.46 default; higher = thinner wax border). */
   glyphScale?: number;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, glyphScale = 0.46, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, glyphColor, glyphScale = 0.46, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -385,13 +387,15 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     const domeAmp = DOME_AMP_HI * Math.pow(DOME_AMP_LO / DOME_AMP_HI, puck);
     const domePow = DOME_POW_LO + (DOME_POW_HI - DOME_POW_LO) * puck;
 
+    // embossed-glyph colour: an explicit glyphColor wins, else white, else wax.
+    const gcol: Rgb | null = glyphColor ? hexToRgb01(glyphColor) : whiteGlyph ? [1, 1, 1] : null;
     const cy = dim * 0.46;
     const draw = (k: Beat, p: Profile = prof) => {
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
       // one continuous object at a FIXED size (scale is a transform below, so the
       // glyph scales with the seal as one unit) — same height-field lighting throughout.
-      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle, cloud, whiteGlyph ? 1 : 0);
+      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle, cloud, gcol);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
 
       // composite (full alpha): layered drop shadow, the seal body, then the white
@@ -484,7 +488,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph, glyphScale]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph, glyphColor, glyphScale]);
 
   return (
     <canvas
@@ -701,7 +705,7 @@ function blurMask(src: Float32Array, dst: Float32Array, dim: number, radius: num
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; img: ImageData },
   dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors, prof: Profile,
-  domeAmp: number, domePow: number, speckle: number, cloud: number, glyphWhite: number,
+  domeAmp: number, domePow: number, speckle: number, cloud: number, glyphCol: Rgb | null,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly, glyR = B.glyR;
@@ -835,12 +839,12 @@ function paintSeal(
           }
         }
       }
-      // material base: the wax colour, blended toward white where the glyph is
-      // raised (glyphWhite) — a white embossed mark that keeps its relief shading.
+      // material base: the wax colour, blended toward `glyphCol` where the glyph
+      // is raised — a coloured embossed mark (white, or the ink) that keeps relief.
       let mr = wr, mg = wg, mb = wb;
-      if (glyphWhite > 0) {
-        const t = gly[i] * glyphWhite;
-        if (t > 0) { mr = wr + (1 - wr) * t; mg = wg + (1 - wg) * t; mb = wb + (1 - wb) * t; }
+      if (glyphCol) {
+        const t = gly[i];
+        if (t > 0) { mr = wr + (glyphCol[0] - wr) * t; mg = wg + (glyphCol[1] - wg) * t; mb = wb + (glyphCol[2] - wb) * t; }
       }
       let R = mr * lf + sr * specMicro * gloss;
       let G = mg * lf + sg * specMicro * gloss;
