@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </filter>
       </svg>
       {/* desk chrome */}
-      <header className="flex shrink-0 items-center justify-between px-2 pb-4 pt-5 sm:px-1 sm:pt-7">
+      <header className="flex shrink-0 items-center justify-between px-2 pb-2 pt-2 sm:px-1 sm:pb-3 sm:pt-4">
         <Wordmark />
         <div className="flex items-center gap-6">
           <ShellNav />
