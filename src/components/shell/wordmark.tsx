@@ -47,7 +47,7 @@ export function Wordmark() {
       const fs = parseFloat(getComputedStyle(ref.current).fontSize);
       if (fs > 0) setFontPx(fs);
     }
-    armSettle();
+    setSettled(true); // no entrance animation on load — the press plays only on tap (home)
     return () => clearTimeout(timer.current);
   }, []);
 

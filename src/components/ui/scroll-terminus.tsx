@@ -121,7 +121,12 @@ export function ScrollTerminus({
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px"
+      className={cn(
+        "pointer-events-none sticky bottom-0 z-[6] -mt-px h-px",
+        // the fade variant (the entry card) rides a hair lower so no seam of
+        // the next line shows below the rule at the scroller's sub-pixel edge
+        fade && "translate-y-px",
+      )}
     >
       {fade && (
         <>

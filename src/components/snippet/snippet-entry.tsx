@@ -12,11 +12,14 @@ export function SnippetEntry({
   snippet,
   stagger = 0,
   dense = false,
+  compact = false,
 }: {
   snippet: Snippet;
   stagger?: number;
   /** standalone (the focused card): drop the list padding + entrance, tighten leading */
   dense?: boolean;
+  /** a long entry that has to scroll: render at the schedule-preview size, not full prose */
+  compact?: boolean;
 }) {
   const isQuote = snippet.kind === "quote";
   // don't repeat an attribution the text already ends with
@@ -35,7 +38,7 @@ export function SnippetEntry({
         className={cn(
           "voice-prose whitespace-pre-wrap",
           isQuote && "hang-quotes italic",
-          dense && "leading-[1.5]",
+          compact ? "text-[0.9rem] leading-[1.42]" : dense && "leading-[1.5]",
         )}
       >
         {snippet.text}

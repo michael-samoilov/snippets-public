@@ -2851,6 +2851,12 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   // the standard scroll terminus: the foot hairline shows while more
   // words lie below, and clears at the last line (or if they all fit)
   const edges = useScrollEdges(contentRef, [editing, draft]);
+  // a long entry that overflows the card reads at the schedule-preview size
+  // (smaller) rather than full prose; once it has to scroll it stays small
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    if (!compact && (edges.top || edges.bottom)) setCompact(true);
+  }, [edges, compact]);
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -2940,7 +2946,7 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
         className="relative min-h-0 flex-initial overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]"
         style={{ scrollbarWidth: "none" }}
       >
-        {!editing && <SnippetEntry snippet={snippet} dense />}
+        {!editing && <SnippetEntry snippet={snippet} dense compact={compact} />}
         {/* the field is always mounted (a hidden one can't take the
             gesture's synchronous focus); writing, it wears the exact
             metrics of the words it replaces */}
@@ -2965,7 +2971,8 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
             // sits in no baseline line-box — its height then matches the
             // prose it replaces exactly, and edit-toggling never resizes
             // the card around the text
-            "voice-prose block resize-none overflow-hidden whitespace-pre-wrap bg-transparent leading-[1.5] outline-none [overflow-wrap:anywhere]",
+            "voice-prose block resize-none overflow-hidden whitespace-pre-wrap bg-transparent outline-none [overflow-wrap:anywhere]",
+            compact ? "text-[0.9rem] leading-[1.42]" : "leading-[1.5]",
             // hidden: inset-x-4 (not left-4 + w-full) so its box can't
             // poke past the right padding and force a sideways scroll
             editing
@@ -3287,6 +3294,10 @@ function MarkedPreview({
         ref={pRef}
         className={cn(
           "voice-prose whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+          // once windowed, clamp to the 6-line view so the last visible line
+          // gets a trailing "…" (the measuring pass renders the full text, so
+          // it must stay unclamped for the line maths to be right)
+          (measured || !occ.length) && "line-clamp-6",
           isQuote && "hang-quotes italic",
         )}
       >
