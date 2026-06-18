@@ -13,12 +13,12 @@ import { WaxStamp } from "@/components/capture/wax-stamp";
 const BASE_FONT = 20.8; // 1.3rem — the real masthead size
 const BUILD = "wordmark lab · 2026-06-18 · seal-S, natural fit";
 
-// bakeGlyph draws the "S" at 0.46 of the seal, so a seal 1/0.46× the font size
-// renders the embossed S at exactly the text's S size. (Independent of the glyph.)
-const S_GLYPH_SCALE = 0.46;
-const SEAL_RATIO = 1 / S_GLYPH_SCALE; // ≈ 2.174
-// the embossed glyph's ink centre sits at 0.46 of the seal height (bakeGlyph).
+// bakeGlyph draws the "S" at `glyphScale` of the seal, so a seal 1/glyphScale×
+// the font size renders the embossed S at exactly the text's S size. Raising
+// glyphScale (a thinner wax border) shrinks the seal for the same S → less of
+// "nippets" overlaps it. The embossed glyph's ink centre sits at 0.46 (bakeGlyph).
 const SEAL_GLYPH_CY = 0.46;
+const DEFAULT_FILL = 0.62; // S fills more of the seal than the 0.46 default → smaller seal
 // a scratch 2-D context for measuring real font metrics (S ink centre / baseline)
 const MEASURE = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
 
@@ -30,14 +30,14 @@ const TREATMENTS: { key: Treatment; label: string }[] = [
 ];
 
 function Mark({
-  fontPx, sizeMul, vnudge, hnudge, treatment, animate, gen, themeKey,
+  fontPx, glyphScale, sizeMul, vnudge, hnudge, treatment, animate, gen, themeKey,
 }: {
-  fontPx: number; sizeMul: number; vnudge: number; hnudge: number;
+  fontPx: number; glyphScale: number; sizeMul: number; vnudge: number; hnudge: number;
   treatment: Treatment; animate: boolean; gen: number; themeKey: string;
 }) {
   const sref = useRef<HTMLSpanElement>(null);
   const [c, setC] = useState<{ x: number; y: number } | null>(null);
-  const sealPx = Math.round(fontPx * SEAL_RATIO * sizeMul);
+  const sealPx = Math.round((fontPx / glyphScale) * sizeMul); // seal that renders the S at font size
 
   useLayoutEffect(() => {
     const measure = () => {
@@ -92,6 +92,7 @@ function Mark({
             mode={mode}
             still={still}
             whiteGlyph={whiteGlyph}
+            glyphScale={glyphScale}
             variant="spring"
           />
         </span>
@@ -104,6 +105,7 @@ function Mark({
 
 export default function WordmarkLab() {
   const [scale, setScale] = useState(2.6);
+  const [glyphScale, setGlyphScale] = useState(DEFAULT_FILL);
   const [sizeMul, setSizeMul] = useState(1);
   const [vnudge, setVnudge] = useState(0);
   const [hnudge, setHnudge] = useState(0);
@@ -117,7 +119,7 @@ export default function WordmarkLab() {
   const chip = (active: boolean) =>
     `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${active ? "bg-wax text-paper" : "bg-paper text-ink border border-rule-faint"}`;
 
-  const common = { sizeMul, vnudge, hnudge, treatment, gen, themeKey };
+  const common = { glyphScale, sizeMul, vnudge, hnudge, treatment, gen, themeKey };
 
   return (
     <div className="flex flex-col gap-5">
@@ -148,6 +150,10 @@ export default function WordmarkLab() {
         <label className="flex items-center gap-2 text-[0.85rem]">
           <span className="voice-data w-24">zoom ×{scale.toFixed(1)}</span>
           <input type="range" min={1} max={5} step={0.1} value={scale} onChange={(e) => setScale(+e.target.value)} />
+        </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-28">S fill {glyphScale.toFixed(2)}</span>
+          <input type="range" min={0.46} max={0.78} step={0.01} value={glyphScale} onChange={(e) => setGlyphScale(+e.target.value)} />
         </label>
         <label className="flex items-center gap-2 text-[0.85rem]">
           <span className="voice-data w-28">S size ×{sizeMul.toFixed(2)}</span>

@@ -325,16 +325,18 @@ export type WaxStampProps = {
   still?: boolean;
   /** render the embossed glyph white (keeps its relief) instead of wax-coloured. */
   whiteGlyph?: boolean;
+  /** how much of the seal the "S"/letter fills (0.46 default; higher = thinner wax border). */
+  glyphScale?: number;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, glyphScale = 0.46, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
-  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number } | null>(null);
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number; bakedGlyphScale: number } | null>(null);
 
   useLayoutEffect(() => {
     colors.current = resolveColors(tint); // tint > dev override > --wax* tokens
@@ -366,11 +368,12 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
         img: ctx.createImageData(dim, dim),
         baked: "",
         bakedScale: -1,
+        bakedGlyphScale: -1,
       };
     }
     const B = buf.current;
-    if (B.baked !== glyph || B.bakedScale !== iconScale) { // re-bake on glyph or size change
-      bakeGlyph(B.gly, B.glyR, B.iconImg, dim, glyph, iconScale); B.baked = glyph; B.bakedScale = iconScale;
+    if (B.baked !== glyph || B.bakedScale !== iconScale || B.bakedGlyphScale !== glyphScale) { // re-bake on glyph or size change
+      bakeGlyph(B.gly, B.glyR, B.iconImg, dim, glyph, iconScale, glyphScale); B.baked = glyph; B.bakedScale = iconScale; B.bakedGlyphScale = glyphScale;
     }
     colors.current = resolveColors(tint); // refresh (theme/tint may have changed)
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
@@ -481,7 +484,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph, glyphScale]);
 
   return (
     <canvas
@@ -574,7 +577,7 @@ const EXTRA_ICONS: Record<string, IconFn> = {
 // rasterise the glyph/icon once → an alpha mask used as embossed relief.
 // Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
 // crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
-function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasElement, dim: number, glyph: string, iconScale: number) {
+function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasElement, dim: number, glyph: string, iconScale: number, glyphScale: number) {
   out.fill(0); outR.fill(0);
   iconImg.getContext("2d")!.clearRect(0, 0, dim, dim);
   if (!glyph) return;
@@ -589,7 +592,7 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasEle
   if (glyph === "S") {
     // friendly opsz≈22 italic Fraunces "S", baked from its vector outline so it
     // matches the masthead regardless of canvas's lack of opsz control.
-    const s = (0.46 * big) / GLYPH_UPM;
+    const s = (glyphScale * big) / GLYPH_UPM;
     gx.save();
     gx.translate(cx, cy); gx.scale(s, -s); gx.translate(-S_CX, -S_CY);
     gx.fill(new Path2D(S_PATH));
@@ -610,7 +613,7 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasEle
       // other letters: canvas text (Fraunces italic)
       const fam = getComputedStyle(document.documentElement).getPropertyValue("--font-fraunces").trim();
       gx.textAlign = "center"; gx.textBaseline = "middle";
-      gx.font = `italic 560 ${Math.round(big * 0.46)}px ${fam || "Fraunces"}, Georgia, "Times New Roman", serif`;
+      gx.font = `italic 560 ${Math.round(big * glyphScale)}px ${fam || "Fraunces"}, Georgia, "Times New Roman", serif`;
       gx.fillText(glyph, cx, cy);
     }
   }
