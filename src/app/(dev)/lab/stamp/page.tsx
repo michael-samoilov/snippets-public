@@ -34,7 +34,7 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 22 · 2026-06-17 · Zest quill (set e)";
+const BUILD = "build 23 · 2026-06-17 · icon-size slider (fit ridge)";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -45,6 +45,7 @@ export default function StampLab() {
   const [bounce, setBounce] = useState(1.5);
   const [rotate, setRotate] = useState(15);
   const [puck, setPuck] = useState(1);
+  const [iconScale, setIconScale] = useState(0.4);
   const [autoplay, setAutoplay] = useState(false);
   const [linger, setLinger] = useState(1000);
   const [exitMs, setExitMs] = useState(200);
@@ -128,6 +129,10 @@ export default function StampLab() {
           <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
           <input type="range" min={0} max={2} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
         </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-24">icon {iconScale.toFixed(2)}</span>
+          <input type="range" min={0.26} max={0.54} step={0.02} value={iconScale} onChange={(e) => setIconScale(+e.target.value)} />
+        </label>
         <button type="button" data-replay onClick={replay} className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper">
           Replay
         </button>
@@ -194,6 +199,7 @@ export default function StampLab() {
           exit={exit}
           tint={tint}
           puck={puck}
+          iconScale={iconScale}
           pressed={pressed}
         />
       </button>

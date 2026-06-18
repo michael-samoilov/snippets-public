@@ -292,18 +292,20 @@ export type WaxStampProps = {
   tint?: Tint;
   /** resting-glob flatness: 0 = round globe, 1 = flat puck. */
   puck?: number;
+  /** icon glyph size as a fraction of the seal (smaller keeps it inside the ridge). */
+  iconScale?: number;
   /** lab/tap: held-down feedback while the thumb is on the button (before release). */
   pressed?: boolean;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 15, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, pressed = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 15, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
-  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string } | null>(null);
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number } | null>(null);
 
   useLayoutEffect(() => {
     colors.current = resolveColors(tint); // tint > dev override > --wax* tokens
@@ -334,10 +336,13 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
         iconImg: mk(),  // the glyph in white, for the resting-dome label
         img: ctx.createImageData(dim, dim),
         baked: "",
+        bakedScale: -1,
       };
     }
     const B = buf.current;
-    if (B.baked !== glyph) { bakeGlyph(B.gly, B.glyR, B.iconImg, dim, glyph); B.baked = glyph; } // re-bake on glyph change
+    if (B.baked !== glyph || B.bakedScale !== iconScale) { // re-bake on glyph or size change
+      bakeGlyph(B.gly, B.glyR, B.iconImg, dim, glyph, iconScale); B.baked = glyph; B.bakedScale = iconScale;
+    }
     colors.current = resolveColors(tint); // refresh (theme/tint may have changed)
     const MR = dim * 0.38; // mean seal radius in backing px (room for lobes + shadow)
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
@@ -447,7 +452,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, pressed]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed]);
 
   return (
     <canvas
@@ -518,7 +523,7 @@ const EXTRA_ICONS: Record<string, IconFn> = {
 // rasterise the glyph/icon once → an alpha mask used as embossed relief.
 // Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
 // crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
-function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasElement, dim: number, glyph: string) {
+function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasElement, dim: number, glyph: string, iconScale: number) {
   out.fill(0); outR.fill(0);
   iconImg.getContext("2d")!.clearRect(0, 0, dim, dim);
   if (!glyph) return;
@@ -545,7 +550,7 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasEle
     const iconKey = ci > 0 ? glyph.slice(ci + 1) : glyph;
     const iconFn = ICON_SETS[setKey]?.[iconKey] ?? ICON_SETS.a[iconKey] ?? EXTRA_ICONS[iconKey];
     if (iconFn) {
-      const sc = (0.48 * big) / 20;          // fit the 0–20 viewBox into the field
+      const sc = (iconScale * big) / 20;     // icon size as a fraction of the field
       gx.save();
       gx.translate(cx, cy); gx.scale(sc, sc); gx.translate(-10, -10);
       iconFn(gx);
