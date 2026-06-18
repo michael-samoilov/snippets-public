@@ -11,7 +11,7 @@ import { WaxStamp } from "@/components/capture/wax-stamp";
 import { WaxText } from "@/components/capture/wax-text";
 
 const BASE_FONT = 20.8; // 1.3rem — the real masthead size
-const BUILD = "wordmark lab · 2026-06-18 · ink S: darker + emboss-all";
+const BUILD = "wordmark lab · 2026-06-18 · LOCKED: light blue + deeper ink S";
 
 const LIGHT_BLUE = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
 const FADE_MASK = "linear-gradient(to right, #000 50%, rgba(0,0,0,0.12) 97%)";
@@ -94,7 +94,7 @@ export default function WordmarkLab() {
   const [sealRatio, setSealRatio] = useState(2.1);
   const [overlap, setOverlap] = useState(0.38);
   const [vnudge, setVnudge] = useState(0.22);
-  const [inkDark, setInkDark] = useState(0);
+  const [inkDark, setInkDark] = useState(0.5);
   const [treatment, setTreatment] = useState<Treatment>("ink-emboss");
   const [animate, setAnimate] = useState(true);
   const [fade, setFade] = useState(false);
