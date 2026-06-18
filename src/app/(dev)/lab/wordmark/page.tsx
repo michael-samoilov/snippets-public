@@ -10,7 +10,12 @@ import { useTheme } from "next-themes";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 
 const BASE_FONT = 20.8; // 1.3rem — the real masthead size
-const BUILD = "wordmark lab · 2026-06-18 · manual sliders";
+const BUILD = "wordmark lab · 2026-06-18 · locked + contrast tries";
+
+// Lamplight's lighter wax blue — an alternative to deepen "n" contrast on Paper.
+const LIGHT_BLUE = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
+// fade the seal's right edge so "nippets" reads against the paper, not the wax.
+const FADE_MASK = "linear-gradient(to right, #000 50%, rgba(0,0,0,0.12) 97%)";
 
 type Treatment = "white-emboss" | "wax" | "white-flat";
 const TREATMENTS: { key: Treatment; label: string }[] = [
@@ -21,10 +26,10 @@ const TREATMENTS: { key: Treatment; label: string }[] = [
 
 // the seal-S then "nippets" pulled left over its right edge by `overlap`.
 function Mark({
-  fontPx, sealRatio, overlap, vnudge, treatment, animate, gen, themeKey,
+  fontPx, sealRatio, overlap, vnudge, treatment, animate, fade, lightBlue, gen, themeKey,
 }: {
   fontPx: number; sealRatio: number; overlap: number; vnudge: number;
-  treatment: Treatment; animate: boolean; gen: number; themeKey: string;
+  treatment: Treatment; animate: boolean; fade: boolean; lightBlue: boolean; gen: number; themeKey: string;
 }) {
   const sealPx = Math.round(fontPx * sealRatio);
   const mode = treatment === "white-flat" ? "tap" : "press";
@@ -35,15 +40,19 @@ function Mark({
       className="voice-display inline-flex items-center italic leading-none tracking-tight text-ink"
       style={{ fontSize: fontPx }}
     >
-      <span className="relative inline-block shrink-0" style={{ width: sealPx, height: sealPx, marginTop: vnudge * fontPx }}>
+      <span
+        className="relative inline-block shrink-0"
+        style={{ width: sealPx, height: sealPx, marginTop: vnudge * fontPx, WebkitMaskImage: fade ? FADE_MASK : undefined, maskImage: fade ? FADE_MASK : undefined }}
+      >
         <WaxStamp
-          key={`${themeKey}-${treatment}-${animate ? gen : "still"}`}
+          key={`${themeKey}-${treatment}-${lightBlue ? "lt" : "tk"}-${animate ? gen : "still"}`}
           playKey={gen}
           size={sealPx}
           glyph="S"
           mode={mode}
           still={still}
           whiteGlyph={whiteGlyph}
+          tint={lightBlue ? LIGHT_BLUE : undefined}
           variant="spring"
         />
       </span>
@@ -62,10 +71,12 @@ const PRESETS: { label: string; sealRatio: number; overlap: number; vnudge: numb
 export default function WordmarkLab() {
   const [scale, setScale] = useState(2.6);
   const [sealRatio, setSealRatio] = useState(2.1);
-  const [overlap, setOverlap] = useState(0.14);
-  const [vnudge, setVnudge] = useState(0);
+  const [overlap, setOverlap] = useState(0.38);
+  const [vnudge, setVnudge] = useState(0.22);
   const [treatment, setTreatment] = useState<Treatment>("white-emboss");
-  const [animate, setAnimate] = useState(false);
+  const [animate, setAnimate] = useState(true);
+  const [fade, setFade] = useState(false);
+  const [lightBlue, setLightBlue] = useState(false);
   const [gen, setGen] = useState(1);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
@@ -94,9 +105,16 @@ export default function WordmarkLab() {
         ))}
       </div>
 
+      {/* contrast alternatives for the overlapping "n" */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="voice-label text-ink-faint">contrast try</span>
+        <button type="button" onClick={() => setFade((v) => !v)} className={chip(fade)}>edge fade {fade ? "on" : "off"}</button>
+        <button type="button" onClick={() => setLightBlue((v) => !v)} className={chip(lightBlue)}>light blue {lightBlue ? "on" : "off"}</button>
+      </div>
+
       {/* playground (zoomed) */}
       <div className="rounded-[10px] border border-rule-faint bg-paper py-10 pl-8 pr-6">
-        <Mark fontPx={BASE_FONT * scale} sealRatio={sealRatio} overlap={overlap} vnudge={vnudge} treatment={treatment} animate={animate} gen={gen} themeKey={themeKey} />
+        <Mark fontPx={BASE_FONT * scale} sealRatio={sealRatio} overlap={overlap} vnudge={vnudge} treatment={treatment} animate={animate} fade={fade} lightBlue={lightBlue} gen={gen} themeKey={themeKey} />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -121,7 +139,7 @@ export default function WordmarkLab() {
       {/* actual masthead size */}
       <div className="flex items-center gap-4 rounded-[10px] border border-rule-faint bg-paper py-5 pl-8 pr-6">
         <span className="voice-label w-28 shrink-0 text-ink-faint">actual size</span>
-        <Mark fontPx={BASE_FONT} sealRatio={sealRatio} overlap={overlap} vnudge={vnudge} treatment={treatment} animate={false} gen={gen} themeKey={themeKey} />
+        <Mark fontPx={BASE_FONT} sealRatio={sealRatio} overlap={overlap} vnudge={vnudge} treatment={treatment} animate={false} fade={fade} lightBlue={lightBlue} gen={gen} themeKey={themeKey} />
       </div>
 
       {/* overlap reference points at the current ratio/treatment */}
@@ -130,7 +148,7 @@ export default function WordmarkLab() {
         {PRESETS.map((pre) => (
           <div key={pre.label} className="flex items-center gap-4 rounded-[10px] border border-rule-faint bg-paper py-5 pl-8 pr-6">
             <span className="voice-label w-28 shrink-0 text-ink-faint">{pre.label}</span>
-            <Mark fontPx={BASE_FONT * 2} sealRatio={pre.sealRatio} overlap={pre.overlap} vnudge={pre.vnudge} treatment={treatment} animate={false} gen={gen} themeKey={themeKey} />
+            <Mark fontPx={BASE_FONT * 2} sealRatio={pre.sealRatio} overlap={pre.overlap} vnudge={pre.vnudge} treatment={treatment} animate={false} fade={fade} lightBlue={lightBlue} gen={gen} themeKey={themeKey} />
           </div>
         ))}
       </div>
