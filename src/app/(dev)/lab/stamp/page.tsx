@@ -3,25 +3,35 @@
 /* TEMPORARY dev harness for iterating and comparing the wax-stamp press.
    Not linked anywhere; removed before the feature ships. */
 
-import { useState } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
-const ICONS = ["S", "quill", "mic", "calendar", "caldots", "check", "spark", "eye", "eye2", "joke", "laugh", "smile"];
-const SET_ICONS = ["quill", "mic", "calendar", "check"]; // these vary by icon-set
-const ICON_SET_KEYS = ["a", "b", "c", "d", "e"] as const;
-const SET_LABEL: Record<string, string> = { a: "a · line", b: "b · solid", c: "c · fine", d: "d · remix", e: "e · zest" };
+// the chosen icon per type, across the icon packs (Zest = "e:", Fine = "c:",
+// app/extra = bare). Swipe the carousel to pick; each is its own wax drop.
+const ICON_CHOICES: { glyph: string; label: string }[] = [
+  { glyph: "S", label: "S" },
+  { glyph: "e:quill", label: "quill" },
+  { glyph: "c:mic", label: "mic" },
+  { glyph: "e:calendar", label: "calendar" },
+  { glyph: "caldots", label: "cal·dots" },
+  { glyph: "eye", label: "eye" },
+  { glyph: "joke", label: "joke" },
+];
+
 const EASES = ["even", "front", "snap"] as const;
 const EXITS = ["fade", "rise", "shrink", "grow"] as const;
+type EaseT = (typeof EASES)[number];
+type ExitT = (typeof EXITS)[number];
+
 // candidate stamp colours to preview (the app ships ONE semantic wax blue; these
 // are an exploration for the categorisation moonshot, sandboxed to the lab). Each
-// hue comes in a deep tone (rich, navy-like) and a soft pastel tone.
-// metals (gold · bronze=rose · silver) are grouped at the end — they carry the
-// metallic speckle; gold leans a touch orange so it doesn't read purely yellow.
+// hue comes in a deep tone (rich, navy-like) and a soft pastel tone. Metals
+// (gold · bronze=rose · silver) are grouped at the end — they carry the cloud/glint.
 const HUES = ["navy", "red", "teal", "plum", "gold", "rose", "silver"] as const;
-const METAL_HUES = ["gold", "rose", "silver"]; // get the flake/grain texture
+const METAL_HUES = ["gold", "rose", "silver"];
 const DEEP: Record<string, Tint | undefined> = {
-  navy: undefined, // theme --wax token (already deep navy)
+  navy: { wax: "#2e5685", bright: "#3d6b9e", shadow: "#234468" }, // Paper's deep blue, fixed so Lamplight matches it
   red: { wax: "#7e2c27", bright: "#a8534a", shadow: "#2a0a07" },
   gold: { wax: "#cd8a16", bright: "#eebe54", shadow: "#3e2606" },
   teal: { wax: "#225247", bright: "#3a8475", shadow: "#082420" },
@@ -39,32 +49,178 @@ const PASTEL: Record<string, Tint> = {
   silver: { wax: "#c6ccd4", bright: "#eef2f7", shadow: "#565d66" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 28 · 2026-06-18 · glint rework + separate cloud slider";
+const BUILD = "build 29 · 2026-06-18 · icon carousel + locked texture";
+
+// shared design values handed to every wax drop in the carousel
+type Design = {
+  size: number; tint?: Tint; puck: number; cloud: number; speckle: number;
+  iconScale: number; ease: EaseT; bounce: number; rotate: number;
+  lingerMs: number; exitMs: number; exit: ExitT; restPressed: boolean; themeKey: string;
+};
+
+// a swipeable strip of wax drops, one per icon. The centred drop is emphasised
+// and stampable (tap the seal to play); neighbours peek de-emphasised on either
+// side. A translated flex track (not native scroll) so the de-emphasis is exact;
+// drag/swipe or wheel to move, tap a neighbour to bring it centre, tap the centre
+// seal to stamp it. Only the seal is a tap target — the surrounding band is not.
+function IconCarousel({ d }: { d: Design }) {
+  const band = useRef<HTMLDivElement>(null);
+  const startX = useRef(0);
+  const moved = useRef(false);
+  const wheelLock = useRef(0);
+  const [active, setActive] = useState(0);
+  const [drag, setDrag] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [pressedIdx, setPressedIdx] = useState<number | null>(null);
+  const [playKeys, setPlayKeys] = useState<number[]>(() => ICON_CHOICES.map(() => 0));
+  const N = ICON_CHOICES.length;
+  const STEP = Math.round(d.size * 1.08);   // spacing between drop centres
+  const STRIP_H = Math.round(d.size * 1.5);
+  const clampIdx = (i: number) => Math.max(0, Math.min(N - 1, i));
+  const stamp = (i: number) => setPlayKeys((p) => { const n = [...p]; n[i]++; return n; });
+
+  // which drop (if any) sits under a screen point — a seal, not the band
+  const idxUnder = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const w = el?.closest("[data-idx]") as HTMLElement | null;
+    return w ? Number(w.dataset.idx) : -1;
+  };
+
+  const onDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    startX.current = e.clientX; moved.current = false;
+    setDragging(true);
+    band.current?.setPointerCapture(e.pointerId);
+    if (!d.restPressed && idxUnder(e.clientX, e.clientY) === active) setPressedIdx(active);
+  };
+  const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX.current;
+    if (Math.abs(dx) > 4) { moved.current = true; setPressedIdx(null); }
+    setDrag(dx);
+  };
+  const onUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    band.current?.releasePointerCapture?.(e.pointerId);
+    setDragging(false);
+    setPressedIdx(null);
+    const dx = e.clientX - startX.current;
+    setDrag(0);
+    if (moved.current) {                 // a swipe → snap by however many steps
+      if (Math.abs(dx) > 8) {
+        const steps = Math.round(dx / STEP);
+        setActive((a) => clampIdx(a + (steps !== 0 ? -steps : dx < 0 ? 1 : -1)));
+      }
+      return;
+    }
+    const i = idxUnder(e.clientX, e.clientY);   // a tap
+    if (i < 0) return;                          // tapped the band, not a seal
+    if (i === active) { if (!d.restPressed) stamp(i); }
+    else setActive(i);
+  };
+  const onWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
+    const dom = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(dom) < 6) return;
+    const now = performance.now();
+    if (now < wheelLock.current) return;
+    wheelLock.current = now + 260;
+    setActive((a) => clampIdx(a + (dom > 0 ? 1 : -1)));
+  };
+
+  const centre = active - drag / STEP;   // fractional centre, follows the drag
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        ref={band}
+        className="relative select-none overflow-hidden"
+        style={{ height: STRIP_H, touchAction: "pan-y", cursor: dragging ? "grabbing" : "grab" }}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onWheel={onWheel}
+      >
+        <div
+          className="absolute top-0 left-1/2 flex h-full items-center"
+          style={{
+            transform: `translateX(${(-(centre * STEP) - STEP / 2).toFixed(2)}px)`,
+            transition: dragging ? "none" : "transform .34s cubic-bezier(.23,1,.32,1)",
+          }}
+        >
+          {ICON_CHOICES.map((c, i) => {
+            const k = Math.max(0, 1 - Math.min(1, Math.abs(i - centre)));  // 1 centred → 0 a slide away
+            return (
+              <div
+                key={c.glyph}
+                className="flex shrink-0 items-center justify-center"
+                style={{ width: STEP, height: STRIP_H, transform: `scale(${(0.6 + 0.4 * k).toFixed(3)})`, opacity: 0.5 + 0.5 * k }}
+              >
+                <div data-idx={i} style={{ width: d.size, height: d.size }} className="grid place-items-center">
+                  <WaxStamp
+                    key={`${d.themeKey}-${i}`}
+                    playKey={playKeys[i]}
+                    size={d.size}
+                    glyph={c.glyph}
+                    variant="spring"
+                    ease={d.ease}
+                    bounce={d.bounce}
+                    rotate={d.rotate}
+                    mode="tap"
+                    lingerMs={d.lingerMs}
+                    exitMs={d.exitMs}
+                    exit={d.exit}
+                    tint={d.tint}
+                    puck={d.puck}
+                    iconScale={d.iconScale}
+                    speckle={d.speckle}
+                    cloud={d.cloud}
+                    pressed={pressedIdx === i || (d.restPressed && i === active)}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* edge hints: more drops to swipe to */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-16" style={{ background: "linear-gradient(to right, var(--paper), transparent)" }} />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-16" style={{ background: "linear-gradient(to left, var(--paper), transparent)" }} />
+      </div>
+      <div className="flex items-center justify-center gap-3">
+        <button
+          type="button"
+          data-replay
+          onClick={() => { if (!d.restPressed) stamp(active); }}
+          className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper"
+        >
+          Replay
+        </button>
+        <span className="voice-data">{ICON_CHOICES[active].label} · play #{playKeys[active]}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function StampLab() {
-  const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(160);
-  const [icon, setIcon] = useState("S");
-  const [iconSet, setIconSet] = useState<(typeof ICON_SET_KEYS)[number]>("a");
-  const [ease, setEase] = useState<(typeof EASES)[number]>("front");
+  const [iconScale, setIconScale] = useState(0.4);
+  const [ease, setEase] = useState<EaseT>("front");
   const [bounce, setBounce] = useState(1.5);
   const [rotate, setRotate] = useState(5);
   const [puck, setPuck] = useState(1);
-  const [iconScale, setIconScale] = useState(0.4);
-  const [speckle, setSpeckle] = useState(0.6);
-  const [cloud, setCloud] = useState(0.6);
-  const [autoplay, setAutoplay] = useState(false);
+  const [cloud, setCloud] = useState(0.5);
+  const [speckle, setSpeckle] = useState(0);
   const [linger, setLinger] = useState(1000);
   const [exitMs, setExitMs] = useState(200);
-  const [exit, setExit] = useState<(typeof EXITS)[number]>("grow");
+  const [exit, setExit] = useState<ExitT>("grow");
   const [hue, setHue] = useState<(typeof HUES)[number]>("navy");
   const [tone, setTone] = useState<"deep" | "pastel">("deep");
-  const [pressed, setPressed] = useState(false);
+  const [restPressed, setRestPressed] = useState(false);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
-  const replay = () => setPlayKey((n) => n + 1);
   const tint = tone === "deep" ? DEEP[hue] : PASTEL[hue];
-  const glyph = SET_ICONS.includes(icon) && iconSet !== "a" ? `${iconSet}:${icon}` : icon;
+
+  const d: Design = {
+    size, tint, puck, cloud, speckle, iconScale, ease, bounce, rotate,
+    lingerMs: linger, exitMs, exit, restPressed, themeKey: `${theme}-${hue}-${tone}`,
+  };
 
   const chip = (active: boolean) =>
     `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${
@@ -78,31 +234,13 @@ export default function StampLab() {
         {BUILD}
       </span>
 
-      {/* active exploration */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {ICONS.map((ic) => (
-            <button key={ic} type="button" onClick={() => setIcon(ic)} className={chip(icon === ic)}>
-              {ic}
-            </button>
-          ))}
-        </div>
         <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className={chip(false)}>
           {dark ? "Lamplight" : "Paper"}
         </button>
-        <button type="button" onClick={() => setAutoplay((v) => !v)} className={chip(autoplay)}>
-          autoplay {autoplay ? "on" : "off"}
+        <button type="button" onClick={() => setRestPressed((v) => !v)} className={chip(restPressed)}>
+          resting {restPressed ? "pressed" : "unpressed"}
         </button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="voice-label text-ink-faint">icon set</span>
-        {ICON_SET_KEYS.map((k) => (
-          <button key={k} type="button" onClick={() => setIconSet(k)} className={chip(iconSet === k)}>
-            {SET_LABEL[k]}
-          </button>
-        ))}
-        <span className="voice-data text-ink-faint">(quill · mic · calendar · check)</span>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -127,38 +265,25 @@ export default function StampLab() {
         ))}
       </div>
 
+      {/* the icon picker: swipe to a drop, tap the centre seal to stamp it */}
+      <IconCarousel d={d} />
+
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <label className="flex items-center gap-2 text-[0.85rem]">
           <span className="voice-data w-24">size {size}</span>
           <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
         </label>
         <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
-          <input type="range" min={0} max={2} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-24">icon {iconScale.toFixed(2)}</span>
+          <span className="voice-data w-28">icon size {iconScale.toFixed(2)}</span>
           <input type="range" min={0.26} max={0.54} step={0.02} value={iconScale} onChange={(e) => setIconScale(+e.target.value)} />
         </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-28">cloud {cloud.toFixed(2)}</span>
-          <input type="range" min={0} max={1} step={0.05} value={cloud} onChange={(e) => setCloud(+e.target.value)} />
-        </label>
-        <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-28">speckle {speckle.toFixed(2)}</span>
-          <input type="range" min={0} max={1} step={0.05} value={speckle} onChange={(e) => setSpeckle(+e.target.value)} />
-          <span className="voice-data text-ink-faint">{METAL_HUES.includes(hue) ? "metal" : "—"}</span>
-        </label>
-        <button type="button" data-replay onClick={replay} className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper">
-          Replay
-        </button>
-        <span className="voice-data">play #{playKey}</span>
+        <span className="voice-data text-ink-faint">{METAL_HUES.includes(hue) ? "metal" : "matte"}</span>
       </div>
 
-      {/* confirmed values — collapsed; the summary shows them at a glance */}
+      {/* confirmed/locked values — collapsed; the summary shows them at a glance */}
       <details className="rounded-[8px] border border-rule-faint bg-paper px-4 py-2.5">
         <summary className="voice-label cursor-pointer select-none text-ink-soft">
-          confirmed — spring · front · bounce {bounce.toFixed(1)}× · rotate {rotate}° · linger {linger}ms · exit {exit} {exitMs}ms
+          locked — spring · front · bounce {bounce.toFixed(1)}× · rotate {rotate}° · puck {puck.toFixed(2)} · cloud {cloud.toFixed(2)} · speckle {speckle.toFixed(2)} · linger {linger}ms · exit {exit} {exitMs}ms
         </summary>
         <div className="mt-3 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -181,6 +306,18 @@ export default function StampLab() {
               <input type="range" min={0} max={60} step={5} value={rotate} onChange={(e) => setRotate(+e.target.value)} />
             </label>
             <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
+              <input type="range" min={0} max={2} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-24">cloud {cloud.toFixed(2)}</span>
+              <input type="range" min={0} max={1} step={0.05} value={cloud} onChange={(e) => setCloud(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
+              <span className="voice-data w-24">speckle {speckle.toFixed(2)}</span>
+              <input type="range" min={0} max={1} step={0.05} value={speckle} onChange={(e) => setSpeckle(+e.target.value)} />
+            </label>
+            <label className="flex items-center gap-2 text-[0.85rem]">
               <span className="voice-data w-28">linger {linger}ms</span>
               <input type="range" min={0} max={3000} step={100} value={linger} onChange={(e) => setLinger(+e.target.value)} />
             </label>
@@ -191,36 +328,6 @@ export default function StampLab() {
           </div>
         </div>
       </details>
-
-      <button
-        type="button"
-        onPointerDown={() => setPressed(true)}
-        onPointerUp={() => { setPressed(false); replay(); }}
-        onPointerLeave={() => setPressed(false)}
-        title="press and release to stamp"
-        className="mt-2 grid cursor-pointer touch-none select-none place-items-center rounded-[12px] border border-rule-faint bg-paper py-16"
-      >
-        <WaxStamp
-          key={`${theme}-${hue}-${tone}`}
-          playKey={playKey}
-          size={size}
-          glyph={glyph}
-          variant="spring"
-          ease={ease}
-          bounce={bounce}
-          rotate={rotate}
-          mode={autoplay ? "loop" : "tap"}
-          lingerMs={linger}
-          exitMs={exitMs}
-          exit={exit}
-          tint={tint}
-          puck={puck}
-          iconScale={iconScale}
-          pressed={pressed}
-          speckle={speckle}
-          cloud={cloud}
-        />
-      </button>
     </div>
   );
 }
