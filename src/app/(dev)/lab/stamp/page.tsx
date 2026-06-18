@@ -9,8 +9,8 @@ import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
 const ICONS = ["S", "quill", "mic", "calendar", "check", "spark", "eye"];
 const SET_ICONS = ["quill", "mic", "calendar", "check"]; // these vary by icon-set
-const ICON_SET_KEYS = ["a", "b", "c", "d"] as const;
-const SET_LABEL: Record<string, string> = { a: "a · line", b: "b · solid", c: "c · fine", d: "d · remix" };
+const ICON_SET_KEYS = ["a", "b", "c", "d", "e"] as const;
+const SET_LABEL: Record<string, string> = { a: "a · line", b: "b · solid", c: "c · fine", d: "d · remix", e: "e · zest" };
 const EASES = ["even", "front", "snap"] as const;
 const EXITS = ["fade", "rise", "shrink", "grow"] as const;
 // candidate stamp colours to preview (the app ships ONE semantic wax blue; these
@@ -34,7 +34,7 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 21 · 2026-06-17 · Remix icon set (d)";
+const BUILD = "build 22 · 2026-06-17 · Zest quill (set e)";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
