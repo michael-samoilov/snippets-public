@@ -321,10 +321,14 @@ export type WaxStampProps = {
   speckle?: number;
   /** molten-cloud strength (0 = none); a low-frequency swirl in the lightness. */
   cloud?: number;
+  /** render the settled seal immediately, with no entrance animation. */
+  still?: boolean;
+  /** render the embossed glyph white (keeps its relief) instead of wax-coloured. */
+  whiteGlyph?: boolean;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -384,7 +388,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       if (k.o <= 0.003) return;
       // one continuous object at a FIXED size (scale is a transform below, so the
       // glyph scales with the seal as one unit) — same height-field lighting throughout.
-      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle, cloud);
+      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle, cloud, whiteGlyph ? 1 : 0);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
 
       // composite (full alpha): layered drop shadow, the seal body, then the white
@@ -428,7 +432,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     };
     const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
 
-    if (reduce.current) { draw(mode === "tap" ? domeBeat(1, 1) : stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
+    if (still || reduce.current) { draw(mode === "tap" ? domeBeat(1, 1) : stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
     const t0 = performance.now();
 
     if (mode === "loop") { // lab: continuous idle→press→linger→exit→drop lifecycle
@@ -477,7 +481,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph]);
 
   return (
     <canvas
@@ -694,7 +698,7 @@ function blurMask(src: Float32Array, dst: Float32Array, dim: number, radius: num
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; img: ImageData },
   dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors, prof: Profile,
-  domeAmp: number, domePow: number, speckle: number, cloud: number,
+  domeAmp: number, domePow: number, speckle: number, cloud: number, glyphWhite: number,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly, glyR = B.glyR;
@@ -828,9 +832,16 @@ function paintSeal(
           }
         }
       }
-      let R = wr * lf + sr * specMicro * gloss;
-      let G = wg * lf + sg * specMicro * gloss;
-      let Bl = wb * lf + sb * specMicro * gloss;
+      // material base: the wax colour, blended toward white where the glyph is
+      // raised (glyphWhite) — a white embossed mark that keeps its relief shading.
+      let mr = wr, mg = wg, mb = wb;
+      if (glyphWhite > 0) {
+        const t = gly[i] * glyphWhite;
+        if (t > 0) { mr = wr + (1 - wr) * t; mg = wg + (1 - wg) * t; mb = wb + (1 - wb) * t; }
+      }
+      let R = mr * lf + sr * specMicro * gloss;
+      let G = mg * lf + sg * specMicro * gloss;
+      let Bl = mb * lf + sb * specMicro * gloss;
       R = softclip(R, HI_KNEE, HICAP);
       G = softclip(G, HI_KNEE, HICAP);
       Bl = softclip(Bl, HI_KNEE, HICAP * 0.98);
