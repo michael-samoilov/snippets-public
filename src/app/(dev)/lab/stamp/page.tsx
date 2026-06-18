@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
-const ICONS = ["S", "quill", "mic", "calendar", "check", "spark", "eye", "joke"];
+const ICONS = ["S", "quill", "mic", "calendar", "check", "spark", "eye", "eye2", "joke", "laugh", "smile"];
 const SET_ICONS = ["quill", "mic", "calendar", "check"]; // these vary by icon-set
 const ICON_SET_KEYS = ["a", "b", "c", "d", "e"] as const;
 const SET_LABEL: Record<string, string> = { a: "a · line", b: "b · solid", c: "c · fine", d: "d · remix", e: "e · zest" };
@@ -34,7 +34,7 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 24 · 2026-06-17 · Zest set complete + eye + joke";
+const BUILD = "build 25 · 2026-06-17 · Remix eye/laugh/smile + white view";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
