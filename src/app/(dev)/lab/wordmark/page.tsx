@@ -1,21 +1,24 @@
 "use client";
 
-/* TEMPORARY dev harness: the wax-seal "S" as the wordmark's first letter (the
-   seal replaces the wax dot). Iterating from the chosen look — light-blue seal,
-   ink-coloured embossed S — with two tries: a darker S ink, and embossing every
-   letter with the same relief (WaxText). Removed before the feature ships. */
+/* TEMPORARY dev harness: the wax-seal "S" wordmark. Locked Paper look = lighter
+   blue seal + deeper ink S. Dark mode has its own recipe (compared here), with a
+   small drop shadow on "nippets" to match the seal's rendered shadow. Removed
+   before the feature ships. */
 
 import { useState } from "react";
 import { useTheme } from "next-themes";
-import { WaxStamp } from "@/components/capture/wax-stamp";
+import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 import { WaxText } from "@/components/capture/wax-text";
 
 const BASE_FONT = 20.8; // 1.3rem — the real masthead size
-const BUILD = "wordmark lab · 2026-06-18 · LOCKED: light blue + deeper ink S";
+const BUILD = "wordmark lab · 2026-06-18 · dark recipes + text shadow";
 
-const LIGHT_BLUE = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
-const FADE_MASK = "linear-gradient(to right, #000 50%, rgba(0,0,0,0.12) 97%)";
+const LIGHT_BLUE: Tint = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
+const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a1a2e" };
 const INK = { light: "#241e15", dark: "#eae1cd" };
+const DARK_INK = "#16110a"; // a dark S ink when the seal stays light in dark mode
+// soft drop shadow for "nippets", echoing the seal's rendered contact shadow
+const TEXT_SHADOW = "0 0.035em 0.06em rgba(6,12,22,0.55), 0 0.09em 0.22em rgba(6,12,22,0.32)";
 
 type Treatment = "ink-emboss" | "white-emboss" | "wax" | "white-flat";
 const TREATMENTS: { key: Treatment; label: string }[] = [
@@ -25,7 +28,6 @@ const TREATMENTS: { key: Treatment; label: string }[] = [
   { key: "white-flat", label: "white on dome" },
 ];
 
-// darken a hex toward black by t (0 = unchanged, 1 = black)
 function darken(hex: string, t: number): string {
   const m = hex.replace("#", "");
   const c = (i: number) => Math.round(parseInt(m.slice(i, i + 2), 16) * (1 - t)).toString(16).padStart(2, "0");
@@ -34,10 +36,10 @@ function darken(hex: string, t: number): string {
 
 // the seal-S then "nippets" pulled left over its right edge by `overlap`.
 function Mark({
-  fontPx, sealRatio, overlap, vnudge, treatment, animate, fade, lightBlue, ink, gen, themeKey,
+  fontPx, sealRatio, overlap, vnudge, treatment, animate, sealTint, ink, textColor, textShadow, gen, themeKey,
 }: {
   fontPx: number; sealRatio: number; overlap: number; vnudge: number; treatment: Treatment;
-  animate: boolean; fade: boolean; lightBlue: boolean; ink: string; gen: number; themeKey: string;
+  animate: boolean; sealTint: Tint; ink: string; textColor: string; textShadow: boolean; gen: number; themeKey: string;
 }) {
   const sealPx = Math.round(fontPx * sealRatio);
   const mode = treatment === "white-flat" ? "tap" : "press";
@@ -45,13 +47,10 @@ function Mark({
   const glyphColor = treatment === "ink-emboss" ? ink : undefined;
   const still = !animate || treatment === "white-flat";
   return (
-    <span className="voice-display inline-flex items-center italic leading-none tracking-tight text-ink" style={{ fontSize: fontPx }}>
-      <span
-        className="relative inline-block shrink-0"
-        style={{ width: sealPx, height: sealPx, marginTop: vnudge * fontPx, WebkitMaskImage: fade ? FADE_MASK : undefined, maskImage: fade ? FADE_MASK : undefined }}
-      >
+    <span className="voice-display inline-flex items-center italic leading-none tracking-tight" style={{ fontSize: fontPx, color: textColor }}>
+      <span className="relative inline-block shrink-0" style={{ width: sealPx, height: sealPx, marginTop: vnudge * fontPx }}>
         <WaxStamp
-          key={`${themeKey}-${treatment}-${lightBlue ? "lt" : "tk"}-${ink}-${animate ? gen : "still"}`}
+          key={`${themeKey}-${treatment}-${sealTint.wax}-${ink}-${animate ? gen : "still"}`}
           playKey={gen}
           size={sealPx}
           glyph="S"
@@ -59,18 +58,18 @@ function Mark({
           still={still}
           whiteGlyph={whiteGlyph}
           glyphColor={glyphColor}
-          tint={lightBlue ? LIGHT_BLUE : undefined}
+          tint={sealTint}
           variant="spring"
         />
       </span>
-      <span className="relative z-10" style={{ marginLeft: -overlap * sealPx }}>nippets</span>
+      <span className="relative z-10" style={{ marginLeft: -overlap * sealPx, textShadow: textShadow ? TEXT_SHADOW : undefined }}>nippets</span>
     </span>
   );
 }
 
 // every letter embossed (WaxText), with a blank wax disc behind the "S".
-function EmbossMark({ fontPx, sealRatio, vnudge, lightBlue, ink, themeKey }: {
-  fontPx: number; sealRatio: number; vnudge: number; lightBlue: boolean; ink: string; themeKey: string;
+function EmbossMark({ fontPx, sealRatio, vnudge, sealTint, ink, themeKey }: {
+  fontPx: number; sealRatio: number; vnudge: number; sealTint: Tint; ink: string; themeKey: string;
 }) {
   const [s, setS] = useState<{ sCenterX: number; sCenterY: number } | null>(null);
   const sealPx = Math.round(fontPx * sealRatio);
@@ -79,7 +78,7 @@ function EmbossMark({ fontPx, sealRatio, vnudge, lightBlue, ink, themeKey }: {
     <span style={{ position: "relative", display: "inline-block", paddingLeft: padL }}>
       {s && (
         <span style={{ position: "absolute", left: padL + s.sCenterX - sealPx / 2, top: s.sCenterY - 0.46 * sealPx + vnudge * fontPx, zIndex: 0 }}>
-          <WaxStamp key={`${themeKey}-blank-${lightBlue ? "lt" : "tk"}`} playKey={1} size={sealPx} glyph="" mode="press" still tint={lightBlue ? LIGHT_BLUE : undefined} variant="spring" />
+          <WaxStamp key={`${themeKey}-blank-${sealTint.wax}`} playKey={1} size={sealPx} glyph="" mode="press" still tint={sealTint} variant="spring" />
         </span>
       )}
       <span style={{ position: "relative", zIndex: 10, display: "block" }}>
@@ -97,17 +96,24 @@ export default function WordmarkLab() {
   const [inkDark, setInkDark] = useState(0.5);
   const [treatment, setTreatment] = useState<Treatment>("ink-emboss");
   const [animate, setAnimate] = useState(true);
-  const [fade, setFade] = useState(false);
-  const [lightBlue, setLightBlue] = useState(true);
+  const [darkSeal, setDarkSeal] = useState<"deep" | "light">("deep");
   const [embossAll, setEmbossAll] = useState(false);
   const [gen, setGen] = useState(1);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
-  const themeKey = theme ?? "light";
-  const ink = dark ? INK.dark : darken(INK.light, inkDark);
+  const themeKey = `${theme ?? "light"}-${darkSeal}`;
+
+  // per-theme recipe. Paper: light-blue seal + deeper ink S. Lamplight: either a
+  // deep-blue seal with a light S, or a light-blue seal with a dark S.
+  const sealTint = dark ? (darkSeal === "deep" ? DEEP_BLUE : LIGHT_BLUE) : LIGHT_BLUE;
+  const ink = dark ? (darkSeal === "deep" ? INK.dark : DARK_INK) : darken(INK.light, inkDark);
+  const textColor = dark ? INK.dark : INK.light;
+  const textShadow = dark;
 
   const chip = (active: boolean) =>
     `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${active ? "bg-wax text-paper" : "bg-paper text-ink border border-rule-faint"}`;
+
+  const common = { sealRatio, vnudge, sealTint, ink, themeKey };
 
   return (
     <div className="flex flex-col gap-5">
@@ -124,16 +130,17 @@ export default function WordmarkLab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setFade((v) => !v)} className={chip(fade)}>edge fade {fade ? "on" : "off"}</button>
-        <button type="button" onClick={() => setLightBlue((v) => !v)} className={chip(lightBlue)}>light blue {lightBlue ? "on" : "off"}</button>
-        <button type="button" onClick={() => setEmbossAll((v) => !v)} className={chip(embossAll)}>emboss all letters {embossAll ? "on" : "off"}</button>
+        <span className="voice-label text-ink-faint">dark seal</span>
+        <button type="button" onClick={() => setDarkSeal("deep")} className={chip(darkSeal === "deep")}>deep + light S</button>
+        <button type="button" onClick={() => setDarkSeal("light")} className={chip(darkSeal === "light")}>light + dark S</button>
+        <button type="button" onClick={() => setEmbossAll((v) => !v)} className={chip(embossAll)}>emboss all {embossAll ? "on" : "off"}</button>
       </div>
 
       {/* playground (zoomed) */}
       <div className="rounded-[10px] border border-rule-faint bg-paper py-10 pl-10 pr-6">
         {embossAll
-          ? <EmbossMark fontPx={BASE_FONT * scale} sealRatio={sealRatio} vnudge={vnudge} lightBlue={lightBlue} ink={ink} themeKey={themeKey} />
-          : <Mark fontPx={BASE_FONT * scale} sealRatio={sealRatio} overlap={overlap} vnudge={vnudge} treatment={treatment} animate={animate} fade={fade} lightBlue={lightBlue} ink={ink} gen={gen} themeKey={themeKey} />}
+          ? <EmbossMark fontPx={BASE_FONT * scale} {...common} />
+          : <Mark fontPx={BASE_FONT * scale} overlap={overlap} treatment={treatment} animate={animate} textColor={textColor} textShadow={textShadow} gen={gen} {...common} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -163,8 +170,8 @@ export default function WordmarkLab() {
       <div className="flex items-center gap-4 rounded-[10px] border border-rule-faint bg-paper py-5 pl-10 pr-6">
         <span className="voice-label w-28 shrink-0 text-ink-faint">actual size</span>
         {embossAll
-          ? <EmbossMark fontPx={BASE_FONT} sealRatio={sealRatio} vnudge={vnudge} lightBlue={lightBlue} ink={ink} themeKey={themeKey} />
-          : <Mark fontPx={BASE_FONT} sealRatio={sealRatio} overlap={overlap} vnudge={vnudge} treatment={treatment} animate={false} fade={fade} lightBlue={lightBlue} ink={ink} gen={gen} themeKey={themeKey} />}
+          ? <EmbossMark fontPx={BASE_FONT} {...common} />
+          : <Mark fontPx={BASE_FONT} overlap={overlap} treatment={treatment} animate={false} textColor={textColor} textShadow={textShadow} gen={gen} {...common} />}
       </div>
     </div>
   );
