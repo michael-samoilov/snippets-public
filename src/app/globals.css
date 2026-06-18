@@ -171,6 +171,14 @@ html {
   color-scheme: dark;
 }
 
+/* the masthead wordmark's "nippets": in Lamplight a soft drop shadow echoes the
+   seal's rendered contact shadow, so the letters and the wax sit on one surface. */
+.dark .wordmark-tail {
+  text-shadow:
+    0 0.035em 0.06em rgb(6 12 22 / 0.55),
+    0 0.09em 0.22em rgb(6 12 22 / 0.32);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

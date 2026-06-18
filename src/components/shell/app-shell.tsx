@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { ShellNav, ShellTabs } from "@/components/shell/shell-nav";
 import { ProfileMenu } from "@/components/shell/profile-menu";
 import { Sheet } from "@/components/shell/sheet";
 import { SheetScroll } from "@/components/shell/sheet-scroll";
 import { CommandMenu } from "@/components/command-menu";
+import { Wordmark } from "@/components/shell/wordmark";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -33,21 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </svg>
       {/* desk chrome */}
       <header className="flex shrink-0 items-center justify-between px-2 pb-4 pt-5 sm:px-1 sm:pt-7">
-        <Link
-          href="/"
-          className="voice-display pressable text-[1.3rem] italic leading-none tracking-tight"
-        >
-          Snippets
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 10 10"
-            className="ml-1.5 inline-block size-[9px] -translate-y-px"
-          >
-            <circle cx="5" cy="5" r="5" fill="var(--wax-deep)" />
-            <circle cx="5" cy="5" r="4.2" fill="var(--wax)" />
-            <circle cx="3.6" cy="3.4" r="1.6" fill="var(--wax-bright)" opacity="0.7" />
-          </svg>
-        </Link>
+        <Wordmark />
         <div className="flex items-center gap-6">
           <ShellNav />
           <ProfileMenu />

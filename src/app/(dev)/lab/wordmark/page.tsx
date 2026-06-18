@@ -8,10 +8,9 @@
 import { useState } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
-import { WaxText } from "@/components/capture/wax-text";
 
 const BASE_FONT = 20.8; // 1.3rem — the real masthead size
-const BUILD = "wordmark lab · 2026-06-18 · dark recipes + text shadow";
+const BUILD = "wordmark lab · 2026-06-18 · wired to masthead";
 
 const LIGHT_BLUE: Tint = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
 const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a1a2e" };
@@ -67,27 +66,6 @@ function Mark({
   );
 }
 
-// every letter embossed (WaxText), with a blank wax disc behind the "S".
-function EmbossMark({ fontPx, sealRatio, vnudge, sealTint, ink, themeKey }: {
-  fontPx: number; sealRatio: number; vnudge: number; sealTint: Tint; ink: string; themeKey: string;
-}) {
-  const [s, setS] = useState<{ sCenterX: number; sCenterY: number } | null>(null);
-  const sealPx = Math.round(fontPx * sealRatio);
-  const padL = s ? Math.max(0, sealPx / 2 - s.sCenterX) : sealPx / 2;
-  return (
-    <span style={{ position: "relative", display: "inline-block", paddingLeft: padL }}>
-      {s && (
-        <span style={{ position: "absolute", left: padL + s.sCenterX - sealPx / 2, top: s.sCenterY - 0.46 * sealPx + vnudge * fontPx, zIndex: 0 }}>
-          <WaxStamp key={`${themeKey}-blank-${sealTint.wax}`} playKey={1} size={sealPx} glyph="" mode="press" still tint={sealTint} variant="spring" />
-        </span>
-      )}
-      <span style={{ position: "relative", zIndex: 10, display: "block" }}>
-        <WaxText text="Snippets" fontPx={fontPx} ink={ink} themeKey={themeKey} onLayout={setS} />
-      </span>
-    </span>
-  );
-}
-
 export default function WordmarkLab() {
   const [scale, setScale] = useState(2.6);
   const [sealRatio, setSealRatio] = useState(2.1);
@@ -97,7 +75,6 @@ export default function WordmarkLab() {
   const [treatment, setTreatment] = useState<Treatment>("ink-emboss");
   const [animate, setAnimate] = useState(true);
   const [darkSeal, setDarkSeal] = useState<"deep" | "light">("deep");
-  const [embossAll, setEmbossAll] = useState(false);
   const [gen, setGen] = useState(1);
   const { theme, setTheme } = useTheme();
   const dark = theme === "dark";
@@ -133,14 +110,11 @@ export default function WordmarkLab() {
         <span className="voice-label text-ink-faint">dark seal</span>
         <button type="button" onClick={() => setDarkSeal("deep")} className={chip(darkSeal === "deep")}>deep + light S</button>
         <button type="button" onClick={() => setDarkSeal("light")} className={chip(darkSeal === "light")}>light + dark S</button>
-        <button type="button" onClick={() => setEmbossAll((v) => !v)} className={chip(embossAll)}>emboss all {embossAll ? "on" : "off"}</button>
       </div>
 
       {/* playground (zoomed) */}
       <div className="rounded-[10px] border border-rule-faint bg-paper py-10 pl-10 pr-6">
-        {embossAll
-          ? <EmbossMark fontPx={BASE_FONT * scale} {...common} />
-          : <Mark fontPx={BASE_FONT * scale} overlap={overlap} treatment={treatment} animate={animate} textColor={textColor} textShadow={textShadow} gen={gen} {...common} />}
+        <Mark fontPx={BASE_FONT * scale} overlap={overlap} treatment={treatment} animate={animate} textColor={textColor} textShadow={textShadow} gen={gen} {...common} />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -169,9 +143,7 @@ export default function WordmarkLab() {
       {/* actual masthead size */}
       <div className="flex items-center gap-4 rounded-[10px] border border-rule-faint bg-paper py-5 pl-10 pr-6">
         <span className="voice-label w-28 shrink-0 text-ink-faint">actual size</span>
-        {embossAll
-          ? <EmbossMark fontPx={BASE_FONT} {...common} />
-          : <Mark fontPx={BASE_FONT} overlap={overlap} treatment={treatment} animate={false} textColor={textColor} textShadow={textShadow} gen={gen} {...common} />}
+        <Mark fontPx={BASE_FONT} overlap={overlap} treatment={treatment} animate={false} textColor={textColor} textShadow={textShadow} gen={gen} {...common} />
       </div>
     </div>
   );
