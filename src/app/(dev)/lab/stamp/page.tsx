@@ -8,6 +8,9 @@ import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
 const ICONS = ["S", "quill", "mic", "calendar", "check", "spark", "eye"];
+const SET_ICONS = ["quill", "mic", "calendar", "check"]; // these vary by icon-set
+const ICON_SET_KEYS = ["a", "b", "c"] as const;
+const SET_LABEL: Record<string, string> = { a: "a · line", b: "b · solid", c: "c · fine" };
 const EASES = ["even", "front", "snap"] as const;
 const EXITS = ["fade", "rise", "shrink", "grow"] as const;
 // candidate stamp colours to preview (the app ships ONE semantic wax blue; these
@@ -31,12 +34,13 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 19 · 2026-06-17 · softer highlights + icon shadows";
+const BUILD = "build 20 · 2026-06-17 · puck>1, icon sets a/b/c";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
   const [size, setSize] = useState(160);
   const [icon, setIcon] = useState("S");
+  const [iconSet, setIconSet] = useState<(typeof ICON_SET_KEYS)[number]>("a");
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
   const [bounce, setBounce] = useState(1.5);
   const [rotate, setRotate] = useState(15);
@@ -52,6 +56,7 @@ export default function StampLab() {
   const dark = theme === "dark";
   const replay = () => setPlayKey((n) => n + 1);
   const tint = tone === "deep" ? DEEP[hue] : PASTEL[hue];
+  const glyph = SET_ICONS.includes(icon) && iconSet !== "a" ? `${iconSet}:${icon}` : icon;
 
   const chip = (active: boolean) =>
     `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${
@@ -82,6 +87,16 @@ export default function StampLab() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="voice-label text-ink-faint">icon set</span>
+        {ICON_SET_KEYS.map((k) => (
+          <button key={k} type="button" onClick={() => setIconSet(k)} className={chip(iconSet === k)}>
+            {SET_LABEL[k]}
+          </button>
+        ))}
+        <span className="voice-data text-ink-faint">(quill · mic · calendar · check)</span>
+      </div>
+
       <div className="flex flex-col gap-2">
         {(["deep", "pastel"] as const).map((tn) => (
           <div key={tn} className="flex flex-wrap items-center gap-2">
@@ -109,6 +124,10 @@ export default function StampLab() {
           <span className="voice-data w-24">size {size}</span>
           <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
         </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
+          <input type="range" min={0} max={2} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
+        </label>
         <button type="button" data-replay onClick={replay} className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper">
           Replay
         </button>
@@ -118,7 +137,7 @@ export default function StampLab() {
       {/* confirmed values — collapsed; the summary shows them at a glance */}
       <details className="rounded-[8px] border border-rule-faint bg-paper px-4 py-2.5">
         <summary className="voice-label cursor-pointer select-none text-ink-soft">
-          confirmed — spring · front · bounce {bounce.toFixed(1)}× · rotate {rotate}° · puck {puck.toFixed(2)} · linger {linger}ms · exit {exit} {exitMs}ms
+          confirmed — spring · front · bounce {bounce.toFixed(1)}× · rotate {rotate}° · linger {linger}ms · exit {exit} {exitMs}ms
         </summary>
         <div className="mt-3 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -139,10 +158,6 @@ export default function StampLab() {
             <label className="flex items-center gap-2 text-[0.85rem]">
               <span className="voice-data w-24">rotate {rotate}°</span>
               <input type="range" min={0} max={60} step={5} value={rotate} onChange={(e) => setRotate(+e.target.value)} />
-            </label>
-            <label className="flex items-center gap-2 text-[0.85rem]">
-              <span className="voice-data w-24">puck {puck.toFixed(2)}</span>
-              <input type="range" min={0} max={1} step={0.05} value={puck} onChange={(e) => setPuck(+e.target.value)} />
             </label>
             <label className="flex items-center gap-2 text-[0.85rem]">
               <span className="voice-data w-28">linger {linger}ms</span>
@@ -168,7 +183,7 @@ export default function StampLab() {
           key={`${theme}-${hue}-${tone}`}
           playKey={playKey}
           size={size}
-          glyph={icon}
+          glyph={glyph}
           variant="spring"
           ease={ease}
           bounce={bounce}

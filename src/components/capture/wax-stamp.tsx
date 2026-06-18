@@ -343,8 +343,10 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     // a fresh seal each keep: 5–7 lobes, random rotation/spacing, same extents.
     // Seeded by playKey so the lab's two seals match within a play, every replay differs.
     const prof = makeProfile(mulberry32(Math.imul(playKey, 0x9e3779b1) >>> 0));
-    // resting-glob shape: puck 0 → round globe, 1 → flat puck
-    const domeAmp = lp(DOME_AMP_HI, DOME_AMP_LO, puck), domePow = lp(DOME_POW_LO, DOME_POW_HI, puck);
+    // resting-glob shape: puck 0 → round globe, 1 → flat puck, >1 → flatter still.
+    // Height falls off exponentially (stays positive past 1); top keeps flattening.
+    const domeAmp = DOME_AMP_HI * Math.pow(DOME_AMP_LO / DOME_AMP_HI, puck);
+    const domePow = DOME_POW_LO + (DOME_POW_HI - DOME_POW_LO) * puck;
 
     const cy = dim * 0.46;
     const draw = (k: Beat, p: Profile = prof) => {
@@ -467,6 +469,42 @@ const S_CX = 661.3, S_CY = 701.5;
 const S_PATH =
   "M575 -23Q489 -23 432 -7Q374 10 339 32Q304 54 283 71Q262 87 250 87Q237 87 220 72Q203 57 184 36Q164 16 145 1Q126 -14 108 -14Q80 -14 66 1Q53 16 56 48L100 401Q103 435 119 453Q134 471 158 471Q181 471 196 455Q211 439 223 407L245 302Q264 191 339 134Q414 76 517 76Q581 76 631 100Q680 123 710 165Q740 207 749 264Q764 350 719 424Q675 499 543 582Q392 678 329 777Q266 876 282 1009Q294 1120 360 1215Q427 1310 545 1368Q664 1426 832 1426Q976 1426 1074 1380Q1172 1334 1221 1262Q1271 1189 1267 1109Q1265 1053 1236 1016Q1207 979 1156 979Q1114 979 1088 1002Q1062 1026 1045 1079L1025 1156Q1002 1248 947 1292Q893 1336 814 1336Q739 1336 683 1307Q627 1277 594 1227Q561 1177 553 1115Q540 1023 588 947Q635 871 761 784Q882 704 946 633Q1010 562 1032 490Q1053 417 1043 334Q1032 228 970 147Q908 67 806 22Q705 -23 575 -23Z";
 
+// alternative icon sets for the seal glyph — each has quill/mic/calendar/check,
+// drawn in a 0–20 viewBox. Chosen via a "set:icon" glyph (e.g. "b:quill");
+// a bare icon name uses set "a". (Lab exploration of icon styles.)
+type IconFn = (gx: CanvasRenderingContext2D) => void;
+const ICON_SETS: Record<string, Record<string, IconFn>> = {
+  a: { // line — the app's own (shell-nav) marks
+    quill: (gx) => { gx.lineWidth = 1.7; for (const dd of ["M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z", "M4.4 15.6 12.6 7", "M4.4 15.6 3.4 17.6"]) gx.stroke(new Path2D(dd)); },
+    mic: (gx) => { gx.beginPath(); gx.roundRect(7.4, 2.6, 5.2, 9.2, 2.6); gx.fill(); gx.lineWidth = 1.8; gx.stroke(new Path2D("M4.6 9.8 a5.4 5.4 0 0 0 10.8 0")); gx.stroke(new Path2D("M10 15.2 V17.6")); },
+    calendar: (gx) => { gx.lineWidth = 1.7; gx.beginPath(); gx.roundRect(3.2, 4.6, 13.6, 12, 2.2); gx.stroke(); gx.stroke(new Path2D("M6.8 2.8v3.4M13.2 2.8v3.4M3.2 9h13.6")); },
+    check: (gx) => { gx.lineWidth = 1.9; gx.stroke(new Path2D("M4.6 10.6 L8.6 14.8 L15.4 5.6")); },
+  },
+  b: { // solid — chunky filled shapes
+    quill: (gx) => { gx.fill(new Path2D("M16.5 3.5 C 10.5 4.5 6 8.5 5 14.5 L 3.6 16 L 5.2 15.2 C 11 14.5 15.5 10 16.5 3.5 Z")); gx.lineWidth = 1.6; gx.stroke(new Path2D("M5 15 L 3.1 17.9")); },
+    mic: (gx) => { gx.beginPath(); gx.roundRect(6.8, 2.4, 6.4, 9.8, 3.2); gx.fill(); gx.lineWidth = 2; gx.stroke(new Path2D("M4.4 9.8 a5.6 5.6 0 0 0 11.2 0")); gx.stroke(new Path2D("M10 15.4 V18.1")); gx.stroke(new Path2D("M6.8 18.1 H13.2")); },
+    calendar: (gx) => {
+      gx.beginPath(); gx.roundRect(3.4, 4.6, 13.2, 12, 2.2); gx.fill();
+      gx.save(); gx.globalCompositeOperation = "destination-out";
+      gx.fillRect(3.4, 8.2, 13.2, 1.5);
+      for (const ry of [11.6, 14.4]) for (const rx of [6.2, 9.8, 13.4]) { gx.beginPath(); gx.roundRect(rx - 0.85, ry - 0.85, 1.7, 1.7, 0.4); gx.fill(); }
+      gx.restore();
+      gx.lineWidth = 2; gx.stroke(new Path2D("M7 2.6 V5.2 M13 2.6 V5.2"));
+    },
+    check: (gx) => { gx.lineWidth = 2.8; gx.stroke(new Path2D("M4.3 10.6 L 8.4 15 L 15.7 5")); },
+  },
+  c: { // fine — thin, delicate lines
+    quill: (gx) => { gx.lineWidth = 1.1; gx.stroke(new Path2D("M4.5 16.5 C 9 11 13 6.5 16.8 3.4")); gx.stroke(new Path2D("M7.2 12 l 2.2 1.3 M9.7 9.2 l 2.2 1.3 M12.2 6.6 l 2.2 1.3")); gx.stroke(new Path2D("M4.5 16.5 L 3.1 18.2")); },
+    mic: (gx) => { gx.lineWidth = 1.2; gx.beginPath(); gx.roundRect(7.7, 2.8, 4.6, 8.4, 2.3); gx.stroke(); gx.stroke(new Path2D("M5.2 9.4 a4.8 4.8 0 0 0 9.6 0")); gx.stroke(new Path2D("M10 14.2 V17.4")); gx.stroke(new Path2D("M7.4 17.4 H12.6")); },
+    calendar: (gx) => { gx.lineWidth = 1.2; gx.beginPath(); gx.roundRect(3.6, 4.8, 12.8, 11.6, 1.6); gx.stroke(); gx.stroke(new Path2D("M7 3 V6 M13 3 V6 M3.6 8.6 H16.4")); for (const ry of [11.4, 14]) for (const rx of [6.6, 10, 13.4]) { gx.beginPath(); gx.arc(rx, ry, 0.7, 0, Math.PI * 2); gx.fill(); } },
+    check: (gx) => { gx.lineWidth = 1.3; gx.stroke(new Path2D("M3.8 10.8 L 8.2 15.2 L 16.2 4.6")); },
+  },
+};
+const EXTRA_ICONS: Record<string, IconFn> = {
+  spark: (gx) => { gx.fill(new Path2D("M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z")); },
+  eye: (gx) => { gx.lineWidth = 1.7; gx.stroke(new Path2D("M2.6 10 Q10 4 17.4 10 Q10 16 2.6 10 Z")); gx.beginPath(); gx.arc(10, 10, 2.5, 0, Math.PI * 2); gx.fill(); },
+};
+
 // rasterise the glyph/icon once → an alpha mask used as embossed relief.
 // Drawn oversampled and box-downsampled (+ a whisper of blur) so the edges are
 // crisp yet anti-aliased — sharp, without the relief lighting stair-stepping.
@@ -482,42 +520,6 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasEle
   gx.fillStyle = "#fff"; gx.strokeStyle = "#fff";
   gx.lineCap = "round"; gx.lineJoin = "round";
   const cx = big / 2, cy = big * 0.46;
-  // the app's own icons (shell-nav quill/calendar, the record mic) live in a
-  // 0–20 viewBox with stroke-width ~1.5 — reuse them verbatim, centred & scaled
-  // into the seal field with a fine stroke.
-  const APP_ICONS: Record<string, () => void> = {
-    quill() {
-      gx.lineWidth = 1.7;
-      for (const dd of [
-        "M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z",
-        "M4.4 15.6 12.6 7", "M4.4 15.6 3.4 17.6",
-      ]) gx.stroke(new Path2D(dd));
-    },
-    mic() {
-      gx.beginPath(); gx.roundRect(7.4, 2.6, 5.2, 9.2, 2.6); gx.fill();
-      gx.lineWidth = 1.8;
-      gx.stroke(new Path2D("M4.6 9.8 a5.4 5.4 0 0 0 10.8 0"));
-      gx.stroke(new Path2D("M10 15.2 V17.6"));
-    },
-    calendar() {
-      gx.lineWidth = 1.7;
-      gx.beginPath(); gx.roundRect(3.2, 4.6, 13.6, 12, 2.2); gx.stroke();
-      gx.stroke(new Path2D("M6.8 2.8v3.4M13.2 2.8v3.4M3.2 9h13.6"));
-    },
-    check() {
-      gx.lineWidth = 1.9;
-      gx.stroke(new Path2D("M4.6 10.6 L8.6 14.8 L15.4 5.6"));
-    },
-    // candidate category glyphs (lab preview)
-    spark() {
-      gx.fill(new Path2D("M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z"));
-    },
-    eye() {
-      gx.lineWidth = 1.7;
-      gx.stroke(new Path2D("M2.6 10 Q10 4 17.4 10 Q10 16 2.6 10 Z"));
-      gx.beginPath(); gx.arc(10, 10, 2.5, 0, Math.PI * 2); gx.fill();
-    },
-  };
   if (glyph === "S") {
     // friendly opsz≈22 italic Fraunces "S", baked from its vector outline so it
     // matches the masthead regardless of canvas's lack of opsz control.
@@ -526,19 +528,25 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasEle
     gx.translate(cx, cy); gx.scale(s, -s); gx.translate(-S_CX, -S_CY);
     gx.fill(new Path2D(S_PATH));
     gx.restore();
-  } else if (APP_ICONS[glyph]) {
-    const sc = (0.48 * big) / 20;            // fit the 0–20 viewBox into the field
-    gx.save();
-    gx.translate(cx, cy); gx.scale(sc, sc); gx.translate(-10, -10);
-    APP_ICONS[glyph]();
-    gx.restore();
   } else {
-    // other letters: canvas text (Fraunces italic) — no opsz control, but the
-    // default and only shipped glyph is "S", handled above.
-    const fam = getComputedStyle(document.documentElement).getPropertyValue("--font-fraunces").trim();
-    gx.textAlign = "center"; gx.textBaseline = "middle";
-    gx.font = `italic 560 ${Math.round(big * 0.46)}px ${fam || "Fraunces"}, Georgia, "Times New Roman", serif`;
-    gx.fillText(glyph, cx, cy);
+    // icon set glyph "set:icon" (e.g. "b:quill"); a bare name uses set "a".
+    const ci = glyph.indexOf(":");
+    const setKey = ci > 0 ? glyph.slice(0, ci) : "a";
+    const iconKey = ci > 0 ? glyph.slice(ci + 1) : glyph;
+    const iconFn = ICON_SETS[setKey]?.[iconKey] ?? EXTRA_ICONS[iconKey];
+    if (iconFn) {
+      const sc = (0.48 * big) / 20;          // fit the 0–20 viewBox into the field
+      gx.save();
+      gx.translate(cx, cy); gx.scale(sc, sc); gx.translate(-10, -10);
+      iconFn(gx);
+      gx.restore();
+    } else {
+      // other letters: canvas text (Fraunces italic)
+      const fam = getComputedStyle(document.documentElement).getPropertyValue("--font-fraunces").trim();
+      gx.textAlign = "center"; gx.textBaseline = "middle";
+      gx.font = `italic 560 ${Math.round(big * 0.46)}px ${fam || "Fraunces"}, Georgia, "Times New Roman", serif`;
+      gx.fillText(glyph, cx, cy);
+    }
   }
   // recentre on the seal's centre from the glyph's actual ink bounds (a font's
   // "middle" baseline and an icon's viewBox aren't centred on their own glyph),
