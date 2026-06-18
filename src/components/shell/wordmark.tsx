@@ -23,7 +23,7 @@ const DARK_S_INK = "#120f0b";  // the deep-ink S on Paper
 const LIGHT_S_INK = "#eae1cd"; // the light S on Lamplight
 
 const SEAL_RATIO = 2.1;   // seal diameter / font size
-const OVERLAP = 0.34;     // "nippets" laps this fraction of the seal (over the wax, right of the S)
+const OVERLAP = 0.40;     // "nippets" laps this fraction of the seal (over the wax, right of the S)
 const NUDGE = 0.04;       // small seal down-shift (× seal) so the S's baseline meets the text
 
 export function Wordmark() {
