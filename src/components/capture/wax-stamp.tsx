@@ -49,6 +49,13 @@ const LX = -0.52, LY = -0.52, LZ = 0.54;
 const AMBIENT = 0.26, DIFF = 1.18;
 const SPEC_STR = 1.35, SHIN = 19, SPEC_RIM = 3.7, ENV = 0.33, HICAP = 0.99;
 const SPEC_AA = 5;            // roughen (roll specular off) on steep walls → no edge sparkle
+const HI_KNEE = 0.74;        // highlights roll off above this (soft, not blown/harsh)
+const GLYPH_SHADE_LIFT = 0.3; // lift the embossed glyph's shadow side so it isn't harsh
+
+// soft highlight shoulder: ease values toward `cap` instead of hard-clipping, so
+// bright highlights roll off gently rather than blowing out to a harsh flat patch.
+const softclip = (x: number, knee: number, cap: number) =>
+  x <= 0 ? 0 : x < knee ? x : knee + (cap - knee) * (1 - Math.exp((knee - x) / (cap - knee)));
 
 const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 const win = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
@@ -709,13 +716,16 @@ function paintSeal(
       // diagonal form shadow: brighter toward the upper-left light, deeper amber
       // toward the lower-right — gives the seal global 3-D depth like the reference
       const env = 1 + envA * (((cx - px) + (cy - py)) / dim);
-      const lf = (amb + dif * ndl) * env;
+      // soften the embossed glyph's shadow side (lift only where it's dark), on
+      // every colour — so the icon's shadows aren't harsher than the seal body.
+      const ambEff = amb + GLYPH_SHADE_LIFT * gly[i] * (1 - ndl);
+      const lf = (ambEff + dif * ndl) * env;
       let R = wr * lf + sr * spec * gloss;
       let G = wg * lf + sg * spec * gloss;
       let Bl = wb * lf + sb * spec * gloss;
-      R = Math.min(clamp(R), HICAP);
-      G = Math.min(clamp(G), HICAP);
-      Bl = Math.min(clamp(Bl), HICAP * 0.98);
+      R = softclip(R, HI_KNEE, HICAP);
+      G = softclip(G, HI_KNEE, HICAP);
+      Bl = softclip(Bl, HI_KNEE, HICAP * 0.98);
       d[o] = Math.round(Math.pow(R, 1 / 1.08) * 255);
       d[o + 1] = Math.round(Math.pow(G, 1 / 1.08) * 255);
       d[o + 2] = Math.round(Math.pow(Bl, 1 / 1.08) * 255);
