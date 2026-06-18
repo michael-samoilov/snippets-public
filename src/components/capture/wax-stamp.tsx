@@ -52,6 +52,15 @@ const SPEC_AA = 5;            // roughen (roll specular off) on steep walls → 
 const HI_KNEE = 0.74;        // highlights roll off above this (soft, not blown/harsh)
 const GLYPH_SHADE_LIFT = 0.3; // lift the embossed glyph's shadow side so it isn't harsh
 
+// metallic flake/grain (gold · bronze · silver): suspended micro-facets that
+// glint like melted precious metal, plus a faint low-frequency "molten cloud".
+// Gated behind the `speckle` prop, so the matte blue ship path pays nothing.
+const FLAKE_REL = 0.0065;    // flake cell as a fraction of the backing dim
+const FLAKE_SHIN = 42;       // facet exponent — pinpoint glints, not a sheen
+const FLAKE_STR = 0.95;      // glint strength (× speckle)
+const GRAIN_REL = 0.055;     // molten-cloud cell as a fraction of dim
+const GRAIN_STR = 0.16;      // cloud lightness wobble (× speckle)
+
 // soft highlight shoulder: ease values toward `cap` instead of hard-clipping, so
 // bright highlights roll off gently rather than blowing out to a harsh flat patch.
 const softclip = (x: number, knee: number, cap: number) =>
@@ -83,6 +92,14 @@ function mulberry32(seed: number) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+// integer hash → [0,1): deterministic per-cell randomness for the metallic
+// flake/grain. Keyed on seal-image pixels so the flecks transform with the seal.
+function hash2(x: number, y: number): number {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
 type Profile = (th: number) => number;
@@ -296,10 +313,12 @@ export type WaxStampProps = {
   iconScale?: number;
   /** lab/tap: held-down feedback while the thumb is on the button (before release). */
   pressed?: boolean;
+  /** metallic flake/grain strength (0 = none, matte); suits gold · bronze · silver. */
+  speckle?: number;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 15, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -359,7 +378,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       if (k.o <= 0.003) return;
       // one continuous object at a FIXED size (scale is a transform below, so the
       // glyph scales with the seal as one unit) — same height-field lighting throughout.
-      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow);
+      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
 
       // composite (full alpha): layered drop shadow, the seal body, then the white
@@ -452,7 +471,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle]);
 
   return (
     <canvas
@@ -669,7 +688,7 @@ function blurMask(src: Float32Array, dst: Float32Array, dim: number, radius: num
 function paintSeal(
   B: { hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; img: ImageData },
   dim: number, MR: number, cy: number, relief: number, lobe: number, dome: number, cf: number, col: Colors, prof: Profile,
-  domeAmp: number, domePow: number,
+  domeAmp: number, domePow: number, speckle: number,
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly, glyR = B.glyR;
@@ -738,6 +757,11 @@ function paintSeal(
   const amb = AMBIENT + soft * 0.45;
   const dif = DIFF * (1 - soft * 0.5);
   const envA = ENV * (1 - soft * 0.7);
+  // metallic flake/grain: cell sizes (in backing px) + a flake glint colour that
+  // is the specular tone pushed halfway to white (a bright mirror of the light).
+  const flakeCell = Math.max(2, Math.round(dim * FLAKE_REL));
+  const grainCell = Math.max(4, Math.round(dim * GRAIN_REL));
+  const fkr = sr + (1 - sr) * 0.5, fkg = sg + (1 - sg) * 0.5, fkb = sb + (1 - sb) * 0.5;
   for (let py = 1; py < dim - 1; py++) {
     for (let px = 1; px < dim - 1; px++) {
       const i = py * dim + px;
@@ -764,10 +788,31 @@ function paintSeal(
       // soften the embossed glyph's shadow side (lift only where it's dark), on
       // every colour — so the icon's shadows aren't harsher than the seal body.
       const ambEff = amb + GLYPH_SHADE_LIFT * gly[i] * (1 - ndl);
-      const lf = (ambEff + dif * ndl) * env;
-      let R = wr * lf + sr * spec * gloss;
-      let G = wg * lf + sg * spec * gloss;
-      let Bl = wb * lf + sb * spec * gloss;
+      let lf = (ambEff + dif * ndl) * env;
+      // metallic flake/grain — only when asked (matte hues skip the whole block)
+      let flakeAdd = 0;
+      if (speckle > 0) {
+        // molten cloud: smooth low-freq value noise nudges the base lightness
+        const gxf = px / grainCell, gyf = py / grainCell;
+        const ix = Math.floor(gxf), iy = Math.floor(gyf);
+        const sxf = sm(gxf - ix), syf = sm(gyf - iy);
+        const v0 = lp(hash2(ix, iy), hash2(ix + 1, iy), sxf);
+        const v1 = lp(hash2(ix, iy + 1), hash2(ix + 1, iy + 1), sxf);
+        lf *= 1 + speckle * GRAIN_STR * (lp(v0, v1, syf) - 0.5);
+        // suspended flake: a hashed micro-facet that glints only when it catches
+        // the half-vector → scattered pinpoints; softened on steep walls (aa) and
+        // dimmed on the shadow side, so it reads as flecks in the wax, not noise.
+        const fcx = (px / flakeCell) | 0, fcy = (py / flakeCell) | 0;
+        const fa = hash2(fcx, fcy) * TAU;
+        const famp = 0.45 + 0.9 * hash2(fcx * 3 + 7, fcy * 5 + 13);
+        let fnx = nx + Math.cos(fa) * famp, fny = ny + Math.sin(fa) * famp, fnz = nz + 0.12;
+        const fnl = Math.hypot(fnx, fny, fnz); fnx /= fnl; fny /= fnl; fnz /= fnl;
+        const fndh = Math.max(0, fnx * hx + fny * hy + fnz * hz);
+        flakeAdd = speckle * FLAKE_STR * Math.pow(fndh, FLAKE_SHIN) * (0.25 + 0.75 * ndl) * aa;
+      }
+      let R = wr * lf + sr * spec * gloss + fkr * flakeAdd;
+      let G = wg * lf + sg * spec * gloss + fkg * flakeAdd;
+      let Bl = wb * lf + sb * spec * gloss + fkb * flakeAdd;
       R = softclip(R, HI_KNEE, HICAP);
       G = softclip(G, HI_KNEE, HICAP);
       Bl = softclip(Bl, HI_KNEE, HICAP * 0.98);

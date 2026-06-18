@@ -16,25 +16,30 @@ const EXITS = ["fade", "rise", "shrink", "grow"] as const;
 // candidate stamp colours to preview (the app ships ONE semantic wax blue; these
 // are an exploration for the categorisation moonshot, sandboxed to the lab). Each
 // hue comes in a deep tone (rich, navy-like) and a soft pastel tone.
-const HUES = ["navy", "red", "gold", "teal", "plum", "rose"] as const;
+// metals (gold · bronze=rose · silver) are grouped at the end — they carry the
+// metallic speckle; gold leans a touch orange so it doesn't read purely yellow.
+const HUES = ["navy", "red", "teal", "plum", "gold", "rose", "silver"] as const;
+const METAL_HUES = ["gold", "rose", "silver"]; // get the flake/grain texture
 const DEEP: Record<string, Tint | undefined> = {
   navy: undefined, // theme --wax token (already deep navy)
   red: { wax: "#7e2c27", bright: "#a8534a", shadow: "#2a0a07" },
-  gold: { wax: "#c5921a", bright: "#ecc658", shadow: "#3c2906" },
+  gold: { wax: "#cd8a16", bright: "#eebe54", shadow: "#3e2606" },
   teal: { wax: "#225247", bright: "#3a8475", shadow: "#082420" },
   plum: { wax: "#4f2c54", bright: "#7a4a80", shadow: "#1e1022" },
   rose: { wax: "#7c3e2c", bright: "#a86048", shadow: "#2a0f08" },
+  silver: { wax: "#8a919b", bright: "#edf1f6", shadow: "#363c44" },
 };
 const PASTEL: Record<string, Tint> = {
   navy: { wax: "#9bb6da", bright: "#bcd0e8", shadow: "#3c587c" },
   red: { wax: "#d99e96", bright: "#e9c2bc", shadow: "#6e3a34" },
-  gold: { wax: "#e8d287", bright: "#f4e4b0", shadow: "#6a5420" },
+  gold: { wax: "#eaca80", bright: "#f5e0b0", shadow: "#6c501e" },
   teal: { wax: "#97c4b6", bright: "#bedfd3", shadow: "#2c5048" },
   plum: { wax: "#b89cc9", bright: "#d2c0de", shadow: "#4e3a58" },
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
+  silver: { wax: "#c6ccd4", bright: "#eef2f7", shadow: "#565d66" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 26 · 2026-06-17 · gold hue + dotted calendar";
+const BUILD = "build 27 · 2026-06-18 · silver hue + metallic speckle";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);
@@ -43,9 +48,10 @@ export default function StampLab() {
   const [iconSet, setIconSet] = useState<(typeof ICON_SET_KEYS)[number]>("a");
   const [ease, setEase] = useState<(typeof EASES)[number]>("front");
   const [bounce, setBounce] = useState(1.5);
-  const [rotate, setRotate] = useState(15);
+  const [rotate, setRotate] = useState(5);
   const [puck, setPuck] = useState(1);
   const [iconScale, setIconScale] = useState(0.4);
+  const [speckle, setSpeckle] = useState(0.6);
   const [autoplay, setAutoplay] = useState(false);
   const [linger, setLinger] = useState(1000);
   const [exitMs, setExitMs] = useState(200);
@@ -133,6 +139,11 @@ export default function StampLab() {
           <span className="voice-data w-24">icon {iconScale.toFixed(2)}</span>
           <input type="range" min={0.26} max={0.54} step={0.02} value={iconScale} onChange={(e) => setIconScale(+e.target.value)} />
         </label>
+        <label className="flex items-center gap-2 text-[0.85rem]">
+          <span className="voice-data w-28">speckle {speckle.toFixed(2)}</span>
+          <input type="range" min={0} max={1} step={0.05} value={speckle} onChange={(e) => setSpeckle(+e.target.value)} />
+          <span className="voice-data text-ink-faint">{METAL_HUES.includes(hue) ? "metal" : "—"}</span>
+        </label>
         <button type="button" data-replay onClick={replay} className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper">
           Replay
         </button>
@@ -201,6 +212,7 @@ export default function StampLab() {
           puck={puck}
           iconScale={iconScale}
           pressed={pressed}
+          speckle={speckle}
         />
       </button>
     </div>
