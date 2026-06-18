@@ -2710,7 +2710,10 @@ function ScheduleFeedBase({
     <div
       ref={scrollerRef}
       onScroll={active ? onScroll : undefined}
-      className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+      // -mt-px: the topmost day's border-t rides up onto the header's bottom
+      // rule, so when today lifts to the top (scrolled all the way down) the two
+      // hairlines coincide instead of doubling a pixel apart
+      className="relative -mt-px h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}
     >
