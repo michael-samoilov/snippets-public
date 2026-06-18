@@ -7,16 +7,16 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEve
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
-// the chosen icon per type, across the icon packs (Zest = "e:", Fine = "c:",
-// app/extra = bare). Swipe the carousel to pick; each is its own wax drop.
-const ICON_CHOICES: { glyph: string; label: string }[] = [
-  { glyph: "S", label: "S" },
-  { glyph: "e:quill", label: "quill" },
-  { glyph: "c:mic", label: "mic" },
-  { glyph: "e:calendar", label: "calendar" },
-  { glyph: "caldots", label: "cal·dots" },
-  { glyph: "eye", label: "eye" },
-  { glyph: "joke", label: "joke" },
+// the chosen icon per type, with a per-icon size so their stroke weights match
+// (quill at 0.36 is the reference; the thin Fine mic needs to be larger). S sizes
+// itself, so its scale is unused. Glyphs: Zest = "e:", Fine = "c:", extras = bare.
+const ICON_CHOICES: { glyph: string; label: string; scale: number }[] = [
+  { glyph: "S", label: "S", scale: 0.4 },
+  { glyph: "e:quill", label: "quill", scale: 0.36 },
+  { glyph: "c:mic", label: "mic", scale: 0.46 },
+  { glyph: "caldots", label: "calendar", scale: 0.36 },
+  { glyph: "eye", label: "eye", scale: 0.36 },
+  { glyph: "joke", label: "joke", scale: 0.36 },
 ];
 
 const EASES = ["even", "front", "snap"] as const;
@@ -46,15 +46,15 @@ const PASTEL: Record<string, Tint> = {
   teal: { wax: "#97c4b6", bright: "#bedfd3", shadow: "#2c5048" },
   plum: { wax: "#b89cc9", bright: "#d2c0de", shadow: "#4e3a58" },
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
-  silver: { wax: "#c6ccd4", bright: "#eef2f7", shadow: "#565d66" },
+  silver: { wax: "#e6e9ed", bright: "#f6f8fa", shadow: "#5c636b" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 29 · 2026-06-18 · icon carousel + locked texture";
+const BUILD = "build 30 · 2026-06-18 · per-icon sizes + whiter pastel silver";
 
 // shared design values handed to every wax drop in the carousel
 type Design = {
   size: number; tint?: Tint; puck: number; cloud: number; speckle: number;
-  iconScale: number; ease: EaseT; bounce: number; rotate: number;
+  iconMult: number; ease: EaseT; bounce: number; rotate: number;
   lingerMs: number; exitMs: number; exit: ExitT; restPressed: boolean; themeKey: string;
 };
 
@@ -169,7 +169,7 @@ function IconCarousel({ d }: { d: Design }) {
                     exit={d.exit}
                     tint={d.tint}
                     puck={d.puck}
-                    iconScale={d.iconScale}
+                    iconScale={c.scale * d.iconMult}
                     speckle={d.speckle}
                     cloud={d.cloud}
                     pressed={pressedIdx === i || (d.restPressed && i === active)}
@@ -200,7 +200,7 @@ function IconCarousel({ d }: { d: Design }) {
 
 export default function StampLab() {
   const [size, setSize] = useState(160);
-  const [iconScale, setIconScale] = useState(0.4);
+  const [iconMult, setIconMult] = useState(1);
   const [ease, setEase] = useState<EaseT>("front");
   const [bounce, setBounce] = useState(1.5);
   const [rotate, setRotate] = useState(5);
@@ -218,7 +218,7 @@ export default function StampLab() {
   const tint = tone === "deep" ? DEEP[hue] : PASTEL[hue];
 
   const d: Design = {
-    size, tint, puck, cloud, speckle, iconScale, ease, bounce, rotate,
+    size, tint, puck, cloud, speckle, iconMult, ease, bounce, rotate,
     lingerMs: linger, exitMs, exit, restPressed, themeKey: `${theme}-${hue}-${tone}`,
   };
 
@@ -274,8 +274,8 @@ export default function StampLab() {
           <input type="range" min={48} max={260} step={4} value={size} onChange={(e) => setSize(+e.target.value)} />
         </label>
         <label className="flex items-center gap-2 text-[0.85rem]">
-          <span className="voice-data w-28">icon size {iconScale.toFixed(2)}</span>
-          <input type="range" min={0.26} max={0.54} step={0.02} value={iconScale} onChange={(e) => setIconScale(+e.target.value)} />
+          <span className="voice-data w-28">icon ×{iconMult.toFixed(2)}</span>
+          <input type="range" min={0.6} max={1.5} step={0.05} value={iconMult} onChange={(e) => setIconMult(+e.target.value)} />
         </label>
         <span className="voice-data text-ink-faint">{METAL_HUES.includes(hue) ? "metal" : "matte"}</span>
       </div>
