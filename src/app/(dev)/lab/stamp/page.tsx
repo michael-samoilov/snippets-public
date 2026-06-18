@@ -31,7 +31,7 @@ const PASTEL: Record<string, Tint> = {
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 17 · 2026-06-17 · confirmed values collapsed";
+const BUILD = "build 18 · 2026-06-17 · softer pastel lighting";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);

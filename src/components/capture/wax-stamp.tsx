@@ -679,6 +679,13 @@ function paintSeal(
   const baseLuma = 0.3 * wr + 0.59 * wg + 0.11 * wb;
   const lumaDamp = 1 - 0.6 * clamp((baseLuma - 0.34) / 0.34);
   const specDamp = (1 - 0.6 * dome) * lumaDamp; // pre-press circle low-sheen; bright base less glossy
+  // soft pastels: a very light base shouldn't carry dark shadows — lift the ambient
+  // floor and ease the diffuse swing + form-shadow as the base lightens (deep
+  // colours have low luma → soft 0 → unchanged).
+  const soft = clamp((baseLuma - 0.48) / 0.32);
+  const amb = AMBIENT + soft * 0.45;
+  const dif = DIFF * (1 - soft * 0.5);
+  const envA = ENV * (1 - soft * 0.7);
   for (let py = 1; py < dim - 1; py++) {
     for (let px = 1; px < dim - 1; px++) {
       const i = py * dim + px;
@@ -701,8 +708,8 @@ function paintSeal(
       const gloss = SPEC_STR * specDamp * (1 + (SPEC_RIM - 1) * clamp(slope * 0.5)) * aa;
       // diagonal form shadow: brighter toward the upper-left light, deeper amber
       // toward the lower-right — gives the seal global 3-D depth like the reference
-      const env = 1 + ENV * (((cx - px) + (cy - py)) / dim);
-      const lf = (AMBIENT + DIFF * ndl) * env;
+      const env = 1 + envA * (((cx - px) + (cy - py)) / dim);
+      const lf = (amb + dif * ndl) * env;
       let R = wr * lf + sr * spec * gloss;
       let G = wg * lf + sg * spec * gloss;
       let Bl = wb * lf + sb * spec * gloss;
