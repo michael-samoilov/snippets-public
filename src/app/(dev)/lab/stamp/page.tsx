@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
-const ICONS = ["S", "quill", "mic", "calendar", "check", "spark", "eye", "eye2", "joke", "laugh", "smile"];
+const ICONS = ["S", "quill", "mic", "calendar", "caldots", "check", "spark", "eye", "eye2", "joke", "laugh", "smile"];
 const SET_ICONS = ["quill", "mic", "calendar", "check"]; // these vary by icon-set
 const ICON_SET_KEYS = ["a", "b", "c", "d", "e"] as const;
 const SET_LABEL: Record<string, string> = { a: "a · line", b: "b · solid", c: "c · fine", d: "d · remix", e: "e · zest" };
@@ -16,11 +16,11 @@ const EXITS = ["fade", "rise", "shrink", "grow"] as const;
 // candidate stamp colours to preview (the app ships ONE semantic wax blue; these
 // are an exploration for the categorisation moonshot, sandboxed to the lab). Each
 // hue comes in a deep tone (rich, navy-like) and a soft pastel tone.
-const HUES = ["navy", "red", "amber", "teal", "plum", "rose"] as const;
+const HUES = ["navy", "red", "gold", "teal", "plum", "rose"] as const;
 const DEEP: Record<string, Tint | undefined> = {
   navy: undefined, // theme --wax token (already deep navy)
   red: { wax: "#7e2c27", bright: "#a8534a", shadow: "#2a0a07" },
-  amber: { wax: "#7a5320", bright: "#a8803c", shadow: "#281805" },
+  gold: { wax: "#c5921a", bright: "#ecc658", shadow: "#3c2906" },
   teal: { wax: "#225247", bright: "#3a8475", shadow: "#082420" },
   plum: { wax: "#4f2c54", bright: "#7a4a80", shadow: "#1e1022" },
   rose: { wax: "#7c3e2c", bright: "#a86048", shadow: "#2a0f08" },
@@ -28,13 +28,13 @@ const DEEP: Record<string, Tint | undefined> = {
 const PASTEL: Record<string, Tint> = {
   navy: { wax: "#9bb6da", bright: "#bcd0e8", shadow: "#3c587c" },
   red: { wax: "#d99e96", bright: "#e9c2bc", shadow: "#6e3a34" },
-  amber: { wax: "#d8bd86", bright: "#ebd9ac", shadow: "#6e5424" },
+  gold: { wax: "#e8d287", bright: "#f4e4b0", shadow: "#6a5420" },
   teal: { wax: "#97c4b6", bright: "#bedfd3", shadow: "#2c5048" },
   plum: { wax: "#b89cc9", bright: "#d2c0de", shadow: "#4e3a58" },
   rose: { wax: "#d6a895", bright: "#e8c8ba", shadow: "#6e4030" },
 };
 // bump this string every push so it's obvious on-screen which build is live
-const BUILD = "build 25 · 2026-06-17 · Remix eye/laugh/smile + white view";
+const BUILD = "build 26 · 2026-06-17 · gold hue + dotted calendar";
 
 export default function StampLab() {
   const [playKey, setPlayKey] = useState(1);

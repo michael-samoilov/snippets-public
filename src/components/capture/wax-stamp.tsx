@@ -520,6 +520,17 @@ const ICON_SETS: Record<string, Record<string, IconFn>> = {
 };
 const EXTRA_ICONS: Record<string, IconFn> = {
   spark: (gx) => { gx.fill(new Path2D("M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z")); },
+  // the app (set a) calendar + date dots: 2 rows × 3, top-left absent (5 dots).
+  caldots: (gx) => {
+    gx.lineWidth = 1.7;
+    gx.beginPath(); gx.roundRect(3.2, 4.6, 13.6, 12, 2.2); gx.stroke();
+    gx.stroke(new Path2D("M6.8 2.8v3.4M13.2 2.8v3.4M3.2 9h13.6"));
+    const cols = [6.6, 10, 13.4], rows = [11.7, 14.1];
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+      if (r === 0 && c === 0) continue;
+      gx.beginPath(); gx.arc(cols[c], rows[r], 0.85, 0, Math.PI * 2); gx.fill();
+    }
+  },
   // Zest Interface Icons (MIT), 24-box evenodd. "joke" = Zest speech bubble + the
   // grinning face's squint eyes + their shared smile, fused into one evenodd fill
   // (bubble ring hollow; eyes + mouth fill inside it).
