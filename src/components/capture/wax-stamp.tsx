@@ -499,6 +499,13 @@ const ICON_SETS: Record<string, Record<string, IconFn>> = {
     calendar: (gx) => { gx.lineWidth = 1.2; gx.beginPath(); gx.roundRect(3.6, 4.8, 12.8, 11.6, 1.6); gx.stroke(); gx.stroke(new Path2D("M7 3 V6 M13 3 V6 M3.6 8.6 H16.4")); for (const ry of [11.4, 14]) for (const rx of [6.6, 10, 13.4]) { gx.beginPath(); gx.arc(rx, ry, 0.7, 0, Math.PI * 2); gx.fill(); } },
     check: (gx) => { gx.lineWidth = 1.3; gx.stroke(new Path2D("M3.8 10.8 L 8.2 15.2 L 16.2 4.6")); },
   },
+  d: { // Remix Icon (line) — Apache-2.0, remixicon.com. Filled outline paths in a
+    // 24-box; scaled 20/24 so they centre + size like the others. Credit in licenses.
+    quill: (gx) => { gx.save(); gx.scale(20 / 24, 20 / 24); gx.fill(new Path2D("M6.94 14.033a30 30 0 0 0-.606 1.783c.96-.697 2.101-1.14 3.418-1.304c2.513-.314 4.746-1.973 5.876-4.058l-1.456-1.455l1.413-1.415l1-1.002c.43-.429.915-1.224 1.428-2.367c-5.593.867-9.018 4.291-11.074 9.818M17 8.997l1 1c-1 3-4 6-8 6.5q-4.003.5-5.002 5.5H3c1-6 3-20 18-20q-1.5 4.496-2.997 5.997z")); gx.restore(); },
+    mic: (gx) => { gx.save(); gx.scale(20 / 24, 20 / 24); gx.fill(new Path2D("M12 3a3 3 0 0 0-3 3v4a3 3 0 1 0 6 0V6a3 3 0 0 0-3-3m0-2a5 5 0 0 1 5 5v4a5 5 0 0 1-10 0V6a5 5 0 0 1 5-5M3.055 11H5.07a7.002 7.002 0 0 0 13.858 0h2.016A9.004 9.004 0 0 1 13 18.945V23h-2v-4.055A9.004 9.004 0 0 1 3.055 11")); gx.restore(); },
+    calendar: (gx) => { gx.save(); gx.scale(20 / 24, 20 / 24); gx.fill(new Path2D("M9 1v2h6V1h2v2h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4V1zm11 10H4v8h16zM7 5H4v4h16V5h-3v2h-2V5H9v2H7z")); gx.restore(); },
+    check: (gx) => { gx.save(); gx.scale(20 / 24, 20 / 24); gx.fill(new Path2D("m10 15.17l9.192-9.191l1.414 1.414L10 17.999l-6.364-6.364l1.414-1.414z")); gx.restore(); },
+  },
 };
 const EXTRA_ICONS: Record<string, IconFn> = {
   spark: (gx) => { gx.fill(new Path2D("M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z")); },
