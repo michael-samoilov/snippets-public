@@ -203,7 +203,7 @@ export default function StampLab() {
   const [iconMult, setIconMult] = useState(1);
   const [ease, setEase] = useState<EaseT>("front");
   const [bounce, setBounce] = useState(1.5);
-  const [rotate, setRotate] = useState(5);
+  const [rotate, setRotate] = useState(30);
   const [puck, setPuck] = useState(1);
   const [cloud, setCloud] = useState(0.5);
   const [speckle, setSpeckle] = useState(0);
