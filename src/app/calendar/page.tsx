@@ -44,6 +44,7 @@ import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
+import { allOccurrences, queryTerms } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import {
   useScrollEdges,
@@ -1095,7 +1096,9 @@ function Calendar() {
   // the index is built on first open, not on every visit — the command
   // menu already keeps one for the whole app
   const hits = useSearch(query, searching ? all : undefined);
-  const searchActive = searching && query.trim() !== "";
+  // engage the filtered view only once there's a usable (≥2-char) term, so a
+  // lone "(" or a single letter doesn't swap the calendar for a result list
+  const searchActive = searching && queryTerms(query).length > 0;
   const searchGroups = useMemo(() => {
     if (!searchActive) return [];
     // the book reads upward through time; the filtered book too
@@ -3206,36 +3209,9 @@ function WaxStamp({
    the lines before the match explain it; the lines after follow
    anyway in whatever clamp room remains). */
 
-/** the query's literal terms, longest first so overlaps mark whole */
-function queryTerms(query: string): string[] {
-  return [
-    ...new Set(
-      query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2),
-    ),
-  ].sort((a, b) => b.length - a.length);
-}
-
-/** Every literal occurrence of the query, merged and in order — a term
-    can recur many times in a long entry, so the count is capped. */
-function allOccurrences(text: string, terms: string[]): Array<[number, number]> {
-  const lower = text.toLowerCase();
-  const hits: Array<[number, number]> = [];
-  for (const t of terms) {
-    let i = lower.indexOf(t);
-    while (i >= 0 && hits.length < 80) {
-      hits.push([i, i + t.length]);
-      i = lower.indexOf(t, i + t.length);
-    }
-  }
-  hits.sort((a, b) => a[0] - b[0]);
-  const merged: Array<[number, number]> = [];
-  for (const h of hits) {
-    const last = merged[merged.length - 1];
-    if (last && h[0] <= last[1]) last[1] = Math.max(last[1], h[1]);
-    else merged.push([h[0], h[1]]);
-  }
-  return merged;
-}
+/* queryTerms + allOccurrences live in src/lib/search.ts, shared with the filter
+   (useSearch), so the words a tile marks and the reason it was filtered in are
+   always the same match. */
 
 const PREVIEW_LINES = 6;
 

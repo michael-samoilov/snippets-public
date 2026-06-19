@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import MiniSearch from "minisearch";
 import {
   allSnippetsNewestFirst,
   computeStats,
@@ -13,6 +12,7 @@ import {
   type Stats,
 } from "@/lib/db";
 import { dayKey } from "@/lib/dates";
+import { normalize, queryTerms, searchableText } from "@/lib/search";
 import type { Snippet } from "@/lib/types";
 
 export function useTodaySnippets(): Snippet[] | undefined {
@@ -52,35 +52,23 @@ export function groupByDay(snippets: Snippet[]): { day: string; snippets: Snippe
 }
 
 /**
- * Client-side full-text search. The index rebuilds when the collection
- * changes — at personal-collection scale this is instantaneous.
+ * Client-side full-text FILTER. Each entry's searchable text is
+ * normalized once when the collection changes (instant at personal
+ * scale); keystrokes only test substrings against it. The filter and
+ * the highlighter share one notion of a match — see src/lib/search.ts.
  */
 export function useSearch(query: string, snippets: Snippet[] | undefined): Snippet[] {
-  const index = useMemo(() => {
-    if (!snippets) return null;
-    const mini = new MiniSearch<Snippet>({
-      fields: ["title", "text", "tagText", "attribution"],
-      storeFields: [],
-      extractField: (doc, field) =>
-        field === "tagText" ? doc.tags.join(" ") : String(doc[field as keyof Snippet] ?? ""),
-      searchOptions: {
-        boost: { title: 2, tagText: 1.5 },
-        // prefix only, no fuzz: search is a FILTER — every entry shown
-        // must literally contain what was typed (prefix covers the
-        // word still being typed; fuzzy let "poop" surface "poo")
-        prefix: true,
-      },
-    });
-    mini.addAll(snippets);
-    return mini;
-  }, [snippets]);
+  const index = useMemo(
+    () => snippets?.map((s) => ({ s, hay: normalize(searchableText(s)) })) ?? null,
+    [snippets],
+  );
 
   return useMemo(() => {
     if (!snippets) return [];
-    const q = query.trim();
-    if (!q) return snippets;
-    if (!index) return [];
-    const ids = new Set(index.search(q).map((r) => r.id as string));
-    return snippets.filter((s) => ids.has(s.id));
+    const terms = queryTerms(query);
+    if (!terms.length || !index) return snippets;
+    return index
+      .filter(({ hay }) => terms.every((t) => hay.includes(t)))
+      .map(({ s }) => s);
   }, [query, snippets, index]);
 }
