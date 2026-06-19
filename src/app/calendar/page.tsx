@@ -3092,7 +3092,9 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
               overflow; and it shows only WITH the fade, so the last line is
               never covered once it's fully in view. */}
           <div className="absolute inset-x-0 bottom-[-4px] h-[6px] bg-paper" />
-          <div className="absolute inset-x-0 bottom-0 border-t border-rule-faint" />
+          {/* the rule itself is inset to the words' own margins (the scroller's
+              px-4), not spanning the whole card */}
+          <div className="absolute inset-x-4 bottom-0 border-t border-rule-faint" />
         </div>
         <div
           // constant padding: the foot never changes the card's height
