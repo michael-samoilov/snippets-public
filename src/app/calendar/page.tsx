@@ -1143,6 +1143,8 @@ function Calendar() {
     setPillBox(glassBox()); // retract both sides back into the circle…
     setSearching(false);
     setQuery("");
+    if (searchInputRef.current) searchInputRef.current.value = ""; // uncontrolled: clear the DOM value too
+
     setPillClosing(true);
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => {
@@ -1400,15 +1402,14 @@ function Calendar() {
               <input
                 ref={searchInputRef}
                 type="text"
-                // off, on a search field: Safari's smart-punctuation/autocorrect
-                // defers the opening-quote/bracket substitution and the controlled
-                // re-render then drops it, so a leading "(", " or ' never lands.
-                autoCorrect="off"
-                autoCapitalize="none"
-                autoComplete="off"
-                spellCheck={false}
                 enterKeyHint="search"
-                value={query}
+                // UNCONTROLLED on purpose. Binding value={query} let iOS Safari
+                // drop the FIRST typed character whenever it also flipped
+                // searchActive: the heavy stage re-render re-asserts the value
+                // mid-input and Safari discards the in-flight key (a leading
+                // "(", { or " never landed). The DOM holds the text; we mirror
+                // it into `query` for the results and clear it via the ref in
+                // closeSearch. Leaving smart punctuation on keeps the curly quotes.
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") closeSearch();
