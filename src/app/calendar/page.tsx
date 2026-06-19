@@ -2527,6 +2527,10 @@ function ScheduleFeedBase({
   const pendingRef = useRef<string | null>(null);
   const rafRef = useRef(0);
   const didInit = useRef(false);
+  // a Today scroll owns the header while it animates: the days it passes must
+  // not each claim the title (which flashes the Today button back in)
+  const progTargetRef = useRef<number | null>(null);
+  const progTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // the rows' geometry, read ONCE per layout and cached — the scroll
   // spy then finds the stacked day from scrollTop alone, never reading
   // ~90 rows' offsets on the scroll path (that first read forced the
@@ -2568,6 +2572,17 @@ function ScheduleFeedBase({
     const row = rowRefs.current.get(day);
     if (!el || !row) return false;
     spyRef.current = day; // the landing must not re-announce itself
+    if (smooth) {
+      // hold the header on the destination while the scroll animates, so the
+      // days it passes don't flip `selected` and flash the Today button back in
+      progTargetRef.current = row.offsetTop;
+      if (progTimerRef.current) clearTimeout(progTimerRef.current);
+      progTimerRef.current = setTimeout(() => {
+        progTargetRef.current = null;
+      }, 800);
+    } else {
+      progTargetRef.current = null;
+    }
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     return true;
   }, []);
@@ -2623,6 +2638,15 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       if (!el) return;
       const top = el.scrollTop;
+      if (progTargetRef.current !== null) {
+        // a Today scroll is animating to its target — let it run, but don't let
+        // the days it passes claim the header (that flashes the Today button)
+        if (Math.abs(top - progTargetRef.current) < 4) {
+          progTargetRef.current = null;
+          if (progTimerRef.current) clearTimeout(progTimerRef.current);
+        }
+        return;
+      }
       // the reader's day is the topmost whose margin date is still
       // fully stacked — a row whose tail merely peeks under the rail
       // has already handed over (its date has slid off the pin).
