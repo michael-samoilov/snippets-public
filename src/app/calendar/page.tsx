@@ -210,7 +210,7 @@ interface MonthFeedHandle {
   originFor: (day: string) => { x: number; y: number; w: number } | null;
 }
 interface ScheduleFeedHandle {
-  goTo: (day: string) => void;
+  goTo: (day: string, smooth?: boolean) => void;
 }
 interface YearFeedHandle {
   goTo: (y: number, smooth: boolean) => void;
@@ -936,14 +936,14 @@ function Calendar() {
   };
 
   /** move the book to a day: selection, title, URL, scroll */
-  const jumpTo = (key: string) => {
+  const jumpTo = (key: string, smooth = false) => {
     setSelected(key);
     const m = startOfMonth(dateFromDayKey(key));
     setVisibleMonth(m);
     setVisibleYear(m.getFullYear());
     if (urlTimer.current) clearTimeout(urlTimer.current);
     window.history.replaceState(null, "", `${pathname}?d=${key}`);
-    scheduleFeedRef.current?.goTo(key);
+    scheduleFeedRef.current?.goTo(key, smooth);
   };
 
   /** the glance shows the lived years: the first entry's through
@@ -1021,7 +1021,8 @@ function Calendar() {
       return;
     }
     if (view === "schedule") {
-      jumpTo(dayKey());
+      // a quick smooth scroll to today, the way the month/year feeds glide
+      jumpTo(dayKey(), true);
       return;
     }
     window.history.replaceState(null, "", pathname);
@@ -2545,22 +2546,24 @@ function ScheduleFeedBase({
     }));
   }, [all, probe, todayKey, yesterdayKey]);
 
-  const scrollToRow = useCallback((day: string) => {
+  const scrollToRow = useCallback((day: string, smooth = false) => {
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el || !row) return false;
     spyRef.current = day; // the landing must not re-announce itself
-    el.scrollTop = row.offsetTop;
+    el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     return true;
   }, []);
 
   const goTo = useCallback(
-    (day: string) => {
+    (day: string, smooth = false) => {
       setProbe(day);
-      // land now so the camera zooms onto the right page, then settle
-      // once the probe (and any row churn) has committed
-      scrollToRow(day);
-      pendingRef.current = day;
+      // land now so the camera zooms onto the right page, then settle once
+      // the probe (and any row churn) has committed. A smooth scroll (pressing
+      // "today") must NOT be yanked instant by that settle — and today is
+      // always in the rows, so it needs no settle pass.
+      scrollToRow(day, smooth);
+      pendingRef.current = smooth ? null : day;
     },
     [scrollToRow],
   );
@@ -3039,7 +3042,15 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
             edges.bottom ? "opacity-100" : "opacity-0",
           )}
         >
-          <div className="absolute inset-0 bg-gradient-to-t from-paper to-transparent" />
+          {/* the soft fade, dissolving to solid paper just above the rule */}
+          <div className="absolute inset-x-0 top-0 bottom-[2px] bg-gradient-to-t from-paper to-transparent" />
+          {/* an opaque paper band straddling the scroller's bottom edge — a
+              couple px above the rule, down a few px into the foot — so no
+              sliver of the next line can leak under the rule (WebKit clips a
+              hair low). It's outside the scroller, so it adds no scroll
+              overflow; and it shows only WITH the fade, so the last line is
+              never covered once it's fully in view. */}
+          <div className="absolute inset-x-0 bottom-[-4px] h-[6px] bg-paper" />
           <div className="absolute inset-x-0 bottom-0 border-t border-rule-faint" />
         </div>
         <div
