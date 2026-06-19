@@ -65,6 +65,11 @@ function Seal({
   label?: string;
   className?: string;
 }) {
+  // a small seal is undersampled at the dpr cap, so the relief reads soft —
+  // render the backing canvas well above device pixels (as the masthead does).
+  // Taper the multiple for larger seals, which are already crisp, to spare the
+  // per-pixel CPU paint during the press.
+  const superSample = size <= 56 ? 4 : size <= 96 ? 2 : 1;
   const seal = (
     <WaxStamp
       playKey={sealKey}
@@ -74,6 +79,7 @@ function Seal({
       mode="press"
       still={!armed}
       variant="spring"
+      superSample={superSample}
     />
   );
   if (!onPress) return <span className={className}>{seal}</span>;
