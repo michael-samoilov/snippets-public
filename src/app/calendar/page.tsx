@@ -2858,16 +2858,13 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // the standard scroll terminus: the foot hairline shows while more
-  // words lie below, and clears at the last line (or if they all fit)
-  const edges = useScrollEdges(contentRef, [editing, draft]);
   // a long entry that overflows the card reads at the schedule-preview size
   // (smaller) rather than full prose. We can't trust the live scroll edges
   // for this: as the card opens it FLIPs from a small tile up to the full
   // stage, so mid-flight a short entry momentarily overflows and would
   // latch compact on. Instead wait for the card height to settle (steady
-  // for a few frames), then measure once — same +1 threshold the fade uses,
-  // so a short entry that fits gets neither the small text nor the fade.
+  // for a few frames), then measure once — same +1 threshold the foot fade
+  // uses, so a short entry that fits gets neither the small text nor the fade.
   const [compact, setCompact] = useState(false);
   useEffect(() => {
     if (editing) return;
@@ -2895,6 +2892,11 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snippet.text, editing]);
+  // the foot terminus shows while more words lie below, and clears at the last
+  // line (or if they all fit). compact is a dep because shrinking the font
+  // changes the scroll height WITHOUT resizing the scroller, which the
+  // ResizeObserver alone misses — leaving the terminus lit at the very bottom.
+  const edges = useScrollEdges(contentRef, [editing, draft, compact]);
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -3018,16 +3020,28 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
               : "pointer-events-none absolute inset-x-4 top-3 h-px opacity-0",
           )}
         />
-        {/* the scroll terminus — a hairline with a soft fade above it
-            while the words run on below; both clear at the last line */}
-        <ScrollTerminus show={edges.bottom} fade />
       </div>
       <div
         data-entry-foot
         // pressing the foot's empty band edits too — not only the words
         onClick={editing ? undefined : startEdit}
-        className="shrink-0"
+        className="relative shrink-0"
       >
+        {/* the scroll terminus — a soft fade + hairline marking that the words
+            run on below. It sits just ABOVE the foot (OUTSIDE the scroller), so
+            the scroller's sub-pixel clip can't leak a sliver of the next line
+            beneath the rule; it clears once the last line is in view. Paper on
+            paper, so an overscroll never flashes it. */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-full z-[6] h-8 transition-opacity duration-200",
+            edges.bottom ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <div className="absolute inset-0 bg-gradient-to-t from-paper to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 border-t border-rule-faint" />
+        </div>
         <div
           // constant padding: the foot never changes the card's height
           // as the terminus comes and goes (it sets the gap from the

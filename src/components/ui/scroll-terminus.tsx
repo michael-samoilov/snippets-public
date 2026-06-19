@@ -100,45 +100,16 @@ export function ScrollTerminusHead({ show }: { show: boolean }) {
 /** The foot hairline — last child of the scroller: pinned at the very
     foot while more content lies below, cleared once the last of it is in
     view. It sits on the bottom edge with nothing beneath, so an
-    overscroll rubber-band reveals only the bare sheet.
-
-    `fade` is the entry card's treatment — its long words want a gentler
-    hand-off than the bare rule. It adds a soft dissolve just above the
-    line, and a 1px paper cap just below it that seals the scroller's
-    fractional sub-pixel bottom (so no sliver of the next line peeks
-    under the rule). The cap is exactly 1px — any taller and the
-    absolutely-positioned box would add enough scroll overflow to make a
-    short entry think it scrolls. Both are safe only there: the card is
-    plain paper, so an overscroll reveals paper on paper; over the
-    textured sheet a fade reads as a band and the cap would flash. */
-export function ScrollTerminus({
-  show,
-  fade = false,
-}: {
-  show: boolean;
-  fade?: boolean;
-}) {
+    overscroll rubber-band reveals only the bare sheet. (The entry card's
+    softer fade lives in calendar's EntryBody, as an overlay just outside
+    its scroller, so the scroller's sub-pixel clip can't leak a sliver of
+    the next line beneath the rule.) */
+export function ScrollTerminus({ show }: { show: boolean }) {
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px"
     >
-      {fade && (
-        <>
-          <div
-            className={cn(
-              "absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-paper to-transparent transition-opacity duration-200",
-              show ? "opacity-100" : "opacity-0",
-            )}
-          />
-          <div
-            className={cn(
-              "absolute inset-x-0 top-full h-px bg-paper transition-opacity duration-200",
-              show ? "opacity-100" : "opacity-0",
-            )}
-          />
-        </>
-      )}
       <div
         className={cn(
           "absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200",
