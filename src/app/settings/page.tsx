@@ -83,6 +83,22 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <section aria-label="Calendar">
+          <h2 className="voice-label border-b border-rule pb-1.5">Calendar</h2>
+          <div className="mt-4 flex items-center justify-between gap-6">
+            <div>
+              <p className="font-serif text-[0.98rem]">Start week on</p>
+              <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
+                The day the month grid and the year’s minis begin the week on.
+              </p>
+            </div>
+            <WeekStartChoice
+              value={settings.weekStart}
+              onChange={(v) => updateSettings({ weekStart: v })}
+            />
+          </div>
+        </section>
+
         <section aria-label="Filing">
           <h2 className="voice-label border-b border-rule pb-1.5">Filing</h2>
           <div className="mt-4 flex items-start justify-between gap-6">
@@ -192,6 +208,47 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** A two-way segmented choice: a raised paper chip sits in a recessed trough. */
+function WeekStartChoice({
+  value,
+  onChange,
+}: {
+  value: 0 | 1;
+  onChange: (v: 0 | 1) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Start week on"
+      className="inline-flex shrink-0 gap-0.5 rounded-[7px] bg-paper-recessed p-0.5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.1)]"
+    >
+      {([
+        [0, "Sunday"],
+        [1, "Monday"],
+      ] as const).map(([v, label]) => {
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(v)}
+            className={cn(
+              "pressable rounded-[5px] px-3.5 py-1.5 font-serif text-[0.9rem]",
+              active
+                ? "bg-paper-raised text-ink shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.12)]"
+                : "text-ink-faint",
+            )}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }

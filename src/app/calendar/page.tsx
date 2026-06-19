@@ -43,13 +43,22 @@ import {
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
+import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import {
   useScrollEdges,
   ScrollTerminus,
 } from "@/components/ui/scroll-terminus";
 
-const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"]; // Sunday-first labels
+/** the weekday labels rotated to the chosen first day of the week. */
+function weekdays(weekStart: 0 | 1): string[] {
+  return weekStart === 1 ? [...WEEKDAYS.slice(1), WEEKDAYS[0]] : WEEKDAYS;
+}
+/** columns (0–6) from the week's first day to `date`'s own weekday. */
+function leadOffset(date: Date, weekStart: 0 | 1): number {
+  return (getDay(date) - weekStart + 7) % 7;
+}
 const ringSpring = { type: "spring", stiffness: 380, damping: 30 } as const;
 const ym = (d: Date) => format(d, "yyyy-MM");
 
@@ -70,8 +79,8 @@ const MINI_DOT = 3;
     scales with the unlikelihood of needing to. */
 const ARCHIVE_YEAR = 1950;
 
-function monthRows(m: Date): number {
-  return Math.ceil((getDay(m) + endOfMonth(m).getDate()) / 7);
+function monthRows(m: Date, weekStart: 0 | 1): number {
+  return Math.ceil((leadOffset(m, weekStart) + endOfMonth(m).getDate()) / 7);
 }
 
 /** Stand a scroller on its true bottom. The archive spacer is a
@@ -108,6 +117,7 @@ function buildMonthGeom(
   labelRowH: number,
   currentMonth: Date,
   span: number,
+  weekStart: 0 | 1,
 ): MonthGeom {
   const cell = width / 7;
   const months: Date[] = [];
@@ -121,7 +131,7 @@ function buildMonthGeom(
     // +1: at y − cell the row's top rule merely touches the rail's
     // hairline from below; the two 1px lines coincide one pixel later
     switchY.push(y === 0 ? 0 : y - cell + 1);
-    y += labelRowH + monthRows(m) * cell;
+    y += labelRowH + monthRows(m, weekStart) * cell;
   }
   return { months, offsets, switchY, total: y + 24, cell, labelRowH };
 }
@@ -293,6 +303,7 @@ function Calendar() {
   const scheduleFeedRef = useRef<ScheduleFeedHandle | null>(null);
   const zooming = useRef(false);
   const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { weekStart } = useSettings();
   useEffect(() => {
     return () => {
       if (urlTimer.current) clearTimeout(urlTimer.current);
@@ -1441,7 +1452,7 @@ function Calendar() {
             )}
             aria-hidden={view !== "month" || searchActive}
           >
-            {WEEKDAYS.map((d, i) => (
+            {weekdays(weekStart).map((d, i) => (
               <span
                 key={`${d}${i}`}
                 role="columnheader"
@@ -1705,18 +1716,19 @@ function MonthFeedBase({
   const progTargetRef = useRef<number | null>(null);
   const progTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const weekStart = useSettings().weekStart;
   const geom = useMemo(
     () =>
       // the hand-over row is barely taller than its text: the label's
       // line box plus 4px of air above and 4px down to the rule
       metrics
-        ? buildMonthGeom(metrics.w, metrics.labelH + 8, currentMonth, span)
+        ? buildMonthGeom(metrics.w, metrics.labelH + 8, currentMonth, span, weekStart)
         : null,
-    // geometry depends on width, label height, and the span only
-    // (currentMonth is stable) — a viewport-height blip must not
-    // rebuild it
+    // geometry depends on width, label height, the span, and the week
+    // start (a Monday start can add a row to some months); currentMonth is
+    // stable, and a viewport-height blip must not rebuild it
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [metrics?.w, metrics?.labelH, span],
+    [metrics?.w, metrics?.labelH, span, weekStart],
   );
   const geomRef = useRef<MonthGeom | null>(null);
   useLayoutEffect(() => {
@@ -2002,8 +2014,9 @@ const MonthBlock = memo(function MonthBlock({
   selected: string;
   onPick: (key: string) => void;
 }) {
+  const weekStart = useSettings().weekStart;
   const days = eachDayOfInterval({ start: month, end: endOfMonth(month) });
-  const leadingBlanks = getDay(month);
+  const leadingBlanks = leadOffset(month, weekStart);
   const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
   const isCurrent = isSameMonth(month, today);
 
@@ -2433,8 +2446,9 @@ function MiniMonth({
   today: Date;
   counts: Map<string, number> | undefined;
 }) {
+  const weekStart = useSettings().weekStart;
   const days = eachDayOfInterval({ start, end: endOfMonth(start) });
-  const leading = getDay(start);
+  const leading = leadOffset(start, weekStart);
   const trailing = 42 - leading - days.length;
   return (
     <span className="grid grid-cols-7 gap-[3px]" aria-hidden="true">
