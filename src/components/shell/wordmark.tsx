@@ -9,9 +9,8 @@ import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
    replaces the old wax dot), with "nippets" tucked over the seal's right edge.
    The whole wordmark is exempt from the .voice-display multiply (globals.css)
    so the cream sheet can't tint the wax; the seal is the same vibrant blue in
-   both themes. "nippets" carries a soft paper halo in Paper / a dark drop
-   shadow in Lamplight (.wordmark-tail) so the letters lift cleanly off the wax
-   where they overlap it.
+   both themes. In Lamplight "nippets" carries a soft dark drop shadow
+   (.dark .wordmark-tail) to sit on the dark sheet; in Paper it's plain ink.
 
    Alignment is deterministic across engines: the row aligns on the text BASELINE
    (so the tight line box of italic Fraunces, which WebKit and Blink distribute
@@ -19,7 +18,7 @@ import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
    embossed S's baseline meets "nippets". The press plays once on load and again
    on tap; reduced motion and re-renders settle without replaying. */
 
-const LIGHT_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#142841" };
+const LIGHT_BLUE: Tint = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
 const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a1a2e" };
 const DARK_S_INK = "#120f0b";  // the deep-ink S on Paper
 const LIGHT_S_INK = "#eae1cd"; // the light S on Lamplight
@@ -79,9 +78,8 @@ export function Wordmark() {
         )}
       </span>
       {/* "nippets" laps onto the seal's right edge. It is never blended into the
-          sheet (the .wordmark exemption, globals.css); instead .wordmark-tail
-          carries a soft paper halo in Paper / a dark drop shadow in Lamplight,
-          so the letters lift cleanly off the wax where they overlap it. */}
+          sheet (the .wordmark exemption, globals.css); Lamplight adds a soft
+          dark drop shadow (.dark .wordmark-tail), Paper leaves it as plain ink. */}
       <span
         className="wordmark-tail relative z-10"
         style={{ marginLeft: -OVERLAP * sealPx, lineHeight: `${sealPx}px` }}
