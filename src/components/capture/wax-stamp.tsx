@@ -199,7 +199,7 @@ type PlayMode = "press" | "loop" | "tap";
 // remap the timeline so the press (first half) runs faster, leaving more settle/hold
 const easeT = (t: number, e: Ease) =>
   e === "front" ? 1 - Math.pow(1 - t, 2.3) : e === "snap" ? 1 - Math.pow(1 - t, 3.6) : t;
-type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number; oy: number; iconWhite: number; glyphFill: number };
+type Beat = { scale: number; dome: number; relief: number; lobe: number; cf: number; rot: number; o: number; oy: number; iconWhite: number };
 function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate: number): Beat {
   const tp = easeT(t, ease); // front-loaded timeline for the press beats
   // physical press (~1.71s): a low matte circle, then the die presses. The die
@@ -217,7 +217,6 @@ function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate
     rot: (rotate * Math.PI / 180) * (1 - eob(win(tp, 0.04, 0.62))), // entrance twist, settling upright
     oy: 0,
     iconWhite: 1 - sm(win(tp, 0.05, 0.26)),         // white label gives way to the embossed stamp
-    glyphFill: sm(win(tp, 0.45, 0.85)),             // glyph fills from wax → its ink as the stamp sets
   };
 }
 
@@ -229,12 +228,12 @@ const DROP_MS = 420, IDLE_MS = 360, PRESS_MS = 1150;
 const PRESSED_SCALE = 0.89, PRESSED_OY = 0.09; // how far the dome presses toward the paper
 // the resting/dropping dome (no relief); shows the glyph as a white label (iconWhite).
 const domeBeat = (scale: number, o: number, iconWhite = 1): Beat =>
-  ({ scale, o, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0, iconWhite, glyphFill: 0 });
+  ({ scale, o, dome: 1, relief: 0, lobe: 0, cf: 0, rot: 0, oy: 0, iconWhite });
 // press-down (q: 0→1): the dome presses toward the paper AND pre-rotates to the
 // press's start angle, so the lift-off continues from here with no jump.
 const pushdownBeat = (q: number, rotate: number): Beat =>
   ({ scale: lp(1, PRESSED_SCALE, q), o: 1, dome: 1, relief: 0, lobe: 0, cf: 0,
-    rot: (rotate * Math.PI / 180) * q, oy: PRESSED_OY * q, iconWhite: 1, glyphFill: 0 });
+    rot: (rotate * Math.PI / 180) * q, oy: PRESSED_OY * q, iconWhite: 1 });
 // release: scale grows continuously from the pressed size outward (no jump back to
 // full size first), overshooting a touch with `bounce`, then settles at 1.
 const releaseScale = (tp: number, bounce: number) => {
@@ -398,20 +397,9 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     const draw = (k: Beat, p: Profile = prof) => {
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
-      // the embossed glyph starts as raised wax and fills to its ink (gcol) as the
-      // stamp sets — so the "S" reads as part of the wax first, then resolves into
-      // the text colour. (No explicit colour → the glyph just stays wax.)
-      const wax = colors.current.wax;
-      const eg: Rgb | null = gcol
-        ? [
-            wax[0] + (gcol[0] - wax[0]) * k.glyphFill,
-            wax[1] + (gcol[1] - wax[1]) * k.glyphFill,
-            wax[2] + (gcol[2] - wax[2]) * k.glyphFill,
-          ]
-        : null;
       // one continuous object at a FIXED size (scale is a transform below, so the
       // glyph scales with the seal as one unit) — same height-field lighting throughout.
-      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle, cloud, eg);
+      paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, p, domeAmp, domePow, speckle, cloud, gcol);
       B.off.getContext("2d")!.putImageData(B.img, 0, 0);
 
       // composite (full alpha): layered drop shadow, the seal body, then the white
@@ -427,7 +415,8 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       }
       cc.restore();
       // the white label is the wax glyph's pre-stamp flash; a glyph with an
-      // explicit colour (gcol) fills in from the wax instead, so it skips it
+      // explicit colour (gcol) is instead inked in by the die as it presses
+      // (the ink follows the contact front), so it needs no label
       if (!gcol && k.iconWhite > 0.004) {
         cc.save(); cc.globalAlpha = 0.9 * k.iconWhite; cc.drawImage(B.iconImg, 0, 0); cc.restore();
       }
@@ -857,12 +846,19 @@ function paintSeal(
           }
         }
       }
-      // material base: the wax colour, blended toward `glyphCol` where the glyph
-      // is raised — a coloured embossed mark (white, or the ink) that keeps relief.
+      // material base: the wax colour, taking `glyphCol` only where the die has
+      // actually pressed — the SAME contact front (cl) that raises the glyph also
+      // inks it, so the mark resolves into the text colour as the emboss expands
+      // from the centre outward (a moving front, never a flat fade). Before the
+      // press it is bare wax — the "S" reads as the seal's own colour.
       let mr = wr, mg = wg, mb = wb;
       if (glyphCol) {
-        const t = gly[i];
-        if (t > 0) { mr = wr + (glyphCol[0] - wr) * t; mg = wg + (glyphCol[1] - wg) * t; mb = wb + (glyphCol[2] - wb) * t; }
+        const gt = gly[i];
+        if (gt > 0) {
+          const rr = Math.hypot(px - cx, py - cy);
+          const t = gt * clamp((cf - rr / MR) / 0.1);
+          if (t > 0) { mr = wr + (glyphCol[0] - wr) * t; mg = wg + (glyphCol[1] - wg) * t; mb = wb + (glyphCol[2] - wb) * t; }
+        }
       }
       let R = mr * lf + sr * specMicro * gloss;
       let G = mg * lf + sg * specMicro * gloss;
