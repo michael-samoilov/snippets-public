@@ -2045,8 +2045,7 @@ const MonthBlock = memo(function MonthBlock({
               type="button"
               disabled={isFuture}
               onClick={() => onPick(key)}
-              whileTap={isFuture ? undefined : { scale: 0.9 }}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              whileTap={isFuture ? undefined : "pressed"}
               aria-label={`${format(date, "MMMM d")}${count ? `, ${count} kept` : ""}`}
               aria-pressed={key === selected}
               className={cn(
@@ -2055,25 +2054,33 @@ const MonthBlock = memo(function MonthBlock({
                 isFuture && "text-ink-faint/40",
               )}
             >
-              <span
-                data-flydate={key}
-                className={cn(
-                  "relative font-mono text-[0.78rem] tabular-nums",
-                  isToday && "font-semibold text-wax",
-                )}
+              {/* only the content presses — scaling the whole cell would shrink
+                  its top border and sever it from the week's continuous rule */}
+              <motion.span
+                variants={{ pressed: { scale: 0.9 } }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className="flex flex-col items-center gap-1"
               >
-                {format(date, "d")}
-              </span>
-              {/* the dot strip is always reserved so numbers sit at the
-                  same height whether or not a day has entries yet */}
-              <span className="relative flex h-[3.5px] gap-[3px]" aria-hidden="true">
-                {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="size-[3.5px] rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
-                  />
-                ))}
-              </span>
+                <span
+                  data-flydate={key}
+                  className={cn(
+                    "relative font-mono text-[0.78rem] tabular-nums",
+                    isToday && "font-semibold text-wax",
+                  )}
+                >
+                  {format(date, "d")}
+                </span>
+                {/* the dot strip is always reserved so numbers sit at the
+                    same height whether or not a day has entries yet */}
+                <span className="relative flex h-[3.5px] gap-[3px]" aria-hidden="true">
+                  {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
+                    <span
+                      key={i}
+                      className="size-[3.5px] rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
+                    />
+                  ))}
+                </span>
+              </motion.span>
             </motion.button>
           );
         })}
@@ -2855,11 +2862,39 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
   // words lie below, and clears at the last line (or if they all fit)
   const edges = useScrollEdges(contentRef, [editing, draft]);
   // a long entry that overflows the card reads at the schedule-preview size
-  // (smaller) rather than full prose; once it has to scroll it stays small
+  // (smaller) rather than full prose. We can't trust the live scroll edges
+  // for this: as the card opens it FLIPs from a small tile up to the full
+  // stage, so mid-flight a short entry momentarily overflows and would
+  // latch compact on. Instead wait for the card height to settle (steady
+  // for a few frames), then measure once — same +1 threshold the fade uses,
+  // so a short entry that fits gets neither the small text nor the fade.
   const [compact, setCompact] = useState(false);
   useEffect(() => {
-    if (!compact && (edges.top || edges.bottom)) setCompact(true);
-  }, [edges, compact]);
+    if (editing) return;
+    const el = contentRef.current;
+    if (!el) return;
+    let raf = 0;
+    let last = -1;
+    let stable = 0;
+    let frames = 0;
+    const tick = () => {
+      frames += 1;
+      const h = el.clientHeight;
+      if (h === last) stable += 1;
+      else {
+        stable = 0;
+        last = h;
+      }
+      if (stable >= 3 || frames > 90) {
+        setCompact(el.scrollHeight > el.clientHeight + 1);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snippet.text, editing]);
 
   const save = async () => {
     const trimmed = draft.trim();
