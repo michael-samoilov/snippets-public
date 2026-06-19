@@ -248,6 +248,17 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* …but editable fields opt out. An input/textarea clips its overflow, so a
+   leading opening bracket or quote — which `first` hangs out into the start
+   margin — renders outside the box and looks like it was never typed. (Safari
+   is the only engine that implements hanging-punctuation, so this only bit
+   there; the typed value was always correct, just hidden.) Displayed prose
+   still hangs — that's the typographic win. */
+input,
+textarea {
+  hanging-punctuation: none;
+}
+
 /* The desk is painted on the root: the canvas background fills any
    overscroll area and never translates, so Safari's rubber-band moves
    the sheet and chrome over a desk that holds perfectly still. The
