@@ -7,11 +7,11 @@ import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
 /* The masthead wordmark: a pressed wax seal stamped with the letter "S" (it
    replaces the old wax dot), with "nippets" tucked over the seal's right edge.
-   Paper: a deep-blue seal with a deep-ink S, rendered straight onto the sheet —
-   the wordmark is exempt from the .voice-display multiply (globals.css) so the
-   cream can't tint the wax. Lamplight: the same deep-blue seal with a light S,
-   and a soft drop shadow on "nippets" (.wordmark-tail) echoing the seal's own
-   contact shadow.
+   The whole wordmark is exempt from the .voice-display multiply (globals.css)
+   so the cream sheet can't tint the wax; the seal is the same vibrant blue in
+   both themes. "nippets" carries a soft paper halo in Paper / a dark drop
+   shadow in Lamplight (.wordmark-tail) so the letters lift cleanly off the wax
+   where they overlap it.
 
    Alignment is deterministic across engines: the row aligns on the text BASELINE
    (so the tight line box of italic Fraunces, which WebKit and Blink distribute
@@ -74,27 +74,19 @@ export function Wordmark() {
             tint={dark ? DEEP_BLUE : LIGHT_BLUE}
             glyphColor={dark ? LIGHT_S_INK : DARK_S_INK}
             variant="spring"
-            rotate={30}
-            superSample={2}
+            superSample={3}
           />
         )}
       </span>
-      {/* "nippets" laps onto the seal's right edge. In Paper it multiplies into
-          the sheet (ink on paper); over the wax, though, that multiply would
-          turn the overlapping letters near-black. A paper-coloured copy sits
-          beneath them so the ink multiplies against paper across the whole word
-          — the wax shows through untouched. Lamplight doesn't multiply (the seal
-          is on a dark sheet), so it needs no backing. */}
+      {/* "nippets" laps onto the seal's right edge. It is never blended into the
+          sheet (the .wordmark exemption, globals.css); instead .wordmark-tail
+          carries a soft paper halo in Paper / a dark drop shadow in Lamplight,
+          so the letters lift cleanly off the wax where they overlap it. */}
       <span
-        className="relative z-10 grid"
+        className="wordmark-tail relative z-10"
         style={{ marginLeft: -OVERLAP * sealPx, lineHeight: `${sealPx}px` }}
       >
-        {!dark && (
-          <span aria-hidden="true" className="col-start-1 row-start-1" style={{ color: "var(--paper)" }}>
-            nippets
-          </span>
-        )}
-        <span className="wordmark-tail col-start-1 row-start-1">nippets</span>
+        nippets
       </span>
     </Link>
   );

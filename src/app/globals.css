@@ -174,7 +174,6 @@ html {
 /* the masthead wordmark's "nippets": in Lamplight a soft drop shadow echoes the
    seal's rendered contact shadow, so the letters and the wax sit on one surface. */
 .dark .wordmark-tail {
-  mix-blend-mode: normal;
   text-shadow:
     0 0.035em 0.06em rgb(6 12 22 / 0.55),
     0 0.09em 0.22em rgb(6 12 22 / 0.32);
@@ -447,16 +446,19 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
-/* The masthead seal is a rendered 3-D object, not ink: exempt the wordmark from
-   the .voice-display multiply above, which in Paper let the cream sheet tint the
-   blue wax (the seal read as washed-out). "nippets" re-takes the multiply on its
-   own — it IS ink pressed into the paper (and stays unblended in Lamplight, via
-   the .dark .wordmark-tail rule). */
+/* The masthead seal is a rendered 3-D object, not ink: exempt the whole wordmark
+   from the .voice-display multiply above, which in Paper let the cream sheet tint
+   the blue wax (the seal read as washed-out). "nippets" stays unblended too;
+   rather than a multiply that would darken the letters to near-black where they
+   lap the wax, a soft paper halo (below) lifts them off it — mirroring, in Paper,
+   the dark drop shadow Lamplight gives them (.dark .wordmark-tail). */
 .wordmark {
   mix-blend-mode: normal;
 }
 .wordmark-tail {
-  mix-blend-mode: multiply;
+  text-shadow:
+    0 0 0.05em var(--paper),
+    0 0 0.11em var(--paper);
 }
 
 /* true edge bleed, mastheads only — displacement is paint-expensive */
