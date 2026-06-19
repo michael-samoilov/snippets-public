@@ -7,9 +7,11 @@ import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 
 /* The masthead wordmark: a pressed wax seal stamped with the letter "S" (it
    replaces the old wax dot), with "nippets" tucked over the seal's right edge.
-   Paper: a lighter-blue seal with a deep-ink S. Lamplight: a deep-blue seal with
-   a light S, and a soft drop shadow on "nippets" (.wordmark-tail in globals.css)
-   echoing the seal's own contact shadow.
+   Paper: a deep-blue seal with a deep-ink S, rendered straight onto the sheet —
+   the wordmark is exempt from the .voice-display multiply (globals.css) so the
+   cream can't tint the wax. Lamplight: the same deep-blue seal with a light S,
+   and a soft drop shadow on "nippets" (.wordmark-tail) echoing the seal's own
+   contact shadow.
 
    Alignment is deterministic across engines: the row aligns on the text BASELINE
    (so the tight line box of italic Fraunces, which WebKit and Blink distribute
@@ -17,7 +19,7 @@ import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
    embossed S's baseline meets "nippets". The press plays once on load and again
    on tap; reduced motion and re-renders settle without replaying. */
 
-const LIGHT_BLUE: Tint = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
+const LIGHT_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#142841" };
 const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a1a2e" };
 const DARK_S_INK = "#120f0b";  // the deep-ink S on Paper
 const LIGHT_S_INK = "#eae1cd"; // the light S on Lamplight
@@ -59,7 +61,7 @@ export function Wordmark() {
       href="/"
       aria-label="Snippets"
       onClick={() => { setPlayKey((k) => k + 1); armSettle(); }}
-      className="voice-display pressable inline-flex items-center text-[1.3rem] italic tracking-tight text-ink"
+      className="wordmark voice-display pressable inline-flex items-center text-[1.3rem] italic tracking-tight text-ink"
     >
       <span className="relative inline-block shrink-0" style={{ width: sealPx, height: sealPx, transform: `translateY(${NUDGE * sealPx}px)` }}>
         {mounted && (
@@ -72,10 +74,28 @@ export function Wordmark() {
             tint={dark ? DEEP_BLUE : LIGHT_BLUE}
             glyphColor={dark ? LIGHT_S_INK : DARK_S_INK}
             variant="spring"
+            rotate={30}
+            superSample={2}
           />
         )}
       </span>
-      <span className="wordmark-tail relative z-10" style={{ marginLeft: -OVERLAP * sealPx, lineHeight: `${sealPx}px` }}>nippets</span>
+      {/* "nippets" laps onto the seal's right edge. In Paper it multiplies into
+          the sheet (ink on paper); over the wax, though, that multiply would
+          turn the overlapping letters near-black. A paper-coloured copy sits
+          beneath them so the ink multiplies against paper across the whole word
+          — the wax shows through untouched. Lamplight doesn't multiply (the seal
+          is on a dark sheet), so it needs no backing. */}
+      <span
+        className="relative z-10 grid"
+        style={{ marginLeft: -OVERLAP * sealPx, lineHeight: `${sealPx}px` }}
+      >
+        {!dark && (
+          <span aria-hidden="true" className="col-start-1 row-start-1" style={{ color: "var(--paper)" }}>
+            nippets
+          </span>
+        )}
+        <span className="wordmark-tail col-start-1 row-start-1">nippets</span>
+      </span>
     </Link>
   );
 }

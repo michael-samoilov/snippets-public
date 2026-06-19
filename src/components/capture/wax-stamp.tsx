@@ -329,10 +329,14 @@ export type WaxStampProps = {
   glyphColor?: string;
   /** how much of the seal the "S"/letter fills (0.46 default; higher = thinner wax border). */
   glyphScale?: number;
+  /** render the backing canvas at this multiple over device pixels — sharper for
+      a small, mostly-static seal (e.g. the masthead) where the dpr cap would
+      otherwise undersample it. Default 1 (no supersampling). */
+  superSample?: number;
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, glyphColor, glyphScale = 0.46, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 5, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, glyphColor, glyphScale = 0.46, superSample = 1, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -349,7 +353,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     const cv = canvas.current;
     if (!cv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    const dim = Math.round(size * dpr);
+    const dim = Math.round(size * dpr * superSample);
     cv.width = dim;
     cv.height = dim;
     const ctx = cv.getContext("2d");
@@ -488,7 +492,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph, glyphColor, glyphScale]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph, glyphColor, glyphScale, superSample]);
 
   return (
     <canvas
