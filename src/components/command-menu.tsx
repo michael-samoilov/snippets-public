@@ -55,6 +55,11 @@ export function CommandMenu() {
         onValueChange={setQuery}
         placeholder="Search, or jump somewhere…"
         className="font-serif"
+        // see calendar's search input: Safari drops a leading "(", " or '
+        // unless smart-punctuation/autocorrect is off on the field
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
       />
       <CommandList>
         <CommandEmpty className="voice-prose py-6 text-center italic text-ink-soft">

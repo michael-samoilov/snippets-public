@@ -1400,6 +1400,14 @@ function Calendar() {
               <input
                 ref={searchInputRef}
                 type="text"
+                // off, on a search field: Safari's smart-punctuation/autocorrect
+                // defers the opening-quote/bracket substitution and the controlled
+                // re-render then drops it, so a leading "(", " or ' never lands.
+                autoCorrect="off"
+                autoCapitalize="none"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
