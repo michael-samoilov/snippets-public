@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, type TargetAndTransition, type Transition } from "motion/react";
+import type { Exit } from "@/components/capture/wax-stamp";
 import { cn } from "@/lib/utils";
 
 export type FlowId = "A" | "B" | "C" | "D" | "E" | "F" | "G";
@@ -31,14 +32,17 @@ export type ComposerReturn = "wipe" | "paint" | "fade";
 export type SealPos = "corner" | "centre" | "travel";
 export type Birth = "rise" | "morph" | "impact" | "emboss" | "file" | "quiet";
 
+// Each flow is now a distinct (where the seal presses) × (how it leaves) combo.
+// The card itself is continuous (optimistic) and the press is finalized, so
+// these two axes — position + exit — are what actually differ between flows.
 export const FLOWS: { id: FlowId; name: string; blurb: string }[] = [
-  { id: "A", name: "Seal & settle", blurb: "Press → the card rises into its slot → the composer wipes in. Sequential, literal." },
-  { id: "B", name: "Wax-to-card morph", blurb: "The pressed puck unfolds into the tile — the stamp itself becomes the kept card." },
-  { id: "C", name: "Impact ripple", blurb: "The wax landing recoils the stack below; the card drops in carrying the impact." },
-  { id: "D", name: "Ink-dry, then seal", blurb: "The words set and dry first, then the seal confirms, then the card slides up." },
-  { id: "E", name: "Lift & file", blurb: "The composer IS the card: its paint completes, it files upward, a fresh composer wipes in." },
-  { id: "F", name: "Press-in emboss", blurb: "The card is pressed into being in place — paint, shadow and ink rise on the seal's relief. Nothing slides." },
-  { id: "G", name: "Quiet keep", blurb: "The everyday budget grade — short press, small rise, wipe. Honours the frequency rule." },
+  { id: "A", name: "Corner · swell", blurb: "Presses at the button's corner (bottom-right), then swells and fades away." },
+  { id: "B", name: "Centre · swell", blurb: "Slides to the row's centre, presses over the new card, then swells and fades." },
+  { id: "C", name: "Travel · swell", blurb: "Starts at the corner and glides to the centre as it presses, then swells away." },
+  { id: "D", name: "Corner · rise", blurb: "Presses at the corner, then floats upward as it fades — lifting off the page." },
+  { id: "E", name: "Centre · rise", blurb: "Slides to centre, presses, then floats upward as it fades." },
+  { id: "F", name: "Corner · shrink", blurb: "Presses at the corner, then shrinks down into the page as it fades." },
+  { id: "G", name: "Corner · quiet", blurb: "The everyday grade — a quick corner press that simply fades, no flourish." },
 ];
 
 export type FlowSpec = {
@@ -51,6 +55,9 @@ export type FlowSpec = {
   composeMs: number;
   birth: Birth;
   sealPos: SealPos;
+  /** how the seal leaves after the press: grow (swell+fade), rise (float up),
+      shrink, or fade. */
+  sealExit: Exit;
   /** the stack below recoils on the wax landing. */
   recoil: boolean;
   /** the composer holds its words through the press, then completes (flow E). */
@@ -75,13 +82,13 @@ export type FlowSpec = {
 // optimistically (continuous), so flows now vary the seal placement and the
 // timings, not a separate card birth.
 const BASE: Record<FlowId, FlowSpec> = {
-  A: { id: "A", pressMs: 1700, cardMs: 380, composeMs: 1100, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  B: { id: "B", pressMs: 1700, cardMs: 380, composeMs: 1100, birth: "morph", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  C: { id: "C", pressMs: 1700, cardMs: 380, composeMs: 1100, birth: "impact", sealPos: "centre", recoil: true, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  D: { id: "D", pressMs: 1700, cardMs: 380, composeMs: 1100, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: true, composerReturn: "fade", keptWord: false },
-  E: { id: "E", pressMs: 1700, cardMs: 380, composeMs: 1100, birth: "file", sealPos: "corner", recoil: false, liftAndFile: true, inkDry: false, composerReturn: "wipe", keptWord: false },
-  F: { id: "F", pressMs: 1700, cardMs: 380, composeMs: 1100, birth: "emboss", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  G: { id: "G", pressMs: 1500, cardMs: 360, composeMs: 800, birth: "quiet", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: true },
+  A: { id: "A", pressMs: 1700, cardMs: 420, composeMs: 1100, birth: "rise", sealPos: "corner", sealExit: "grow", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  B: { id: "B", pressMs: 1700, cardMs: 420, composeMs: 1100, birth: "rise", sealPos: "centre", sealExit: "grow", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  C: { id: "C", pressMs: 1700, cardMs: 420, composeMs: 1100, birth: "rise", sealPos: "travel", sealExit: "grow", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  D: { id: "D", pressMs: 1700, cardMs: 480, composeMs: 1100, birth: "rise", sealPos: "corner", sealExit: "rise", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  E: { id: "E", pressMs: 1700, cardMs: 480, composeMs: 1100, birth: "rise", sealPos: "centre", sealExit: "rise", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  F: { id: "F", pressMs: 1700, cardMs: 420, composeMs: 1100, birth: "rise", sealPos: "corner", sealExit: "shrink", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  G: { id: "G", pressMs: 1450, cardMs: 320, composeMs: 800, birth: "quiet", sealPos: "corner", sealExit: "fade", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: true },
 };
 
 /** the lush base, or a tightened quick grade (the frequency-rule everyday). */

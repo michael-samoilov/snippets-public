@@ -10,6 +10,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useTheme } from "next-themes";
 import { motion, MotionConfig } from "motion/react";
 import { ulid } from "ulidx";
@@ -26,6 +27,7 @@ import {
   type QuillSet,
   type SealPos,
 } from "@/components/schedule/keep-sequence";
+import type { Exit } from "@/components/capture/wax-stamp";
 import {
   KeepFlowContext,
   KeptDraftContext,
@@ -36,7 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 
 // bump on every push so it's obvious on-screen which build is live
-const BUILD = "build 2026-06-20c · optimistic card (no blink) · seal press→linger→exit · slow wipe";
+const BUILD = "build 2026-06-20d · pos×exit dials · flows = distinct combos · compare screen";
 
 // ── the isolated demo dataset ─────────────────────────────────────
 const POOL = [
@@ -228,6 +230,7 @@ function Lab() {
   // deleted card leaves
   const [slow, setSlow] = useState(1);
   const [pos, setPos] = useState<SealPos | "auto">("auto");
+  const [exitStyle, setExitStyle] = useState<Exit | "auto">("auto");
   const [deleteLeave, setDeleteLeave] = useState<DeleteLeave>("dissolve");
 
   // seed BEFORE the calendar mounts so it opens on today with the full history
@@ -273,6 +276,7 @@ function Lab() {
     const base = resolveFlow(flowId, grade, {
       keptWord,
       ...(pos !== "auto" ? { sealPos: pos } : {}),
+      ...(exitStyle !== "auto" ? { sealExit: exitStyle } : {}),
     });
     // the slow-mo dial stretches every beat so the press + births are legible
     const spec = {
@@ -282,7 +286,7 @@ function Lab() {
       composeMs: Math.round(base.composeMs * slow),
     };
     return { spec, quillSet, reduce, deleteLeave };
-  }, [flowId, grade, keptWord, pos, slow, quillSet, reduce, deleteLeave]);
+  }, [flowId, grade, keptWord, pos, exitStyle, slow, quillSet, reduce, deleteLeave]);
 
   // ← → step the flow, unless the caret is in the composer
   useEffect(() => {
@@ -339,13 +343,15 @@ function Lab() {
           <div className="flex flex-wrap items-center justify-center gap-1">
             <Pill active={grade === "quick"} onClick={() => setGrade(grade === "lush" ? "quick" : "lush")}>{grade}</Pill>
             <Pill onClick={() => cycle(QUILL_SETS, quillSet, setQuillSet)}>quill: {quillSet}</Pill>
-            <Pill onClick={() => cycle(["auto", "corner", "centre", "travel"] as const, pos, setPos)}>seal: {pos}</Pill>
+            <Pill onClick={() => cycle(["auto", "corner", "centre", "travel"] as const, pos, setPos)}>pos: {pos}</Pill>
+            <Pill onClick={() => cycle(["auto", "grow", "rise", "shrink", "fade"] as const, exitStyle, setExitStyle)}>exit: {exitStyle}</Pill>
             <Pill onClick={() => cycle(["dissolve", "fade", "swipe"] as const, deleteLeave, setDeleteLeave)}>del: {deleteLeave}</Pill>
             <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
             <Pill active={keptWord} onClick={() => setKeptWord((v) => !v)}>“kept.”</Pill>
             <Pill active={reduce} onClick={() => setReduce((v) => !v)}>reduced</Pill>
             <Pill onClick={seed}>seed</Pill>
             <Pill onClick={clear}>clear</Pill>
+            <Link href="/lab/keep-compare" className="voice-label rounded-full bg-paper-recessed px-2.5 py-1 text-[0.7rem] leading-none text-ink-soft hover:text-ink">compare ↗</Link>
           </div>
 
           {/* slow-mo: stretch every beat so flows are legible / the press is seen */}

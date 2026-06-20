@@ -3869,7 +3869,14 @@ function FlowBackfillCapture({
           className="mt-2 flex justify-end pr-px"
           initial={false}
           animate={{ x: sealCentre ? centreShift : 0 }}
-          transition={{ x: { type: "spring", stiffness: 380, damping: 30 } }}
+          // "travel" glides across the whole press (corner → centre); "centre"
+          // snaps there at the start; "corner" never moves
+          transition={{
+            x:
+              flow.spec.sealPos === "travel"
+                ? { duration: Math.max(0.5, flow.spec.pressMs / 1000), ease: [0.23, 1, 0.32, 1] }
+                : { type: "spring", stiffness: 380, damping: 30 },
+          }}
         >
           <button
             type="button"
@@ -3896,7 +3903,7 @@ function FlowBackfillCapture({
               // exactly when the seal unmounts (composing), in sync with slow-mo
               lingerMs={Math.max(0, flow.spec.pressMs - 1150)}
               exitMs={flow.spec.cardMs}
-              exit="grow"
+              exit={flow.spec.sealExit}
               variant="spring"
               ease="front"
               bounce={1.5}

@@ -223,7 +223,7 @@ function stateAt(t: number, variant: Variant, ease: Ease, bounce: number, rotate
 // ── full lifecycle (lab preview) ──────────────────────────────────
 // a wax drop expands into the resting dome, waits, is pressed, lingers at the
 // settled seal, then exits; loops. Lets us tune the linger + exit by feel.
-type Exit = "fade" | "rise" | "shrink" | "grow";
+export type Exit = "fade" | "rise" | "shrink" | "grow";
 const DROP_MS = 420, IDLE_MS = 360, PRESS_MS = 1150;
 const PRESSED_SCALE = 0.89, PRESSED_OY = 0.09; // how far the dome presses toward the paper
 // the resting/dropping dome (no relief); shows the glyph as a white label (iconWhite).
