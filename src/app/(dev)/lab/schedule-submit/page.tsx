@@ -1,18 +1,20 @@
 "use client";
 
-/* TEMPORARY dev harness for the schedule submission flow — comparing how a
-   kept snippet is stamped onto its day. Mirrors the /lab/stamp pattern; uses
-   the REAL wax-seal engine and the REAL tile/composer materials AND behaviour
-   (type into the composer, tap the seal to keep) so anything tuned here
-   transfers 1:1 to production. Not linked anywhere; removed before the feature
-   ships. The seam it drives (`keep-sequence.tsx`) stays. */
+/* TEMPORARY dev harness for the schedule submission flow. It renders the REAL
+   book — chromeless title row, ledger margin dates, tiles, and a live composer
+   on the bare sheet — so it reads exactly as it would in the app, not as a demo
+   inside a card. Navigate the 7 flows with ← → (arrows / swipe / chevrons); a
+   floating HUD names the active flow and carries the rest as pills. Not linked
+   anywhere; removed before the feature ships. The seam it drives
+   (`keep-sequence.tsx`) stays. */
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { StampMark } from "@/components/stamp-mark";
+import { ScrollTerminus, useScrollEdges } from "@/components/ui/scroll-terminus";
 import {
   ComposerWipe,
   FLOWS,
@@ -27,20 +29,28 @@ import {
 } from "@/components/schedule/keep-sequence";
 import { cn } from "@/lib/utils";
 
-const BUILD = "schedule-submit lab · build 2 · live composer (type + keep)";
-
 // the schedule's tile material (the one sanctioned card), shared verbatim.
 const TILE =
   "rounded-[6px] border border-rule-faint bg-paper p-2.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]";
 const PROSE = "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]";
-
-const SEED = [
-  "The barista drew a fern in the foam and apologised for it being a fern.",
-  "Dad still calls the remote “the clicker.”",
-];
 const SAMPLE = "Mara taught the dog to ring a bell for the door; now it rings it to be polite.";
 
-const today = new Date();
+const TODAY = new Date();
+// a few past days so it reads like the book you scroll, today pinned to the foot
+const PAST: { d: Date; entries: string[] }[] = [
+  { d: subDays(TODAY, 5), entries: ["The barista drew a fern in the foam and apologised for it being a fern."] },
+  {
+    d: subDays(TODAY, 3),
+    entries: [
+      "Dad still calls the remote “the clicker.”",
+      "Found a 1998 receipt for film developing tucked in a library book.",
+    ],
+  },
+  { d: subDays(TODAY, 1), entries: ["Overheard: “I’m not superstitious, but I am a little stitious.”"] },
+];
+
+const HOMES = ["inline", "foot", "ledge", "corner"] as const;
+type Home = (typeof HOMES)[number];
 
 function autosize(el: HTMLTextAreaElement) {
   el.style.height = "auto";
@@ -65,10 +75,8 @@ function Seal({
   label?: string;
   className?: string;
 }) {
-  // a small seal is undersampled at the dpr cap, so the relief reads soft —
-  // render the backing canvas well above device pixels (as the masthead does).
-  // Taper the multiple for larger seals, which are already crisp, to spare the
-  // per-pixel CPU paint during the press.
+  // a small seal is undersampled at the dpr cap, so supersample its backing
+  // canvas (as the masthead does); taper for larger seals to spare the paint.
   const superSample = size <= 56 ? 4 : size <= 96 ? 2 : 1;
   const seal = (
     <WaxStamp
@@ -88,7 +96,6 @@ function Seal({
       type="button"
       aria-label={label}
       onClick={onPress}
-      // don't steal focus from the field — keep typing straight after
       onPointerDown={(e) => e.preventDefault()}
       className={cn("relative grid place-items-center rounded-full", className)}
       style={{ width: size, height: size }}
@@ -101,21 +108,14 @@ function Seal({
 // a pressable standing entry, in the real ScheduleCards material.
 function EntryTile({ text }: { text: string }) {
   return (
-    <button
-      type="button"
-      className={cn(
-        "pressable isolate block w-full text-left hover:bg-paper-raised",
-        TILE,
-      )}
-    >
+    <button type="button" className={cn("pressable isolate block w-full text-left hover:bg-paper-raised", TILE)}>
       <p className={PROSE}>{text}</p>
     </button>
   );
 }
 
-// the REAL composer: a tile you type into, its paint fading rightward until
-// words stand in it, the seal appearing once there's something to keep.
-// Faithful to BackfillCapture.
+// the REAL composer — faithful to BackfillCapture: a tile you type into, its
+// paint fading rightward until words stand in it, the seal once there's text.
 function Composer({
   value,
   onChange,
@@ -171,8 +171,7 @@ function Composer({
   );
 }
 
-// the words held (non-editable) while the seal presses — they've been kept,
-// they just haven't landed as a card yet. Flow D dries them first.
+// the words held (non-editable) while the seal presses. Flow D dries them.
 function HeldWords({ text, inkDry, dryKey }: { text: string; inkDry?: boolean; dryKey?: number }) {
   return (
     <div className="relative">
@@ -190,45 +189,53 @@ function HeldWords({ text, inkDry, dryKey }: { text: string; inkDry?: boolean; d
   );
 }
 
-// the margin date + content column of one day, in the real grammar.
-function DayGroup({ children }: { children: React.ReactNode }) {
+// a day's margin date + content, in the real ledger grammar.
+function DaySection({ date, isToday, children }: { date: Date; isToday?: boolean; children: React.ReactNode }) {
   return (
     <section className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint">
       <div className="sticky top-0 self-start pb-3 pt-2 text-center">
-        <span className="voice-label block text-[0.62rem] leading-tight text-wax">{format(today, "EEE")}</span>
-        <span className="voice-display block text-[1.15rem] leading-tight text-wax">{format(today, "d")}</span>
+        <span className={cn("voice-label block text-[0.62rem] leading-tight", isToday ? "text-wax" : "text-ink-faint")}>
+          {format(date, "EEE")}
+        </span>
+        <span className={cn("voice-display block text-[1.15rem] leading-tight", isToday && "text-wax")}>
+          {format(date, "d")}
+        </span>
       </div>
       <div className="min-w-0 pb-3 pt-2">{children}</div>
     </section>
   );
 }
 
-// ── one live, playable day of a flow ─────────────────────────────
-function FlowDemo({
+// ── the live book: past days + today, with the flow on today's composer ──
+function BookStage({
   flowId,
   grade,
   quillSet,
   reduce,
   keptWord,
-  demoSignal,
+  home,
+  demoRef,
+  onNav,
 }: {
   flowId: FlowId;
   grade: Grade;
   quillSet: QuillSet;
   reduce: boolean;
   keptWord: boolean;
-  demoSignal: number;
+  home: Home;
+  demoRef: React.RefObject<(() => void) | null>;
+  onNav: (dir: 1 | -1) => void;
 }) {
   const spec = resolveFlow(flowId, grade, { keptWord });
   const seq = useKeepSequence(spec, reduce);
-  const [seeds] = useState(() => new Set(SEED.map((_, i) => `s${i}`)));
-  const [cards, setCards] = useState(() => SEED.map((t, i) => ({ id: `s${i}`, text: t })));
+  const [cards, setCards] = useState<{ id: string; text: string }[]>([]);
   const [text, setText] = useState("");
   const [held, setHeld] = useState<string | null>(null);
   const queued = useRef<{ id: string; text: string } | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const edges = useScrollEdges(scroller, [cards.length, home]);
 
-  // the press resolves → the kept card is born into the day
   useEffect(() => {
     if (seq.phase !== "carding" || !queued.current) return;
     const card = queued.current;
@@ -237,7 +244,6 @@ function FlowDemo({
     setHeld(null);
   }, [seq.phase]);
 
-  // the composer wipes back in → refocus so the next thought can be typed
   useEffect(() => {
     if (seq.phase !== "composing") return;
     const t = setTimeout(() => areaRef.current?.focus(), Math.max(40, spec.composeMs * 0.5));
@@ -258,66 +264,161 @@ function FlowDemo({
   };
   const doKeep = () => keepWith(text.trim());
 
-  // the "Demo keep" button fills a sample and keeps it, for a no-typing compare
-  useEffect(() => {
-    if (!demoSignal || seq.phase !== "idle") return;
+  // the HUD's "demo" pill: fill a sample, show it, then keep — a no-typing
+  // compare. Driven through a ref so it's an event, not a setState-in-effect.
+  const runDemo = () => {
+    if (seq.phase !== "idle") return;
     setText(SAMPLE);
     requestAnimationFrame(() => areaRef.current?.focus());
-    const t = setTimeout(() => keepWith(SAMPLE), 600);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoSignal]);
+    setTimeout(() => keepWith(SAMPLE), 600);
+  };
+  useEffect(() => {
+    demoRef.current = runDemo;
+  });
 
   const composerOpen = seq.phase === "idle" || seq.phase === "composing";
   const recoil = spec.recoil && seq.phase === "carding" && !reduce;
   const centre = spec.sealPos !== "corner";
 
-  return (
+  const composerBlock = (withSeal: boolean) => (
     <div className="relative">
-      <DayGroup>
-        <motion.ul
-          className="flex flex-col gap-1"
-          animate={recoil ? { y: [0, 2.5, 0] } : { y: 0 }}
-          transition={{ duration: 0.34, ease: [0.23, 1, 0.32, 1] }}
-        >
-          <AnimatePresence initial={false}>
-            {cards.map((s) => (
-              <li key={s.id}>
-                {seeds.has(s.id) ? (
-                  <EntryTile text={s.text} />
-                ) : (
-                  <KeptCard text={s.text} spec={spec} reduce={reduce} />
-                )}
-              </li>
-            ))}
-          </AnimatePresence>
-        </motion.ul>
+      {seq.phase === "pressing" && held != null && (
+        <HeldWords text={held} inkDry={spec.inkDry} dryKey={seq.sealKey} />
+      )}
+      <ComposerWipe active={composerOpen} style={spec.composerReturn}>
+        <Composer
+          value={text}
+          onChange={setText}
+          onKeep={doKeep}
+          areaRef={areaRef}
+          seal={withSeal ? <Seal set={quillSet} sealKey={seq.sealKey} armed={seq.armed} onPress={doKeep} /> : undefined}
+        />
+      </ComposerWipe>
+    </div>
+  );
 
-        {/* the composer slot: the held words while the seal presses, the live
-            composer wiping back in after */}
-        <div className="relative mt-1">
-          {seq.phase === "pressing" && held != null && (
-            <HeldWords text={held} inkDry={spec.inkDry} dryKey={seq.sealKey} />
+  // ── horizontal flick → step a flow (the calendar's swipe recipe) ──
+  const swipe = useRef<{ x: number; y: number; t: number; ok: boolean } | null>(null);
+  const armSwipe = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse") return;
+    const onControl = (e.target as HTMLElement).closest("button, a, textarea, input");
+    swipe.current = { x: e.clientX, y: e.clientY, t: performance.now(), ok: !onControl };
+  };
+  const settleSwipe = (e: React.PointerEvent) => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || !s.ok) return;
+    const dx = e.clientX - s.x;
+    const dy = Math.abs(e.clientY - s.y);
+    if (Math.abs(dx) >= 56 && Math.abs(dx) >= dy && performance.now() - s.t <= 700) {
+      onNav(dx < 0 ? 1 : -1);
+    }
+  };
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col">
+      {/* the chromeless title row — the page's first line, like the book */}
+      <div className="relative flex items-center justify-between pb-2">
+        <span className="voice-display whitespace-nowrap text-(length:--date-head)">
+          <svg aria-hidden="true" viewBox="0 0 12 20" className="mr-1.5 inline-block h-[0.85em] w-auto align-[-0.05em]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 3 L4 10 L9 17" />
+          </svg>
+          {format(TODAY, "MMMM yyyy")}
+        </span>
+        <span
+          aria-hidden="true"
+          className="grid size-9 shrink-0 place-items-center rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
+        >
+          <svg viewBox="0 0 20 20" className="size-[1.05rem]" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="8.6" cy="8.6" r="5" />
+            <path d="M12.4 12.4 L16.5 16.5" />
+          </svg>
+        </span>
+      </div>
+
+      {/* the book scroller — exactly the real container */}
+      <div
+        ref={scroller}
+        className="relative -mt-px h-full overflow-y-auto overscroll-contain [overflow-anchor:none] [touch-action:pan-y]"
+        style={{ scrollbarWidth: "none" }}
+        onPointerDown={armSwipe}
+        onPointerUp={settleSwipe}
+        onPointerCancel={() => (swipe.current = null)}
+        tabIndex={-1}
+      >
+        {/* the book sticks to its foot — today + composer rest at the bottom,
+            past days stack above, bare desk above the oldest shown day */}
+        <div className="flex min-h-full flex-col justify-end">
+          {/* month hand-over label */}
+          <p className="voice-label px-1 pb-1.5 pt-2 text-[0.82rem] text-wax">{format(TODAY, "MMMM yyyy")}</p>
+
+          {PAST.map((row, i) => (
+            <DaySection key={i} date={row.d}>
+              <ul className="flex flex-col gap-1">
+                {row.entries.map((t, j) => (
+                  <li key={j}>
+                    <EntryTile text={t} />
+                  </li>
+                ))}
+              </ul>
+            </DaySection>
+          ))}
+
+          {/* today */}
+          <DaySection date={TODAY} isToday>
+            <motion.ul
+              className="flex flex-col gap-1"
+              animate={recoil ? { y: [0, 2.5, 0] } : { y: 0 }}
+              transition={{ duration: 0.34, ease: [0.23, 1, 0.32, 1] }}
+            >
+              <AnimatePresence initial={false}>
+                {cards.map((s) => (
+                  <li key={s.id}>
+                    <KeptCard text={s.text} spec={spec} reduce={reduce} />
+                  </li>
+                ))}
+              </AnimatePresence>
+            </motion.ul>
+
+            {(home === "inline" || home === "corner") && (
+              <div className="mt-1">{composerBlock(home === "inline")}</div>
+            )}
+
+            {spec.keptWord && (seq.phase === "carding" || seq.phase === "composing") && (
+              <p className="stamp-in mt-1 inline-flex items-center gap-1.5 px-2.5 font-serif text-[0.85rem] not-italic text-wax">
+                <StampMark /> Kept.
+              </p>
+            )}
+          </DaySection>
+
+          {/* desk-ledge tray (home: ledge) */}
+          {home === "ledge" && (
+            <div className="ml-[calc(2.1rem+0.5rem)] mt-2 rounded-[8px] border border-rule-faint bg-paper-recessed p-2 shadow-[inset_0_1px_0_var(--press-highlight)]">
+              {composerBlock(true)}
+            </div>
           )}
-          <ComposerWipe active={composerOpen} style={spec.composerReturn}>
-            <Composer
-              value={text}
-              onChange={setText}
-              onKeep={doKeep}
-              areaRef={areaRef}
-              seal={<Seal set={quillSet} sealKey={seq.sealKey} armed={seq.armed} onPress={doKeep} />}
-            />
-          </ComposerWipe>
+
+          {/* pinned-foot composer (home: foot) */}
+          {home === "foot" && (
+            <div className="sticky bottom-0 z-10 -mx-2 mt-1 border-t border-rule-faint bg-paper px-2 pb-1 pt-2">
+              {composerBlock(true)}
+            </div>
+          )}
+
+          {/* resting corner seal (home: corner) */}
+          {home === "corner" && (
+            <div className="pointer-events-none sticky bottom-0 z-10 flex justify-end pb-4 pr-1">
+              <div className="pointer-events-auto drop-shadow-[0_4px_10px_rgb(var(--shadow-hue)/0.3)]">
+                <Seal set={quillSet} sealKey={seq.sealKey} armed={seq.armed} onPress={doKeep} size={56} />
+              </div>
+            </div>
+          )}
         </div>
 
-        {spec.keptWord && (seq.phase === "carding" || seq.phase === "composing") && (
-          <p className="stamp-in mt-1 inline-flex items-center gap-1.5 px-2.5 font-serif text-[0.85rem] not-italic text-wax">
-            <StampMark /> Kept.
-          </p>
-        )}
-      </DayGroup>
+        <ScrollTerminus show={edges.bottom} />
+      </div>
 
-      {/* the centred / travelling seal plays over the day during the press */}
+      {/* the centred / travelling seal plays over the book during the press */}
       {centre && (seq.phase === "pressing" || seq.phase === "carding") && (
         <motion.div
           key={seq.sealKey}
@@ -334,117 +435,36 @@ function FlowDemo({
   );
 }
 
-// ── the bottom "today zone" prototypes (also live) ───────────────
-const ZONES = [
-  { id: "B1", name: "Pinned composer foot", blurb: "The today composer sticks at the feed's foot; kept cards file upward above it. (Home for flow E.)" },
-  { id: "B2", name: "Desk-ledge tray", blurb: "Below the last tile, a faint recessed ledge holds the composer + a resting seal — the inkwell at the desk's edge." },
-  { id: "B3", name: "Resting seal in the corner", blurb: "A settled wax seal parked bottom-right on the desk; pressing it stamps today. A real stamp on the blotter." },
-  { id: "B4", name: "Below the last month", blurb: "In the month/year altitudes, the empty whitespace below the last month carries a quiet add-to-today seal." },
-] as const;
-type ZoneId = (typeof ZONES)[number]["id"];
+// ── the floating HUD ──────────────────────────────────────────────
+const underlineSpring = { type: "spring", stiffness: 480, damping: 40 } as const;
 
-// a small live keep for the zones: type → tap the seal → the card files in.
-function useZoneKeep(initial: string[]) {
-  const [cards, setCards] = useState(() => initial.map((t, i) => ({ id: `z${i}`, text: t })));
-  const [text, setText] = useState("");
-  const [sealKey, setSealKey] = useState(0);
-  const keep = () => {
-    const t = text.trim();
-    if (!t) return;
-    setCards((c) => [...c, { id: `zk-${Date.now()}`, text: t }]);
-    setText("");
-    setSealKey((k) => k + 1);
-    navigator.vibrate?.(8);
-  };
-  return { cards, text, setText, keep, sealKey };
+function Pill({ active, onClick, children }: { active?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "voice-label rounded-full px-2.5 py-1 text-[0.7rem] leading-none transition-colors",
+        active ? "bg-wax text-paper" : "bg-paper-recessed text-ink-soft hover:text-ink",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
-function ZoneMock({ zone, quillSet }: { zone: ZoneId; quillSet: QuillSet }) {
-  const z = useZoneKeep(zone === "B1" ? [...SEED, "Found a 1998 receipt for film developing in a library book."] : [SEED[0]]);
-  const sealFor = (size = 44) => (
-    <Seal set={quillSet} sealKey={z.sealKey} armed={z.sealKey > 0} size={size} onPress={z.keep} />
-  );
-
-  if (zone === "B1") {
-    return (
-      <div className="flex h-80 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper">
-        <div className="flex-1 space-y-1 overflow-y-auto p-3">
-          <AnimatePresence initial={false}>
-            {z.cards.map((c) => (
-              <motion.div
-                key={c.id}
-                layout="position"
-                initial={c.id.startsWith("zk") ? { opacity: 0, y: 10 } : false}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}
-              >
-                <EntryTile text={c.text} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-        <div className="border-t border-rule-faint p-3">
-          <Composer value={z.text} onChange={z.setText} onKeep={z.keep} seal={sealFor()} />
-        </div>
-      </div>
-    );
-  }
-  if (zone === "B2") {
-    return (
-      <div className="rounded-[10px] border border-rule-faint bg-paper p-3">
-        <div className="mb-3 space-y-1">
-          <AnimatePresence initial={false}>
-            {z.cards.map((c) => (
-              <motion.div key={c.id} layout="position" initial={c.id.startsWith("zk") ? { opacity: 0, y: 10 } : false} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}>
-                <EntryTile text={c.text} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-        <div className="rounded-[8px] border border-rule-faint bg-paper-recessed p-2 shadow-[inset_0_1px_0_var(--press-highlight)]">
-          <Composer value={z.text} onChange={z.setText} onKeep={z.keep} seal={sealFor()} />
-        </div>
-      </div>
-    );
-  }
-  if (zone === "B3") {
-    return (
-      <div className="relative h-72 overflow-hidden rounded-[10px] border border-rule-faint bg-paper p-3">
-        <div className="space-y-1">
-          <AnimatePresence initial={false}>
-            {z.cards.map((c) => (
-              <motion.div key={c.id} layout="position" initial={c.id.startsWith("zk") ? { opacity: 0, y: 10 } : false} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}>
-                <EntryTile text={c.text} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-        {/* a quick line to stamp; the seal rests on the desk in the corner */}
-        <div className="absolute inset-x-3 bottom-3 flex items-end gap-2">
-          <div className="flex-1">
-            <Composer value={z.text} onChange={z.setText} onKeep={z.keep} />
-          </div>
-          <div className="shrink-0 drop-shadow-[0_4px_10px_rgb(var(--shadow-hue)/0.3)]">{sealFor(60)}</div>
-        </div>
-      </div>
-    );
-  }
-  // B4 — a faux month canvas with the zone below the last row
+function Chevron({ dir, onClick }: { dir: 1 | -1; onClick: () => void }) {
   return (
-    <div className="rounded-[10px] border border-rule-faint bg-paper p-4">
-      <p className="voice-label mb-2 text-[0.82rem] text-wax">June 2026</p>
-      <div className="grid grid-cols-7 gap-px">
-        {Array.from({ length: 21 }).map((_, i) => (
-          <div key={i} className="aspect-square border-t border-rule-faint text-center">
-            <span className="voice-data text-ink-faint">{i + 1}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-6 flex items-center justify-center gap-3 py-4">
-        {sealFor(48)}
-        <span className="voice-label text-[0.82rem] text-ink-faint">add to today</span>
-      </div>
-    </div>
+    <button
+      type="button"
+      aria-label={dir === 1 ? "Next flow" : "Previous flow"}
+      onClick={onClick}
+      className="pressable grid size-8 shrink-0 place-items-center rounded-full text-ink-soft hover:text-ink"
+    >
+      <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {dir === 1 ? <path d="M7.5 4 L13.5 10 L7.5 16" /> : <path d="M12.5 4 L6.5 10 L12.5 16" />}
+      </svg>
+    </button>
   );
 }
 
@@ -456,76 +476,83 @@ export default function ScheduleSubmitLab() {
   const [quillSet, setQuillSet] = useState<QuillSet>("e");
   const [reduce, setReduce] = useState(false);
   const [keptWord, setKeptWord] = useState(false);
-  const [zone, setZone] = useState<ZoneId>("B1");
-  const [runKey, setRunKey] = useState(0);
-  const [demoSignal, setDemoSignal] = useState(0);
+  const [home, setHome] = useState<Home>("inline");
+  const demoRef = useRef<(() => void) | null>(null);
 
-  const flow = FLOWS.find((f) => f.id === flowId)!;
-  const chip = (active: boolean) =>
-    `rounded-[6px] px-3 py-1.5 font-serif text-[0.9rem] ${active ? "bg-wax text-paper" : "bg-paper text-ink border border-rule-faint"}`;
+  const idx = FLOWS.findIndex((f) => f.id === flowId);
+  const flow = FLOWS[idx];
 
-  const reset = () => setRunKey((k) => k + 1);
+  const nav = (dir: 1 | -1) => setFlowId(FLOWS[(idx + dir + FLOWS.length) % FLOWS.length].id);
+  const cycle = <T,>(list: readonly T[], cur: T, set: (v: T) => void) =>
+    set(list[(list.indexOf(cur) + 1) % list.length]);
+
+  // ← → step the flow, unless the caret is in the composer
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); nav(1); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); nav(-1); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx]);
 
   return (
-    <div className="flex flex-col gap-5 pb-16">
-      <h1 className="voice-label">schedule-submit lab</h1>
-      <span className="inline-block self-start rounded bg-wax px-2 py-1 font-mono text-[0.72rem] text-paper">{BUILD}</span>
+    <div className="relative h-full min-h-0">
+      {/* the live, app-faithful book; remounts per flow/home so it's ready to keep */}
+      <BookStage
+        key={`${flowId}-${home}`}
+        flowId={flowId}
+        grade={grade}
+        quillSet={quillSet}
+        reduce={reduce}
+        keptWord={keptWord}
+        home={home}
+        demoRef={demoRef}
+        onNav={nav}
+      />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className={chip(false)}>
-          {dark ? "Lamplight" : "Paper"}
-        </button>
-        <button type="button" onClick={() => setGrade(grade === "lush" ? "quick" : "lush")} className={chip(grade === "quick")}>
-          {grade}
-        </button>
-        <button type="button" onClick={() => setReduce((v) => !v)} className={chip(reduce)}>
-          reduced motion {reduce ? "on" : "off"}
-        </button>
-        <button type="button" onClick={() => setKeptWord((v) => !v)} className={chip(keptWord)}>
-          “Kept.” {keptWord ? "on" : "off"}
-        </button>
-        <span className="voice-label ml-2 text-ink-faint">quill</span>
-        {QUILL_SETS.map((s) => (
-          <button key={s} type="button" onClick={() => setQuillSet(s)} className={chip(quillSet === s)}>
-            {s}
-          </button>
-        ))}
-      </div>
+      {/* the floating HUD: the active flow + the rest as pills */}
+      <div className="pointer-events-none fixed inset-x-0 top-2 z-50 flex justify-center px-3">
+        <div className="float pointer-events-auto flex max-w-full flex-col items-center gap-1.5 rounded-[1.25rem] px-2.5 py-2">
+          <div className="flex items-center gap-1">
+            <Chevron dir={-1} onClick={() => nav(-1)} />
+            <div className="flex min-w-[10.5rem] flex-col items-center px-1">
+              <span className="voice-label text-[0.82rem] text-ink">
+                {flow.id} · {flow.name}
+              </span>
+              <div className="mt-1 flex items-center gap-1">
+                {FLOWS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-label={`${f.id} · ${f.name}`}
+                    onClick={() => setFlowId(f.id)}
+                    className="relative grid h-3 w-3 place-items-center"
+                  >
+                    <span className="size-1.5 rounded-full bg-rule" />
+                    {f.id === flowId && (
+                      <motion.span layoutId="flow-dot" transition={underlineSpring} className="absolute inset-0 rounded-full bg-wax" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Chevron dir={1} onClick={() => nav(1)} />
+          </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {FLOWS.map((f) => (
-          <button key={f.id} type="button" onClick={() => { setFlowId(f.id); reset(); }} className={chip(flowId === f.id)}>
-            {f.id} · {f.name}
-          </button>
-        ))}
-      </div>
-      <p className="voice-prose -mt-2 max-w-[40rem] text-[0.92rem] italic text-ink-soft">{flow.blurb}</p>
-
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={() => setDemoSignal((d) => d + 1)} className="rounded-[5px] bg-ink px-5 py-2 font-serif text-[0.95rem] text-paper">
-          Demo keep
-        </button>
-        <button type="button" onClick={reset} className={chip(false)}>
-          reset
-        </button>
-        <span className="voice-data text-ink-faint">type in the composer, then tap the seal</span>
-      </div>
-
-      <div className="rounded-[10px] border border-rule-faint bg-paper p-5 sm:p-8">
-        <FlowDemo key={runKey} flowId={flowId} grade={grade} quillSet={quillSet} reduce={reduce} keptWord={keptWord} demoSignal={demoSignal} />
-      </div>
-
-      <div className="mt-6 flex flex-col gap-3">
-        <h2 className="voice-label text-ink-soft">bottom “today zone” prototypes</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {ZONES.map((z) => (
-            <button key={z.id} type="button" onClick={() => setZone(z.id)} className={chip(zone === z.id)}>
-              {z.id} · {z.name}
-            </button>
-          ))}
+          <div className="flex flex-wrap items-center justify-center gap-1">
+            <Pill active={home !== "inline"} onClick={() => cycle(HOMES, home, setHome)}>home: {home}</Pill>
+            <Pill active={grade === "quick"} onClick={() => setGrade(grade === "lush" ? "quick" : "lush")}>{grade}</Pill>
+            <Pill onClick={() => cycle(QUILL_SETS, quillSet, setQuillSet)}>quill: {quillSet}</Pill>
+            <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
+            <Pill active={keptWord} onClick={() => setKeptWord((v) => !v)}>“kept.”</Pill>
+            <Pill active={reduce} onClick={() => setReduce((v) => !v)}>reduced</Pill>
+            <Pill onClick={() => demoRef.current?.()}>demo ▸</Pill>
+          </div>
         </div>
-        <p className="voice-prose max-w-[40rem] text-[0.92rem] italic text-ink-soft">{ZONES.find((z) => z.id === zone)!.blurb}</p>
-        <ZoneMock key={zone} zone={zone} quillSet={quillSet} />
       </div>
     </div>
   );
