@@ -162,6 +162,12 @@ function birthMotion(birth: Birth): { initial: TargetAndTransition; animate: Tar
   }
 }
 
+/** The flow's card birth (transform/opacity/filter), for callers that animate
+    their own element (e.g. the real ScheduleCards tile) rather than KeptCard. */
+export function birthFor(spec: FlowSpec, reduce = false) {
+  return birthMotion(reduce ? "quiet" : spec.birth);
+}
+
 /** A kept entry in the schedule's tile material, born by the flow. The
     `emboss` birth additionally rises the tile's paint (border + fill +
     top-highlight) from nothing, so the words are pressed onto bare page. */

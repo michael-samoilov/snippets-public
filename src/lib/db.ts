@@ -6,8 +6,8 @@ import { dayKey } from "@/lib/dates";
 class SnippetsDB extends Dexie {
   snippets!: Table<Snippet, string>;
 
-  constructor() {
-    super("snippets");
+  constructor(name = "snippets") {
+    super(name);
     this.version(1).stores({
       // id is the primary key; the rest are query indexes
       snippets: "id, day, capturedAt, kind, favorite, enriched, *tags",
@@ -16,6 +16,22 @@ class SnippetsDB extends Dexie {
 }
 
 export const db = new SnippetsDB();
+
+// All reads/writes go through `activeDb`, which is the production singleton by
+// default. A dev surface (the schedule-submit lab) can point it at a separate
+// store so its data never touches the real book — `setActiveDb` before the
+// consumer mounts, `resetActiveDb` on unmount. Production never calls these, so
+// `activeDb === db` and behaviour is unchanged.
+let activeDb: SnippetsDB = db;
+export function createSnippetsDb(name: string): SnippetsDB {
+  return new SnippetsDB(name);
+}
+export function setActiveDb(next: SnippetsDB): void {
+  activeDb = next;
+}
+export function resetActiveDb(): void {
+  activeDb = db;
+}
 
 const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -40,7 +56,7 @@ export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
     enriched: "pending",
     updatedAt: now,
   };
-  await db.snippets.add(snippet);
+  await activeDb.snippets.add(snippet);
   return snippet;
 }
 
@@ -48,7 +64,7 @@ export async function updateSnippet(
   id: string,
   changes: Partial<Omit<Snippet, "id">>,
 ): Promise<void> {
-  await db.snippets.update(id, { ...changes, updatedAt: Date.now() });
+  await activeDb.snippets.update(id, { ...changes, updatedAt: Date.now() });
 }
 
 /** Apply enrichment results only onto fields the writer hasn't touched. */
@@ -56,12 +72,12 @@ export async function applyEnrichment(
   id: string,
   enrichment: { title?: string; kind?: SnippetKind; tags?: string[]; attribution?: string },
 ): Promise<void> {
-  await db.transaction("rw", db.snippets, async () => {
-    const current = await db.snippets.get(id);
+  await activeDb.transaction("rw", activeDb.snippets, async () => {
+    const current = await activeDb.snippets.get(id);
     if (!current || current.deletedAt) return;
     // The writer beat us to it — their filing wins.
     if (current.enriched === "manual") return;
-    await db.snippets.update(id, {
+    await activeDb.snippets.update(id, {
       title: current.title ?? enrichment.title,
       kind: current.kind ?? enrichment.kind ?? null,
       tags: current.tags.length ? current.tags : (enrichment.tags ?? []),
@@ -76,17 +92,17 @@ export async function markEnrichment(
   id: string,
   state: Snippet["enriched"],
 ): Promise<void> {
-  const current = await db.snippets.get(id);
+  const current = await activeDb.snippets.get(id);
   if (!current || current.enriched === "manual") return;
-  await db.snippets.update(id, { enriched: state });
+  await activeDb.snippets.update(id, { enriched: state });
 }
 
 export async function softDeleteSnippet(id: string): Promise<void> {
-  await db.snippets.update(id, { deletedAt: Date.now() });
+  await activeDb.snippets.update(id, { deletedAt: Date.now() });
 }
 
 export async function restoreSnippet(id: string): Promise<void> {
-  await db.snippets
+  await activeDb.snippets
     .where("id")
     .equals(id)
     .modify((s) => {
@@ -96,15 +112,15 @@ export async function restoreSnippet(id: string): Promise<void> {
 }
 
 export async function toggleFavorite(id: string): Promise<void> {
-  const s = await db.snippets.get(id);
+  const s = await activeDb.snippets.get(id);
   if (!s) return;
-  await db.snippets.update(id, { favorite: s.favorite ? 0 : 1 });
+  await activeDb.snippets.update(id, { favorite: s.favorite ? 0 : 1 });
 }
 
 /** Housekeeping: permanently remove long-deleted entries. */
 export async function purgeOldDeleted(): Promise<void> {
   const cutoff = Date.now() - PURGE_AFTER_MS;
-  await db.snippets
+  await activeDb.snippets
     .filter((s) => s.deletedAt !== undefined && s.deletedAt < cutoff)
     .delete();
 }
@@ -112,24 +128,24 @@ export async function purgeOldDeleted(): Promise<void> {
 // ── reads ───────────────────────────────────────────────────────
 
 export async function snippetsForDay(day: string): Promise<Snippet[]> {
-  const rows = await db.snippets.where("day").equals(day).sortBy("capturedAt");
+  const rows = await activeDb.snippets.where("day").equals(day).sortBy("capturedAt");
   return rows.filter(notDeleted);
 }
 
 export async function allSnippetsNewestFirst(): Promise<Snippet[]> {
-  const rows = await db.snippets.orderBy("capturedAt").reverse().toArray();
+  const rows = await activeDb.snippets.orderBy("capturedAt").reverse().toArray();
   return rows.filter(notDeleted);
 }
 
 export async function pendingEnrichment(): Promise<Snippet[]> {
-  const rows = await db.snippets.where("enriched").equals("pending").toArray();
+  const rows = await activeDb.snippets.where("enriched").equals("pending").toArray();
   return rows.filter(notDeleted);
 }
 
 /** day -> count, for the ledger's ink dots */
 export async function countsByDay(): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  await db.snippets.each((s) => {
+  await activeDb.snippets.each((s) => {
     if (!notDeleted(s)) return;
     counts.set(s.day, (counts.get(s.day) ?? 0) + 1);
   });
