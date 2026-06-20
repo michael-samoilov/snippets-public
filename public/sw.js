@@ -1,5 +1,5 @@
 /* Snippets service worker — app shell offline, data lives in IndexedDB. */
-const VERSION = "snippets-v1";
+const VERSION = "snippets-v2";
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {

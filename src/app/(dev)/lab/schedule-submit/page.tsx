@@ -29,6 +29,9 @@ import {
 import { KeepFlowContext, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
+// bump on every push so it's obvious on-screen which build is live
+const BUILD = "build 2026-06-20 · tap-dome seal · slow single-line wipe · dissolve/fade/swipe delete";
+
 // ── the isolated demo dataset ─────────────────────────────────────
 const POOL = [
   "The barista drew a fern in the foam and apologised for it being a fern.",
@@ -340,6 +343,9 @@ function Lab() {
               <button type="button" onClick={() => setSlow(1)} className="text-ink-faint hover:text-ink">reset</button>
             )}
           </label>
+
+          {/* build marker — confirms which deploy is live (look here first) */}
+          <span className="voice-data text-[0.6rem] text-ink-faint">{BUILD}</span>
         </div>
       </div>
     </KeepFlowContext.Provider>

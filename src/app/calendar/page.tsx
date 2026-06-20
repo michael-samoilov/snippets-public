@@ -3869,11 +3869,11 @@ function FlowBackfillCapture({
             onPointerUp={() => setPressedDown(false)}
             onPointerLeave={() => setPressedDown(false)}
             className="relative grid place-items-center rounded-full"
-            style={{ width: 44, height: 44 }}
+            style={{ width: 56, height: 56 }}
           >
             <CanvasSeal
               playKey={seq.sealKey}
-              size={44}
+              size={56}
               glyph={`${flow.quillSet}:quill`}
               iconScale={QUILL_SCALE[flow.quillSet]}
               mode="tap"
