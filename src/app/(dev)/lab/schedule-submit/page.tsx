@@ -24,8 +24,9 @@ import {
   type FlowId,
   type Grade,
   type QuillSet,
+  type SealPos,
 } from "@/components/schedule/keep-sequence";
-import { KeepFlowContext, type KeepFlow } from "@/lib/keep-flow";
+import { KeepFlowContext, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
 // ── the isolated demo dataset ─────────────────────────────────────
@@ -213,6 +214,12 @@ function Lab() {
   const [reduce, setReduce] = useState(false);
   const [keptWord, setKeptWord] = useState(false);
   const [seeded, setSeeded] = useState(false);
+  // exploration dials beyond the animation itself: a slow-mo multiplier over
+  // every beat (so flows can be told apart), where the seal sits, and how a
+  // deleted card leaves
+  const [slow, setSlow] = useState(1);
+  const [pos, setPos] = useState<SealPos | "auto">("auto");
+  const [deleteLeave, setDeleteLeave] = useState<DeleteLeave>("dissolve");
 
   // seed BEFORE the calendar mounts so it opens on today with the full history
   // above (seeding after mount would scroll an empty book, then grow past it)
@@ -241,10 +248,20 @@ function Lab() {
   const cycle = <T,>(list: readonly T[], cur: T, set: (v: T) => void) =>
     set(list[(list.indexOf(cur) + 1) % list.length]);
 
-  const value: KeepFlow = useMemo(
-    () => ({ spec: resolveFlow(flowId, grade, { keptWord }), quillSet, reduce }),
-    [flowId, grade, keptWord, quillSet, reduce],
-  );
+  const value: KeepFlow = useMemo(() => {
+    const base = resolveFlow(flowId, grade, {
+      keptWord,
+      ...(pos !== "auto" ? { sealPos: pos } : {}),
+    });
+    // the slow-mo dial stretches every beat so the press + births are legible
+    const spec = {
+      ...base,
+      pressMs: Math.round(base.pressMs * slow),
+      cardMs: Math.round(base.cardMs * slow),
+      composeMs: Math.round(base.composeMs * slow),
+    };
+    return { spec, quillSet, reduce, deleteLeave };
+  }, [flowId, grade, keptWord, pos, slow, quillSet, reduce, deleteLeave]);
 
   // ← → step the flow, unless the caret is in the composer
   useEffect(() => {
@@ -297,12 +314,32 @@ function Lab() {
           <div className="flex flex-wrap items-center justify-center gap-1">
             <Pill active={grade === "quick"} onClick={() => setGrade(grade === "lush" ? "quick" : "lush")}>{grade}</Pill>
             <Pill onClick={() => cycle(QUILL_SETS, quillSet, setQuillSet)}>quill: {quillSet}</Pill>
+            <Pill onClick={() => cycle(["auto", "corner", "centre", "travel"] as const, pos, setPos)}>seal: {pos}</Pill>
+            <Pill onClick={() => cycle(["dissolve", "fade", "swipe"] as const, deleteLeave, setDeleteLeave)}>del: {deleteLeave}</Pill>
             <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
             <Pill active={keptWord} onClick={() => setKeptWord((v) => !v)}>“kept.”</Pill>
             <Pill active={reduce} onClick={() => setReduce((v) => !v)}>reduced</Pill>
             <Pill onClick={seed}>seed</Pill>
             <Pill onClick={clear}>clear</Pill>
           </div>
+
+          {/* slow-mo: stretch every beat so flows are legible / the press is seen */}
+          <label className="voice-label flex items-center gap-2 px-1 text-[0.66rem] text-ink-soft">
+            <span className="tabular-nums">slow {slow.toFixed(2)}×</span>
+            <input
+              type="range"
+              min={1}
+              max={6}
+              step={0.25}
+              value={slow}
+              onChange={(e) => setSlow(parseFloat(e.target.value))}
+              aria-label="Slow-motion multiplier"
+              className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-rule-faint accent-wax"
+            />
+            {slow !== 1 && (
+              <button type="button" onClick={() => setSlow(1)} className="text-ink-faint hover:text-ink">reset</button>
+            )}
+          </label>
         </div>
       </div>
     </KeepFlowContext.Provider>
