@@ -3653,8 +3653,11 @@ function FlowBackfillCapture({
   const [text, setText] = useState("");
   const [held, setHeld] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const pending = useRef<{ text: string; capturedAt?: number } | null>(null);
   const seq = useKeepSequence(flow.spec, flow.reduce);
+  // how far to slide the seal left to centre it over the slot (centred flows)
+  const [centreShift, setCentreShift] = useState(0);
   const isToday = day === dayKey();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -3688,19 +3691,38 @@ function FlowBackfillCapture({
     if (!trimmed || seq.phase !== "idle") return;
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
-    pending.current = { text: trimmed, capturedAt: isToday ? undefined : at.getTime() };
-    setHeld(trimmed);
+    const capturedAt = isToday ? undefined : at.getTime();
     setText("");
     if (areaRef.current) {
       areaRef.current.value = "";
       autosizeArea(areaRef.current);
     }
     navigator.vibrate?.(8);
+    // reduced motion: no press theatre — the deferred `carding` beat can't fire
+    // when every phase passes in 0ms, so file the card directly and let it settle
+    if (flow.reduce) {
+      void addSnippet({ text: trimmed, source: "typed", ...(capturedAt ? { capturedAt } : {}) });
+      return;
+    }
+    pending.current = { text: trimmed, capturedAt };
+    setHeld(trimmed);
+    // centred flows slide the seal to the row's middle, over the new slot
+    const w = wrapRef.current?.clientWidth ?? 0;
+    setCentreShift(-(Math.max(0, w - 40) / 2));
     seq.start();
   };
 
   const hasText = text.trim().length > 0;
   const composerOpen = seq.phase === "idle" || seq.phase === "composing";
+  // the press owns these two beats: the words are held on a tile and the seal
+  // presses onto them, then the card is born above
+  const pressing = seq.phase === "pressing" || seq.phase === "carding";
+  const showPressStage = !flow.reduce && pressing && held != null;
+  // the seal stays for the press even after the text is cleared; it's gone once
+  // the empty composer wipes back in (composing). Under reduced motion the
+  // phases pass in ~0ms, so don't flash it — the card just files.
+  const showSeal = hasText || (pressing && !flow.reduce);
+  const sealCentre = flow.spec.sealPos !== "corner" && pressing;
   const placeholder = isToday
     ? "Add something from today…"
     : isYesterday
@@ -3708,10 +3730,18 @@ function FlowBackfillCapture({
       : "Add something you want to remember…";
 
   return (
-    <div className={cn("relative", follows && "mt-1")}>
-      {/* the words held while the seal presses — the flow's ink may dry first */}
-      {seq.phase === "pressing" && held != null && (
-        <div className="relative">
+    <div ref={wrapRef} className={cn("relative", follows && "mt-1")}>
+      {/* the press stage: the words held on a tile while the seal presses onto
+          them — the flow's ink may dry first (D). It cross-fades out across the
+          card's birth so the real card (born above in ScheduleCards) takes over
+          with no empty gap or double */}
+      {showPressStage && (
+        <motion.div
+          className="relative"
+          initial={false}
+          animate={{ opacity: seq.phase === "carding" ? 0 : 1 }}
+          transition={{ duration: Math.max(0.08, flow.spec.cardMs / 1000), ease: [0.23, 1, 0.32, 1] }}
+        >
           <span
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
@@ -3725,9 +3755,10 @@ function FlowBackfillCapture({
           >
             {held}
           </motion.p>
-        </div>
+        </motion.div>
       )}
 
+      {/* the composer collapses during the press and wipes back at `composing` */}
       <ComposerWipe active={composerOpen} style={flow.spec.composerReturn}>
         <div className="group relative">
           <span
@@ -3764,30 +3795,39 @@ function FlowBackfillCapture({
             )}
           />
         </div>
-        {hasText && (
-          <div className="mt-2 flex justify-end pr-px">
-            <button
-              type="button"
-              aria-label="Keep this"
-              onClick={keep}
-              onPointerDown={(e) => e.preventDefault()}
-              className="relative grid place-items-center rounded-full"
-              style={{ width: 40, height: 40 }}
-            >
-              <CanvasSeal
-                playKey={seq.sealKey}
-                size={40}
-                glyph={`${flow.quillSet}:quill`}
-                iconScale={QUILL_SCALE[flow.quillSet]}
-                mode="press"
-                still={!seq.armed}
-                variant="spring"
-                superSample={4}
-              />
-            </button>
-          </div>
-        )}
       </ComposerWipe>
+
+      {/* the seal — the keep affordance AND the press. It lives OUTSIDE the wipe
+          so pressing it (which clears the text) can't collapse or unmount it:
+          one seal across idle → pressing → carding. Centred flows (B/C/F) slide
+          it over the new slot; the rest keep it in the composer's corner. */}
+      {showSeal && (
+        <motion.div
+          className="mt-2 flex justify-end pr-px"
+          animate={{ x: sealCentre ? centreShift : 0 }}
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        >
+          <button
+            type="button"
+            aria-label="Keep this"
+            onClick={keep}
+            onPointerDown={(e) => e.preventDefault()}
+            className="relative grid place-items-center rounded-full"
+            style={{ width: 40, height: 40 }}
+          >
+            <CanvasSeal
+              playKey={seq.sealKey}
+              size={40}
+              glyph={`${flow.quillSet}:quill`}
+              iconScale={QUILL_SCALE[flow.quillSet]}
+              mode="press"
+              still={flow.reduce || !seq.armed}
+              variant="spring"
+              superSample={4}
+            />
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }
