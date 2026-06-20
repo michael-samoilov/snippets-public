@@ -35,7 +35,7 @@ import {
   QUILL_SCALE,
   useKeepSequence,
 } from "@/components/schedule/keep-sequence";
-import { useKeepFlow, type KeepFlow } from "@/lib/keep-flow";
+import { useKeepFlow, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
 import {
   groupByDay,
   useAllSnippets,
@@ -281,6 +281,11 @@ function Calendar() {
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
+  // a deletion closes the entry by dissolving the card in place, not the
+  // shared-element shrink back to its (vanishing) book slot. The lab picks the
+  // leave style to preview; production defaults to dissolve.
+  const keepFlow = useKeepFlow();
+  const deleteCloseRef = useRef<DeleteLeave | null>(null);
 
   /** the entry the camera has dived into */
   const [focusedId, setFocusedId] = useState<string | null>(() =>
@@ -461,6 +466,7 @@ function Calendar() {
       for (const el of willChanged) el.style.willChange = "";
       flyerBox?.remove();
       for (const el of hiddenNumbers) el.style.visibility = "";
+      deleteCloseRef.current = null;
       setZoom(null);
       zooming.current = false;
     };
@@ -483,6 +489,29 @@ function Calendar() {
     // card the whole way. The schedule fades under it; the full content
     // fades in as it opens.
     if (zoom.from === "entry" || zoom.to === "entry") {
+      // a deletion: dissolve the card where it stands (or a plain quick fade)
+      // while the book fades up behind it — no shrink back to the slot the
+      // entry is leaving. The struck tile collapses in the book on its own.
+      if (zoom.from === "entry" && deleteCloseRef.current) {
+        const mode = deleteCloseRef.current;
+        const schedEl = layers.schedule!;
+        const cardEl = entryCard ?? incoming;
+        layers.entry!.style.opacity = "1";
+        schedEl.style.opacity = "0";
+        cardEl.style.willChange = "transform, opacity";
+        willChanged.push(cardEl);
+        const dur = mode === "fade" ? 0.16 : 0.26;
+        moves.push(
+          animate(
+            cardEl,
+            mode === "fade" ? { opacity: [1, 0] } : { opacity: [1, 0], y: [0, 12] },
+            { duration: dur, ease: [0.4, 0, 1, 1] },
+          ).finished,
+          animate(schedEl, { opacity: [0, 1] }, { duration: dur, ease: [0.23, 1, 0.32, 1] }).finished,
+        );
+        void Promise.all(moves).then(finish, finish);
+        return;
+      }
       const tile = scheduleLayerRef.current?.querySelector<HTMLElement>(
         `[data-entry="${CSS.escape(zoom.anchor)}"]`,
       );
@@ -918,6 +947,21 @@ function Calendar() {
   );
 
   const closeEntry = () => window.history.back();
+
+  // letting an entry go: mark the close as a deletion (so the zoom dissolves
+  // the card rather than shrinking it back to a slot that's about to vanish),
+  // soft-delete, then close over the struck line with an undo toast.
+  const letGo = useCallback(
+    async (id: string) => {
+      deleteCloseRef.current = keepFlow?.deleteLeave ?? "dissolve";
+      await softDeleteSnippet(id);
+      window.history.back();
+      toast("Let go.", {
+        action: { label: "Undo", onClick: () => void restoreSnippet(id) },
+      });
+    },
+    [keepFlow?.deleteLeave],
+  );
 
   /* ── the back swipe: a left-to-right flick climbs one altitude ────
      Trigger-on-release (the camera zoom is the transition) and touch/
@@ -1592,7 +1636,7 @@ function Calendar() {
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
         >
-          {(view === "entry" || warm) && <EntryView snippet={focused} />}
+          {(view === "entry" || warm) && <EntryView snippet={focused} onLetGo={letGo} />}
         </div>
         {/* the filtered book: while a query stands, the stage shows the
             schedule of matching pages — same ledger, same tiles, only
@@ -2866,7 +2910,13 @@ const ScheduleFeed = memo(
 
 /* ── the focused entry: one card, the whole stage ────────────────── */
 
-function EntryViewBase({ snippet }: { snippet: Snippet | null }) {
+function EntryViewBase({
+  snippet,
+  onLetGo,
+}: {
+  snippet: Snippet | null;
+  onLetGo: (id: string) => void | Promise<void>;
+}) {
   // one tile, grown to fill the stage — the same paper material as the
   // schedule card it expanded from, so the FLIP reads as that very card
   // opening. The zoom drives [data-entry-card]'s box and fades the
@@ -2881,7 +2931,7 @@ function EntryViewBase({ snippet }: { snippet: Snippet | null }) {
       style={{ transformOrigin: "0 0" }}
     >
       {snippet ? (
-        <EntryBody key={snippet.id} snippet={snippet} />
+        <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (
         <div data-entry-card-content className="px-4 pb-4 pt-3">
           <p className="voice-prose italic text-ink-soft">Let go.</p>
@@ -2909,7 +2959,13 @@ const EntryView = memo(EntryViewBase);
  * foot confirms (the same as dismissing the keyboard). A quiet ember
  * trash, across from it, lets the entry go.
  */
-function EntryBody({ snippet }: { snippet: Snippet }) {
+function EntryBody({
+  snippet,
+  onLetGo,
+}: {
+  snippet: Snippet;
+  onLetGo: (id: string) => void | Promise<void>;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -3006,13 +3062,9 @@ function EntryBody({ snippet }: { snippet: Snippet }) {
     vv.addEventListener("resize", onResize);
     return () => vv.removeEventListener("resize", onResize);
   }, [editing]);
-  const letGo = async () => {
-    await softDeleteSnippet(snippet.id);
-    window.history.back(); // the page closes over the struck line
-    toast("Let go.", {
-      action: { label: "Undo", onClick: () => void restoreSnippet(snippet.id) },
-    });
-  };
+  // the parent owns the deletion (it marks the close as a dissolve, soft-deletes,
+  // and raises the undo toast) so the camera knows not to shrink back to the slot
+  const letGo = () => void onLetGo(snippet.id);
 
   return (
     <>
@@ -3655,6 +3707,7 @@ function FlowBackfillCapture({
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const pending = useRef<{ text: string; capturedAt?: number } | null>(null);
+  const heldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seq = useKeepSequence(flow.spec, flow.reduce);
   // how far to slide the seal left to centre it over the slot (centred flows)
   const [centreShift, setCentreShift] = useState(0);
@@ -3668,13 +3721,17 @@ function FlowBackfillCapture({
     if (seq.phase !== "carding" || !pending.current) return;
     const p = pending.current;
     pending.current = null;
-    setHeld(null);
     void addSnippet({
       text: p.text,
       source: "typed",
       ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
     });
+    // the real card lands a frame or two later (Dexie write → live query);
+    // keep the held tile fading across that lag so the words never blink out
+    // before the born card arrives — the handoff has no empty gap
+    heldTimer.current = setTimeout(() => setHeld(null), 280);
   }, [seq.phase]);
+  useEffect(() => () => { if (heldTimer.current) clearTimeout(heldTimer.current); }, []);
 
   // refocus when the composer wipes back, to keep typing
   useEffect(() => {
@@ -3717,7 +3774,9 @@ function FlowBackfillCapture({
   // the press owns these two beats: the words are held on a tile and the seal
   // presses onto them, then the card is born above
   const pressing = seq.phase === "pressing" || seq.phase === "carding";
-  const showPressStage = !flow.reduce && pressing && held != null;
+  // the held tile stays until the bridge timer drops it (past carding), so it
+  // can fade across the live card's arrival rather than blink out
+  const showPressStage = !flow.reduce && held != null && seq.phase !== "idle";
   // the seal stays for the press even after the text is cleared; it's gone once
   // the empty composer wipes back in (composing). Under reduced motion the
   // phases pass in ~0ms, so don't flash it — the card just files.
@@ -3739,8 +3798,8 @@ function FlowBackfillCapture({
         <motion.div
           className="relative"
           initial={false}
-          animate={{ opacity: seq.phase === "carding" ? 0 : 1 }}
-          transition={{ duration: Math.max(0.08, flow.spec.cardMs / 1000), ease: [0.23, 1, 0.32, 1] }}
+          animate={{ opacity: seq.phase === "pressing" ? 1 : 0 }}
+          transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
         >
           <span
             aria-hidden="true"
@@ -3759,7 +3818,7 @@ function FlowBackfillCapture({
       )}
 
       {/* the composer collapses during the press and wipes back at `composing` */}
-      <ComposerWipe active={composerOpen} style={flow.spec.composerReturn}>
+      <ComposerWipe active={composerOpen} style={flow.spec.composerReturn} durationMs={flow.spec.composeMs}>
         <div className="group relative">
           <span
             aria-hidden="true"

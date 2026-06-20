@@ -63,14 +63,16 @@ export type FlowSpec = {
 };
 
 // the lush, per-session-or-day grade. `resolveFlow` derives the quick grade.
+// composeMs is the empty composer's wipe-in (slow by design — the page settling
+// back, not a frequent beat); the lab's speed dial scales it (and the rest).
 const BASE: Record<FlowId, FlowSpec> = {
-  A: { id: "A", pressMs: 520, cardMs: 380, composeMs: 320, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  B: { id: "B", pressMs: 600, cardMs: 460, composeMs: 320, birth: "morph", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  C: { id: "C", pressMs: 300, cardMs: 420, composeMs: 320, birth: "impact", sealPos: "centre", recoil: true, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  D: { id: "D", pressMs: 720, cardMs: 380, composeMs: 320, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: true, composerReturn: "fade", keptWord: false },
-  E: { id: "E", pressMs: 460, cardMs: 460, composeMs: 360, birth: "file", sealPos: "corner", recoil: false, liftAndFile: true, inkDry: false, composerReturn: "wipe", keptWord: false },
-  F: { id: "F", pressMs: 120, cardMs: 620, composeMs: 320, birth: "emboss", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  G: { id: "G", pressMs: 220, cardMs: 260, composeMs: 220, birth: "quiet", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: true },
+  A: { id: "A", pressMs: 520, cardMs: 380, composeMs: 560, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  B: { id: "B", pressMs: 600, cardMs: 460, composeMs: 560, birth: "morph", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  C: { id: "C", pressMs: 300, cardMs: 420, composeMs: 560, birth: "impact", sealPos: "centre", recoil: true, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  D: { id: "D", pressMs: 720, cardMs: 380, composeMs: 600, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: true, composerReturn: "fade", keptWord: false },
+  E: { id: "E", pressMs: 460, cardMs: 460, composeMs: 600, birth: "file", sealPos: "corner", recoil: false, liftAndFile: true, inkDry: false, composerReturn: "wipe", keptWord: false },
+  F: { id: "F", pressMs: 120, cardMs: 620, composeMs: 560, birth: "emboss", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  G: { id: "G", pressMs: 220, cardMs: 260, composeMs: 420, birth: "quiet", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: true },
 };
 
 /** the lush base, or a tightened quick grade (the frequency-rule everyday). */
@@ -215,20 +217,28 @@ export function KeptCard({
 export function ComposerWipe({
   active,
   style,
+  durationMs,
   children,
   className,
 }: {
   active: boolean;
   style: ComposerReturn;
+  /** the wipe-in duration; falls back to the CSS token when unset. */
+  durationMs?: number;
   children: React.ReactNode;
   className?: string;
 }) {
+  // an explicit duration (the flow's composeMs, tunable by the lab's speed)
+  // overrides the token, so the return reads as slow as the flow asks
+  const dur = durationMs != null ? { transitionDuration: `${durationMs}ms` } : undefined;
   if (style === "wipe") {
     return (
       <span
         data-wipe={active ? "open" : "closed"}
+        style={dur}
         className={cn(
-          "grid transition-[grid-template-columns,opacity] duration-[calc(var(--dur-slow)*1.4)] ease-[var(--ease-out)]",
+          "grid transition-[grid-template-columns,opacity] ease-[var(--ease-out)]",
+          durationMs == null && "duration-[calc(var(--dur-slow)*1.4)]",
           active ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0",
           className,
         )}
@@ -239,8 +249,10 @@ export function ComposerWipe({
   }
   return (
     <span
+      style={dur}
       className={cn(
-        "block transition-opacity duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+        "block transition-opacity ease-[var(--ease-out)]",
+        durationMs == null && "duration-[var(--dur-slow)]",
         active ? "opacity-100" : "opacity-0",
         className,
       )}
