@@ -3884,6 +3884,7 @@ function FlowBackfillCapture({
               bounce={1.5}
               rotate={30}
               superSample={4}
+              ignoreReducedMotion
             />
           </button>
         </motion.div>

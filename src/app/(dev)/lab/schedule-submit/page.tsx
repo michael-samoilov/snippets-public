@@ -11,7 +11,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { motion } from "motion/react";
+import { motion, MotionConfig } from "motion/react";
 import { ulid } from "ulidx";
 import CalendarPage from "@/app/calendar/page";
 import { createSnippetsDb, resetActiveDb, setActiveDb } from "@/lib/db";
@@ -30,7 +30,7 @@ import { KeepFlowContext, type DeleteLeave, type KeepFlow } from "@/lib/keep-flo
 import { cn } from "@/lib/utils";
 
 // bump on every push so it's obvious on-screen which build is live
-const BUILD = "build 2026-06-20 · tap-dome seal · slow single-line wipe · dissolve/fade/swipe delete";
+const BUILD = "build 2026-06-20b · plays under reduced-motion · tap-dome seal · slow wipe · dissolve/fade/swipe delete";
 
 // ── the isolated demo dataset ─────────────────────────────────────
 const POOL = [
@@ -284,6 +284,9 @@ function Lab() {
 
   return (
     <KeepFlowContext.Provider value={value}>
+      {/* the lab is an evaluation surface: force full motion so the flows can be
+          judged even on a desktop with prefers-reduced-motion enabled */}
+      <MotionConfig reducedMotion="never">
       {/* the real calendar, reading the isolated demo store */}
       <CalendarPage />
 
@@ -348,6 +351,7 @@ function Lab() {
           <span className="voice-data text-[0.6rem] text-ink-faint">{BUILD}</span>
         </div>
       </div>
+      </MotionConfig>
     </KeepFlowContext.Provider>
   );
 }
