@@ -63,16 +63,21 @@ export type FlowSpec = {
 };
 
 // the lush, per-session-or-day grade. `resolveFlow` derives the quick grade.
-// composeMs is the empty composer's wipe-in (slow by design — the page settling
-// back, not a frequent beat); the lab's speed dial scales it (and the rest).
+// pressMs is the time the stamp owns the stage before the card is born — long
+// enough to see the whole press (the canvas press runs ~1.15s and is finalized).
+// composeMs is the empty composer's slow wipe-in (a once/twice-a-day beat). The
+// flows now share the press and differ in the card's entrance, the seal's
+// position, and the wipe; the lab's speed dial scales every beat.
+// pressMs ≈ the canvas press (~1.15s) + a short hold (the "delay") before the
+// stamp lifts away and the card is born.
 const BASE: Record<FlowId, FlowSpec> = {
-  A: { id: "A", pressMs: 520, cardMs: 380, composeMs: 560, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  B: { id: "B", pressMs: 600, cardMs: 460, composeMs: 560, birth: "morph", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  C: { id: "C", pressMs: 300, cardMs: 420, composeMs: 560, birth: "impact", sealPos: "centre", recoil: true, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  D: { id: "D", pressMs: 720, cardMs: 380, composeMs: 600, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: true, composerReturn: "fade", keptWord: false },
-  E: { id: "E", pressMs: 460, cardMs: 460, composeMs: 600, birth: "file", sealPos: "corner", recoil: false, liftAndFile: true, inkDry: false, composerReturn: "wipe", keptWord: false },
-  F: { id: "F", pressMs: 120, cardMs: 620, composeMs: 560, birth: "emboss", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
-  G: { id: "G", pressMs: 220, cardMs: 260, composeMs: 420, birth: "quiet", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: true },
+  A: { id: "A", pressMs: 1350, cardMs: 460, composeMs: 1100, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  B: { id: "B", pressMs: 1350, cardMs: 520, composeMs: 1100, birth: "morph", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  C: { id: "C", pressMs: 1350, cardMs: 460, composeMs: 1100, birth: "impact", sealPos: "centre", recoil: true, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  D: { id: "D", pressMs: 1350, cardMs: 460, composeMs: 1100, birth: "rise", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: true, composerReturn: "fade", keptWord: false },
+  E: { id: "E", pressMs: 1350, cardMs: 520, composeMs: 1100, birth: "file", sealPos: "corner", recoil: false, liftAndFile: true, inkDry: false, composerReturn: "wipe", keptWord: false },
+  F: { id: "F", pressMs: 1350, cardMs: 640, composeMs: 1100, birth: "emboss", sealPos: "centre", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: false },
+  G: { id: "G", pressMs: 1200, cardMs: 320, composeMs: 760, birth: "quiet", sealPos: "corner", recoil: false, liftAndFile: false, inkDry: false, composerReturn: "wipe", keptWord: true },
 };
 
 /** the lush base, or a tightened quick grade (the frequency-rule everyday). */

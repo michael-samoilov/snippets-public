@@ -9,9 +9,10 @@
 import { createContext, useContext } from "react";
 import type { FlowSpec, QuillSet } from "@/components/schedule/keep-sequence";
 
-/** how a deleted card leaves: dissolve in place (fade + sink) or a plain
-    quick fade. Production picks a default; the lab toggles to compare. */
-export type DeleteLeave = "dissolve" | "fade";
+/** how a deleted card leaves: dissolve in place (fade + sink), a plain quick
+    fade, or a swipe off to the right. Production picks a default; the lab
+    toggles to compare. */
+export type DeleteLeave = "dissolve" | "fade" | "swipe";
 
 export type KeepFlow = {
   spec: FlowSpec;

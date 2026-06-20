@@ -315,7 +315,7 @@ function Lab() {
             <Pill active={grade === "quick"} onClick={() => setGrade(grade === "lush" ? "quick" : "lush")}>{grade}</Pill>
             <Pill onClick={() => cycle(QUILL_SETS, quillSet, setQuillSet)}>quill: {quillSet}</Pill>
             <Pill onClick={() => cycle(["auto", "corner", "centre", "travel"] as const, pos, setPos)}>seal: {pos}</Pill>
-            <Pill onClick={() => cycle(["dissolve", "fade"] as const, deleteLeave, setDeleteLeave)}>del: {deleteLeave}</Pill>
+            <Pill onClick={() => cycle(["dissolve", "fade", "swipe"] as const, deleteLeave, setDeleteLeave)}>del: {deleteLeave}</Pill>
             <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
             <Pill active={keptWord} onClick={() => setKeptWord((v) => !v)}>“kept.”</Pill>
             <Pill active={reduce} onClick={() => setReduce((v) => !v)}>reduced</Pill>
