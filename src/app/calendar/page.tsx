@@ -28,13 +28,14 @@ import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react
 import { highlight as drawHighlight } from "@highlighters/core";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
+import { ulid } from "ulidx";
 import { WaxStamp as CanvasSeal } from "@/components/capture/wax-stamp";
 import {
   birthFor,
   QUILL_SCALE,
   useKeepSequence,
 } from "@/components/schedule/keep-sequence";
-import { useKeepFlow, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
+import { useKeepFlow, useKeptDraft, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
 import {
   groupByDay,
   useAllSnippets,
@@ -2783,7 +2784,7 @@ function ScheduleFeedBase({
                   </span>
                 </div>
                 <div className="min-w-0 pb-3 pt-2">
-                  <ScheduleCards snippets={row.snippets} onOpen={onOpen} />
+                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
                   {showComposer && (
                     <BackfillCapture
                       key={row.day}
@@ -2847,9 +2848,11 @@ function ScheduleFeedBase({
  */
 function ScheduleCards({
   snippets,
+  day,
   onOpen,
 }: {
   snippets: Snippet[];
+  day: string;
   onOpen: (id: string) => void;
 }) {
   // entries already on the page at mount don't animate — only changes do
@@ -2859,24 +2862,40 @@ function ScheduleCards({
   const flow = useKeepFlow();
   const birth = flow ? birthFor(flow.spec, flow.reduce) : null;
 
+  // the optimistic just-kept card: render it in its final slot the instant the
+  // seal is pressed so the typed words never blink out waiting for the live
+  // query; when the real row lands (same id) it takes over seamlessly (same key
+  // → same element, no re-animation) and the draft is cleared.
+  const draftStore = useKeptDraft();
+  const draft = draftStore?.drafts[day];
+  const draftPending = draft != null && !snippets.some((s) => s.id === draft.id);
+  useEffect(() => {
+    if (draft && snippets.some((s) => s.id === draft.id)) draftStore?.clear(day);
+  }, [draft, snippets, day, draftStore]);
+  const items = draftPending ? [...snippets, draft] : snippets;
+
   return (
     <ul className="flex flex-col gap-1">
       <AnimatePresence initial={false}>
-        {snippets.map((s) => (
+        {items.map((s) => {
+          const isDraft = draftPending && s.id === draft!.id;
+          return (
           <motion.li
             key={s.id}
             layout="position"
             initial={
-              presentAtMount.has(s.id)
-                ? false
-                : (birth?.initial ?? { opacity: 0, y: -10, scale: 0.985 })
+              isDraft
+                ? { opacity: 0 }
+                : presentAtMount.has(s.id)
+                  ? false
+                  : (birth?.initial ?? { opacity: 0, y: -10, scale: 0.985 })
             }
-            animate={birth?.animate ?? { opacity: 1, y: 0, scale: 1 }}
+            animate={isDraft ? { opacity: 1 } : (birth?.animate ?? { opacity: 1, y: 0, scale: 1 })}
             // a deleted card is gone at once (its leave animation plays on the
             // focused card up in the entry view) — so the book behind is already
             // at its final state, never showing the struck card collapse
             exit={{ opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0 } }}
-            transition={birth?.transition ?? { type: "spring", duration: 0.5, bounce: 0.16 }}
+            transition={isDraft ? { duration: 0.18, ease: [0.23, 1, 0.32, 1] } : (birth?.transition ?? { type: "spring", duration: 0.5, bounce: 0.16 })}
           >
             <button
               type="button"
@@ -2902,7 +2921,8 @@ function ScheduleCards({
               </p>
             </button>
           </motion.li>
-        ))}
+          );
+        })}
       </AnimatePresence>
     </ul>
   );
@@ -3722,8 +3742,8 @@ function FlowBackfillCapture({
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const pending = useRef<{ text: string; capturedAt?: number } | null>(null);
   const seq = useKeepSequence(flow.spec, flow.reduce);
+  const draftStore = useKeptDraft();
   // how far to slide the seal left to centre it over the slot (centred flows)
   const [centreShift, setCentreShift] = useState(0);
   // the thumb-down dip (the /lab/stamp `pressed` feedback before release)
@@ -3732,18 +3752,6 @@ function FlowBackfillCapture({
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = day === dayKey(yesterday);
-
-  // carding: commit so the card is born (live query) as the stamp lifts away
-  useEffect(() => {
-    if (seq.phase !== "carding" || !pending.current) return;
-    const p = pending.current;
-    pending.current = null;
-    void addSnippet({
-      text: p.text,
-      source: "typed",
-      ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
-    });
-  }, [seq.phase]);
 
   // refocus once the composer has wiped back, to keep typing
   useEffect(() => {
@@ -3757,20 +3765,32 @@ function FlowBackfillCapture({
     if (!trimmed || seq.phase !== "idle") return;
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
-    const capturedAt = isToday ? undefined : at.getTime();
+    const capturedAt = isToday ? Date.now() : at.getTime();
+    const id = ulid(capturedAt);
+    // render the kept card optimistically in its final slot AT ONCE, so the
+    // typed words stay put instead of blinking out until the live query lands;
+    // the real row (same id) takes over seamlessly
+    draftStore?.set({
+      id,
+      text: trimmed,
+      kind: null,
+      tags: [],
+      capturedAt,
+      day,
+      source: "typed",
+      favorite: 0,
+      enriched: "pending",
+      updatedAt: capturedAt,
+    });
+    void addSnippet({ id, text: trimmed, source: "typed", capturedAt });
     setText("");
     if (areaRef.current) {
       areaRef.current.value = "";
       autosizeArea(areaRef.current);
     }
     navigator.vibrate?.(8);
-    // reduced motion: no press theatre — the deferred `carding` beat can't fire
-    // when every phase passes in 0ms, so file the card directly
-    if (flow.reduce) {
-      void addSnippet({ text: trimmed, source: "typed", ...(capturedAt ? { capturedAt } : {}) });
-      return;
-    }
-    pending.current = { text: trimmed, capturedAt };
+    // reduced motion: the card is already filed; skip the press theatre
+    if (flow.reduce) return;
     // centred flows slide the seal to the row's middle, over the new slot
     const w = wrapRef.current?.clientWidth ?? 0;
     setCentreShift(-(Math.max(0, w - 40) / 2));
@@ -3840,23 +3860,16 @@ function FlowBackfillCapture({
       )}
 
       {/* the seal — rests as the white-icon dome (identical to /lab/stamp): a
-          thumb-down dip, then the full press lifecycle on release. It lifts away
-          (fades + rises) as the card is born — the only mark in today's date
-          through the press. Centred flows slide it over the new slot. */}
+          thumb-down dip, then the full press → linger → exit lifecycle on
+          release (the seal plays it; we just unmount once it has exited). The
+          card is already in place beside/above it. Centred flows slide it over
+          the new slot. */}
       {showSeal && (
         <motion.div
           className="mt-2 flex justify-end pr-px"
           initial={false}
-          animate={{
-            x: sealCentre ? centreShift : 0,
-            opacity: seq.phase === "carding" ? 0 : 1,
-            y: seq.phase === "carding" ? -10 : 0,
-          }}
-          transition={{
-            x: { type: "spring", stiffness: 380, damping: 30 },
-            opacity: { duration: 0.42, ease: [0.23, 1, 0.32, 1] },
-            y: { duration: 0.42, ease: [0.23, 1, 0.32, 1] },
-          }}
+          animate={{ x: sealCentre ? centreShift : 0 }}
+          transition={{ x: { type: "spring", stiffness: 380, damping: 30 } }}
         >
           <button
             type="button"
@@ -3878,7 +3891,12 @@ function FlowBackfillCapture({
               iconScale={QUILL_SCALE[flow.quillSet]}
               mode="tap"
               pressed={pressedDown}
-              lingerMs={6000}
+              // the canvas press runs ~1150ms; linger fills the rest of pressMs,
+              // and the exit plays across cardMs — so the whole lifecycle lands
+              // exactly when the seal unmounts (composing), in sync with slow-mo
+              lingerMs={Math.max(0, flow.spec.pressMs - 1150)}
+              exitMs={flow.spec.cardMs}
+              exit="grow"
               variant="spring"
               ease="front"
               bounce={1.5}

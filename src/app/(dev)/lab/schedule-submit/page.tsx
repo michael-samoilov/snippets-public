@@ -26,11 +26,17 @@ import {
   type QuillSet,
   type SealPos,
 } from "@/components/schedule/keep-sequence";
-import { KeepFlowContext, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
+import {
+  KeepFlowContext,
+  KeptDraftContext,
+  type DeleteLeave,
+  type KeepFlow,
+  type KeptDraftStore,
+} from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
 // bump on every push so it's obvious on-screen which build is live
-const BUILD = "build 2026-06-20b · plays under reduced-motion · tap-dome seal · slow wipe · dissolve/fade/swipe delete";
+const BUILD = "build 2026-06-20c · optimistic card (no blink) · seal press→linger→exit · slow wipe";
 
 // ── the isolated demo dataset ─────────────────────────────────────
 const POOL = [
@@ -251,6 +257,18 @@ function Lab() {
   const cycle = <T,>(list: readonly T[], cur: T, set: (v: T) => void) =>
     set(list[(list.indexOf(cur) + 1) % list.length]);
 
+  // optimistic kept cards, so the typed words stay in place through the press
+  // instead of blinking out until the live query catches up
+  const [drafts, setDrafts] = useState<Record<string, Snippet>>({});
+  const draftStore: KeptDraftStore = useMemo(
+    () => ({
+      drafts,
+      set: (s) => setDrafts((d) => ({ ...d, [s.day]: s })),
+      clear: (day) => setDrafts((d) => { const n = { ...d }; delete n[day]; return n; }),
+    }),
+    [drafts],
+  );
+
   const value: KeepFlow = useMemo(() => {
     const base = resolveFlow(flowId, grade, {
       keptWord,
@@ -284,6 +302,7 @@ function Lab() {
 
   return (
     <KeepFlowContext.Provider value={value}>
+     <KeptDraftContext.Provider value={draftStore}>
       {/* the lab is an evaluation surface: force full motion so the flows can be
           judged even on a desktop with prefers-reduced-motion enabled */}
       <MotionConfig reducedMotion="never">
@@ -352,6 +371,7 @@ function Lab() {
         </div>
       </div>
       </MotionConfig>
+     </KeptDraftContext.Provider>
     </KeepFlowContext.Provider>
   );
 }

@@ -49,6 +49,8 @@ export interface SnippetDraft {
   text: string;
   source: Snippet["source"];
   capturedAt?: number;
+  /** pre-set id so an optimistic card and its DB row can share identity. */
+  id?: string;
 }
 
 /** Shape returned by the enrichment endpoint. */

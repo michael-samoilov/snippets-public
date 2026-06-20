@@ -45,7 +45,7 @@ export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
   const now = Date.now();
   const capturedAt = draft.capturedAt ?? now;
   const snippet: Snippet = {
-    id: ulid(capturedAt),
+    id: draft.id ?? ulid(capturedAt),
     text: draft.text.trim(),
     kind: null,
     tags: [],

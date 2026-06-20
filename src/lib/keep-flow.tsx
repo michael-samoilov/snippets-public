@@ -8,6 +8,7 @@
 
 import { createContext, useContext } from "react";
 import type { FlowSpec, QuillSet } from "@/components/schedule/keep-sequence";
+import type { Snippet } from "@/lib/types";
 
 /** how a deleted card leaves: dissolve in place (fade + sink), a plain quick
     fade, or a swipe off to the right. Production picks a default; the lab
@@ -27,4 +28,21 @@ export const KeepFlowContext = createContext<KeepFlow | null>(null);
 /** null in production (no provider); a flow config inside the lab. */
 export function useKeepFlow(): KeepFlow | null {
   return useContext(KeepFlowContext);
+}
+
+/* Optimistic kept cards. The composer publishes the just-kept snippet here so
+   ScheduleCards can render it IN its final slot the instant the seal is pressed
+   — the typed words never blink out waiting for the Dexie live query. When the
+   real row arrives (same id) the draft is cleared, a seamless hand-off. Keyed by
+   day so each day's composer owns its own draft. Null with no provider. */
+export type KeptDraftStore = {
+  drafts: Record<string, Snippet>;
+  set: (snippet: Snippet) => void;
+  clear: (day: string) => void;
+};
+
+export const KeptDraftContext = createContext<KeptDraftStore | null>(null);
+
+export function useKeptDraft(): KeptDraftStore | null {
+  return useContext(KeptDraftContext);
 }
