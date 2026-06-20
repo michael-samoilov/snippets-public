@@ -28,6 +28,14 @@ import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react
 import { highlight as drawHighlight } from "@highlighters/core";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
+import { WaxStamp as CanvasSeal } from "@/components/capture/wax-stamp";
+import {
+  birthFor,
+  ComposerWipe,
+  QUILL_SCALE,
+  useKeepSequence,
+} from "@/components/schedule/keep-sequence";
+import { useKeepFlow, type KeepFlow } from "@/lib/keep-flow";
 import {
   groupByDay,
   useAllSnippets,
@@ -2788,6 +2796,10 @@ function ScheduleCards({
 }) {
   // entries already on the page at mount don't animate — only changes do
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
+  // a dev flow (the lab) births freshly-kept cards with the chosen flow; in
+  // production `flow` is null and the default rise/fade plays
+  const flow = useKeepFlow();
+  const birth = flow ? birthFor(flow.spec, flow.reduce) : null;
 
   return (
     <ul className="flex flex-col gap-1">
@@ -2799,11 +2811,11 @@ function ScheduleCards({
             initial={
               presentAtMount.has(s.id)
                 ? false
-                : { opacity: 0, y: -10, scale: 0.985 }
+                : (birth?.initial ?? { opacity: 0, y: -10, scale: 0.985 })
             }
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            animate={birth?.animate ?? { opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, height: 0, overflow: "hidden" }}
-            transition={{ type: "spring", duration: 0.5, bounce: 0.16 }}
+            transition={birth?.transition ?? { type: "spring", duration: 0.5, bounce: 0.16 }}
           >
             <button
               type="button"
@@ -3472,7 +3484,19 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 
 /* ── adding to a day: today at its own moment, the past at noon ──── */
 
-function BackfillCapture({
+// Production renders no KeepFlow provider → `flow` is null → the legacy composer
+// runs unchanged. Inside the schedule-submit lab a flow is provided, so the keep
+// is orchestrated by the keep-sequence engine with the canvas quill seal.
+function BackfillCapture(props: { day: string; follows?: boolean }) {
+  const flow = useKeepFlow();
+  return flow ? (
+    <FlowBackfillCapture {...props} flow={flow} />
+  ) : (
+    <LegacyBackfillCapture {...props} />
+  );
+}
+
+function LegacyBackfillCapture({
   day,
   follows = false,
 }: {
@@ -3608,6 +3632,162 @@ function BackfillCapture({
             : `Kept to ${friendlyDay(day).toLowerCase()}.`
           : " "}
       </p>
+    </div>
+  );
+}
+
+/* The flow-driven composer (lab only). The press plays the canvas quill seal,
+   the words are held through it, the write is deferred to the `carding` beat so
+   the card is born from the stamp (ScheduleCards gives it the flow's birth),
+   then the empty composer wipes back in. Enrichment is skipped — it's a
+   best-effort decoration irrelevant to the preview. */
+function FlowBackfillCapture({
+  day,
+  follows = false,
+  flow,
+}: {
+  day: string;
+  follows?: boolean;
+  flow: KeepFlow;
+}) {
+  const [text, setText] = useState("");
+  const [held, setHeld] = useState<string | null>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const pending = useRef<{ text: string; capturedAt?: number } | null>(null);
+  const seq = useKeepSequence(flow.spec, flow.reduce);
+  const isToday = day === dayKey();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = day === dayKey(yesterday);
+
+  // at the carding beat, commit the held words so the card is born from the stamp
+  useEffect(() => {
+    if (seq.phase !== "carding" || !pending.current) return;
+    const p = pending.current;
+    pending.current = null;
+    setHeld(null);
+    void addSnippet({
+      text: p.text,
+      source: "typed",
+      ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
+    });
+  }, [seq.phase]);
+
+  // refocus when the composer wipes back, to keep typing
+  useEffect(() => {
+    if (seq.phase !== "composing") return;
+    const t = setTimeout(
+      () => areaRef.current?.focus(),
+      Math.max(40, flow.spec.composeMs * 0.5),
+    );
+    return () => clearTimeout(t);
+  }, [seq.phase, flow.spec.composeMs]);
+
+  const keep = () => {
+    const trimmed = text.trim();
+    if (!trimmed || seq.phase !== "idle") return;
+    const at = dateFromDayKey(day);
+    at.setHours(12, 0, 0, 0);
+    pending.current = { text: trimmed, capturedAt: isToday ? undefined : at.getTime() };
+    setHeld(trimmed);
+    setText("");
+    if (areaRef.current) {
+      areaRef.current.value = "";
+      autosizeArea(areaRef.current);
+    }
+    navigator.vibrate?.(8);
+    seq.start();
+  };
+
+  const hasText = text.trim().length > 0;
+  const composerOpen = seq.phase === "idle" || seq.phase === "composing";
+  const placeholder = isToday
+    ? "Add something from today…"
+    : isYesterday
+      ? "Add something from yesterday…"
+      : "Add something you want to remember…";
+
+  return (
+    <div className={cn("relative", follows && "mt-1")}>
+      {/* the words held while the seal presses — the flow's ink may dry first */}
+      {seq.phase === "pressing" && held != null && (
+        <div className="relative">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
+          />
+          <motion.p
+            key={seq.sealKey}
+            initial={flow.spec.inkDry ? { filter: "blur(2.5px)", opacity: 0.6 } : false}
+            animate={flow.spec.inkDry ? { filter: "blur(0px)", opacity: 1 } : undefined}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className="voice-prose relative whitespace-pre-wrap p-2.5 text-[0.9rem] leading-[1.42]"
+          >
+            {held}
+          </motion.p>
+        </div>
+      )}
+
+      <ComposerWipe active={composerOpen} style={flow.spec.composerReturn}>
+        <div className="group relative">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
+          />
+          <span
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
+              "border-rule-faint group-focus-within:border-rule",
+              text.length > 0 ? "opacity-100" : "opacity-0",
+            )}
+          />
+          <textarea
+            ref={areaRef}
+            value={text}
+            rows={1}
+            placeholder={placeholder}
+            aria-label={`Add an entry to ${friendlyDay(day)}`}
+            onChange={(e) => {
+              setText(e.target.value);
+              autosizeArea(e.target);
+            }}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                keep();
+              }
+            }}
+            className={cn(
+              "voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+              isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
+            )}
+          />
+        </div>
+        {hasText && (
+          <div className="mt-2 flex justify-end pr-px">
+            <button
+              type="button"
+              aria-label="Keep this"
+              onClick={keep}
+              onPointerDown={(e) => e.preventDefault()}
+              className="relative grid place-items-center rounded-full"
+              style={{ width: 40, height: 40 }}
+            >
+              <CanvasSeal
+                playKey={seq.sealKey}
+                size={40}
+                glyph={`${flow.quillSet}:quill`}
+                iconScale={QUILL_SCALE[flow.quillSet]}
+                mode="press"
+                still={!seq.armed}
+                variant="spring"
+                superSample={4}
+              />
+            </button>
+          </div>
+        )}
+      </ComposerWipe>
     </div>
   );
 }
