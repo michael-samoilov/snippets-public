@@ -4075,17 +4075,20 @@ function TodayZoneFill({
           <CanvasSeal
             playKey={playKey}
             size={128}
-            glyph={hasText ? "e:quill" : "a:mic"}
-            iconScale={hasText ? 0.36 : 0.42}
+            glyph={hasText ? "e:quill" : "c:mic"}
+            iconScale={hasText ? 0.36 : 0.46}
             mode="tap"
             pressed={down}
-            lingerMs={550}
-            exitMs={420}
-            exit="grow"
             variant="spring"
             ease="front"
             bounce={1.5}
             rotate={30}
+            puck={1}
+            cloud={0.5}
+            speckle={0}
+            lingerMs={1000}
+            exitMs={200}
+            exit="grow"
             superSample={3}
             ignoreReducedMotion
           />
