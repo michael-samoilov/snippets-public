@@ -323,6 +323,10 @@ export type WaxStampProps = {
   cloud?: number;
   /** render the settled seal immediately, with no entrance animation. */
   still?: boolean;
+  /** draw the white glyph label on the resting dome (default true). Set false to
+      leave the rest dome bare — e.g. when a DOM overlay owns/animates the icon —
+      while the press still embosses the glyph as relief. */
+  restGlyph?: boolean;
   /** render the embossed glyph white (keeps its relief) instead of wax-coloured. */
   whiteGlyph?: boolean;
   /** render the embossed glyph in this colour (hex) — overrides whiteGlyph (e.g. the ink). */
@@ -339,7 +343,7 @@ export type WaxStampProps = {
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 30, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, whiteGlyph = false, glyphColor, glyphScale = 0.46, superSample = 1, ignoreReducedMotion = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 30, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, restGlyph = true, whiteGlyph = false, glyphColor, glyphScale = 0.46, superSample = 1, ignoreReducedMotion = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
@@ -420,7 +424,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       // the white label is the wax glyph's pre-stamp flash; a glyph with an
       // explicit colour (gcol) is instead inked in by the die as it presses
       // (the ink follows the contact front), so it needs no label
-      if (!gcol && k.iconWhite > 0.004) {
+      if (restGlyph && !gcol && k.iconWhite > 0.004) {
         cc.save(); cc.globalAlpha = 0.9 * k.iconWhite; cc.drawImage(B.iconImg, 0, 0); cc.restore();
       }
 
@@ -499,7 +503,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     draw(stateAt(0, variant, ease, bounce, rotate));
     raf = requestAnimationFrame(frame);
     return cleanup;
-  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, whiteGlyph, glyphColor, glyphScale, superSample, ignoreReducedMotion]);
+  }, [playKey, size, glyph, variant, ease, bounce, rotate, mode, lingerMs, exitMs, exit, tint, puck, iconScale, pressed, speckle, cloud, still, restGlyph, whiteGlyph, glyphColor, glyphScale, superSample, ignoreReducedMotion]);
 
   return (
     <canvas
@@ -507,6 +511,62 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       aria-hidden="true"
       className={cn("block", className)}
       style={{ width: size, height: size, overflow: "visible" }}
+    />
+  );
+}
+
+/** A standalone glyph from the seal's own icon sets, drawn flat (default white)
+    to a small canvas — for DOM overlays that animate the icon independently of
+    the seal (e.g. a fade+carousel swap on the today-zone button). `scale` is the
+    same fraction-of-the-seal as WaxStamp's `iconScale`, so it lines up with the
+    embossed glyph the press produces. */
+export function SealGlyph({
+  glyph,
+  size,
+  scale = 0.46,
+  color = "#fff",
+  className,
+}: {
+  glyph: string;
+  size: number;
+  scale?: number;
+  color?: string;
+  className?: string;
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = canvas.current;
+    if (!cv) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const dim = Math.round(size * dpr);
+    cv.width = dim;
+    cv.height = dim;
+    const gx = cv.getContext("2d");
+    if (!gx) return;
+    gx.clearRect(0, 0, dim, dim);
+    gx.fillStyle = color;
+    gx.strokeStyle = color;
+    gx.lineCap = "round";
+    gx.lineJoin = "round";
+    const ci = glyph.indexOf(":");
+    const setKey = ci > 0 ? glyph.slice(0, ci) : "a";
+    const iconKey = ci > 0 ? glyph.slice(ci + 1) : glyph;
+    const iconFn = ICON_SETS[setKey]?.[iconKey] ?? ICON_SETS.a[iconKey] ?? EXTRA_ICONS[iconKey];
+    if (!iconFn) return;
+    const sc = (scale * dim) / 20; // the icon set draws in a 20-unit box
+    gx.save();
+    gx.translate(dim / 2, dim / 2);
+    gx.scale(sc, sc);
+    gx.translate(-10, -10);
+    iconFn(gx);
+    gx.restore();
+  }, [glyph, size, scale, color]);
+  return (
+    <canvas
+      ref={canvas}
+      aria-hidden="true"
+      className={cn("block", className)}
+      style={{ width: size, height: size }}
     />
   );
 }

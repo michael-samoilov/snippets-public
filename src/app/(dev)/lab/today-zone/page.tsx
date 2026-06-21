@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-21c · min-height floor · big date · smooth seal · glyph-aware keep";
+const BUILD = "build 2026-06-21d · mic↔quill fade+carousel · char-gated quill";
 
 const RIFFS: { id: string; name: string; desc: string }[] = [
   { id: "outline", name: "Outline", desc: "A thin solid wax outline, now spanning the full hairline width; inside: today's date, a ruled line to write on, the mic→quill seal." },

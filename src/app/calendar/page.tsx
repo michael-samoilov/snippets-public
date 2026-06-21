@@ -29,7 +29,7 @@ import { highlight as drawHighlight } from "@highlighters/core";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { ulid } from "ulidx";
-import { WaxStamp as CanvasSeal } from "@/components/capture/wax-stamp";
+import { WaxStamp as CanvasSeal, SealGlyph } from "@/components/capture/wax-stamp";
 import {
   birthFor,
   QUILL_SCALE,
@@ -3995,13 +3995,17 @@ function TodayZoneFill({
   // while a typed keep plays, hold the quill so the animation embosses the quill
   // (not the mic it would snap back to once the text is cleared)
   const [playingQuill, setPlayingQuill] = useState(false);
+  // true only while the canvas seal is embossing its press, so the DOM icon
+  // overlay steps aside and lets the relief show
+  const [pressing, setPressing] = useState(false);
   const playTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draft = useKeptDraft();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
-  const hasText = text.trim().length > 0;
+  // the quill appears only once there's a real character typed (not on focus)
+  const hasText = text.length > 0;
   const quill = hasText || playingQuill; // which glyph the seal wears + presses
   useEffect(() => () => {
     if (playTimer.current) clearTimeout(playTimer.current);
@@ -4038,10 +4042,14 @@ function TodayZoneFill({
     if (playTimer.current) clearTimeout(playTimer.current);
     if (startTimer.current) clearTimeout(startTimer.current);
     startTimer.current = setTimeout(() => {
+      setPressing(true); // hide the DOM icon; the canvas reliefs the glyph
       setPlayKey((k) => k + 1);
       navigator.vibrate?.(8);
     }, LEAD_MS);
-    playTimer.current = setTimeout(() => setPlayingQuill(false), LEAD_MS + TAP_MS);
+    playTimer.current = setTimeout(() => {
+      setPlayingQuill(false);
+      setPressing(false);
+    }, LEAD_MS + TAP_MS);
   };
 
   // the zone's two framings (the rounded card, as before) — outline & wax wash
@@ -4126,8 +4134,37 @@ function TodayZoneFill({
             lingerMs={1000}
             exitMs={200}
             exit="grow"
+            // the DOM overlay below owns the resting icon (so it can fade+carousel
+            // between mic and quill); the press still embosses it as relief
+            restGlyph={false}
             ignoreReducedMotion
           />
+          {/* the resting icon, swapped mic↔quill with a fade + vertical carousel.
+              hidden while the seal is pressing, so the embossed relief shows */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden"
+            style={{ transform: "translateY(-4px)" }}
+          >
+            <AnimatePresence initial={false} mode="popLayout">
+              {!pressing && (
+                <motion.span
+                  key={quill ? "quill" : "mic"}
+                  initial={{ y: "70%", opacity: 0 }}
+                  animate={{ y: "0%", opacity: 1 }}
+                  exit={{ y: "-70%", opacity: 0 }}
+                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                  className="block"
+                >
+                  <SealGlyph
+                    glyph={quill ? "e:quill" : "c:mic"}
+                    size={128}
+                    scale={quill ? 0.36 : 0.46}
+                  />
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </span>
         </button>
       </div>
     </div>
