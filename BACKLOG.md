@@ -61,3 +61,67 @@ Companion to #1; same joint session. Prototype findings worth keeping:
 - Haptic `[12, 30, 12]`. Still open for the session: should the new
   entry's flight into the list originate from the seal; sound (opt-in);
   whether the press squash wants squash-and-stretch asymmetry.
+
+## 3. Move the primary typeface off Fraunces
+
+> "Consider changing our primary font away from Fraunces. I've seen it
+> in the first two other vibecoded websites I've seen. I think all the
+> following are examples of being vibecoded: Fraunces, Bricolage, Space
+> Grotesk, Sora, Young Serif, Bodoni, Geist, Syne, Inter, Instrument
+> Serif."
+>
+> "When we do that, we'll have to change the logo S as well (and the
+> favicon, etc.)."
+
+A *consideration*, not a settled swap — the owner wants off Fraunces
+because it now reads as a vibecode tell, but the replacement is open.
+Whatever lands has to carry the type system, not just substitute a
+family.
+
+**What the serif must keep doing.** Fraunces is the whole serif half of
+law 2's "two fonts": it backs `.voice-display` (WONK axis + the
+letterpress emboss), `.voice-label` (small-caps), and every button (the
+mono, IBM Plex Mono, is the other font and stays). A replacement needs
+(a) real character at display size — Fraunces's WONK/SOFT/opsz is what
+keeps the masthead from looking default; (b) a clean letterpress emboss,
+since the seal "S" and mastheads lean on fine serifs that don't halo;
+and (c) a quiet small-caps for the label voice. Decide up front whether
+one family covers display + label or they split (still two fonts total).
+
+**Avoid-list** (the owner's vibecode tells — don't pick these): Fraunces,
+Bricolage, Space Grotesk, Sora, Young Serif, Bodoni, Geist, Syne, Inter,
+Instrument Serif. (Inter is already banned by law 2 regardless.)
+
+**The cascade — what the swap touches** (the owner's "the logo S and
+favicon, etc."):
+
+- `src/app/layout.tsx` — the `next/font` loader, its axes, and the
+  `--font-fraunces` variable name.
+- `src/app/globals.css` — the `--font-fraunces` token, `.voice-display`
+  / `.voice-label`, and the letterpress treatment tuned to Fraunces's
+  metrics.
+- `src/components/shell/wordmark.tsx` + `src/components/capture/wax-stamp.tsx`
+  — the masthead seal is the letter **"S"** set in italic Fraunces and
+  embossed. A new glyph changes the silhouette, so re-tune `SEAL_RATIO`,
+  `NUDGE`, the baseline alignment, and `superSample`.
+- `scripts/generate-icons.mjs` — the favicon "S" is a **hard-coded
+  vector outline** (`S_PATH`, with bounds `S_CX` / `S_CY` / `S_H`) traced
+  from italic Fraunces at opsz≈22. Re-trace from the new font, recompute
+  the centring constants, then `pnpm icons`. And per the script's own
+  note, the icons that actually *ship* are re-rendered from the live 3-D
+  seal — regenerate those too, not just this flat fallback.
+- Regenerate the baked assets: `src/app/icon.png`,
+  `src/app/apple-icon.png`, and `public/icons/icon-192.png` /
+  `icon-512.png` / `maskable-512.png`. (Wax + paper hues are unchanged,
+  so `themeColor` / the manifest shouldn't move.)
+- On ship, amend the rule-holders this file's header names: `DESIGN.md`
+  and `.claude/skills/snippets-craft/SKILL.md` (both cite Fraunces in
+  law 2), plus the `README.md` mention.
+
+**Choosing (start warm).** The bar: a serif with genuine letterpress
+character and either an expressive axis or true italics, that does *not*
+read as a 2020s variable-font default. Favour real history or quirk over
+the current designy crop; confirm it embosses cleanly at the seal "S"
+and holds the small-caps label voice, in both themes and the masthead
+press, before committing. The `frontend-design` skill is the right
+companion for that selection session.
