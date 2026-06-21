@@ -3988,8 +3988,8 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
           <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
         </div>
 
-        {/* the ruled "paper" — the clickable entry, the middle three-fifths */}
-        <div className="w-3/5 min-w-[12rem] max-w-sm">
+        {/* the ruled "paper" — the clickable entry, the middle two-thirds */}
+        <div className="w-2/3 min-w-[12rem] max-w-md">
           <textarea
             ref={areaRef}
             value={text}
@@ -4000,10 +4000,13 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
             aria-label={`Write an entry for ${format(d, "MMMM d")}`}
             className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
             style={{
-              lineHeight: "1.95rem",
-              minHeight: "5.85rem",
+              lineHeight: "1.7rem",
+              minHeight: "5.1rem",
+              // rule near the baseline (not the row foot) so the text sits low on
+              // the line and descenders dip below it, like real ruled paper
               backgroundImage:
-                "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.95rem - 1px), var(--rule-faint) calc(1.95rem - 1px), var(--rule-faint) 1.95rem)",
+                "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
+              backgroundPositionY: "-0.5rem",
               backgroundAttachment: "local",
             }}
           />
