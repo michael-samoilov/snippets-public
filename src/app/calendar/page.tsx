@@ -35,7 +35,7 @@ import {
   QUILL_SCALE,
   useKeepSequence,
 } from "@/components/schedule/keep-sequence";
-import { useConsolidatedToday, useKeepFlow, useKeptDraft, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
+import { useKeepFlow, useKeptDraft, useTodayZone, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
 import {
   groupByDay,
   useAllSnippets,
@@ -2588,6 +2588,9 @@ function ScheduleFeedBase({
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
   const [probe, setProbe] = useState<string | null>(selected);
+  // a dev riff (the today-zone lab): fill today's blank tail with a big
+  // "add to today" zone; null in production
+  const todayZone = useTodayZone();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const spyRef = useRef<string | null>(null);
@@ -2812,14 +2815,19 @@ function ScheduleFeedBase({
               // row's top — in the same layout pass as any content
               // change, so shrinking rows can never dip scrollHeight
               // and clamp the reader off their page
-              <div className="min-h-full">{pageRow}</div>
+              <div className={cn(todayZone && isToday ? "flex h-full flex-col" : "min-h-full")}>
+                {pageRow}
+                {todayZone && isToday && (
+                  <TodayZoneFill day={row.day} riff={todayZone} className="min-h-0 flex-1" />
+                )}
+              </div>
             ) : (
               pageRow
             )}
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today],
+    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone],
   );
 
   const edges = useScrollEdges(scrollerRef, [rows]);
@@ -3578,10 +3586,9 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 // is orchestrated by the keep-sequence engine with the canvas quill seal.
 function BackfillCapture(props: { day: string; follows?: boolean }) {
   const flow = useKeepFlow();
-  const consolidated = useConsolidatedToday();
-  // the today-zone lab houses the day's entry in a single bottom zone, so the
-  // inline composer steps aside
-  if (consolidated) return null;
+  // the today-zone lab houses today's entry in a big fill zone, so the inline
+  // composer steps aside
+  if (useTodayZone()) return null;
   return flow ? (
     <FlowBackfillCapture {...props} flow={flow} />
   ) : (
@@ -3918,6 +3925,95 @@ function FlowBackfillCapture({
           </button>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+/* The today-zone (lab riffs): a big "add to today" panel that FILLS the blank
+   tail of today's page (flex-1 within the min-h-full), housing the large
+   pre-stamp wax button. It shrinks as today fills with entries above it. Each
+   riff is a different framing of the same idea. Lab-only (gated by context). */
+function TodayZoneFill({ day, riff, className }: { day: string; riff: string; className?: string }) {
+  const [text, setText] = useState("");
+  const [playKey, setPlayKey] = useState(0);
+  const [down, setDown] = useState(false);
+  const draft = useKeptDraft();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const keep = () => {
+    const t = text.trim();
+    if (!t) { inputRef.current?.focus(); return; }
+    const capturedAt = Date.now();
+    const id = ulid(capturedAt);
+    draft?.set({
+      id, text: t, kind: null, tags: [], capturedAt, day,
+      source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
+    });
+    void addSnippet({ id, text: t, source: "typed", capturedAt });
+    setText("");
+    setPlayKey((k) => k + 1);
+    navigator.vibrate?.(8);
+  };
+
+  const isMic = riff === "mic";
+  const frame =
+    riff === "fill"
+      ? "border border-rule-faint bg-paper-recessed shadow-[inset_0_1px_0_var(--press-highlight)]"
+      : riff === "outline"
+        ? "border border-wax/55"
+        : riff === "wash"
+          ? "border border-transparent bg-wax/[0.06]"
+          : "border-2 border-dashed border-wax/45"; // dashed (default) + mic
+
+  return (
+    <div className={cn("px-3 pb-3 pt-1", className)}>
+      {/* the panel fills the blank tail; clicking it focuses the field */}
+      <div
+        onClick={() => inputRef.current?.focus()}
+        className={cn(
+          "flex h-full min-h-[8.5rem] w-full cursor-text flex-col items-center justify-center gap-3 rounded-2xl px-4 py-6 text-center",
+          frame,
+        )}
+      >
+        <button
+          type="button"
+          aria-label="Keep today's entry"
+          onClick={(e) => { e.stopPropagation(); keep(); }}
+          onPointerDown={(e) => { e.preventDefault(); setDown(true); }}
+          onPointerUp={() => setDown(false)}
+          onPointerLeave={() => setDown(false)}
+          className="relative grid place-items-center rounded-full"
+          style={{ width: 92, height: 92 }}
+        >
+          <CanvasSeal
+            playKey={playKey}
+            size={92}
+            glyph={isMic ? "a:mic" : "e:quill"}
+            iconScale={isMic ? 0.42 : 0.36}
+            mode="tap"
+            pressed={down}
+            lingerMs={550}
+            exitMs={420}
+            exit="grow"
+            variant="spring"
+            ease="front"
+            bounce={1.5}
+            rotate={30}
+            superSample={3}
+            ignoreReducedMotion
+          />
+        </button>
+        <input
+          ref={inputRef}
+          value={text}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); keep(); } }}
+          placeholder={isMic ? "Speak or type today’s entry…" : "Add something from today…"}
+          aria-label="Add to today"
+          className="voice-prose w-full max-w-sm bg-transparent text-center text-[0.95rem] outline-none placeholder:italic placeholder:text-wax/70"
+        />
+      </div>
     </div>
   );
 }

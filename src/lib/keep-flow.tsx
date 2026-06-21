@@ -47,10 +47,12 @@ export function useKeptDraft(): KeptDraftStore | null {
   return useContext(KeptDraftContext);
 }
 
-/* When a dev surface consolidates the "today" entry into a single bottom zone
-   (the today-zone lab), the per-day inline composer is suppressed so the zone
-   is the only place to add. Production has no provider → false → unchanged. */
-export const ConsolidatedTodayContext = createContext(false);
-export function useConsolidatedToday(): boolean {
-  return useContext(ConsolidatedTodayContext);
+/* The today-zone lab fills the blank desk at the foot of the book with a big
+   "add to today" zone (a wax-outlined panel housing the large pre-stamp seal).
+   The context carries the chosen riff id; when set, the per-day inline composer
+   steps aside and the fill zone renders in today's slot. Production has no
+   provider → null → unchanged. */
+export const TodayZoneContext = createContext<string | null>(null);
+export function useTodayZone(): string | null {
+  return useContext(TodayZoneContext);
 }
