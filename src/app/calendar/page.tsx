@@ -1704,7 +1704,7 @@ function Calendar() {
                         </span>
                         <span
                           className={cn(
-                            "voice-display block text-[1.15rem] leading-tight",
+                            "voice-display block text-[1.15rem] leading-tight tabular-nums",
                             isToday && "text-wax",
                           )}
                         >
@@ -2802,7 +2802,7 @@ function ScheduleFeedBase({
                   <span
                     data-flydate={row.day}
                     className={cn(
-                      "voice-display block text-[1.15rem] leading-tight",
+                      "voice-display block text-[1.15rem] leading-tight tabular-nums",
                       isToday && "text-wax",
                     )}
                   >
@@ -3223,7 +3223,12 @@ function EntryBody({
           aria-hidden="true"
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-full z-[6] h-8 transition-opacity duration-200",
-            edges.bottom ? "opacity-100" : "opacity-0",
+            // hidden while rewriting: as the field autosizes and the keyboard
+            // room scrolls to follow the caret, the foot crosses the bottom
+            // threshold every keystroke — which would flicker the hairline. The
+            // caret is kept in view by useKeyboardRoom, so the marker isn't
+            // needed mid-edit anyway.
+            edges.bottom && !editing ? "opacity-100" : "opacity-0",
           )}
         >
           {/* the soft fade, dissolving to solid paper just above the rule */}
