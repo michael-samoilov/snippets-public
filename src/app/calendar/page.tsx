@@ -2886,13 +2886,13 @@ function ScheduleFeedBase({
       tabIndex={-1}
     >
       {body}
-      {/* in zone mode the foot rule wears the blue outline and pulls in to the
-          zone's corner radius, so it reads as the zone's own bottom edge */}
-      <ScrollTerminus
-        show={edges.bottom}
-        tone={todayZone ? "wax" : "faint"}
-        inset={todayZone ? 16 : 0}
-      />
+      {todayZone ? (
+        // tracks the visible bottom: blue + rounded over the zone, default rule
+        // elsewhere
+        <TodayZoneTerminus scrollerRef={scrollerRef} />
+      ) : (
+        <ScrollTerminus show={edges.bottom} />
+      )}
     </div>
   );
 }
@@ -4011,6 +4011,66 @@ function FlowBackfillCapture({
   );
 }
 
+/* The foot hairline for the today-zone. It marks the bottom of the visible
+   content (sticky at the scroll foot, shown only while there's more below).
+   Over the zone it wears the blue outline and follows the zone's rounded
+   bottom corners (so it reads as the zone's own bottom edge, tracing whatever
+   is currently visible); over plain content it's the default full-width rule.
+   Imperative (its own rAF scroll read) so it never re-renders the feed. */
+function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivElement | null> }) {
+  const lineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    const line = lineRef.current;
+    if (!sc || !line) return;
+    const R = 16; // the zone's rounded-2xl corner radius
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
+      if (!moreBelow) { line.style.opacity = "0"; return; }
+      const vpBottom = sc.getBoundingClientRect().bottom;
+      const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
+      const box = boxes[boxes.length - 1];
+      let blue = false;
+      let inset = 0;
+      if (box) {
+        const r = box.getBoundingClientRect();
+        if (r.top <= vpBottom && r.bottom >= vpBottom) {
+          blue = true;
+          const dy = r.bottom - vpBottom; // distance from the fold to the real bottom
+          if (dy < R) inset = R - Math.sqrt(Math.max(0, R * R - (R - dy) * (R - dy)));
+        }
+      }
+      line.style.opacity = "1";
+      line.style.left = `${inset}px`;
+      line.style.right = `${inset}px`;
+      line.style.borderTopColor = blue
+        ? "color-mix(in srgb, var(--wax) 45%, transparent)"
+        : "var(--rule-faint)";
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(onScroll);
+    ro.observe(sc);
+    update();
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [scrollerRef]);
+  return (
+    <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
+      <div
+        ref={lineRef}
+        className="absolute bottom-0 border-t transition-[opacity,border-color] duration-200"
+        style={{ left: 0, right: 0, opacity: 0, borderTopColor: "var(--rule-faint)" }}
+      />
+    </div>
+  );
+}
+
 /* Variants of the locked blue outline — the riff now picks one of these. */
 const FRAME_VARIANTS: Record<string, string> = {
   hairline: "border border-wax/45",
@@ -4040,33 +4100,31 @@ function TodayZoneFill({
   const [text, setText] = useState("");
   const [playKey, setPlayKey] = useState(0);
   const [down, setDown] = useState(false);
-  // a generation counter: bumping it swaps the whole zone — the old one (still
-  // showing the kept words + settled seal) slides off the right while a fresh,
-  // empty zone wipes down from the top to take its place
+  // a generation counter: bumping it brings a fresh empty zone in (wipes down)
   const [gen, setGen] = useState(0);
-  // "pressing" freezes the words in place while the seal plays its keep; the
-  // gen bump then carries them off and files the entry
-  const [phase, setPhase] = useState<"idle" | "pressing">("idle");
-  const startTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // the keep sequence:
+  //  pressing → (sweep) exiting → filling → idle   |   (morph) → idle
+  const [phase, setPhase] = useState<"idle" | "pressing" | "exiting" | "filling">("idle");
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   const draft = useKeptDraft();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
+  const morph = submitStyle === "morph";
   // the quill appears only once there's a real character typed (not on focus),
   // and stays through the keep
   const hasText = text.length > 0;
   const quill = hasText || frozen; // which glyph the seal wears + presses
-  useEffect(() => () => {
-    if (startTimer.current) clearTimeout(startTimer.current);
-    if (exitTimer.current) clearTimeout(exitTimer.current);
-  }, []);
+  useEffect(() => clearTimers, []);
 
-  // press timeline: settle the keyboard-dismiss + scroll, play the press, hold
-  // the settled seal a beat — THEN sweep the zone off and file the entry
-  const LEAD_MS = 380;     // keyboard dismiss + scroll, before the press
-  const HOLD_MS = 1500;    // press (~1.15s) + a short settled beat, before the sweep
+  // press timeline (sequential): lead (dismiss keyboard + scroll), play the
+  // press, hold the settled seal a beat, then the keep animation in order.
+  const LEAD_MS = 380;
+  const HOLD_MS = 1450;
+  const EXIT_MS = 560;  // sweep step 1: the zone slides off right
+  const ENTRY_MS = 560; // sweep step 2: the entry wipes into the schedule
 
   const submit = () => {
     if (!hasText) {
@@ -4076,36 +4134,38 @@ function TodayZoneFill({
     const t = text.trim();
     const capturedAt = Date.now();
     const id = ulid(capturedAt);
+    const file = () => {
+      draft?.set({
+        id, text: t, kind: null, tags: [], capturedAt, day,
+        source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
+      });
+      void addSnippet({ id, text: t, source: "typed", capturedAt });
+    };
     // freeze the words; dismiss the keyboard and bring the seal fully into view
     setPhase("pressing");
     areaRef.current?.blur();
     requestAnimationFrame(() =>
       btnRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }),
     );
-    if (startTimer.current) clearTimeout(startTimer.current);
-    if (exitTimer.current) clearTimeout(exitTimer.current);
-    startTimer.current = setTimeout(() => {
-      setPlayKey((k) => k + 1); // play the press in place, words still showing
-      navigator.vibrate?.(8);
-    }, LEAD_MS);
-    exitTimer.current = setTimeout(() => {
-      // file the entry — it wipes into its schedule slot above — as this zone
-      // (still wearing the words + settled seal) sweeps off the right, and a
-      // fresh empty zone wipes down to replace it (the gen bump drives both)
-      draft?.set({
-        id, text: t, kind: null, tags: [], capturedAt, day,
-        source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
+    clearTimers();
+    const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
+    at(LEAD_MS, () => { setPlayKey((k) => k + 1); navigator.vibrate?.(8); });
+    if (morph) {
+      // the zone's box flows up into the kept card (shared layoutId) while a
+      // fresh empty zone wipes down
+      at(LEAD_MS + HOLD_MS, () => { file(); setText(""); setPhase("idle"); setGen((g) => g + 1); });
+    } else {
+      // sweep — three beats, IN ORDER:
+      at(LEAD_MS + HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
+      at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); }); // 2 entry wipes into schedule
+      at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone wipes down
+        setText(""); setPhase("idle"); setGen((g) => g + 1);
       });
-      void addSnippet({ id, text: t, source: "typed", capturedAt });
-      setText("");
-      setPhase("idle");
-      setGen((g) => g + 1);
-    }, LEAD_MS + HOLD_MS);
+    }
   };
 
   // locked: the blue outline. The riff now picks a VARIANT of that outline.
   const frame = FRAME_VARIANTS[riff] ?? FRAME_VARIANTS.hairline;
-  const morph = submitStyle === "morph";
 
   return (
     // each generation is one element. SWEEP: the old zone (words + settled seal)
@@ -4114,16 +4174,18 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
-        // no horizontal inset: the card spans the full scroll width, flush with
-        // the day hairlines left and right. w-full so popLayout keeps its width
-        // when it pins the exiting copy absolutely to sweep it off
         className={cn("relative w-full pb-3 pt-1", className)}
         initial={gen === 0 ? false : { y: "-40%", opacity: 0 }}
-        animate={{ x: 0, y: 0, opacity: 1 }}
-        exit={morph ? { opacity: 0 } : { x: "112%", opacity: 0 }}
-        transition={{ duration: 0.55, ease: "easeInOut" }}
+        // SWEEP step 1: the current zone slides off the right (driven by phase,
+        // in place — the gen bump for the fresh zone only happens at step 3).
+        animate={!morph && phase === "exiting" ? { x: "112%", opacity: 0 } : { x: 0, y: 0, opacity: 1 }}
+        // morph fades the old box as its layoutId carries it into the card;
+        // sweep's visible slide is the `animate` above, so removal is instant
+        exit={morph ? { opacity: 0 } : { opacity: 0, transition: { duration: 0 } }}
+        transition={{ duration: morph ? 0.55 : EXIT_MS / 1000, ease: "easeInOut" }}
       >
         <motion.div
+          data-today-zone-box
           // in morph mode the (about-to-exit) box shares its layout id with the
           // kept card, so it flows into that card's slot as it leaves
           layoutId={morph && phase === "pressing" ? "today-zone-card" : undefined}

@@ -109,19 +109,7 @@ export function ScrollTerminusHead({ show }: { show: boolean }) {
     softer fade lives in calendar's EntryBody, as an overlay just outside
     its scroller, so the scroller's sub-pixel clip can't leak a sliver of
     the next line beneath the rule.) */
-export function ScrollTerminus({
-  show,
-  tone = "faint",
-  inset = 0,
-}: {
-  show: boolean;
-  /** the hairline colour — the plain rule, or the blue zone outline. */
-  tone?: "faint" | "wax";
-  /** pull the line in from each edge (px) so it meets the zone's rounded
-      corners instead of running the full scroll width — reads as the zone's
-      own bottom edge. */
-  inset?: number;
-}) {
+export function ScrollTerminus({ show }: { show: boolean }) {
   return (
     <div
       aria-hidden="true"
@@ -129,11 +117,9 @@ export function ScrollTerminus({
     >
       <div
         className={cn(
-          "absolute bottom-0 border-t transition-opacity duration-200",
-          tone === "wax" ? "border-wax/55" : "border-rule-faint",
+          "absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200",
           show ? "opacity-100" : "opacity-0",
         )}
-        style={{ left: inset, right: inset }}
       />
     </div>
   );
