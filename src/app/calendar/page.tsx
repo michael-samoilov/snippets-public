@@ -4005,34 +4005,35 @@ function TodayZoneFill({
     navigator.vibrate?.(8);
   };
 
-  // two framings of the zone — both full-bleed (no rounded card), matching the
-  // scroll container / day hairlines edge-to-edge
+  // the zone's two framings (the rounded card, as before) — outline & wax wash
   const frame =
     riff === "wash"
-      ? "border-y border-wax/15 bg-wax/[0.06]"
-      : "border-y border-wax/50"; // outline (default)
+      ? "border border-transparent bg-wax/[0.06]"
+      : "border border-wax/55"; // outline (default)
 
   return (
-    <div
-      className={cn(
-        "flex min-h-[14rem] w-full flex-col items-center justify-center gap-4 px-4 py-6 text-center",
-        frame,
-        className,
-      )}
-    >
-      {/* today's date, in the Today-page voice — omitted when today already
-          owns its own page above (no duplicate date) */}
-      {showDate && (
-        <div className="leading-none">
-          <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
-          <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
-        </div>
-      )}
+    // no horizontal inset: the card spans the full scroll width, flush with the
+    // day hairlines left and right
+    <div className={cn("pb-3 pt-1", className)}>
+      <div
+        className={cn(
+          "flex h-full min-h-[14rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
+          frame,
+        )}
+      >
+        {/* today's date, in the Today-page voice — omitted when today already
+            owns its own page above (no duplicate date) */}
+        {showDate && (
+          <div className="leading-none">
+            <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
+            <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
+          </div>
+        )}
 
-      {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt sits
-          on one line */}
-      <div className="w-4/5 min-w-[14rem] max-w-2xl">
-        <textarea
+        {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt sits
+            on one line */}
+        <div className="w-4/5 min-w-[14rem] max-w-2xl">
+          <textarea
             ref={areaRef}
             value={text}
             rows={3}
@@ -4084,6 +4085,7 @@ function TodayZoneFill({
             ignoreReducedMotion
           />
         </button>
+      </div>
     </div>
   );
 }

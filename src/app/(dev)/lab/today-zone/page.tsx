@@ -27,11 +27,11 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-21a · today-zone composer · full-bleed · outline / wax wash";
+const BUILD = "build 2026-06-21b · today-zone composer · full-width card · outline / wax wash";
 
 const RIFFS: { id: string; name: string; desc: string }[] = [
-  { id: "outline", name: "Outline", desc: "Full-bleed wax hairlines top & bottom; inside: today's date, a ruled line to write on, the mic→quill seal." },
-  { id: "wash", name: "Wax wash", desc: "Full-bleed faint wax wash behind the same composer (date · ruled line · mic→quill seal)." },
+  { id: "outline", name: "Outline", desc: "A thin solid wax outline, now spanning the full hairline width; inside: today's date, a ruled line to write on, the mic→quill seal." },
+  { id: "wash", name: "Wax wash", desc: "No border; a faint wax wash behind the same composer, full-width (date · ruled line · mic→quill seal)." },
 ];
 
 // ── compact isolated demo dataset (today starts blank) ──
