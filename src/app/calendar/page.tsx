@@ -2821,8 +2821,13 @@ function ScheduleFeedBase({
                 </div>
           </section>
         );
+        // the tail (last row + zone) keeps a stable key so that when today
+        // earns its first entry — and the last row flips from a past day to
+        // today — the zone reconciles in place instead of remounting (which
+        // would cut its keep animation short)
+        const rowKey = last && todayZone ? "__today_tail__" : row.day;
         return (
-          <Fragment key={row.day}>
+          <Fragment key={rowKey}>
             {newMonth && (
               <p
                 className={cn(
@@ -2848,7 +2853,7 @@ function ScheduleFeedBase({
                     day={todayKey}
                     riff={todayZone}
                     showDate={!isToday}
-                    className="min-h-0 flex-1"
+                    className="flex-1"
                   />
                 )}
               </div>
@@ -3986,10 +3991,16 @@ function TodayZoneFill({
   const [text, setText] = useState("");
   const [playKey, setPlayKey] = useState(0);
   const [down, setDown] = useState(false);
+  // while a typed keep plays, hold the quill so the animation embosses the quill
+  // (not the mic it would snap back to once the text is cleared)
+  const [playingQuill, setPlayingQuill] = useState(false);
+  const playTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draft = useKeptDraft();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const d = dateFromDayKey(day);
   const hasText = text.trim().length > 0;
+  const quill = hasText || playingQuill; // which glyph the seal wears + presses
+  useEffect(() => () => { if (playTimer.current) clearTimeout(playTimer.current); }, []);
 
   const submit = () => {
     if (!hasText) {
@@ -4006,6 +4017,10 @@ function TodayZoneFill({
     void addSnippet({ id, text: t, source: "typed", capturedAt });
     setText("");
     if (areaRef.current) { areaRef.current.value = ""; areaRef.current.style.height = ""; }
+    // keep the quill through the full press lifecycle (press+linger+exit+drop)
+    setPlayingQuill(true);
+    if (playTimer.current) clearTimeout(playTimer.current);
+    playTimer.current = setTimeout(() => setPlayingQuill(false), 2770);
     setPlayKey((k) => k + 1);
     navigator.vibrate?.(8);
   };
@@ -4022,7 +4037,9 @@ function TodayZoneFill({
     <div className={cn("pb-3 pt-1", className)}>
       <div
         className={cn(
-          "flex h-full min-h-[14rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
+          // a firm floor so a tall stack of entries can never squeeze the zone
+          // smaller than its contents (date + ruled line + the big seal)
+          "flex h-full min-h-[22rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
           frame,
         )}
       >
@@ -4075,8 +4092,8 @@ function TodayZoneFill({
           <CanvasSeal
             playKey={playKey}
             size={128}
-            glyph={hasText ? "e:quill" : "c:mic"}
-            iconScale={hasText ? 0.36 : 0.46}
+            glyph={quill ? "e:quill" : "c:mic"}
+            iconScale={quill ? 0.36 : 0.46}
             mode="tap"
             pressed={down}
             variant="spring"
@@ -4089,7 +4106,6 @@ function TodayZoneFill({
             lingerMs={1000}
             exitMs={200}
             exit="grow"
-            superSample={3}
             ignoreReducedMotion
           />
         </button>
