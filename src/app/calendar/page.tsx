@@ -4002,11 +4002,11 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
             style={{
               lineHeight: "1.7rem",
               minHeight: "5.1rem",
-              // rule near the baseline (not the row foot) so the text sits low on
-              // the line and descenders dip below it, like real ruled paper
+              // rule just below the baseline so standard characters rest ON the
+              // line and only descenders dip across it, like real ruled paper
               backgroundImage:
                 "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
-              backgroundPositionY: "-0.5rem",
+              backgroundPositionY: "-0.25rem",
               backgroundAttachment: "local",
             }}
           />
