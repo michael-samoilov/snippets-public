@@ -35,7 +35,7 @@ import {
   QUILL_SCALE,
   useKeepSequence,
 } from "@/components/schedule/keep-sequence";
-import { useKeepFlow, useKeptDraft, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
+import { useConsolidatedToday, useKeepFlow, useKeptDraft, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
 import {
   groupByDay,
   useAllSnippets,
@@ -3578,6 +3578,10 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 // is orchestrated by the keep-sequence engine with the canvas quill seal.
 function BackfillCapture(props: { day: string; follows?: boolean }) {
   const flow = useKeepFlow();
+  const consolidated = useConsolidatedToday();
+  // the today-zone lab houses the day's entry in a single bottom zone, so the
+  // inline composer steps aside
+  if (consolidated) return null;
   return flow ? (
     <FlowBackfillCapture {...props} flow={flow} />
   ) : (

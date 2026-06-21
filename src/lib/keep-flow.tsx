@@ -46,3 +46,11 @@ export const KeptDraftContext = createContext<KeptDraftStore | null>(null);
 export function useKeptDraft(): KeptDraftStore | null {
   return useContext(KeptDraftContext);
 }
+
+/* When a dev surface consolidates the "today" entry into a single bottom zone
+   (the today-zone lab), the per-day inline composer is suppressed so the zone
+   is the only place to add. Production has no provider → false → unchanged. */
+export const ConsolidatedTodayContext = createContext(false);
+export function useConsolidatedToday(): boolean {
+  return useContext(ConsolidatedTodayContext);
+}

@@ -35,8 +35,9 @@ export type Birth = "rise" | "morph" | "impact" | "emboss" | "file" | "quiet";
 // Each flow is now a distinct (where the seal presses) × (how it leaves) combo.
 // The card itself is continuous (optimistic) and the press is finalized, so
 // these two axes — position + exit — are what actually differ between flows.
+// DECIDED (owner, 2026-06-20): the shipped keep is flow A — corner · swell.
 export const FLOWS: { id: FlowId; name: string; blurb: string }[] = [
-  { id: "A", name: "Corner · swell", blurb: "Presses at the button's corner (bottom-right), then swells and fades away." },
+  { id: "A", name: "Corner · swell ✓", blurb: "The chosen keep: presses at the button's corner, then swells and fades away." },
   { id: "B", name: "Centre · swell", blurb: "Slides to the row's centre, presses over the new card, then swells and fades." },
   { id: "C", name: "Travel · swell", blurb: "Starts at the corner and glides to the centre as it presses, then swells away." },
   { id: "D", name: "Corner · rise", blurb: "Presses at the corner, then floats upward as it fades — lifting off the page." },
