@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   useScrollEdges,
   ScrollTerminusHead,
   ScrollTerminus,
 } from "@/components/ui/scroll-terminus";
+import { useKeyboardRoom } from "@/hooks/use-keyboard-room";
 
 /**
  * The sheet's main scroll area. The Today page scrolls inside it and so
@@ -40,55 +41,9 @@ export function SheetScroll({
     return () => ro.disconnect();
   }, [marked]);
 
-  // keyboard-aware: while a field on the page is focused, reserve room below it
-  // for the on-screen keyboard (and its accessory/autofill bar) and keep the
-  // field's foot above them — otherwise a growing entry's last lines, and the
-  // caret, hide behind the keyboard with nothing below to scroll them into view.
-  useEffect(() => {
-    if (!marked) return;
-    const vv = window.visualViewport;
-    const el = ref.current;
-    const content = contentRef.current;
-    if (!vv || !el || !content) return;
-    let field: HTMLElement | null = null;
-    const sync = () => {
-      // visualViewport's height excludes the keyboard AND its accessory bar, so
-      // this is exactly the height they cover
-      const covered = field
-        ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-        : 0;
-      content.style.paddingBottom = covered ? `${covered}px` : "";
-      if (field && covered) {
-        // float the field's foot just above the keyboard (8px of air)
-        const over = field.getBoundingClientRect().bottom - (vv.offsetTop + vv.height - 8);
-        if (over > 0) el.scrollTop += over;
-      }
-    };
-    const onFocusIn = (e: FocusEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) {
-        field = t;
-        sync();
-      }
-    };
-    const onFocusOut = () => {
-      field = null;
-      content.style.paddingBottom = "";
-    };
-    el.addEventListener("focusin", onFocusIn);
-    el.addEventListener("focusout", onFocusOut);
-    el.addEventListener("input", sync); // the field grows as it's typed into
-    vv.addEventListener("resize", sync); // the keyboard opens/closes
-    vv.addEventListener("scroll", sync);
-    return () => {
-      el.removeEventListener("focusin", onFocusIn);
-      el.removeEventListener("focusout", onFocusOut);
-      el.removeEventListener("input", sync);
-      vv.removeEventListener("resize", sync);
-      vv.removeEventListener("scroll", sync);
-      content.style.paddingBottom = "";
-    };
-  }, [marked]);
+  // keep the capture field (and a growing entry's last lines) clear of the
+  // keyboard and its floating accessory band
+  useKeyboardRoom(ref, marked);
 
   // liveHeight: the Today page's own content grows as you type, so "at the
   // bottom" must read the real current height, not a cached (shorter) one

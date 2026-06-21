@@ -42,6 +42,7 @@ import {
   useDayCounts,
   useSearch,
 } from "@/hooks/use-snippets";
+import { useKeyboardRoom } from "@/hooks/use-keyboard-room";
 import {
   addSnippet,
   restoreSnippet,
@@ -2592,6 +2593,8 @@ function ScheduleFeedBase({
   // "add to today" zone; null in production
   const todayZone = useTodayZone();
   const scrollerRef = useRef<HTMLDivElement>(null);
+  // keep a focused composer/editor clear of the keyboard and its floating pills
+  useKeyboardRoom(scrollerRef, active);
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const spyRef = useRef<string | null>(null);
   const pendingRef = useRef<string | null>(null);
@@ -3015,6 +3018,9 @@ function EntryBody({
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // while rewriting, keep the field and the entry's last lines clear of the
+  // keyboard and its floating pills
+  useKeyboardRoom(contentRef, editing);
   // a long entry that overflows the card reads at the schedule-preview size
   // (smaller) rather than full prose. We can't trust the live scroll edges
   // for this: as the card opens it FLIPs from a small tile up to the full
