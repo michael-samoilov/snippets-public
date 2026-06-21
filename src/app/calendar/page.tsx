@@ -2846,13 +2846,11 @@ function ScheduleFeedBase({
               <div className={cn(todayZone ? "flex h-full flex-col" : "min-h-full")}>
                 {pageRow}
                 {todayZone && (
-                  // the zone always represents today; when today already owns
-                  // this last page (it has entries) the date is hidden to avoid
-                  // doubling it, otherwise (blank today) the date shows here
+                  // the zone always carries today's big date — even once today
+                  // also owns a page above — so the composer always names its day
                   <TodayZoneFill
                     day={todayKey}
                     riff={todayZone}
-                    showDate={!isToday}
                     className="flex-1"
                   />
                 )}
@@ -2866,7 +2864,10 @@ function ScheduleFeedBase({
     [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone],
   );
 
-  const edges = useScrollEdges(scrollerRef, [rows]);
+  // with the today-zone on, the scroller's content height grows with the zone,
+  // so read it live — otherwise the cached height leaves the foot hairline lit
+  // and floating across the zone instead of resting below it / fading at the end
+  const edges = useScrollEdges(scrollerRef, [rows, todayZone], !!todayZone);
 
   return (
     <div
@@ -3995,12 +3996,21 @@ function TodayZoneFill({
   // (not the mic it would snap back to once the text is cleared)
   const [playingQuill, setPlayingQuill] = useState(false);
   const playTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draft = useKeptDraft();
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const hasText = text.trim().length > 0;
   const quill = hasText || playingQuill; // which glyph the seal wears + presses
-  useEffect(() => () => { if (playTimer.current) clearTimeout(playTimer.current); }, []);
+  useEffect(() => () => {
+    if (playTimer.current) clearTimeout(playTimer.current);
+    if (startTimer.current) clearTimeout(startTimer.current);
+  }, []);
+
+  // ms to settle the keyboard-dismiss + scroll before the press plays
+  const LEAD_MS = 420;
+  const TAP_MS = 2770; // press + linger + exit + drop (see wax-stamp TAP_TOTAL)
 
   const submit = () => {
     if (!hasText) {
@@ -4017,12 +4027,21 @@ function TodayZoneFill({
     void addSnippet({ id, text: t, source: "typed", capturedAt });
     setText("");
     if (areaRef.current) { areaRef.current.value = ""; areaRef.current.style.height = ""; }
-    // keep the quill through the full press lifecycle (press+linger+exit+drop)
+    // dismiss the keyboard and bring the seal fully into view, so its press
+    // animation is certainly on-screen, THEN play it
+    areaRef.current?.blur();
+    requestAnimationFrame(() =>
+      btnRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }),
+    );
+    // keep the quill through the lead + full press lifecycle
     setPlayingQuill(true);
     if (playTimer.current) clearTimeout(playTimer.current);
-    playTimer.current = setTimeout(() => setPlayingQuill(false), 2770);
-    setPlayKey((k) => k + 1);
-    navigator.vibrate?.(8);
+    if (startTimer.current) clearTimeout(startTimer.current);
+    startTimer.current = setTimeout(() => {
+      setPlayKey((k) => k + 1);
+      navigator.vibrate?.(8);
+    }, LEAD_MS);
+    playTimer.current = setTimeout(() => setPlayingQuill(false), LEAD_MS + TAP_MS);
   };
 
   // the zone's two framings (the rounded card, as before) — outline & wax wash
@@ -4080,6 +4099,7 @@ function TodayZoneFill({
         {/* the wax button — white mic at rest; becomes a white quill once typing
             starts; press it to submit (plays the corner·swell keep) */}
         <button
+          ref={btnRef}
           type="button"
           aria-label={hasText ? "Keep today's entry" : "Speak today's entry"}
           onClick={submit}
