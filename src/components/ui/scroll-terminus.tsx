@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 export function useScrollEdges(
   ref: RefObject<HTMLElement | null>,
   deps: DependencyList = [],
+  liveHeight = false,
 ): { top: boolean; bottom: boolean } {
   const [edges, setEdges] = useState({ top: false, bottom: false });
   // the scroll content's height changes only on resize or a content
@@ -38,12 +39,16 @@ export function useScrollEdges(
     // height would leave the foot lit at the very bottom (and only clear
     // on overscroll), so the viewport height must be current here.
     const clientH = el.clientHeight;
-    const scrollH = scrollHRef.current;
+    // liveHeight: a surface whose OWN content grows as you type (the Today
+    // page's textarea) reads its scroll height live too, so "at the bottom"
+    // tracks the real, current bottom instead of a cached, shorter one. A long
+    // virtual feed leaves it cached (the read there can force a full layout).
+    const scrollH = liveHeight ? el.scrollHeight : scrollHRef.current;
     const can = scrollH > clientH + 1;
     const top = el.scrollTop > 1;
     const bottom = can && el.scrollTop + clientH < scrollH - 1;
     setEdges((p) => (p.top === top && p.bottom === bottom ? p : { top, bottom }));
-  }, [ref]);
+  }, [ref, liveHeight]);
   const refresh = useCallback(() => {
     const el = ref.current;
     if (!el) return;
