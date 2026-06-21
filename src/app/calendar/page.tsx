@@ -4006,7 +4006,7 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
               // line and only descenders dip across it, like real ruled paper
               backgroundImage:
                 "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
-              backgroundPositionY: "-0.25rem",
+              backgroundPositionY: "-0.4rem",
               backgroundAttachment: "local",
             }}
           />
