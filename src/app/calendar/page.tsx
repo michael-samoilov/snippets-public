@@ -2650,6 +2650,14 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el) return false;
+    // in zone mode "today" lives at the very foot (the zone fills the tail) —
+    // land on the bottom so the today zone is shown, not the top of today's row
+    if (todayZone && day === todayKey) {
+      spyRef.current = day;
+      progTargetRef.current = null;
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+      return true;
+    }
     if (!row) {
       // when the today-zone stands in for a blank today, there is no today row
       // to land on — scroll to the foot, where the zone lives
@@ -2675,7 +2683,7 @@ function ScheduleFeedBase({
     }
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     return true;
-  }, [todayKey]);
+  }, [todayKey, todayZone]);
 
   const goTo = useCallback(
     (day: string, smooth = false) => {
@@ -2796,27 +2804,42 @@ function ScheduleFeedBase({
                 {/* the date stands in the margin and holds its ground
                     while its day's entries scroll past */}
                 <div className="sticky top-0 self-start pb-3 pt-2 text-center">
-                  {!hideToday && (
-                    <>
-                      <span
-                        className={cn(
-                          "voice-label block text-[0.62rem] leading-tight",
-                          isToday ? "text-wax" : "text-ink-faint",
-                        )}
+                  {!hideToday && (() => {
+                    const dateInner = (
+                      <>
+                        <span
+                          className={cn(
+                            "voice-label block text-[0.62rem] leading-tight",
+                            isToday ? "text-wax" : "text-ink-faint",
+                          )}
+                        >
+                          {format(d, "EEE")}
+                        </span>
+                        <span
+                          data-flydate={row.day}
+                          className={cn(
+                            "voice-display block text-[1.15rem] leading-tight tabular-nums",
+                            isToday && "text-wax",
+                          )}
+                        >
+                          {format(d, "d")}
+                        </span>
+                      </>
+                    );
+                    // in zone mode today's date sticky-header populates as the
+                    // entry arrives — wipe it in from the left, with the card
+                    return todayZone && isToday ? (
+                      <motion.div
+                        initial={{ opacity: 0, clipPath: "inset(0 100% 0 0)" }}
+                        animate={{ opacity: 1, clipPath: "inset(0 0% 0 0)" }}
+                        transition={{ duration: 0.5, ease: "easeInOut" }}
                       >
-                        {format(d, "EEE")}
-                      </span>
-                      <span
-                        data-flydate={row.day}
-                        className={cn(
-                          "voice-display block text-[1.15rem] leading-tight tabular-nums",
-                          isToday && "text-wax",
-                        )}
-                      >
-                        {format(d, "d")}
-                      </span>
-                    </>
-                  )}
+                        {dateInner}
+                      </motion.div>
+                    ) : (
+                      dateInner
+                    );
+                  })()}
                 </div>
                 <div className={cn("min-w-0", !hideToday && "pb-3 pt-2")}>
                   <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
@@ -2922,9 +2945,11 @@ function ScheduleCards({
   // zone itself becomes this card, via a shared layout id)
   const todayZone = useTodayZone();
   const zoneSubmit = todayZone?.submit;
+  // a true wipe-in from the left (a left→right clip reveal), reused for the
+  // kept card and its margin date
   const sweepBirth = {
-    initial: { opacity: 0, x: -56 },
-    animate: { opacity: 1, x: 0 },
+    initial: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
+    animate: { opacity: 1, clipPath: "inset(0 0% 0 0)" },
     transition: { duration: 0.5, ease: "easeInOut" as const },
   };
   const defaultBirth = birth ?? {
@@ -2966,7 +2991,7 @@ function ScheduleCards({
                   ? false
                   : newBirth.initial
             }
-            animate={isDraft ? { opacity: 1, x: 0 } : newBirth.animate}
+            animate={isDraft ? (zoneSubmit === "morph" ? { opacity: 1 } : sweepBirth.animate) : newBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
             // focused card up in the entry view) — so the book behind is already
             // at its final state, never showing the struck card collapse
@@ -4011,11 +4036,12 @@ function FlowBackfillCapture({
   );
 }
 
-/* The foot hairline for the today-zone. It marks the bottom of the visible
-   content (sticky at the scroll foot, shown only while there's more below).
-   Over the zone it wears the blue outline and follows the zone's rounded
-   bottom corners (so it reads as the zone's own bottom edge, tracing whatever
-   is currently visible); over plain content it's the default full-width rule.
+/* The foot hairline for the today-zone. The plain scroll terminus, BUT it
+   hides while the fold (viewport bottom) is over the zone — the sticky line
+   would otherwise be pulled up into the middle of the (taller-than-viewport)
+   zone. The zone's own rounded blue bottom border is the bottom edge there, so
+   the only hairline you see over the zone is at the real bottom once you scroll
+   to it. Over the content above the zone it's the normal full-width rule.
    Imperative (its own rAF scroll read) so it never re-renders the feed. */
 function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivElement | null> }) {
   const lineRef = useRef<HTMLDivElement>(null);
@@ -4023,31 +4049,22 @@ function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLD
     const sc = scrollerRef.current;
     const line = lineRef.current;
     if (!sc || !line) return;
-    const R = 16; // the zone's rounded-2xl corner radius
     let raf = 0;
     const update = () => {
       raf = 0;
       const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
-      if (!moreBelow) { line.style.opacity = "0"; return; }
-      const vpBottom = sc.getBoundingClientRect().bottom;
-      const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
-      const box = boxes[boxes.length - 1];
-      let blue = false;
-      let inset = 0;
-      if (box) {
-        const r = box.getBoundingClientRect();
-        if (r.top <= vpBottom && r.bottom >= vpBottom) {
-          blue = true;
-          const dy = r.bottom - vpBottom; // distance from the fold to the real bottom
-          if (dy < R) inset = R - Math.sqrt(Math.max(0, R * R - (R - dy) * (R - dy)));
+      let show = moreBelow;
+      if (show) {
+        const vpBottom = sc.getBoundingClientRect().bottom;
+        const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
+        const box = boxes[boxes.length - 1];
+        if (box) {
+          const r = box.getBoundingClientRect();
+          // the fold cuts through the zone (zone runs past the viewport bottom)
+          if (r.top <= vpBottom && r.bottom > vpBottom) show = false;
         }
       }
-      line.style.opacity = "1";
-      line.style.left = `${inset}px`;
-      line.style.right = `${inset}px`;
-      line.style.borderTopColor = blue
-        ? "color-mix(in srgb, var(--wax) 45%, transparent)"
-        : "var(--rule-faint)";
+      line.style.opacity = show ? "1" : "0";
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
     sc.addEventListener("scroll", onScroll, { passive: true });
@@ -4064,8 +4081,8 @@ function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLD
     <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
       <div
         ref={lineRef}
-        className="absolute bottom-0 border-t transition-[opacity,border-color] duration-200"
-        style={{ left: 0, right: 0, opacity: 0, borderTopColor: "var(--rule-faint)" }}
+        className="absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200"
+        style={{ opacity: 0 }}
       />
     </div>
   );
@@ -4100,6 +4117,9 @@ function TodayZoneFill({
   const [text, setText] = useState("");
   const [playKey, setPlayKey] = useState(0);
   const [down, setDown] = useState(false);
+  // holds the seal pressed-down (rotated) from the tap through the lead, so the
+  // press animation LIFTS OFF from that same press — no un-rotate-then-replay
+  const [holdDown, setHoldDown] = useState(false);
   // a generation counter: bumping it brings a fresh empty zone in (wipes down)
   const [gen, setGen] = useState(0);
   // the keep sequence:
@@ -4131,6 +4151,7 @@ function TodayZoneFill({
       areaRef.current?.focus(); // mic: begin the entry (voice capture is a TODO)
       return;
     }
+    if (phase !== "idle") return; // a keep is already running (idempotent)
     const t = text.trim();
     const capturedAt = Date.now();
     const id = ulid(capturedAt);
@@ -4141,15 +4162,19 @@ function TodayZoneFill({
       });
       void addSnippet({ id, text: t, source: "typed", capturedAt });
     };
-    // freeze the words; dismiss the keyboard and bring the seal fully into view
+    // freeze the words; hold the seal pressed-down through the lead; dismiss the
+    // keyboard and bring the seal fully into view
     setPhase("pressing");
+    setHoldDown(true);
     areaRef.current?.blur();
     requestAnimationFrame(() =>
       btnRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }),
     );
     clearTimers();
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
-    at(LEAD_MS, () => { setPlayKey((k) => k + 1); navigator.vibrate?.(8); });
+    // release the held press exactly as the lift-off plays — the press
+    // animation continues from the user's press, no un-rotate
+    at(LEAD_MS, () => { setHoldDown(false); setPlayKey((k) => k + 1); navigator.vibrate?.(8); });
     if (morph) {
       // the zone's box flows up into the kept card (shared layoutId) while a
       // fresh empty zone wipes down
@@ -4176,9 +4201,14 @@ function TodayZoneFill({
         key={gen}
         className={cn("relative w-full pb-3 pt-1", className)}
         initial={gen === 0 ? false : { y: "-40%", opacity: 0 }}
-        // SWEEP step 1: the current zone slides off the right (driven by phase,
-        // in place — the gen bump for the fresh zone only happens at step 3).
-        animate={!morph && phase === "exiting" ? { x: "112%", opacity: 0 } : { x: 0, y: 0, opacity: 1 }}
+        // SWEEP: once slid off the right it STAYS off (through `filling`) so it
+        // never animates back in before the gen bump removes it; y pinned to 0
+        // so it travels straight right, not up-and-right.
+        animate={
+          !morph && (phase === "exiting" || phase === "filling")
+            ? { x: "112%", y: 0, opacity: 0 }
+            : { x: 0, y: 0, opacity: 1 }
+        }
         // morph fades the old box as its layoutId carries it into the card;
         // sweep's visible slide is the `animate` above, so removal is instant
         exit={morph ? { opacity: 0 } : { opacity: 0, transition: { duration: 0 } }}
@@ -4237,10 +4267,13 @@ function TodayZoneFill({
             ref={btnRef}
             type="button"
             aria-label={hasText ? "Keep today's entry" : "Speak today's entry"}
+            // keep on pointer-up (released ON the button) so setDown(false) and
+            // the hold batch in one render — the press never un-rotates. onClick
+            // covers keyboard; it's idempotent.
             onClick={submit}
             disabled={frozen}
             onPointerDown={(e) => { e.preventDefault(); setDown(true); }}
-            onPointerUp={() => setDown(false)}
+            onPointerUp={() => { setDown(false); if (hasText) submit(); }}
             onPointerLeave={() => setDown(false)}
             className="relative grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
@@ -4249,10 +4282,10 @@ function TodayZoneFill({
               <motion.span
                 key={quill ? "quill" : "mic"}
                 className="absolute inset-0 grid place-items-center"
-                initial={{ x: "75%", opacity: 0 }}
+                initial={{ x: "70%", opacity: 0 }}
                 animate={{ x: "0%", opacity: 1 }}
-                exit={{ x: "-75%", opacity: 0 }}
-                transition={{ duration: 0.4, ease: "easeInOut" }}
+                exit={{ x: "-70%", opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
               >
                 <CanvasSeal
                   playKey={playKey}
@@ -4260,7 +4293,7 @@ function TodayZoneFill({
                   glyph={quill ? "e:quill" : "c:mic"}
                   iconScale={quill ? 0.36 : 0.46}
                   mode="tap"
-                  pressed={down}
+                  pressed={down || holdDown}
                   variant="spring"
                   ease="front"
                   bounce={1.5}
