@@ -129,6 +129,7 @@ function Lab() {
   const [seeded, setSeeded] = useState(false);
   const [riff, setRiff] = useState("outline");
   const [zoneOn, setZoneOn] = useState(true);
+  const [hudOpen, setHudOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Snippet>>({});
 
   useEffect(() => {
@@ -166,24 +167,50 @@ function Lab() {
           <MotionConfig reducedMotion="never">
             <CalendarPage />
 
-            <div className="pointer-events-none fixed inset-x-0 top-2 z-50 flex justify-center px-3">
-              <div className="float pointer-events-auto flex max-w-full flex-col items-center gap-1.5 rounded-[1.25rem] px-2.5 py-2">
-                <div className="flex flex-wrap items-center justify-center gap-1">
-                  {RIFFS.map((r) => (
-                    <Pill key={r.id} active={zoneOn && riff === r.id} onClick={() => { setRiff(r.id); setZoneOn(true); }}>{r.name}</Pill>
-                  ))}
+            {hudOpen ? (
+              <div className="pointer-events-none fixed inset-x-0 top-2 z-50 flex justify-center px-3">
+                <div className="float pointer-events-auto relative flex max-w-full flex-col items-center gap-1.5 rounded-[1.25rem] px-2.5 py-2 pr-7">
+                  <button
+                    type="button"
+                    onClick={() => setHudOpen(false)}
+                    aria-label="Collapse controls"
+                    className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full text-ink-faint hover:text-ink"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-1">
+                    {RIFFS.map((r) => (
+                      <Pill key={r.id} active={zoneOn && riff === r.id} onClick={() => { setRiff(r.id); setZoneOn(true); }}>{r.name}</Pill>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-1">
+                    <Pill active={zoneOn} onClick={() => setZoneOn((v) => !v)}>zone {zoneOn ? "on" : "off"}</Pill>
+                    <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
+                    <Pill onClick={seed}>seed</Pill>
+                    <Pill onClick={clear}>clear</Pill>
+                    <Link href="/lab/schedule-submit" className="voice-label rounded-full bg-paper-recessed px-2.5 py-1 text-[0.7rem] leading-none text-ink-soft hover:text-ink">keep lab ↗</Link>
+                  </div>
+                  <p className="voice-prose max-w-[22rem] text-center text-[0.7rem] leading-snug text-ink-soft">{cur.desc}</p>
+                  <span className="voice-data text-[0.6rem] text-ink-faint">{BUILD}</span>
                 </div>
-                <div className="flex flex-wrap items-center justify-center gap-1">
-                  <Pill active={zoneOn} onClick={() => setZoneOn((v) => !v)}>zone {zoneOn ? "on" : "off"}</Pill>
-                  <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
-                  <Pill onClick={seed}>seed</Pill>
-                  <Pill onClick={clear}>clear</Pill>
-                  <Link href="/lab/schedule-submit" className="voice-label rounded-full bg-paper-recessed px-2.5 py-1 text-[0.7rem] leading-none text-ink-soft hover:text-ink">keep lab ↗</Link>
-                </div>
-                <p className="voice-prose max-w-[22rem] text-center text-[0.7rem] leading-snug text-ink-soft">{cur.desc}</p>
-                <span className="voice-data text-[0.6rem] text-ink-faint">{BUILD}</span>
               </div>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setHudOpen(true)}
+                aria-label="Open lab controls"
+                className="float fixed bottom-4 left-4 z-50 grid h-10 w-10 place-items-center rounded-full text-wax"
+              >
+                {/* sliders glyph — the collapsed debug overlay, Vercel-style */}
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+                  <circle cx="16" cy="7" r="2" fill="currentColor" stroke="none" />
+                  <circle cx="8" cy="17" r="2" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            )}
           </MotionConfig>
         </TodayZoneContext.Provider>
       </KeptDraftContext.Provider>
