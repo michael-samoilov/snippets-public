@@ -27,14 +27,11 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-20g · today-zone composer · date + ruled lines + mic→quill";
+const BUILD = "build 2026-06-21a · today-zone composer · full-bleed · outline / wax wash";
 
 const RIFFS: { id: string; name: string; desc: string }[] = [
-  { id: "dashed", name: "Dashed", desc: "A wax dashed outline frames the filled tail. Inside: today's date, ruled lines to write on, the mic→quill seal." },
-  { id: "outline", name: "Outline", desc: "A thin solid wax outline; same composer inside (date · ruled lines · mic→quill seal)." },
-  { id: "fill", name: "Recessed", desc: "A panel sunk into the desk holds the composer — part of the furniture." },
-  { id: "wash", name: "Wax wash", desc: "No border; a faint wax wash behind the composer." },
-  { id: "plain", name: "Plain", desc: "No frame at all — the composer sits on the bare desk." },
+  { id: "outline", name: "Outline", desc: "Full-bleed wax hairlines top & bottom; inside: today's date, a ruled line to write on, the mic→quill seal." },
+  { id: "wash", name: "Wax wash", desc: "Full-bleed faint wax wash behind the same composer (date · ruled line · mic→quill seal)." },
 ];
 
 // ── compact isolated demo dataset (today starts blank) ──
@@ -130,7 +127,7 @@ function Lab() {
     return d;
   });
   const [seeded, setSeeded] = useState(false);
-  const [riff, setRiff] = useState("dashed");
+  const [riff, setRiff] = useState("outline");
   const [zoneOn, setZoneOn] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, Snippet>>({});
 

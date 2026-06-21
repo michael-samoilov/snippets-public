@@ -2629,21 +2629,41 @@ function ScheduleFeedBase({
     const groups = groupByDay([...all].reverse()); // oldest → newest
     const map = new Map(groups.map((g) => [g.day, g.snippets]));
     const days = new Set(map.keys());
-    days.add(todayKey);
-    // yesterday always earns a page so its memory can still be caught —
-    // even when nothing was kept there
-    if (!map.has(yesterdayKey)) days.add(yesterdayKey);
-    if (probe) days.add(probe);
+    // when the today-zone is on and today is still blank, the zone element below
+    // the last entry-day stands in for today's page — so don't lay down an empty
+    // today (or the forced-empty yesterday); the last day shown is the previous
+    // date that actually has an entry
+    const zoneStandIn = !!todayZone && (map.get(todayKey)?.length ?? 0) === 0;
+    if (!zoneStandIn) {
+      days.add(todayKey);
+      // yesterday always earns a page so its memory can still be caught —
+      // even when nothing was kept there
+      if (!map.has(yesterdayKey)) days.add(yesterdayKey);
+    }
+    // the opened day keeps its page — unless that day is the blank today the
+    // zone element is already standing in for
+    if (probe && !(zoneStandIn && probe === todayKey)) days.add(probe);
     return [...days].sort().map((day) => ({
       day,
       snippets: map.get(day) ?? ([] as Snippet[]),
     }));
-  }, [all, probe, todayKey, yesterdayKey]);
+  }, [all, probe, todayKey, yesterdayKey, todayZone]);
 
   const scrollToRow = useCallback((day: string, smooth = false) => {
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
-    if (!el || !row) return false;
+    if (!el) return false;
+    if (!row) {
+      // when the today-zone stands in for a blank today, there is no today row
+      // to land on — scroll to the foot, where the zone lives
+      if (day === todayKey) {
+        spyRef.current = day;
+        progTargetRef.current = null;
+        el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+        return true;
+      }
+      return false;
+    }
     spyRef.current = day; // the landing must not re-announce itself
     if (smooth) {
       // hold the header on the destination while the scroll animates, so the
@@ -2658,7 +2678,7 @@ function ScheduleFeedBase({
     }
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     return true;
-  }, []);
+  }, [todayKey]);
 
   const goTo = useCallback(
     (day: string, smooth = false) => {
@@ -2818,10 +2838,18 @@ function ScheduleFeedBase({
               // row's top — in the same layout pass as any content
               // change, so shrinking rows can never dip scrollHeight
               // and clamp the reader off their page
-              <div className={cn(todayZone && isToday ? "flex h-full flex-col" : "min-h-full")}>
+              <div className={cn(todayZone ? "flex h-full flex-col" : "min-h-full")}>
                 {pageRow}
-                {todayZone && isToday && (
-                  <TodayZoneFill day={row.day} riff={todayZone} className="min-h-0 flex-1" />
+                {todayZone && (
+                  // the zone always represents today; when today already owns
+                  // this last page (it has entries) the date is hidden to avoid
+                  // doubling it, otherwise (blank today) the date shows here
+                  <TodayZoneFill
+                    day={todayKey}
+                    riff={todayZone}
+                    showDate={!isToday}
+                    className="min-h-0 flex-1"
+                  />
                 )}
               </div>
             ) : (
@@ -3939,7 +3967,17 @@ function FlowBackfillCapture({
    tail of today's page (flex-1 within the min-h-full), housing the large
    pre-stamp wax button. It shrinks as today fills with entries above it. Each
    riff is a different framing of the same idea. Lab-only (gated by context). */
-function TodayZoneFill({ day, riff, className }: { day: string; riff: string; className?: string }) {
+function TodayZoneFill({
+  day,
+  riff,
+  showDate = true,
+  className,
+}: {
+  day: string;
+  riff: string;
+  showDate?: boolean;
+  className?: string;
+}) {
   const [text, setText] = useState("");
   const [playKey, setPlayKey] = useState(0);
   const [down, setDown] = useState(false);
@@ -3967,36 +4005,34 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
     navigator.vibrate?.(8);
   };
 
-  // the five framings of the empty zone (kept from before); the inner composer
-  // is the same in each
+  // two framings of the zone — both full-bleed (no rounded card), matching the
+  // scroll container / day hairlines edge-to-edge
   const frame =
-    riff === "fill"
-      ? "border border-rule-faint bg-paper-recessed shadow-[inset_0_1px_0_var(--press-highlight)]"
-      : riff === "outline"
-        ? "border border-wax/55"
-        : riff === "wash"
-          ? "border border-transparent bg-wax/[0.06]"
-          : riff === "plain"
-            ? "border border-transparent"
-            : "border-2 border-dashed border-wax/45"; // dashed (default)
+    riff === "wash"
+      ? "border-y border-wax/15 bg-wax/[0.06]"
+      : "border-y border-wax/50"; // outline (default)
 
   return (
-    <div className={cn("px-3 pb-3 pt-1", className)}>
-      <div
-        className={cn(
-          "flex h-full min-h-[15rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
-          frame,
-        )}
-      >
-        {/* today's date, in the Today-page voice */}
+    <div
+      className={cn(
+        "flex min-h-[14rem] w-full flex-col items-center justify-center gap-4 px-4 py-6 text-center",
+        frame,
+        className,
+      )}
+    >
+      {/* today's date, in the Today-page voice — omitted when today already
+          owns its own page above (no duplicate date) */}
+      {showDate && (
         <div className="leading-none">
           <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
           <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
         </div>
+      )}
 
-        {/* the ruled "paper" — the clickable entry, the middle two-thirds */}
-        <div className="w-2/3 min-w-[12rem] max-w-md">
-          <textarea
+      {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt sits
+          on one line */}
+      <div className="w-4/5 min-w-[14rem] max-w-2xl">
+        <textarea
             ref={areaRef}
             value={text}
             rows={3}
@@ -4048,7 +4084,6 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
             ignoreReducedMotion
           />
         </button>
-      </div>
     </div>
   );
 }
