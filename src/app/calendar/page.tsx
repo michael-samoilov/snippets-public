@@ -3938,11 +3938,16 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
   const [playKey, setPlayKey] = useState(0);
   const [down, setDown] = useState(false);
   const draft = useKeptDraft();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const d = dateFromDayKey(day);
+  const hasText = text.trim().length > 0;
 
-  const keep = () => {
+  const submit = () => {
+    if (!hasText) {
+      areaRef.current?.focus(); // mic: begin the entry (voice capture is a TODO)
+      return;
+    }
     const t = text.trim();
-    if (!t) { inputRef.current?.focus(); return; }
     const capturedAt = Date.now();
     const id = ulid(capturedAt);
     draft?.set({
@@ -3951,11 +3956,13 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
     });
     void addSnippet({ id, text: t, source: "typed", capturedAt });
     setText("");
+    if (areaRef.current) { areaRef.current.value = ""; areaRef.current.style.height = ""; }
     setPlayKey((k) => k + 1);
     navigator.vibrate?.(8);
   };
 
-  const isMic = riff === "mic";
+  // the five framings of the empty zone (kept from before); the inner composer
+  // is the same in each
   const frame =
     riff === "fill"
       ? "border border-rule-faint bg-paper-recessed shadow-[inset_0_1px_0_var(--press-highlight)]"
@@ -3963,33 +3970,62 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
         ? "border border-wax/55"
         : riff === "wash"
           ? "border border-transparent bg-wax/[0.06]"
-          : "border-2 border-dashed border-wax/45"; // dashed (default) + mic
+          : riff === "plain"
+            ? "border border-transparent"
+            : "border-2 border-dashed border-wax/45"; // dashed (default)
 
   return (
     <div className={cn("px-3 pb-3 pt-1", className)}>
-      {/* the panel fills the blank tail; clicking it focuses the field */}
       <div
-        onClick={() => inputRef.current?.focus()}
         className={cn(
-          "flex h-full min-h-[8.5rem] w-full cursor-text flex-col items-center justify-center gap-3 rounded-2xl px-4 py-6 text-center",
+          "flex h-full min-h-[15rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
           frame,
         )}
       >
+        {/* today's date, in the Today-page voice */}
+        <div className="leading-none">
+          <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
+          <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
+        </div>
+
+        {/* the ruled "paper" — the clickable entry, the middle three-fifths */}
+        <div className="w-3/5 min-w-[12rem] max-w-sm">
+          <textarea
+            ref={areaRef}
+            value={text}
+            rows={3}
+            onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
+            placeholder="Write something from today…"
+            aria-label={`Write an entry for ${format(d, "MMMM d")}`}
+            className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+            style={{
+              lineHeight: "1.95rem",
+              minHeight: "5.85rem",
+              backgroundImage:
+                "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.95rem - 1px), var(--rule-faint) calc(1.95rem - 1px), var(--rule-faint) 1.95rem)",
+              backgroundAttachment: "local",
+            }}
+          />
+        </div>
+
+        {/* the wax button — white mic at rest; becomes a white quill once typing
+            starts; press it to submit (plays the corner·swell keep) */}
         <button
           type="button"
-          aria-label="Keep today's entry"
-          onClick={(e) => { e.stopPropagation(); keep(); }}
+          aria-label={hasText ? "Keep today's entry" : "Speak today's entry"}
+          onClick={submit}
           onPointerDown={(e) => { e.preventDefault(); setDown(true); }}
           onPointerUp={() => setDown(false)}
           onPointerLeave={() => setDown(false)}
           className="relative grid place-items-center rounded-full"
-          style={{ width: 92, height: 92 }}
+          style={{ width: 60, height: 60 }}
         >
           <CanvasSeal
             playKey={playKey}
-            size={92}
-            glyph={isMic ? "a:mic" : "e:quill"}
-            iconScale={isMic ? 0.42 : 0.36}
+            size={60}
+            glyph={hasText ? "e:quill" : "a:mic"}
+            iconScale={hasText ? 0.36 : 0.42}
             mode="tap"
             pressed={down}
             lingerMs={550}
@@ -4003,16 +4039,6 @@ function TodayZoneFill({ day, riff, className }: { day: string; riff: string; cl
             ignoreReducedMotion
           />
         </button>
-        <input
-          ref={inputRef}
-          value={text}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); keep(); } }}
-          placeholder={isMic ? "Speak or type today’s entry…" : "Add something from today…"}
-          aria-label="Add to today"
-          className="voice-prose w-full max-w-sm bg-transparent text-center text-[0.95rem] outline-none placeholder:italic placeholder:text-wax/70"
-        />
       </div>
     </div>
   );

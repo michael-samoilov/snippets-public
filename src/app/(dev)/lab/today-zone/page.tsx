@@ -27,14 +27,14 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-20f · today-zone FILL · big pre-stamp seal";
+const BUILD = "build 2026-06-20g · today-zone composer · date + ruled lines + mic→quill";
 
 const RIFFS: { id: string; name: string; desc: string }[] = [
-  { id: "dashed", name: "Dashed", desc: "A wax-blue dashed outline fills the empty tail — a friendly “drop your day here” frame." },
-  { id: "outline", name: "Outline", desc: "A thin solid wax outline, nothing filled — quieter than the dashed frame." },
-  { id: "fill", name: "Recessed", desc: "A filled panel sunk into the desk (recessed paper + lit top edge) — part of the furniture." },
-  { id: "wash", name: "Wax wash", desc: "No border; a faint wax wash pooling in the empty space, the seal floating in it." },
-  { id: "mic", name: "Voice-first", desc: "Dashed frame, but the big button wears the microphone — speak or type today’s entry." },
+  { id: "dashed", name: "Dashed", desc: "A wax dashed outline frames the filled tail. Inside: today's date, ruled lines to write on, the mic→quill seal." },
+  { id: "outline", name: "Outline", desc: "A thin solid wax outline; same composer inside (date · ruled lines · mic→quill seal)." },
+  { id: "fill", name: "Recessed", desc: "A panel sunk into the desk holds the composer — part of the furniture." },
+  { id: "wash", name: "Wax wash", desc: "No border; a faint wax wash behind the composer." },
+  { id: "plain", name: "Plain", desc: "No frame at all — the composer sits on the bare desk." },
 ];
 
 // ── compact isolated demo dataset (today starts blank) ──
