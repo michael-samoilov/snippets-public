@@ -347,6 +347,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
+  const wasPressed = useRef(false); // tap mode: was the thumb down last frame (to ease back on cancel)
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
   const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number; bakedGlyphScale: number } | null>(null);
@@ -474,6 +475,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       const tapped = lastKey.current !== null && lastKey.current !== playKey;
       lastKey.current = playKey;
       if (pressed) { // thumb is down — ease into the pressed-down (pre-rotated) state and hold
+        wasPressed.current = true;
         const frame = (now: number) => {
           const q = clamp((now - t0) / 150);
           draw(pushdownBeat(eo(q), rotate));
@@ -482,6 +484,20 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
         raf = requestAnimationFrame(frame);
         return cleanup;
       }
+      if (!tapped && wasPressed.current) {
+        // released without keeping (cancelled) — ease the press-down + rotation
+        // back to rest instead of snapping
+        wasPressed.current = false;
+        const frame = (now: number) => {
+          const q = clamp((now - t0) / 150);
+          draw(pushdownBeat(1 - eo(q), rotate));
+          if (q < 1) raf = requestAnimationFrame(frame);
+          else draw(domeBeat(1, 1));
+        };
+        raf = requestAnimationFrame(frame);
+        return cleanup;
+      }
+      wasPressed.current = false;
       if (!tapped) { draw(domeBeat(1, 1)); return cleanup; } // mount / non-tap dep change → just rest
       const frame = (now: number) => {
         const e = now - t0;

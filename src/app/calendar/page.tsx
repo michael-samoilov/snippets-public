@@ -29,7 +29,7 @@ import { highlight as drawHighlight } from "@highlighters/core";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { ulid } from "ulidx";
-import { WaxStamp as CanvasSeal, SealGlyph } from "@/components/capture/wax-stamp";
+import { WaxStamp as CanvasSeal } from "@/components/capture/wax-stamp";
 import {
   birthFor,
   QUILL_SCALE,
@@ -2629,20 +2629,17 @@ function ScheduleFeedBase({
     const groups = groupByDay([...all].reverse()); // oldest → newest
     const map = new Map(groups.map((g) => [g.day, g.snippets]));
     const days = new Set(map.keys());
-    // when the today-zone is on and today is still blank, the zone element below
-    // the last entry-day stands in for today's page — so don't lay down an empty
-    // today (or the forced-empty yesterday); the last day shown is the previous
-    // date that actually has an entry
-    const zoneStandIn = !!todayZone && (map.get(todayKey)?.length ?? 0) === 0;
-    if (!zoneStandIn) {
-      days.add(todayKey);
-      // yesterday always earns a page so its memory can still be caught —
-      // even when nothing was kept there
-      if (!map.has(yesterdayKey)) days.add(yesterdayKey);
+    // today always earns its page. In zone mode its section stays invisible
+    // until it holds an entry (so the kept card can wipe into an already-mounted
+    // list, and nothing remounts mid-animation); the big date lives in the zone.
+    days.add(todayKey);
+    if (!todayZone && !map.has(yesterdayKey)) {
+      // yesterday always earns a page so its memory can still be caught — even
+      // when nothing was kept there (off in zone mode, which wants prev-entry →
+      // zone with nothing empty between)
+      days.add(yesterdayKey);
     }
-    // the opened day keeps its page — unless that day is the blank today the
-    // zone element is already standing in for
-    if (probe && !(zoneStandIn && probe === todayKey)) days.add(probe);
+    if (probe) days.add(probe);
     return [...days].sort().map((day) => ({
       day,
       snippets: map.get(day) ?? ([] as Snippet[]),
@@ -2781,35 +2778,47 @@ function ScheduleFeedBase({
           row.day === probe ||
           (row.day === yesterdayKey && row.snippets.length === 0);
         const last = i === rows.length - 1;
+        // in zone mode today's own section stays invisible until it holds an
+        // entry — its date lives in the zone, and the kept card wipes into this
+        // (already-mounted) list. Its ScheduleCards stays rendered so the
+        // AnimatePresence is live to animate that card in.
+        const hideToday = isToday && !!todayZone && row.snippets.length === 0;
         const pageRow = (
           <section
             ref={rowRef(row.day)}
             data-day={row.day}
             aria-label={friendlyDay(row.day)}
-            className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint"
+            className={cn(
+              "grid grid-cols-[2.1rem_1fr] gap-x-2",
+              !hideToday && "border-t border-rule-faint",
+            )}
           >
                 {/* the date stands in the margin and holds its ground
                     while its day's entries scroll past */}
                 <div className="sticky top-0 self-start pb-3 pt-2 text-center">
-                  <span
-                    className={cn(
-                      "voice-label block text-[0.62rem] leading-tight",
-                      isToday ? "text-wax" : "text-ink-faint",
-                    )}
-                  >
-                    {format(d, "EEE")}
-                  </span>
-                  <span
-                    data-flydate={row.day}
-                    className={cn(
-                      "voice-display block text-[1.15rem] leading-tight tabular-nums",
-                      isToday && "text-wax",
-                    )}
-                  >
-                    {format(d, "d")}
-                  </span>
+                  {!hideToday && (
+                    <>
+                      <span
+                        className={cn(
+                          "voice-label block text-[0.62rem] leading-tight",
+                          isToday ? "text-wax" : "text-ink-faint",
+                        )}
+                      >
+                        {format(d, "EEE")}
+                      </span>
+                      <span
+                        data-flydate={row.day}
+                        className={cn(
+                          "voice-display block text-[1.15rem] leading-tight tabular-nums",
+                          isToday && "text-wax",
+                        )}
+                      >
+                        {format(d, "d")}
+                      </span>
+                    </>
+                  )}
                 </div>
-                <div className="min-w-0 pb-3 pt-2">
+                <div className={cn("min-w-0", !hideToday && "pb-3 pt-2")}>
                   <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
                   {showComposer && (
                     <BackfillCapture
@@ -2821,14 +2830,9 @@ function ScheduleFeedBase({
                 </div>
           </section>
         );
-        // the tail (last row + zone) keeps a stable key so that when today
-        // earns its first entry — and the last row flips from a past day to
-        // today — the zone reconciles in place instead of remounting (which
-        // would cut its keep animation short)
-        const rowKey = last && todayZone ? "__today_tail__" : row.day;
         return (
-          <Fragment key={rowKey}>
-            {newMonth && (
+          <Fragment key={row.day}>
+            {newMonth && !hideToday && (
               <p
                 className={cn(
                   "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
@@ -2843,14 +2847,15 @@ function ScheduleFeedBase({
               // row's top — in the same layout pass as any content
               // change, so shrinking rows can never dip scrollHeight
               // and clamp the reader off their page
-              <div className={cn(todayZone ? "flex h-full flex-col" : "min-h-full")}>
+              <div className={cn(todayZone ? "relative flex h-full flex-col" : "min-h-full")}>
                 {pageRow}
                 {todayZone && (
                   // the zone always carries today's big date — even once today
                   // also owns a page above — so the composer always names its day
                   <TodayZoneFill
                     day={todayKey}
-                    riff={todayZone}
+                    riff={todayZone.frame}
+                    submitStyle={todayZone.submit}
                     className="flex-1"
                   />
                 )}
@@ -2881,7 +2886,13 @@ function ScheduleFeedBase({
       tabIndex={-1}
     >
       {body}
-      <ScrollTerminus show={edges.bottom} />
+      {/* in zone mode the foot rule wears the blue outline and pulls in to the
+          zone's corner radius, so it reads as the zone's own bottom edge */}
+      <ScrollTerminus
+        show={edges.bottom}
+        tone={todayZone ? "wax" : "faint"}
+        inset={todayZone ? 16 : 0}
+      />
     </div>
   );
 }
@@ -2906,6 +2917,22 @@ function ScheduleCards({
   // production `flow` is null and the default rise/fade plays
   const flow = useKeepFlow();
   const birth = flow ? birthFor(flow.spec, flow.reduce) : null;
+  // the today-zone exploration births a kept entry one of two ways: SWEEP (the
+  // entry wipes in from the left as the zone slides off right) or MORPH (the
+  // zone itself becomes this card, via a shared layout id)
+  const todayZone = useTodayZone();
+  const zoneSubmit = todayZone?.submit;
+  const sweepBirth = {
+    initial: { opacity: 0, x: -56 },
+    animate: { opacity: 1, x: 0 },
+    transition: { duration: 0.5, ease: "easeInOut" as const },
+  };
+  const defaultBirth = birth ?? {
+    initial: { opacity: 0, y: -10, scale: 0.985 },
+    animate: { opacity: 1, y: 0, scale: 1 },
+    transition: { type: "spring" as const, duration: 0.5, bounce: 0.16 },
+  };
+  const newBirth = zoneSubmit === "sweep" ? sweepBirth : defaultBirth;
 
   // the optimistic just-kept card: render it in its final slot the instant the
   // seal is pressed so the typed words never blink out waiting for the live
@@ -2924,23 +2951,33 @@ function ScheduleCards({
       <AnimatePresence initial={false}>
         {items.map((s) => {
           const isDraft = draftPending && s.id === draft!.id;
+          // MORPH: the kept card shares a layout id with the zone, so the zone's
+          // box flows into this card. SWEEP: the kept card wipes in from the left.
+          const morphCard = isDraft && zoneSubmit === "morph";
           return (
           <motion.li
             key={s.id}
             layout="position"
+            layoutId={morphCard ? "today-zone-card" : undefined}
             initial={
               isDraft
-                ? { opacity: 0 }
+                ? (zoneSubmit === "morph" ? false : sweepBirth.initial)
                 : presentAtMount.has(s.id)
                   ? false
-                  : (birth?.initial ?? { opacity: 0, y: -10, scale: 0.985 })
+                  : newBirth.initial
             }
-            animate={isDraft ? { opacity: 1 } : (birth?.animate ?? { opacity: 1, y: 0, scale: 1 })}
+            animate={isDraft ? { opacity: 1, x: 0 } : newBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
             // focused card up in the entry view) — so the book behind is already
             // at its final state, never showing the struck card collapse
             exit={{ opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0 } }}
-            transition={isDraft ? { duration: 0.18, ease: [0.23, 1, 0.32, 1] } : (birth?.transition ?? { type: "spring", duration: 0.5, bounce: 0.16 })}
+            transition={
+              isDraft
+                ? (zoneSubmit === "morph"
+                    ? { layout: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }, opacity: { duration: 0.35 } }
+                    : sweepBirth.transition)
+                : newBirth.transition
+            }
           >
             <button
               type="button"
@@ -3974,47 +4011,62 @@ function FlowBackfillCapture({
   );
 }
 
+/* Variants of the locked blue outline — the riff now picks one of these. */
+const FRAME_VARIANTS: Record<string, string> = {
+  hairline: "border border-wax/45",
+  bold: "border-2 border-wax/70",
+  double: "border-[3px] border-double border-wax/65",
+  glow: "border border-wax/55 shadow-[0_0_24px_-6px_var(--wax)]",
+  soft: "border border-wax/25",
+};
+
 /* The today-zone (lab riffs): a big "add to today" panel that FILLS the blank
    tail of today's page (flex-1 within the min-h-full), housing the large
    pre-stamp wax button. It shrinks as today fills with entries above it. Each
-   riff is a different framing of the same idea. Lab-only (gated by context). */
+   riff is a variant of the blue outline. Lab-only (gated by context). */
 function TodayZoneFill({
   day,
   riff,
+  submitStyle = "sweep",
   showDate = true,
   className,
 }: {
   day: string;
   riff: string;
+  submitStyle?: "sweep" | "morph";
   showDate?: boolean;
   className?: string;
 }) {
   const [text, setText] = useState("");
   const [playKey, setPlayKey] = useState(0);
   const [down, setDown] = useState(false);
-  // while a typed keep plays, hold the quill so the animation embosses the quill
-  // (not the mic it would snap back to once the text is cleared)
-  const [playingQuill, setPlayingQuill] = useState(false);
-  // true only while the canvas seal is embossing its press, so the DOM icon
-  // overlay steps aside and lets the relief show
-  const [pressing, setPressing] = useState(false);
-  const playTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // a generation counter: bumping it swaps the whole zone — the old one (still
+  // showing the kept words + settled seal) slides off the right while a fresh,
+  // empty zone wipes down from the top to take its place
+  const [gen, setGen] = useState(0);
+  // "pressing" freezes the words in place while the seal plays its keep; the
+  // gen bump then carries them off and files the entry
+  const [phase, setPhase] = useState<"idle" | "pressing">("idle");
   const startTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draft = useKeptDraft();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
-  // the quill appears only once there's a real character typed (not on focus)
+  const frozen = phase !== "idle";
+  // the quill appears only once there's a real character typed (not on focus),
+  // and stays through the keep
   const hasText = text.length > 0;
-  const quill = hasText || playingQuill; // which glyph the seal wears + presses
+  const quill = hasText || frozen; // which glyph the seal wears + presses
   useEffect(() => () => {
-    if (playTimer.current) clearTimeout(playTimer.current);
     if (startTimer.current) clearTimeout(startTimer.current);
+    if (exitTimer.current) clearTimeout(exitTimer.current);
   }, []);
 
-  // ms to settle the keyboard-dismiss + scroll before the press plays
-  const LEAD_MS = 420;
-  const TAP_MS = 2770; // press + linger + exit + drop (see wax-stamp TAP_TOTAL)
+  // press timeline: settle the keyboard-dismiss + scroll, play the press, hold
+  // the settled seal a beat — THEN sweep the zone off and file the entry
+  const LEAD_MS = 380;     // keyboard dismiss + scroll, before the press
+  const HOLD_MS = 1500;    // press (~1.15s) + a short settled beat, before the sweep
 
   const submit = () => {
     if (!hasText) {
@@ -4024,150 +4076,147 @@ function TodayZoneFill({
     const t = text.trim();
     const capturedAt = Date.now();
     const id = ulid(capturedAt);
-    draft?.set({
-      id, text: t, kind: null, tags: [], capturedAt, day,
-      source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
-    });
-    void addSnippet({ id, text: t, source: "typed", capturedAt });
-    setText("");
-    if (areaRef.current) { areaRef.current.value = ""; areaRef.current.style.height = ""; }
-    // dismiss the keyboard and bring the seal fully into view, so its press
-    // animation is certainly on-screen, THEN play it
+    // freeze the words; dismiss the keyboard and bring the seal fully into view
+    setPhase("pressing");
     areaRef.current?.blur();
     requestAnimationFrame(() =>
       btnRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }),
     );
-    // keep the quill through the lead + full press lifecycle
-    setPlayingQuill(true);
-    if (playTimer.current) clearTimeout(playTimer.current);
     if (startTimer.current) clearTimeout(startTimer.current);
+    if (exitTimer.current) clearTimeout(exitTimer.current);
     startTimer.current = setTimeout(() => {
-      setPressing(true); // hide the DOM icon; the canvas reliefs the glyph
-      setPlayKey((k) => k + 1);
+      setPlayKey((k) => k + 1); // play the press in place, words still showing
       navigator.vibrate?.(8);
     }, LEAD_MS);
-    playTimer.current = setTimeout(() => {
-      setPlayingQuill(false);
-      setPressing(false);
-    }, LEAD_MS + TAP_MS);
+    exitTimer.current = setTimeout(() => {
+      // file the entry — it wipes into its schedule slot above — as this zone
+      // (still wearing the words + settled seal) sweeps off the right, and a
+      // fresh empty zone wipes down to replace it (the gen bump drives both)
+      draft?.set({
+        id, text: t, kind: null, tags: [], capturedAt, day,
+        source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
+      });
+      void addSnippet({ id, text: t, source: "typed", capturedAt });
+      setText("");
+      setPhase("idle");
+      setGen((g) => g + 1);
+    }, LEAD_MS + HOLD_MS);
   };
 
-  // the zone's two framings (the rounded card, as before) — outline & wax wash
-  const frame =
-    riff === "wash"
-      ? "border border-transparent bg-wax/[0.06]"
-      : "border border-wax/55"; // outline (default)
+  // locked: the blue outline. The riff now picks a VARIANT of that outline.
+  const frame = FRAME_VARIANTS[riff] ?? FRAME_VARIANTS.hairline;
+  const morph = submitStyle === "morph";
 
   return (
-    // no horizontal inset: the card spans the full scroll width, flush with the
-    // day hairlines left and right
-    <div className={cn("pb-3 pt-1", className)}>
-      <div
-        className={cn(
-          // a firm floor so a tall stack of entries can never squeeze the zone
-          // smaller than its contents (date + ruled line + the big seal)
-          "flex h-full min-h-[22rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
-          frame,
-        )}
+    // each generation is one element. SWEEP: the old zone (words + settled seal)
+    // slides off the right while a fresh empty zone wipes down. MORPH: the old
+    // zone's box flows into the kept entry card (shared layoutId) as it fades.
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.div
+        key={gen}
+        // no horizontal inset: the card spans the full scroll width, flush with
+        // the day hairlines left and right. w-full so popLayout keeps its width
+        // when it pins the exiting copy absolutely to sweep it off
+        className={cn("relative w-full pb-3 pt-1", className)}
+        initial={gen === 0 ? false : { y: "-40%", opacity: 0 }}
+        animate={{ x: 0, y: 0, opacity: 1 }}
+        exit={morph ? { opacity: 0 } : { x: "112%", opacity: 0 }}
+        transition={{ duration: 0.55, ease: "easeInOut" }}
       >
-        {/* today's date, in the Today-page voice — omitted when today already
-            owns its own page above (no duplicate date) */}
-        {showDate && (
-          <div className="leading-none">
-            <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
-            <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
-          </div>
-        )}
-
-        {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt sits
-            on one line */}
-        <div className="w-4/5 min-w-[14rem] max-w-2xl">
-          <textarea
-            ref={areaRef}
-            value={text}
-            rows={3}
-            onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
-            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
-            placeholder="Write something from today…"
-            aria-label={`Write an entry for ${format(d, "MMMM d")}`}
-            className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
-            style={{
-              lineHeight: "1.7rem",
-              minHeight: "5.1rem",
-              // rule just below the baseline so standard characters rest ON the
-              // line and only descenders dip across it, like real ruled paper
-              backgroundImage:
-                "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
-              backgroundPositionY: "-0.4rem",
-              backgroundAttachment: "local",
-            }}
-          />
-        </div>
-
-        {/* the wax button — white mic at rest; becomes a white quill once typing
-            starts; press it to submit (plays the corner·swell keep) */}
-        <button
-          ref={btnRef}
-          type="button"
-          aria-label={hasText ? "Keep today's entry" : "Speak today's entry"}
-          onClick={submit}
-          onPointerDown={(e) => { e.preventDefault(); setDown(true); }}
-          onPointerUp={() => setDown(false)}
-          onPointerLeave={() => setDown(false)}
-          className="relative grid place-items-center rounded-full"
-          style={{ width: 128, height: 128 }}
+        <motion.div
+          // in morph mode the (about-to-exit) box shares its layout id with the
+          // kept card, so it flows into that card's slot as it leaves
+          layoutId={morph && phase === "pressing" ? "today-zone-card" : undefined}
+          className={cn(
+            // a firm floor so a tall stack of entries can never squeeze the zone
+            // smaller than its contents (date + ruled line + the big seal)
+            "flex h-full min-h-[22rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
+            frame,
+          )}
         >
-          <CanvasSeal
-            playKey={playKey}
-            size={128}
-            glyph={quill ? "e:quill" : "c:mic"}
-            iconScale={quill ? 0.36 : 0.46}
-            mode="tap"
-            pressed={down}
-            variant="spring"
-            ease="front"
-            bounce={1.5}
-            rotate={30}
-            puck={1}
-            cloud={0.5}
-            speckle={0}
-            lingerMs={1000}
-            exitMs={200}
-            exit="grow"
-            // the DOM overlay below owns the resting icon (so it can fade+carousel
-            // between mic and quill); the press still embosses it as relief
-            restGlyph={false}
-            ignoreReducedMotion
-          />
-          {/* the resting icon, swapped mic↔quill with a fade + vertical carousel.
-              hidden while the seal is pressing, so the embossed relief shows */}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden"
-            style={{ transform: "translateY(-4px)" }}
+          {/* today's date, in the Today-page voice */}
+          {showDate && (
+            <div className="leading-none">
+              <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
+              <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
+            </div>
+          )}
+
+          {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt
+              sits on one line */}
+          <div className="w-4/5 min-w-[14rem] max-w-2xl">
+            <textarea
+              ref={areaRef}
+              value={text}
+              rows={3}
+              readOnly={frozen}
+              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
+              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
+              placeholder="Write something from today…"
+              aria-label={`Write an entry for ${format(d, "MMMM d")}`}
+              className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              style={{
+                lineHeight: "1.7rem",
+                minHeight: "5.1rem",
+                // rule just below the baseline so standard characters rest ON the
+                // line and only descenders dip across it, like real ruled paper
+                backgroundImage:
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
+                backgroundPositionY: "-0.4rem",
+                backgroundAttachment: "local",
+              }}
+            />
+          </div>
+
+          {/* the wax button — mic at rest, quill once typing starts; the whole
+              button cross-slides (left↔right carousel) on the swap. press it to
+              submit (plays the corner·swell keep) */}
+          <button
+            ref={btnRef}
+            type="button"
+            aria-label={hasText ? "Keep today's entry" : "Speak today's entry"}
+            onClick={submit}
+            disabled={frozen}
+            onPointerDown={(e) => { e.preventDefault(); setDown(true); }}
+            onPointerUp={() => setDown(false)}
+            onPointerLeave={() => setDown(false)}
+            className="relative grid place-items-center rounded-full"
+            style={{ width: 128, height: 128 }}
           >
-            <AnimatePresence initial={false} mode="popLayout">
-              {!pressing && (
-                <motion.span
-                  key={quill ? "quill" : "mic"}
-                  initial={{ y: "70%", opacity: 0 }}
-                  animate={{ y: "0%", opacity: 1 }}
-                  exit={{ y: "-70%", opacity: 0 }}
-                  transition={{ duration: 0.4, ease: "easeInOut" }}
-                  className="block"
-                >
-                  <SealGlyph
-                    glyph={quill ? "e:quill" : "c:mic"}
-                    size={128}
-                    scale={quill ? 0.36 : 0.46}
-                  />
-                </motion.span>
-              )}
+            <AnimatePresence initial={false}>
+              <motion.span
+                key={quill ? "quill" : "mic"}
+                className="absolute inset-0 grid place-items-center"
+                initial={{ x: "75%", opacity: 0 }}
+                animate={{ x: "0%", opacity: 1 }}
+                exit={{ x: "-75%", opacity: 0 }}
+                transition={{ duration: 0.4, ease: "easeInOut" }}
+              >
+                <CanvasSeal
+                  playKey={playKey}
+                  size={128}
+                  glyph={quill ? "e:quill" : "c:mic"}
+                  iconScale={quill ? 0.36 : 0.46}
+                  mode="tap"
+                  pressed={down}
+                  variant="spring"
+                  ease="front"
+                  bounce={1.5}
+                  rotate={30}
+                  puck={1}
+                  cloud={0.5}
+                  speckle={0}
+                  lingerMs={1000}
+                  exitMs={200}
+                  exit="grow"
+                  ignoreReducedMotion
+                />
+              </motion.span>
             </AnimatePresence>
-          </span>
-        </button>
-      </div>
-    </div>
+          </button>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
