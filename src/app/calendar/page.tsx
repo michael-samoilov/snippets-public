@@ -4070,11 +4070,11 @@ function TodayZoneFill({
           onPointerUp={() => setDown(false)}
           onPointerLeave={() => setDown(false)}
           className="relative grid place-items-center rounded-full"
-          style={{ width: 60, height: 60 }}
+          style={{ width: 128, height: 128 }}
         >
           <CanvasSeal
             playKey={playKey}
-            size={60}
+            size={128}
             glyph={hasText ? "e:quill" : "a:mic"}
             iconScale={hasText ? 0.36 : 0.42}
             mode="tap"
