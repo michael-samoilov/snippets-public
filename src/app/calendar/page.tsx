@@ -4047,6 +4047,10 @@ function FlowBackfillCapture({
       bottom), so it never extends past the border;
     • scrolled fully to the bottom → hidden (the zone's rounded bottom shows). */
 const ZONE_CORNER = 16; // matches the zone box's rounded-2xl radius
+// overlap (px) the clip-pinned rule keeps drawing past the box's own bottom
+// border before handing off, so a sub-pixel-vanishing 1px border never leaves
+// the foot with no line at all
+const FOOT_OVERLAP = 2;
 // the rounded rect's horizontal inset `t`px from a corner's edge (0 at the very
 // edge → the straight top/bottom segment is inset by R; R away → full width)
 const cornerInset = (t: number) =>
@@ -4064,25 +4068,32 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
       const vpBottom = sc.getBoundingClientRect().bottom;
       const box = sc.querySelector<HTMLElement>("[data-today-zone-box]");
       const busy = box?.getAttribute("data-zone-busy") === "1";
-      let show = moreBelow && !busy;
+      let show = false;
       let blue = false;
       let inset = 0;
-      if (show && box) {
+      if (box && !busy) {
         const r = box.getBoundingClientRect();
-        if (r.bottom <= vpBottom) {
-          // the clip point is at/below the zone's bottom border — the box's OWN
-          // rounded bottom is the edge there; never draw the rule below it
-          show = false;
-        } else if (r.top > vpBottom) {
-          blue = false; // zone entirely below the fold → grey rule over the days
-        } else {
+        // Keep drawing the blue edge AT the fixed clip line until the box's OWN
+        // bottom border is safely (> FOOT_OVERLAP px) inside the viewport. The
+        // clip-pinned rule renders at a stable position, but the box's 1px
+        // border moves with scroll and at some rest offsets lands on a sub-pixel
+        // boundary and anti-aliases to nothing on retina; without this overlap
+        // the rule would have already handed off, leaving NO line at the foot.
+        const crossesClip = r.top <= vpBottom && r.bottom > vpBottom - FOOT_OVERLAP;
+        if (crossesClip) {
+          show = true;
           blue = true;
           const distTop = vpBottom - r.top;     // clip point's depth below the zone's top
           const distBottom = r.bottom - vpBottom; // real bottom's depth below the clip point
-          // follow whichever rounded corner the clip point is passing through;
-          // full width across the straight middle
+          // follow whichever rounded corner the clip point is passing through
+          // (incl. the overlap band, where distBottom ≤ 0 → fully inset, so the
+          // box's rounded corners complete the edge); full width across the
+          // straight middle
           if (distTop < ZONE_CORNER) inset = cornerInset(distTop);
           else if (distBottom < ZONE_CORNER) inset = cornerInset(distBottom);
+        } else if (moreBelow) {
+          // the clip lies above the zone, over the regular days → grey terminus
+          show = true;
         }
       }
       line.style.opacity = show ? "1" : "0";
