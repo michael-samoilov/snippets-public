@@ -169,8 +169,6 @@ export const copy = {
   keep: {
     /** the stamp's accessible name */
     label: "Keep this",
-    /** confirm-stamp after rewriting an existing entry */
-    doneRewrite: "Done — keep the rewrite",
     /** the "Kept." stamp on today */
     stampedToday: "Kept.",
     /** the "Kept to yesterday." stamp on a backfilled day */

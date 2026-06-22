@@ -3288,32 +3288,9 @@ function EntryBody({
         <div
           // constant padding: the foot never changes the card's height
           // as the terminus comes and goes (it sets the gap from the
-          // words/hairline down to the marks)
-          className="flex items-center justify-between px-3 pb-3 pt-2.5"
+          // words/hairline down to the trash mark)
+          className="flex items-center justify-end px-3 pb-3 pt-2.5"
         >
-          {/* the confirm quill is always mounted so it can FADE in and
-              out — when a keyboard dismissal ends the edit it dissolves
-              rather than vanishing. Invisible, it yields its press to
-              the band beneath (which edits) */}
-          <div
-            className={cn(
-              "transition-opacity duration-200 ease-[var(--ease-out)]",
-              editing ? "opacity-100" : "pointer-events-none opacity-0",
-            )}
-            aria-hidden={!editing}
-          >
-            <WaxStamp
-              label={copy.keep.doneRewrite}
-              onClick={stopEdit}
-              keepFocus
-              disabled={!editing}
-            >
-              {/* the dock's quill, now the confirming stamp */}
-              <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
-              <path d="M4.4 15.6 12.6 7" />
-              <path d="M4.4 15.6 3.4 17.6" />
-            </WaxStamp>
-          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -3340,79 +3317,6 @@ function EntryBody({
         </div>
       </div>
     </>
-  );
-}
-
-/** A pressed-wax seal at stamp scale — the entry card's marks, in the
-    day page seal's own material: lit from the upper left, a grooved
-    rim, sitting proud of the paper, depressing under the finger.
-    While listening it breathes, rings widening. */
-function WaxStamp({
-  label,
-  onClick,
-  listening = false,
-  keepFocus = false,
-  disabled = false,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  listening?: boolean;
-  /** don't steal focus from the field on press (the mic, mid-edit) */
-  keepFocus?: boolean;
-  /** faded out and inert (the confirm stamp at rest) */
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className="relative inline-grid place-items-center">
-      {listening && (
-        <>
-          <span
-            aria-hidden="true"
-            className="seal-ring absolute inset-0 rounded-full bg-wax"
-          />
-          <span
-            aria-hidden="true"
-            className="seal-ring seal-ring-late absolute inset-0 rounded-full bg-wax"
-          />
-        </>
-      )}
-      <button
-        type="button"
-        aria-label={label}
-        onClick={onClick}
-        disabled={disabled}
-        tabIndex={disabled ? -1 : undefined}
-        onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
-        className={cn(
-          "relative grid size-[34px] shrink-0 place-items-center rounded-full text-paper-raised",
-          "bg-[radial-gradient(circle_at_32%_28%,var(--wax-bright)_0%,var(--wax)_48%,var(--wax-deep)_100%)]",
-          "shadow-[inset_0_1px_1.5px_rgb(255_255_255/0.3),inset_0_-2px_3.5px_rgb(0_0_0/0.3),0_1px_2px_rgb(var(--shadow-hue)/0.3),0_3px_8px_-2px_var(--wax-shadow)]",
-          "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-          "active:scale-[0.93] active:shadow-[inset_0_2px_4px_rgb(0_0_0/0.4),0_1px_2px_rgb(var(--shadow-hue)/0.25)]",
-          listening && "seal-breathe",
-        )}
-      >
-        {/* the grooved rim */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-[3.5px] rounded-full border border-black/25 shadow-[inset_0_1px_1px_rgb(255_255_255/0.18)]"
-        />
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 20 20"
-          className="relative size-[15px] drop-shadow-[0_1px_1px_rgb(0_0_0/0.3)]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {children}
-        </svg>
-      </button>
-    </span>
   );
 }
 
