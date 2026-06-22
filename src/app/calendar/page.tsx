@@ -4041,13 +4041,16 @@ function FlowBackfillCapture({
    of the scroll viewport (where content clips) — it never moves. Imperative
    (its own rAF scroll read) so it doesn't re-render the feed.
     • over the days (zone entirely below the fold) → the plain grey rule;
-    • over the zone's straight sides → a flat BLUE line across the clip point
-      (the sides, clipped by the scroller, meet it — no overhang);
-    • in the zone's rounded-corner range (the bottom ~16px coming into view) →
-      hidden: the zone's OWN rounded border is the curve there, so the sides
-      curve into it and nothing extends past the corner;
+    • over the zone → a BLUE line whose length tracks the zone's outline at the
+      clip point: full width across the straight sides, and INSET along the
+      circular curve while the clip point is within a rounded corner (top or
+      bottom), so it never extends past the border;
     • scrolled fully to the bottom → hidden (the zone's rounded bottom shows). */
 const ZONE_CORNER = 16; // matches the zone box's rounded-2xl radius
+// the rounded rect's horizontal inset `t`px from a corner's edge (0 at the very
+// edge → the straight top/bottom segment is inset by R; R away → full width)
+const cornerInset = (t: number) =>
+  t <= 0 ? ZONE_CORNER : t >= ZONE_CORNER ? 0 : ZONE_CORNER - Math.sqrt(ZONE_CORNER * ZONE_CORNER - (ZONE_CORNER - t) * (ZONE_CORNER - t));
 function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivElement | null> }) {
   const lineRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -4061,20 +4064,31 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
       const vpBottom = sc.getBoundingClientRect().bottom;
       const box = sc.querySelector<HTMLElement>("[data-today-zone-box]");
       const busy = box?.getAttribute("data-zone-busy") === "1";
-      let mode: "none" | "grey" | "blue" = "none";
-      if (moreBelow && !busy) {
-        if (!box) {
-          mode = "grey";
+      const show = moreBelow && !busy;
+      let blue = false;
+      let inset = 0;
+      if (show && box) {
+        const r = box.getBoundingClientRect();
+        if (r.top > vpBottom) {
+          blue = false; // zone entirely below the fold → grey rule over the days
         } else {
-          const r = box.getBoundingClientRect();
-          if (r.top > vpBottom) mode = "grey";                  // zone below the fold → over the days
-          else if (r.bottom - vpBottom > ZONE_CORNER) mode = "blue"; // straight region of the zone
-          // else: rounded-corner range → the box's own curve is the hairline
+          blue = true;
+          const distTop = vpBottom - r.top;     // clip point's depth below the zone's top
+          const distBottom = r.bottom - vpBottom; // real bottom's depth below the clip point
+          // follow whichever rounded corner the clip point is passing through;
+          // full width across the straight middle
+          if (distTop < ZONE_CORNER) inset = cornerInset(distTop);
+          else if (distBottom < ZONE_CORNER) inset = cornerInset(distBottom);
         }
+      } else if (show && !box) {
+        blue = false;
       }
-      line.style.opacity = mode === "none" ? "0" : "1";
-      line.style.borderTopColor =
-        mode === "blue" ? "color-mix(in srgb, var(--wax) 45%, transparent)" : "var(--rule-faint)";
+      line.style.opacity = show ? "1" : "0";
+      line.style.left = `${inset}px`;
+      line.style.right = `${inset}px`;
+      line.style.borderTopColor = blue
+        ? "color-mix(in srgb, var(--wax) 45%, transparent)"
+        : "var(--rule-faint)";
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
     sc.addEventListener("scroll", onScroll, { passive: true });
@@ -4091,8 +4105,8 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
       <div
         ref={lineRef}
-        className="absolute inset-x-0 bottom-0 border-t transition-[opacity,border-color] duration-200"
-        style={{ opacity: 0, borderTopColor: "var(--rule-faint)" }}
+        className="absolute bottom-0 border-t transition-[opacity,border-color] duration-200"
+        style={{ opacity: 0, left: 0, right: 0, borderTopColor: "var(--rule-faint)" }}
       />
     </div>
   );
