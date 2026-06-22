@@ -42,18 +42,41 @@ export function useKeyboardRoom(
     let settle: ReturnType<typeof setTimeout> | null = null;
 
     const correct = () => {
-      const kb = field
-        ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-        : 0;
-      const room = kb ? `${kb + FLOAT}px` : "";
-      el.style.paddingBottom = room;
-      // if iOS honors it, its own focus-scroll leaves the band clear — no fight
-      el.style.scrollPaddingBottom = room;
-      if (field && kb) {
-        // float the field's foot above the keyboard's floating accessory band
-        const over =
-          field.getBoundingClientRect().bottom -
-          (vv.offsetTop + vv.height - FLOAT);
+      if (!field) {
+        el.style.paddingBottom = "";
+        el.style.scrollPaddingBottom = "";
+        return;
+      }
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      if (!kb) {
+        el.style.paddingBottom = "";
+        el.style.scrollPaddingBottom = "";
+        return;
+      }
+      // the top of the keyboard's floating accessory band (autofill pills +
+      // dismiss button) — the real ceiling the words must stay above
+      const bandTop = vv.offsetTop + vv.height - FLOAT;
+      if (field.hasAttribute("data-room-center")) {
+        // a tall, growing field (the today zone) keeps the line being written
+        // CENTRED between the top of the writing area and that band, so the
+        // current line never creeps down under the keyboard as the entry grows.
+        const availTop = el.getBoundingClientRect().top;
+        const targetY = (availTop + bandTop) / 2;
+        // reserve enough room below the content that even the last line can be
+        // lifted all the way to the centre (half the available height + the
+        // keyboard itself), then glue the caret's line to that centre line
+        const halfAvail = Math.max(0, (bandTop - availTop) / 2);
+        el.style.paddingBottom = `${kb + FLOAT + halfAvail}px`;
+        el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
+        const lineH = parseFloat(getComputedStyle(field).lineHeight) || 24;
+        const lineCentre = field.getBoundingClientRect().bottom - lineH / 2;
+        const delta = lineCentre - targetY;
+        if (Math.abs(delta) > 1) el.scrollTop += delta;
+      } else {
+        // a short field: just float its foot above the band, no more
+        el.style.paddingBottom = `${kb + FLOAT}px`;
+        el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
+        const over = field.getBoundingClientRect().bottom - bandTop;
         if (over > 0.5) el.scrollTop += over;
       }
     };
@@ -66,10 +89,19 @@ export function useKeyboardRoom(
         correct();
       });
     };
+    // The field grows a whole line at a time as it's typed into; an input event
+    // fires BEFORE the autosize reflow (it bubbles to us ahead of React's
+    // onChange), so reacting to input alone lands a beat behind — a newline
+    // drops the caret under the keyboard until the next keystroke catches up.
+    // A ResizeObserver on the field instead fires AFTER layout, on the actual
+    // height change, so the correction tracks every line as it appears — no
+    // back-and-forth jank.
+    const ro = new ResizeObserver(() => correct());
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) {
         field = t;
+        ro.observe(t);
         sync();
         // one more pass past the keyboard's rise (~250ms), in case iOS's
         // settle-scroll lands after our frame
@@ -78,6 +110,7 @@ export function useKeyboardRoom(
       }
     };
     const onFocusOut = () => {
+      if (field) ro.unobserve(field);
       field = null;
       if (settle) clearTimeout(settle);
       settle = null;
@@ -86,15 +119,14 @@ export function useKeyboardRoom(
     };
     el.addEventListener("focusin", onFocusIn);
     el.addEventListener("focusout", onFocusOut);
-    el.addEventListener("input", sync); // the field grows as it's typed into
     vv.addEventListener("resize", sync); // the keyboard opens/closes
     vv.addEventListener("scroll", sync);
     return () => {
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
-      el.removeEventListener("input", sync);
       vv.removeEventListener("resize", sync);
       vv.removeEventListener("scroll", sync);
+      ro.disconnect();
       if (raf) cancelAnimationFrame(raf);
       if (settle) clearTimeout(settle);
       el.style.paddingBottom = "";

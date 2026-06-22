@@ -4007,6 +4007,9 @@ function TodayZoneFill({
               value={text}
               rows={3}
               readOnly={frozen}
+              // keep the line being written centred above the keyboard, not just
+              // clear of it (this field grows long; see useKeyboardRoom)
+              data-room-center=""
               onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={firstEver ? copy.todayZone.placeholderFirstEver : copy.todayZone.placeholder}
