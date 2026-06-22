@@ -30,12 +30,8 @@ import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { ulid } from "ulidx";
 import { WaxStamp as CanvasSeal } from "@/components/capture/wax-stamp";
-import {
-  birthFor,
-  QUILL_SCALE,
-  useKeepSequence,
-} from "@/components/schedule/keep-sequence";
-import { useKeepFlow, useKeptDraft, useTodayZone, type DeleteLeave, type KeepFlow } from "@/lib/keep-flow";
+import { KEEP_BEATS, useKeepSequence } from "@/components/schedule/keep-sequence";
+import { useKeptDraft } from "@/lib/kept-draft";
 import {
   groupByDay,
   useAllSnippets,
@@ -287,10 +283,9 @@ function Calendar() {
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
   // a deletion closes the entry by dissolving the card in place, not the
-  // shared-element shrink back to its (vanishing) book slot. The lab picks the
-  // leave style to preview; production defaults to dissolve.
-  const keepFlow = useKeepFlow();
-  const deleteCloseRef = useRef<DeleteLeave | null>(null);
+  // shared-element shrink back to its (vanishing) book slot — this flag marks
+  // the next close as a deletion so it plays the dissolve.
+  const deleteCloseRef = useRef(false);
 
   /** the entry the camera has dived into */
   const [focusedId, setFocusedId] = useState<string | null>(() =>
@@ -485,7 +480,7 @@ function Calendar() {
       for (const el of willChanged) el.style.willChange = "";
       flyerBox?.remove();
       for (const el of hiddenNumbers) el.style.visibility = "";
-      deleteCloseRef.current = null;
+      deleteCloseRef.current = false;
       setDeletingSnippet(null);
       setZoom(null);
       zooming.current = false;
@@ -513,25 +508,16 @@ function Calendar() {
       // while the book fades up behind it — no shrink back to the slot the
       // entry is leaving. The struck tile collapses in the book on its own.
       if (zoom.from === "entry" && deleteCloseRef.current) {
-        const mode = deleteCloseRef.current;
         const schedEl = layers.schedule!;
         const cardEl = entryCard ?? incoming;
         layers.entry!.style.opacity = "1";
         schedEl.style.opacity = "0";
         cardEl.style.willChange = "transform, opacity";
         willChanged.push(cardEl);
-        const dur = mode === "fade" ? 0.18 : mode === "swipe" ? 0.34 : 0.32;
-        const leave =
-          mode === "fade"
-            ? { opacity: [1, 0] as number[] }
-            : mode === "swipe"
-              ? { opacity: [1, 0] as number[], x: [0, Math.round(stageRect.width * 0.6)] }
-              : { opacity: [1, 0] as number[], y: [0, 14] };
+        // dissolve the card in place — fade while it sinks a few pixels
+        const dur = 0.32;
         moves.push(
-          animate(cardEl, leave, {
-            duration: dur,
-            ease: mode === "swipe" ? [0.5, 0, 0.75, 0] : [0.4, 0, 1, 1],
-          }).finished,
+          animate(cardEl, { opacity: [1, 0], y: [0, 14] }, { duration: dur, ease: [0.4, 0, 1, 1] }).finished,
           animate(schedEl, { opacity: [0, 1] }, { duration: dur * 0.8, ease: [0.23, 1, 0.32, 1] }).finished,
         );
         void Promise.all(moves).then(finish, finish);
@@ -978,7 +964,7 @@ function Calendar() {
   // soft-delete, then close over the struck line with an undo toast.
   const letGo = useCallback(
     async (snippet: Snippet) => {
-      deleteCloseRef.current = keepFlow?.deleteLeave ?? "dissolve";
+      deleteCloseRef.current = true; // the next close is a deletion → dissolve
       setDeletingSnippet(snippet); // hold the words through the leave animation
       await softDeleteSnippet(snippet.id);
       window.history.back();
@@ -986,7 +972,7 @@ function Calendar() {
         action: { label: copy.deleteEntry.undo, onClick: () => void restoreSnippet(snippet.id) },
       });
     },
-    [keepFlow?.deleteLeave],
+    [],
   );
 
   /* ── the back swipe: a left-to-right flick climbs one altitude ────
@@ -2600,9 +2586,6 @@ function ScheduleFeedBase({
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
   const [probe, setProbe] = useState<string | null>(selected);
-  // a dev riff (the today-zone lab): fill today's blank tail with a big
-  // "add to today" zone; null in production
-  const todayZone = useTodayZone();
   // a pending kept draft for today means a keep JUST happened (it's cleared once
   // the live row lands) — the only time today's date should wipe in (never on a
   // page refresh)
@@ -2673,25 +2656,16 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el) return false;
-    // in zone mode "today" lives at the very foot (the zone fills the tail) —
-    // land on the bottom so the today zone is shown, not the top of today's row
-    if (todayZone && day === todayKey) {
+    // "today" lives at the very foot (its fill zone fills the tail) — land on
+    // the bottom so the zone is shown, not the top of today's row (and when the
+    // zone stands in for a blank today there's no today row to land on anyway)
+    if (day === todayKey) {
       spyRef.current = day;
       progTargetRef.current = null;
       el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
       return true;
     }
-    if (!row) {
-      // when the today-zone stands in for a blank today, there is no today row
-      // to land on — scroll to the foot, where the zone lives
-      if (day === todayKey) {
-        spyRef.current = day;
-        progTargetRef.current = null;
-        el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
-        return true;
-      }
-      return false;
-    }
+    if (!row) return false;
     spyRef.current = day; // the landing must not re-announce itself
     if (smooth) {
       // hold the header on the destination while the scroll animates, so the
@@ -2706,7 +2680,7 @@ function ScheduleFeedBase({
     }
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     return true;
-  }, [todayKey, todayZone]);
+  }, [todayKey]);
 
   const goTo = useCallback(
     (day: string, smooth = false) => {
@@ -2817,7 +2791,7 @@ function ScheduleFeedBase({
         // entry — its date lives in the zone, and the kept card wipes into this
         // (already-mounted) list. Its ScheduleCards stays rendered so the
         // AnimatePresence is live to animate that card in.
-        const hideToday = isToday && !!todayZone && row.snippets.length === 0;
+        const hideToday = isToday && row.snippets.length === 0;
         const pageRow = (
           <section
             ref={rowRef(row.day)}
@@ -2853,12 +2827,12 @@ function ScheduleFeedBase({
                         </span>
                       </>
                     );
-                    // in zone mode today's date sticky-header populates as the
-                    // entry arrives — wipe it in from the left, with the card
-                    // wipe the date in only on a fresh keep (todayJustKept),
-                    // never on a page refresh; it leads the card — fast (the
-                    // first fifth of the sweep) so date+card read as one sweep
-                    return todayZone && isToday ? (
+                    // today's date sticky-header populates as the first entry
+                    // arrives — wipe it in from the left to lead the kept card,
+                    // but ONLY on a fresh keep (todayJustKept), never on a page
+                    // refresh; fast (the first fifth of the sweep) so date+card
+                    // read as one sweep across the row
+                    return isToday ? (
                       <motion.div
                         initial={todayJustKept ? { opacity: 0, clipPath: "inset(0 100% 0 0)" } : false}
                         animate={{ opacity: 1, clipPath: "inset(0 0% 0 0)" }}
@@ -2900,24 +2874,21 @@ function ScheduleFeedBase({
               // row's top — in the same layout pass as any content
               // change, so shrinking rows can never dip scrollHeight
               // and clamp the reader off their page
-              <div className={cn(todayZone ? "relative flex h-full flex-col" : "min-h-full")}>
+              <div className="relative flex h-full flex-col">
                 {pageRow}
-                {todayZone && (
-                  // the zone always carries today's big date — even once today
-                  // also owns a page above — so the composer always names its day
-                  <TodayZoneFill
-                    day={todayKey}
-                    riff={todayZone.frame}
-                    firstEver={bookEmpty}
-                    // a hair of breathing room below the zone's border so that at
-                    // the very bottom the border rests just ABOVE the clip line —
-                    // fully painted and crisp, never sitting exactly on the
-                    // sub-pixel clip edge (where it half-vanishes). The foot rule
-                    // then hands off to a border that's already visible: no bare
-                    // gap on the approach, no doubled hairline at rest.
-                    className="flex-1 mb-[3px]"
-                  />
-                )}
+                {/* the zone always carries today's big date — even once today
+                    also owns a page above — so the composer always names its day */}
+                <TodayZoneFill
+                  day={todayKey}
+                  firstEver={bookEmpty}
+                  // a hair of breathing room below the zone's border so that at
+                  // the very bottom the border rests just ABOVE the clip line —
+                  // fully painted and crisp, never sitting exactly on the
+                  // sub-pixel clip edge (where it half-vanishes). The foot rule
+                  // then hands off to a border that's already visible: no bare
+                  // gap on the approach, no doubled hairline at rest.
+                  className="flex-1 mb-[3px]"
+                />
               </div>
             ) : (
               pageRow
@@ -2925,13 +2896,8 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone, todayJustKept, bookEmpty],
+    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty],
   );
-
-  // with the today-zone on, the scroller's content height grows with the zone,
-  // so read it live — otherwise the cached height leaves the foot hairline lit
-  // and floating across the zone instead of resting below it / fading at the end
-  const edges = useScrollEdges(scrollerRef, [rows, todayZone], !!todayZone);
 
   return (
     <div
@@ -2948,11 +2914,7 @@ function ScheduleFeedBase({
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
           the corner range */}
-      {todayZone ? (
-        <ZoneFootRule scrollerRef={scrollerRef} />
-      ) : (
-        <ScrollTerminus show={edges.bottom} />
-      )}
+      <ZoneFootRule scrollerRef={scrollerRef} />
     </div>
   );
 }
@@ -2973,26 +2935,15 @@ function ScheduleCards({
 }) {
   // entries already on the page at mount don't animate — only changes do
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
-  // a dev flow (the lab) births freshly-kept cards with the chosen flow; in
-  // production `flow` is null and the default rise/fade plays
-  const flow = useKeepFlow();
-  const birth = flow ? birthFor(flow.spec, flow.reduce) : null;
-  // in the today-zone exploration a kept entry WIPES in from the left — a pure
-  // left→right clip reveal (no float). The margin date wipes just before it, so
-  // the two read as one uniform sweep across the row's width: the date takes the
-  // first fifth, the card the rest (it waits out the date with a delay).
-  const todayZone = useTodayZone();
+  // a kept entry WIPES in from the left — a pure left→right clip reveal (no
+  // float). The margin date wipes just before it, so the two read as one uniform
+  // sweep across the row's width: the date takes the first fifth, the card the
+  // rest (it waits out the date with a delay).
   const sweepBirth = {
     initial: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
     animate: { opacity: 1, clipPath: "inset(0 0% 0 0)" },
     transition: { duration: 0.4, delay: 0.1, ease: "easeInOut" as const },
   };
-  const defaultBirth = birth ?? {
-    initial: { opacity: 0, y: -10, scale: 0.985 },
-    animate: { opacity: 1, y: 0, scale: 1 },
-    transition: { type: "spring" as const, duration: 0.5, bounce: 0.16 },
-  };
-  const newBirth = todayZone ? sweepBirth : defaultBirth;
 
   // the optimistic just-kept card: render it in its final slot the instant the
   // seal is pressed so the typed words never blink out waiting for the live
@@ -3014,26 +2965,17 @@ function ScheduleCards({
           return (
           <motion.li
             key={s.id}
-            // the freshly-kept (zone) card wipes in via clip only — no FLIP
-            // position float; other cards keep their layout spring
-            layout={isDraft && todayZone ? false : "position"}
-            initial={
-              isDraft
-                ? (todayZone ? sweepBirth.initial : { opacity: 0 })
-                : presentAtMount.has(s.id)
-                  ? false
-                  : newBirth.initial
-            }
-            animate={isDraft ? (todayZone ? sweepBirth.animate : { opacity: 1 }) : newBirth.animate}
+            // the freshly-kept card wipes in via clip only — no FLIP position
+            // float; cards already present keep their layout spring as the stack
+            // reshuffles around them
+            layout={isDraft ? false : "position"}
+            initial={presentAtMount.has(s.id) ? false : sweepBirth.initial}
+            animate={sweepBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
             // focused card up in the entry view) — so the book behind is already
             // at its final state, never showing the struck card collapse
             exit={{ opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0 } }}
-            transition={
-              isDraft
-                ? (todayZone ? sweepBirth.transition : { duration: 0.18, ease: [0.23, 1, 0.32, 1] })
-                : newBirth.transition
-            }
+            transition={sweepBirth.transition}
           >
             <button
               type="button"
@@ -3719,184 +3661,33 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 
 /* ── adding to a day: today at its own moment, the past at noon ──── */
 
-// Production renders no KeepFlow provider → `flow` is null → the legacy composer
-// runs unchanged. Inside the schedule-submit lab a flow is provided, so the keep
-// is orchestrated by the keep-sequence engine with the canvas quill seal.
+// The keep is orchestrated by the keep-sequence engine with the canvas quill
+// seal. Today's capture lives in the big fill zone, so today's inline composer
+// steps aside — but other days keep theirs (yesterday's "add something from
+// yesterday" invite, or any page you opened to backfill).
 function BackfillCapture(props: { day: string; follows?: boolean }) {
-  const flow = useKeepFlow();
-  // in zone mode today's capture lives in the big fill zone, so today's inline
-  // composer steps aside — but other days keep theirs (yesterday's "add
-  // something from yesterday" invite, or any page you opened to backfill)
-  if (useTodayZone() && props.day === dayKey()) return null;
-  return flow ? (
-    <FlowBackfillCapture {...props} flow={flow} />
-  ) : (
-    <LegacyBackfillCapture {...props} />
-  );
+  if (props.day === dayKey()) return null;
+  return <FlowBackfillCapture {...props} />;
 }
 
-function LegacyBackfillCapture({
-  day,
-  follows = false,
-}: {
-  day: string;
-  /** the composer stands below entries, stacked like one more tile */
-  follows?: boolean;
-}) {
-  const [text, setText] = useState("");
-  const [stamped, setStamped] = useState(false);
-  const areaRef = useRef<HTMLTextAreaElement>(null);
-  const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isToday = day === dayKey();
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const isYesterday = day === dayKey(yesterday);
-  // remounted per day via key, so state starts fresh; only clean the timer
-  useEffect(() => {
-    return () => {
-      if (stampTimer.current) clearTimeout(stampTimer.current);
-    };
-  }, []);
-
-  const keep = async () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setText("");
-    const el = areaRef.current;
-    if (el) {
-      el.value = "";
-      autosizeArea(el);
-    }
-    navigator.vibrate?.(8);
-    setStamped(true);
-    if (stampTimer.current) clearTimeout(stampTimer.current);
-    stampTimer.current = setTimeout(() => setStamped(false), 1600);
-    const at = dateFromDayKey(day);
-    at.setHours(12, 0, 0, 0); // noon: clear of DST edges
-    try {
-      const snippet = await addSnippet({
-        text: trimmed,
-        source: "typed",
-        // today is stamped at its real moment; the past lands at noon
-        ...(isToday ? {} : { capturedAt: at.getTime() }),
-      });
-      void enrichSnippet(snippet);
-    } catch {
-      toast(copy.data.keepFailed);
-    }
-  };
-
-  const hasText = text.trim().length > 0;
-
-  return (
-    // the composer sits on the tile line and wears the tiles' own
-    // paddings — a one-line tile waiting for words
-    <div className={cn("relative", follows && "mt-1")}>
-      {/* the card proper: paint and field only — the Keep button and
-          the stamp line live below it, outside the paint (an inset-0
-          coat over the whole composer once buried them) */}
-      <div className="group relative">
-        {/* the tile's paint, fading rightward into the bare page: an
-            entry not yet written. Focus darkens the rule, as writing
-            surfaces do */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
-        />
-        {/* …and while words stand in it, the paint completes: the card
-            is becoming real */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
-            "border-rule-faint group-focus-within:border-rule",
-            text.length > 0 ? "opacity-100" : "opacity-0",
-          )}
-        />
-        <textarea
-          ref={areaRef}
-          value={text}
-          rows={1}
-          placeholder={
-            isToday
-              ? copy.backfill.today
-              : isYesterday
-                ? copy.backfill.yesterday
-                : copy.backfill.other
-          }
-          aria-label={copy.backfill.ariaAddTo(friendlyDay(day))}
-          onChange={(e) => {
-            setText(e.target.value);
-            autosizeArea(e.target);
-          }}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              void keep();
-            }
-          }}
-          className={cn(
-            "voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
-            // today's invitation shares today's hue, like its date across
-            // the gutter; other days keep the quiet ink
-            isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
-          )}
-        />
-      </div>
-      {hasText && (
-        // the same wax quill confirm-stamp the entry editor uses; keeping
-        // holds focus so the next thing can be typed straight away
-        <div className="mt-2 flex justify-end pr-px">
-          <WaxStamp label={copy.keep.label} onClick={() => void keep()} keepFocus>
-            <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
-            <path d="M4.4 15.6 12.6 7" />
-            <path d="M4.4 15.6 3.4 17.6" />
-          </WaxStamp>
-        </div>
-      )}
-      {/* the "Kept." stamp floats below the field rather than reserving
-          height — the composer's foot then matches any other tile's, and
-          a stamp can't reshape the row, clamp the scroller, or wake the
-          spy */}
-      <p
-        role="status"
-        className={cn(
-          "pointer-events-none absolute inset-x-0 top-full mt-1 h-5 px-2.5 font-serif text-[0.85rem] not-italic text-wax",
-          stamped ? "stamp-in" : "invisible",
-        )}
-      >
-        {stamped
-          ? isToday
-            ? copy.keep.stampedToday
-            : copy.keep.stampedTo(friendlyDay(day).toLowerCase())
-          : " "}
-      </p>
-    </div>
-  );
-}
-
-/* The flow-driven composer (lab only). The seal rests as the white-icon dome
-   (the /lab/stamp button) and plays its full press → linger → exit lifecycle on
-   click; during the press today's date shows ONLY the stamp. The card is then
-   born (ScheduleCards gives it the flow's entrance), and finally the empty
-   composer wipes back in from the left as a single revealed line (slow). */
+/* A past day's composer. The seal rests as the white-icon dome and plays its
+   full press → linger → exit lifecycle on click; during the press the date
+   shows ONLY the stamp. The card is then born (ScheduleCards wipes it in), and
+   finally the empty composer wipes back in from the left as a single revealed
+   line (slow). */
 function FlowBackfillCapture({
   day,
   follows = false,
-  flow,
 }: {
   day: string;
   follows?: boolean;
-  flow: KeepFlow;
 }) {
+  const reduce = useReducedMotion() ?? false;
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const seq = useKeepSequence(flow.spec, flow.reduce);
+  const seq = useKeepSequence(KEEP_BEATS, reduce);
   const draftStore = useKeptDraft();
-  // how far to slide the seal left to centre it over the slot (centred flows)
-  const [centreShift, setCentreShift] = useState(0);
-  // the thumb-down dip (the /lab/stamp `pressed` feedback before release)
+  // the thumb-down dip (the seal's `pressed` feedback before release)
   const [pressedDown, setPressedDown] = useState(false);
   const isToday = day === dayKey();
   const yesterday = new Date();
@@ -3906,9 +3697,9 @@ function FlowBackfillCapture({
   // refocus once the composer has wiped back, to keep typing
   useEffect(() => {
     if (seq.phase !== "composing") return;
-    const t = setTimeout(() => areaRef.current?.focus(), Math.max(80, flow.spec.composeMs * 0.7));
+    const t = setTimeout(() => areaRef.current?.focus(), Math.max(80, KEEP_BEATS.composeMs * 0.7));
     return () => clearTimeout(t);
-  }, [seq.phase, flow.spec.composeMs]);
+  }, [seq.phase]);
 
   const keep = () => {
     const trimmed = text.trim();
@@ -3934,7 +3725,7 @@ function FlowBackfillCapture({
       enriched: "pending",
       updatedAt: capturedAt,
     });
-    void addSnippet({ id, text: trimmed, source: "typed", capturedAt });
+    void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).then(enrichSnippet);
     setText("");
     if (areaRef.current) {
       areaRef.current.value = "";
@@ -3942,10 +3733,7 @@ function FlowBackfillCapture({
     }
     navigator.vibrate?.(8);
     // reduced motion: the card is already filed; skip the press theatre
-    if (flow.reduce) return;
-    // centred flows slide the seal to the row's middle, over the new slot
-    const w = wrapRef.current?.clientWidth ?? 0;
-    setCentreShift(-(Math.max(0, w - 40) / 2));
+    if (reduce) return;
     seq.start();
   };
 
@@ -3954,8 +3742,7 @@ function FlowBackfillCapture({
   const composerOpen = seq.phase === "idle" || seq.phase === "composing";
   // the seal shows at rest (typed) and through the press; it's gone once the
   // empty composer wipes back in. Reduced motion files instantly, no theatre.
-  const showSeal = hasText || (pressing && !flow.reduce);
-  const sealCentre = flow.spec.sealPos !== "corner" && pressing;
+  const showSeal = hasText || (pressing && !reduce);
   const placeholder = isToday
     ? copy.backfill.today
     : isYesterday
@@ -3963,7 +3750,7 @@ function FlowBackfillCapture({
       : copy.backfill.other;
 
   return (
-    <div ref={wrapRef} className={cn("relative", follows && "mt-1")}>
+    <div className={cn("relative", follows && "mt-1")}>
       {/* the composer — present at rest and after a keep, GONE during the press
           so today shows only the stamp. Its return wipes in from the left as a
           single already-laid-out line (clip-path reveal — no re-wrapping), slow
@@ -3972,7 +3759,7 @@ function FlowBackfillCapture({
         <motion.div
           initial={seq.phase === "composing" ? { clipPath: "inset(0 100% 0 0)" } : false}
           animate={{ clipPath: "inset(0 0 0 0)" }}
-          transition={{ duration: flow.spec.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
           className="group relative"
         >
           <span
@@ -4011,25 +3798,12 @@ function FlowBackfillCapture({
         </motion.div>
       )}
 
-      {/* the seal — rests as the white-icon dome (identical to /lab/stamp): a
-          thumb-down dip, then the full press → linger → exit lifecycle on
-          release (the seal plays it; we just unmount once it has exited). The
-          card is already in place beside/above it. Centred flows slide it over
-          the new slot. */}
+      {/* the seal — rests as the white-icon dome: a thumb-down dip, then the
+          full press → linger → exit lifecycle on release (the seal plays it; we
+          just unmount once it has exited). The card is already in place above
+          it; the seal presses at the corner and swells away. */}
       {showSeal && (
-        <motion.div
-          className="mt-2 flex justify-end pr-px"
-          initial={false}
-          animate={{ x: sealCentre ? centreShift : 0 }}
-          // "travel" glides across the whole press (corner → centre); "centre"
-          // snaps there at the start; "corner" never moves
-          transition={{
-            x:
-              flow.spec.sealPos === "travel"
-                ? { duration: Math.max(0.5, flow.spec.pressMs / 1000), ease: [0.23, 1, 0.32, 1] }
-                : { type: "spring", stiffness: 380, damping: 30 },
-          }}
-        >
+        <div className="mt-2 flex justify-end pr-px">
           <button
             type="button"
             aria-label={copy.keep.label}
@@ -4046,16 +3820,16 @@ function FlowBackfillCapture({
             <CanvasSeal
               playKey={seq.sealKey}
               size={56}
-              glyph={`${flow.quillSet}:quill`}
-              iconScale={QUILL_SCALE[flow.quillSet]}
+              glyph="e:quill"
+              iconScale={0.36}
               mode="tap"
               pressed={pressedDown}
               // the canvas press runs ~1150ms; linger fills the rest of pressMs,
               // and the exit plays across cardMs — so the whole lifecycle lands
-              // exactly when the seal unmounts (composing), in sync with slow-mo
-              lingerMs={Math.max(0, flow.spec.pressMs - 1150)}
-              exitMs={flow.spec.cardMs}
-              exit={flow.spec.sealExit}
+              // exactly when the seal unmounts (composing)
+              lingerMs={Math.max(0, KEEP_BEATS.pressMs - 1150)}
+              exitMs={KEEP_BEATS.cardMs}
+              exit="grow"
               variant="spring"
               ease="front"
               bounce={1.5}
@@ -4064,7 +3838,7 @@ function FlowBackfillCapture({
               ignoreReducedMotion
             />
           </button>
-        </motion.div>
+        </div>
       )}
     </div>
   );
@@ -4155,29 +3929,16 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
   );
 }
 
-/* Variants of the locked blue outline — the riff now picks one of these. */
-const FRAME_VARIANTS: Record<string, string> = {
-  hairline: "border border-wax/45",
-  bold: "border-2 border-wax/70",
-  double: "border-[3px] border-double border-wax/65",
-  glow: "border border-wax/55 shadow-[0_0_24px_-6px_var(--wax)]",
-  soft: "border border-wax/25",
-};
-
-/* The today-zone (lab riffs): a big "add to today" panel that FILLS the blank
-   tail of today's page (flex-1 within the min-h-full), housing the large
-   pre-stamp wax button. It shrinks as today fills with entries above it. Each
-   riff is a variant of the blue outline. Lab-only (gated by context). */
+/* The today zone: a big "add to today" panel that FILLS the blank tail of
+   today's page (flex-1 within the min-h-full), housing the large pre-stamp wax
+   button inside a hairline blue outline. It shrinks as today fills with entries
+   above it. This is the app's capture surface. */
 function TodayZoneFill({
   day,
-  riff,
-  showDate = true,
   firstEver = false,
   className,
 }: {
   day: string;
-  riff: string;
-  showDate?: boolean;
   /** nothing has ever been saved — a warmer first invitation */
   firstEver?: boolean;
   className?: string;
@@ -4227,7 +3988,7 @@ function TodayZoneFill({
         id, text: t, kind: null, tags: [], capturedAt, day,
         source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
       });
-      void addSnippet({ id, text: t, source: "typed", capturedAt });
+      void addSnippet({ id, text: t, source: "typed", capturedAt }).then(enrichSnippet);
     };
     // freeze the words; hold the seal pressed-down through the lead; dismiss the
     // keyboard and bring the seal fully into view
@@ -4250,8 +4011,8 @@ function TodayZoneFill({
     });
   };
 
-  // locked: the blue outline. The riff now picks a VARIANT of that outline.
-  const frame = FRAME_VARIANTS[riff] ?? FRAME_VARIANTS.hairline;
+  // the zone's hairline blue outline (wax = recording)
+  const frame = "border border-wax/45";
 
   return (
     // each generation is one element: the old zone slides off the right while a
@@ -4294,12 +4055,10 @@ function TodayZoneFill({
         >
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
           {/* today's date, in the Today-page voice */}
-          {showDate && (
-            <div className="leading-none">
-              <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
-              <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
-            </div>
-          )}
+          <div className="leading-none">
+            <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
+            <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
+          </div>
 
           {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt
               sits on one line */}
