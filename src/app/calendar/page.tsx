@@ -4109,10 +4109,7 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
       <div
         ref={lineRef}
-        // no transitions at all: opacity, colour and length all change instantly
-        // so the rule hands off to/from the zone's own bottom border with no fade
-        // window where neither edge is visible
-        className="absolute bottom-0 border-t"
+        className="absolute bottom-0 border-t transition-opacity duration-200"
         style={{ opacity: 0, left: 0, right: 0, borderTopColor: "var(--rule-faint)" }}
       />
     </div>
