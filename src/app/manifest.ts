@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
+import { copy } from "@/lib/copy";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Snippets",
-    short_name: "Snippets",
-    description:
-      "A pocket commonplace book. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
+    name: copy.app.name,
+    short_name: copy.app.name,
+    description: copy.app.description,
     id: "/",
     start_url: "/",
     display: "standalone",

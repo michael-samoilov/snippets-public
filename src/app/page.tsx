@@ -6,6 +6,7 @@ import { Capture } from "@/components/capture/capture";
 import { OnThisDay } from "@/components/on-this-day";
 import { MotionEntryList } from "@/components/snippet/motion-entry-list";
 import { useStats, useTodaySnippets } from "@/hooks/use-snippets";
+import { copy } from "@/lib/copy";
 
 export default function TodayPage() {
   const today = useTodaySnippets();
@@ -22,11 +23,11 @@ export default function TodayPage() {
         </h1>
         {stats && stats.total > 0 && (
           <p className="mt-2.5 font-serif text-[0.92rem] italic text-ink-soft">
-            <NumberFlow value={stats.total} /> kept
+            <NumberFlow value={stats.total} /> {copy.today.kept}
             {stats.currentStreak > 1 && (
               <>
                 {" "}
-                · <NumberFlow value={stats.currentStreak} /> days running
+                · <NumberFlow value={stats.currentStreak} /> {copy.today.daysRunning}
               </>
             )}
           </p>
@@ -37,16 +38,14 @@ export default function TodayPage() {
 
       {stats?.total === 0 && (
         <p className="voice-prose mt-10 max-w-prose italic text-ink-soft">
-          Your days are fuller than you think. Catch one true moment before it
-          evaporates — a line someone said, a small scene, a joke that landed.
-          Two sentences is plenty.
+          {copy.today.empty}
         </p>
       )}
 
       {entries && entries.length > 0 && (
-        <section aria-label="Kept today" className="mt-10">
+        <section aria-label={copy.today.keptToday} className="mt-10">
           <h2 className="voice-label border-b border-rule pb-1.5">
-            Kept today · {entries.length}
+            {copy.today.keptToday} · {entries.length}
           </h2>
           <MotionEntryList snippets={entries} />
         </section>

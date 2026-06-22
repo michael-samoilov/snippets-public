@@ -1,4 +1,5 @@
 import type { SnippetKind } from "@/lib/types";
+import { copy } from "@/lib/copy";
 
 interface KindMeta {
   /** singular, sentence case — used on chips and labels */
@@ -51,31 +52,14 @@ export const KIND_META: Record<SnippetKind, KindMeta> = {
 };
 
 /**
- * The day's rotating questions, in the spirit of Homework for Life.
- * Specific beats open-ended: a narrow question is easier to answer.
- * Index by day-of-year so the question is stable all day.
+ * The day's rotating capture question (the prompts live in src/lib/copy.ts).
+ * Indexed by day-of-year so the question is stable all day.
  */
-export const DAILY_PROMPTS = [
-  "If today were a story, where would it begin?",
-  "What almost didn't happen today?",
-  "What did someone say today that you want to remember?",
-  "What was the smallest good thing today?",
-  "What surprised you today?",
-  "What would you tell a friend about today?",
-  "What did you notice today that nobody else seemed to?",
-  "When did you laugh today?",
-  "What was today's moment?",
-  "What changed today, even slightly?",
-  "Who was unexpectedly kind today — or unexpectedly strange?",
-  "What will you have forgotten by next week, unless you keep it?",
-  "Where were you today that you'd like to stand again?",
-  "What went wrong today that might make a good story?",
-] as const;
-
 export function promptForDate(date: Date): string {
   const start = new Date(date.getFullYear(), 0, 0);
   const dayOfYear = Math.floor(
     (date.getTime() - start.getTime()) / 86_400_000,
   );
-  return DAILY_PROMPTS[dayOfYear % DAILY_PROMPTS.length];
+  const prompts = copy.capture.dailyPrompts;
+  return prompts[dayOfYear % prompts.length];
 }

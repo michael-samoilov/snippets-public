@@ -2,6 +2,7 @@ import Dexie, { type Table } from "dexie";
 import { ulid } from "ulidx";
 import type { Snippet, SnippetDraft, SnippetKind } from "@/lib/types";
 import { dayKey } from "@/lib/dates";
+import { copy } from "@/lib/copy";
 
 class SnippetsDB extends Dexie {
   snippets!: Table<Snippet, string>;
@@ -215,13 +216,13 @@ export async function onThisDay(today = new Date()): Promise<MemoryGroup[]> {
     if (key.slice(5) !== mmdd) continue; // Feb 29 drift
     candidates.push({
       day: key,
-      label: yearsAgo === 1 ? "One year ago" : `${yearsAgo} years ago`,
+      label: yearsAgo === 1 ? copy.memories.oneYearAgo : copy.memories.yearsAgo(yearsAgo),
     });
   }
   const monthAgo = new Date(today);
   monthAgo.setMonth(monthAgo.getMonth() - 1);
   if (monthAgo.getDate() === today.getDate()) {
-    candidates.push({ day: dayKey(monthAgo), label: "One month ago" });
+    candidates.push({ day: dayKey(monthAgo), label: copy.memories.oneMonthAgo });
   }
 
   for (const { day, label } of candidates) {

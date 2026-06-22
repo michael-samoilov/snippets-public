@@ -5,6 +5,7 @@ import { db, allSnippetsNewestFirst } from "@/lib/db";
 import { dayKey, dateFromDayKey } from "@/lib/dates";
 import { KIND_META } from "@/lib/kinds";
 import { KINDS, type Snippet } from "@/lib/types";
+import { copy } from "@/lib/copy";
 
 function download(filename: string, content: string, type: string) {
   const blob = new Blob([content], { type });
@@ -62,7 +63,7 @@ export async function importJSON(file: File): Promise<number> {
     parsed === null ||
     !Array.isArray((parsed as { snippets?: unknown }).snippets)
   ) {
-    throw new Error("Not a Snippets export file.");
+    throw new Error(copy.data.notExportFile);
   }
   const rows = (parsed as { snippets: unknown[] }).snippets.filter(
     (row): row is Snippet => {
@@ -77,7 +78,7 @@ export async function importJSON(file: File): Promise<number> {
       );
     },
   );
-  if (rows.length === 0) throw new Error("No entries found in that file.");
+  if (rows.length === 0) throw new Error(copy.data.noEntriesInFile);
   await db.snippets.bulkPut(rows);
   return rows.length;
 }

@@ -2,6 +2,7 @@
 
 import { useOnThisDay } from "@/hooks/use-snippets";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
+import { copy } from "@/lib/copy";
 
 /**
  * Memories resurface quietly: the same date in earlier years, and the
@@ -12,8 +13,8 @@ export function OnThisDay() {
   if (!groups || groups.length === 0) return null;
 
   return (
-    <section aria-label="On this day" className="mt-12">
-      <h2 className="voice-label border-b border-rule pb-1.5">On this day</h2>
+    <section aria-label={copy.memories.heading} className="mt-12">
+      <h2 className="voice-label border-b border-rule pb-1.5">{copy.memories.heading}</h2>
       {groups.map((group) => (
         <div key={group.label} className="mt-4">
           <h3 className="voice-display text-[1.05rem] italic text-ink-soft">

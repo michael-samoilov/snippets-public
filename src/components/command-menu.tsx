@@ -47,8 +47,8 @@ export function CommandMenu() {
     <CommandDialog
       open={open}
       onOpenChange={setOpen}
-      title="Command menu"
-      description="Search the book or jump somewhere"
+      title={copy.commandMenu.title}
+      description={copy.commandMenu.description}
       className="float border-none bg-paper-raised duration-100 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
     >
       <CommandInput
@@ -59,12 +59,12 @@ export function CommandMenu() {
       />
       <CommandList>
         <CommandEmpty className="voice-prose py-6 text-center italic text-ink-soft">
-          Nothing found.
+          {copy.commandMenu.empty}
         </CommandEmpty>
 
         {query.trim() && results.length > 0 && (
           <>
-            <CommandGroup heading="In the book">
+            <CommandGroup heading={copy.commandMenu.inTheBook}>
               {results.map((s) => (
                 <CommandItem
                   key={s.id}
@@ -80,21 +80,21 @@ export function CommandMenu() {
           </>
         )}
 
-        <CommandGroup heading="Go to">
+        <CommandGroup heading={copy.commandMenu.goTo}>
           <CommandItem className="font-serif" onSelect={() => run(() => router.push("/"))}>
-            Today
+            {copy.nav.today}
           </CommandItem>
           <CommandItem className="font-serif" onSelect={() => run(() => router.push("/calendar"))}>
-            Calendar
+            {copy.nav.calendar}
           </CommandItem>
           <CommandItem className="font-serif" onSelect={() => run(() => router.push("/settings"))}>
-            Settings
+            {copy.settings.title}
           </CommandItem>
         </CommandGroup>
 
         <CommandSeparator />
 
-        <CommandGroup heading="Do">
+        <CommandGroup heading={copy.commandMenu.do}>
           <CommandItem
             className="font-serif"
             onSelect={() =>
@@ -103,13 +103,13 @@ export function CommandMenu() {
               )
             }
           >
-            Switch to {resolvedTheme === "dark" ? "Paper" : "Lamplight"}
+            {copy.commandMenu.switchTo(resolvedTheme === "dark" ? copy.themes.paper : copy.themes.lamplight)}
           </CommandItem>
           <CommandItem className="font-serif" onSelect={() => run(() => void exportJSON())}>
-            Export as JSON
+            {copy.commandMenu.exportJSON}
           </CommandItem>
           <CommandItem className="font-serif" onSelect={() => run(() => void exportMarkdown())}>
-            Export as Markdown
+            {copy.commandMenu.exportMarkdown}
           </CommandItem>
         </CommandGroup>
       </CommandList>

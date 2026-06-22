@@ -3,6 +3,7 @@ import { Fraunces, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AppShell } from "@/components/shell/app-shell";
+import { copy } from "@/lib/copy";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -21,17 +22,16 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Snippets",
-    template: "%s · Snippets",
+    default: copy.app.name,
+    template: copy.app.titleTemplate,
   },
-  description:
-    "A pocket commonplace book. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
-  applicationName: "Snippets",
+  description: copy.app.description,
+  applicationName: copy.app.name,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Snippets",
+    title: copy.app.name,
   },
   formatDetection: { telephone: false },
 };

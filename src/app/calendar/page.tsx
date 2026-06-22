@@ -972,8 +972,8 @@ function Calendar() {
       setDeletingSnippet(snippet); // hold the words through the leave animation
       await softDeleteSnippet(snippet.id);
       window.history.back();
-      toast("Let go.", {
-        action: { label: "Undo", onClick: () => void restoreSnippet(snippet.id) },
+      toast(copy.deleteEntry.toast, {
+        action: { label: copy.deleteEntry.undo, onClick: () => void restoreSnippet(snippet.id) },
       });
     },
     [keepFlow?.deleteLeave],
@@ -1300,10 +1300,10 @@ function Calendar() {
             }
             aria-label={
               view === "month"
-                ? `Show ${visibleMonth.getFullYear()} at a glance`
+                ? copy.calendar.backToGlance(visibleMonth.getFullYear())
                 : view === "schedule"
-                  ? `Back to the ${format(visibleMonth, "MMMM yyyy")} grid`
-                  : "Back to the days"
+                  ? copy.calendar.backToGrid(format(visibleMonth, "MMMM yyyy"))
+                  : copy.calendar.backToDays
             }
             className="voice-display pressable whitespace-nowrap rounded-[5px] text-left text-(length:--date-head) hover:text-wax"
           >
@@ -1350,7 +1350,7 @@ function Calendar() {
             ref={glassRef}
             type="button"
             onClick={openSearch}
-            aria-label="Search entries"
+            aria-label={copy.search.entriesLabel}
             aria-expanded={searching}
             className={cn(
               // the cards' material, drawn into a circle as tall as
@@ -1484,7 +1484,7 @@ function Calendar() {
                   if (searching && !query.trim()) closeSearch();
                 }}
                 placeholder={copy.search.schedule}
-                aria-label="Search entries"
+                aria-label={copy.search.entriesLabel}
                 tabIndex={searching ? 0 : -1}
                 className="voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
               />
@@ -3093,7 +3093,7 @@ function EntryViewBase({
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (
         <div data-entry-card-content className="px-4 pb-4 pt-3">
-          <p className="voice-prose italic text-ink-soft">Let go.</p>
+          <p className="voice-prose italic text-ink-soft">{copy.deleteEntry.toast}</p>
         </div>
       )}
       {/* the card's lit top edge, kept ABOVE the scrolling ink: the ink
@@ -3178,7 +3178,7 @@ function EntryBody({
       try {
         await updateSnippet(snippet.id, { text: trimmed });
       } catch {
-        toast("That didn’t take — try again.");
+        toast(copy.data.keepFailed);
       }
     }
   };
@@ -3247,7 +3247,7 @@ function EntryBody({
             startEdit();
           }
         }}
-        aria-label={editing ? undefined : "Rewrite this entry"}
+        aria-label={editing ? undefined : copy.entry.rewrite}
         // flex-initial (basis auto), NOT flex-1 (basis 0): the card is
         // max-h, so a short entry must size to its words and show them
         // all; only a long one shrinks to fill the stage and scrolls.
@@ -3274,7 +3274,7 @@ function EntryBody({
           onBlur={() => {
             if (editing) stopEdit();
           }}
-          aria-label="The entry’s words"
+          aria-label={copy.entry.words}
           tabIndex={editing ? 0 : -1}
           className={cn(
             // block (not the textarea's default inline-block) so it
@@ -3345,7 +3345,7 @@ function EntryBody({
             aria-hidden={!editing}
           >
             <WaxStamp
-              label="Done — keep the rewrite"
+              label={copy.keep.doneRewrite}
               onClick={stopEdit}
               keepFocus
               disabled={!editing}
@@ -3362,7 +3362,7 @@ function EntryBody({
               e.stopPropagation(); // not a press-to-edit
               void letGo();
             }}
-            aria-label="Let this entry go"
+            aria-label={copy.entry.letGo}
             className="pressable grid size-[34px] place-items-center rounded-full text-ember hover:bg-ember/10"
           >
             <svg
@@ -3766,7 +3766,7 @@ function LegacyBackfillCapture({
       });
       void enrichSnippet(snippet);
     } catch {
-      toast("That didn’t take — try again.");
+      toast(copy.data.keepFailed);
     }
   };
 
@@ -3808,7 +3808,7 @@ function LegacyBackfillCapture({
                 ? copy.backfill.yesterday
                 : copy.backfill.other
           }
-          aria-label={`Add an entry to ${friendlyDay(day)}`}
+          aria-label={copy.backfill.ariaAddTo(friendlyDay(day))}
           onChange={(e) => {
             setText(e.target.value);
             autosizeArea(e.target);
@@ -3831,7 +3831,7 @@ function LegacyBackfillCapture({
         // the same wax quill confirm-stamp the entry editor uses; keeping
         // holds focus so the next thing can be typed straight away
         <div className="mt-2 flex justify-end pr-px">
-          <WaxStamp label="Keep this" onClick={() => void keep()} keepFocus>
+          <WaxStamp label={copy.keep.label} onClick={() => void keep()} keepFocus>
             <path d="M4.4 15.6C5.2 10.2 9 5.6 16 3.8c.5 2.7-.7 6.6-3.2 9.1-1.9 1.9-4.9 2.7-8.4 2.7Z" />
             <path d="M4.4 15.6 12.6 7" />
             <path d="M4.4 15.6 3.4 17.6" />
@@ -3851,8 +3851,8 @@ function LegacyBackfillCapture({
       >
         {stamped
           ? isToday
-            ? "Kept."
-            : `Kept to ${friendlyDay(day).toLowerCase()}.`
+            ? copy.keep.stampedToday
+            : copy.keep.stampedTo(friendlyDay(day).toLowerCase())
           : " "}
       </p>
     </div>
@@ -3974,7 +3974,7 @@ function FlowBackfillCapture({
             value={text}
             rows={1}
             placeholder={placeholder}
-            aria-label={`Add an entry to ${friendlyDay(day)}`}
+            aria-label={copy.backfill.ariaAddTo(friendlyDay(day))}
             onChange={(e) => {
               setText(e.target.value);
               autosizeArea(e.target);
@@ -4014,7 +4014,7 @@ function FlowBackfillCapture({
         >
           <button
             type="button"
-            aria-label="Keep this"
+            aria-label={copy.keep.label}
             onClick={keep}
             onPointerDown={(e) => {
               e.preventDefault(); // keep the textarea's focus
@@ -4294,7 +4294,7 @@ function TodayZoneFill({
               onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={firstEver ? copy.todayZone.placeholderFirstEver : copy.todayZone.placeholder}
-              aria-label={`Write an entry for ${format(d, "MMMM d")}`}
+              aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
               className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
               style={{
                 lineHeight: "1.7rem",
@@ -4315,7 +4315,7 @@ function TodayZoneFill({
           <button
             ref={btnRef}
             type="button"
-            aria-label={hasText ? "Keep today's entry" : "Speak today's entry"}
+            aria-label={hasText ? copy.todayZone.keepEntry : copy.todayZone.speakEntry}
             // keep on pointer-up (released ON the button) so setDown(false) and
             // the hold batch in one render — the press never un-rotates. onClick
             // covers keyboard; it's idempotent.

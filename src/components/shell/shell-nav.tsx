@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
+import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { href: "/", label: "Today" },
-  { href: "/calendar", label: "Calendar" },
+  { href: "/", label: copy.nav.today },
+  { href: "/calendar", label: copy.nav.calendar },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {
@@ -35,7 +36,7 @@ const underlineSpring = { type: "spring", stiffness: 480, damping: 40 } as const
 export function ShellNav() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Primary" className="hidden gap-6 sm:flex">
+    <nav aria-label={copy.nav.primary} className="hidden gap-6 sm:flex">
       {LINKS.map(({ href, label }) => {
         const active = isActive(pathname, href);
         return (
@@ -105,8 +106,8 @@ function CalendarIcon({ className }: { className?: string }) {
 }
 
 const TABS = [
-  { href: "/", label: "today", Icon: QuillIcon },
-  { href: "/calendar", label: "calendar", Icon: CalendarIcon },
+  { href: "/", label: copy.nav.dock.today, Icon: QuillIcon },
+  { href: "/calendar", label: copy.nav.dock.calendar, Icon: CalendarIcon },
 ] as const;
 
 /** Mobile: a floating dock on the desk — two marks with small words. */
@@ -114,7 +115,7 @@ export function ShellTabs() {
   const pathname = usePathname();
   return (
     <nav
-      aria-label="Primary"
+      aria-label={copy.nav.primary}
       className="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:hidden"
     >
       <div className="float flex items-center gap-1 rounded-full px-2 py-1">

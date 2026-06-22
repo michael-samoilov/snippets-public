@@ -9,11 +9,11 @@ import { promptForDate } from "@/lib/kinds";
 import {
   isIOSStandalone,
   useSpeech,
-  type SpeechFailure,
   type SpeechSegment,
 } from "@/hooks/use-speech";
 import { StampMark } from "@/components/stamp-mark";
 import { WaxStamp } from "@/components/capture/wax-stamp";
+import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 function joinText(a: string, b: string): string {
@@ -64,43 +64,16 @@ export function Capture() {
   // voice must never fail silently — every failure says what happened
   useEffect(() => {
     if (!speech.failure) return;
-    const messages: Record<SpeechFailure, { title: string; description: string }> = {
-      denied: {
-        title: "The microphone was declined.",
-        description:
-          "Re-allow it in your browser’s site settings to speak your snippets.",
-      },
-      "no-mic": {
-        title: "No microphone found.",
-        description: "Plug one in or check your input settings — writing works meanwhile.",
-      },
-      network: {
-        title: "The speech service couldn’t be reached.",
-        description:
-          "This browser transcribes over the network. Check the connection, or write it instead.",
-      },
-      service: {
-        title: "Voice isn’t available here.",
-        description: isIOSStandalone()
-          ? "iOS doesn’t allow voice inside installed web apps yet. Open Snippets in Safari itself for voice — writing works everywhere."
-          : "This browser is refusing speech recognition. Chrome, Safari, or Edge offer it — writing works everywhere.",
-      },
-      transcribe: {
-        title: "Aqua couldn’t set the words.",
-        description:
-          "The recording was made but transcription failed. Try the seal again, or write it.",
-      },
-      "too-long": {
-        title: "That take ran long.",
-        description:
-          "Recordings stop at five minutes — what was said is being set now. Split longer thoughts and keep both halves.",
-      },
-      unknown: {
-        title: "Voice capture hit a snag.",
-        description: "Try the seal again, or write it — nothing was lost.",
-      },
-    };
-    const m = messages[speech.failure];
+    const f = copy.capture.voiceFailures;
+    const m: { title: string; description: string } =
+      speech.failure === "service"
+        ? {
+            title: f.service.title,
+            description: isIOSStandalone()
+              ? f.service.descriptionInstalledIOS
+              : f.service.descriptionOtherwise,
+          }
+        : f[speech.failure];
     toast(m.title, { description: m.description });
   }, [speech.failure]);
 
@@ -147,7 +120,7 @@ export function Capture() {
   const hasText = text.trim().length > 0;
 
   return (
-    <section aria-label="Capture a snippet">
+    <section aria-label={copy.capture.sectionLabel}>
       {/* the writing surface, and the seal a keep presses onto it */}
       <div className="relative">
       {liveWords ? (
@@ -167,7 +140,7 @@ export function Capture() {
             !text &&
             speech.segments.length === 0 &&
             !speech.interim && (
-              <span className="italic text-ink-faint">Listening…</span>
+              <span className="italic text-ink-faint">{copy.capture.listeningPlaceholder}</span>
             )}
         </div>
       ) : recordingQuietly || transcribing ? (
@@ -184,7 +157,7 @@ export function Capture() {
               <span className="caret-blink" aria-hidden="true" />
             </>
           ) : (
-            <span className="italic text-ink-faint">Setting your words…</span>
+            <span className="italic text-ink-faint">{copy.capture.settingWords}</span>
           )}
         </div>
       ) : (
@@ -253,21 +226,21 @@ export function Capture() {
             >
               {listening ? (
                 <span className="not-italic text-wax">
-                  Listening — tap the seal to stop
+                  {copy.capture.listeningHint}
                 </span>
               ) : transcribing ? (
-                <span className="text-ink-soft">a moment…</span>
+                <span className="text-ink-soft">{copy.capture.aMoment}</span>
               ) : stampVisible ? (
                 <span
                   className="stamp-in inline-flex items-center gap-1.5 not-italic text-wax"
                   role="status"
                 >
-                  <StampMark /> Kept.
+                  <StampMark /> {copy.keep.stampedToday}
                 </span>
               ) : !speech.resolved || speech.supported ? (
-                "speak it or write it"
+                copy.capture.hint
               ) : (
-                "this browser doesn’t offer voice capture — Chrome, Safari, or Edge do; writing works everywhere"
+                copy.capture.noVoiceHint
               )}
             </motion.p>
           </AnimatePresence>
@@ -287,7 +260,7 @@ export function Capture() {
             hasText && !listening && !transcribing ? "opacity-100" : "opacity-0",
           )}
         >
-          Keep
+          {copy.capture.keep}
         </button>
       </div>
     </section>
@@ -398,10 +371,10 @@ function Seal({
         aria-busy={busy}
         aria-label={
           busy
-            ? "Setting your words"
+            ? copy.capture.seal.busy
             : listening
-              ? "Stop listening"
-              : "Speak a snippet"
+              ? copy.capture.seal.stop
+              : copy.capture.seal.speak
         }
         className={cn(
           "relative grid size-16 shrink-0 place-items-center rounded-full text-paper-raised sm:size-14",

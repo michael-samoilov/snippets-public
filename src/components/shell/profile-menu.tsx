@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/lib/auth";
+import { copy } from "@/lib/copy";
 
 /**
  * The account mark on the desk's top edge. Until a sync provider is
@@ -22,7 +23,7 @@ export function ProfileMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label="Account"
+        aria-label={copy.account.label}
         className="pressable flex size-8 shrink-0 items-center justify-center rounded-full border border-rule bg-paper-raised text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.08)] hover:text-ink data-[state=open]:text-ink"
       >
         {user ? (
@@ -53,11 +54,11 @@ export function ProfileMenu() {
         className="float origin-(--radix-dropdown-menu-content-transform-origin) border-none font-serif data-[state=closed]:duration-100 data-[state=open]:duration-150"
       >
         <DropdownMenuItem disabled className="italic">
-          Sign in to sync across devices — soon
+          {copy.account.syncSoon}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push("/settings")}>
-          Settings…
+          {copy.account.settings}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

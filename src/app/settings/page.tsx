@@ -17,6 +17,7 @@ import { db } from "@/lib/db";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
+import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
@@ -35,9 +36,9 @@ export default function SettingsPage() {
   const onImport = async (file: File) => {
     try {
       const count = await importJSON(file);
-      toast(`Restored ${count} ${count === 1 ? "entry" : "entries"}.`);
+      toast(copy.settings.toasts.restored(count));
     } catch (error) {
-      toast("That file couldn’t be read.", {
+      toast(copy.settings.toasts.importFailed, {
         description: error instanceof Error ? error.message : undefined,
       });
     }
@@ -47,16 +48,16 @@ export default function SettingsPage() {
     <div className="page-settle">
       <header className="mb-8">
         <h1 className="voice-display ink-bleed text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
-          Settings
+          {copy.settings.title}
         </h1>
       </header>
 
       <div className="space-y-10">
-        <section aria-label="Appearance">
-          <h2 className="voice-label border-b border-rule pb-1.5">Appearance</h2>
-          <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label="Theme">
+        <section aria-label={copy.settings.appearance.heading}>
+          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.heading}</h2>
+          <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label={copy.settings.appearance.themeLabel}>
             <ThemeSwatch
-              label="Paper"
+              label={copy.themes.paper}
               active={mounted && theme === "light"}
               onPick={() => setTheme("light")}
               paper="#f7f1e3"
@@ -64,7 +65,7 @@ export default function SettingsPage() {
               ink="#241e15"
             />
             <ThemeSwatch
-              label="Lamplight"
+              label={copy.themes.lamplight}
               active={mounted && theme === "dark"}
               onPick={() => setTheme("dark")}
               paper="#1d1812"
@@ -72,7 +73,7 @@ export default function SettingsPage() {
               ink="#eae1cd"
             />
             <ThemeSwatch
-              label="System"
+              label={copy.themes.system}
               active={mounted && theme === "system"}
               onPick={() => setTheme("system")}
               split
@@ -83,13 +84,13 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section aria-label="Calendar">
-          <h2 className="voice-label border-b border-rule pb-1.5">Calendar</h2>
+        <section aria-label={copy.settings.calendar.heading}>
+          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.calendar.heading}</h2>
           <div className="mt-4 flex items-center justify-between gap-6">
             <div>
-              <p className="font-serif text-[0.98rem]">Start week on</p>
+              <p className="font-serif text-[0.98rem]">{copy.settings.calendar.startWeek}</p>
               <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                The day the month grid and the year’s minis begin the week on.
+                {copy.settings.calendar.startWeekHint}
               </p>
             </div>
             <WeekStartChoice
@@ -99,49 +100,41 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section aria-label="Filing">
-          <h2 className="voice-label border-b border-rule pb-1.5">Filing</h2>
+        <section aria-label={copy.settings.filing.heading}>
+          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.filing.heading}</h2>
           <div className="mt-4 flex items-start justify-between gap-6">
             <div>
-              <p className="font-serif text-[0.98rem]">Automatic filing</p>
+              <p className="font-serif text-[0.98rem]">{copy.settings.filing.auto}</p>
               <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                New entries are quietly filed by Claude — a title, a kind,
-                tags — kept in the data to make search smarter, never shown
-                on the page. Needs an API key on the server. Your words stay
-                on this device either way — only the entry text is sent for
-                filing.
+                {copy.settings.filing.autoHint}
               </p>
             </div>
             <Switch
               checked={settings.autoFile}
               onCheckedChange={(checked) => updateSettings({ autoFile: checked })}
-              aria-label="Automatic filing"
+              aria-label={copy.settings.filing.auto}
             />
           </div>
         </section>
 
-        <section aria-label="Your data">
-          <h2 className="voice-label border-b border-rule pb-1.5">Your data</h2>
+        <section aria-label={copy.settings.data.heading}>
+          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.data.heading}</h2>
           <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
-            Everything lives in this browser — kept on this device, yours
-            alone.
+            {copy.settings.data.lead}
             {stats && stats.total > 0 && (
-              <>
-                {" "}
-                {stats.total} {stats.total === 1 ? "entry" : "entries"} so far.
-              </>
+              <> {copy.settings.data.countSoFar(stats.total)}</>
             )}{" "}
-            Take a copy whenever you like.
+            {copy.settings.data.takeCopy}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <PaperButton onClick={() => void exportJSON()}>
-              Export JSON
+              {copy.settings.data.exportJSON}
             </PaperButton>
             <PaperButton onClick={() => void exportMarkdown()}>
-              Export Markdown
+              {copy.settings.data.exportMarkdown}
             </PaperButton>
             <PaperButton onClick={() => fileRef.current?.click()}>
-              Restore from JSON…
+              {copy.settings.data.restore}
             </PaperButton>
             <input
               ref={fileRef}
@@ -161,19 +154,17 @@ export default function SettingsPage() {
               className="px-0 font-serif text-ember hover:bg-transparent hover:text-ember-deep"
               onClick={() => setEraseOpen(true)}
             >
-              Let everything go…
+              {copy.settings.data.eraseAll}
             </Button>
           </div>
         </section>
 
-        <section aria-label="About">
-          <h2 className="voice-label border-b border-rule pb-1.5">About</h2>
+        <section aria-label={copy.settings.about.heading}>
+          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.about.heading}</h2>
           <p className="voice-prose mt-4 max-w-[48ch] text-[0.9rem] text-ink-soft">
-            Snippets is a pocket commonplace book, made in the spirit of
-            Matthew Dicks&rsquo; <em>Homework for Life</em>: at the end of each
-            day, keep the most storyworthy thing that happened. Jokes, quotes,
-            and stray phrases are welcome too — good lines shouldn&rsquo;t go
-            to waste.
+            {copy.settings.about.lead}
+            <em>{copy.settings.about.workTitle}</em>
+            {copy.settings.about.rest}
           </p>
         </section>
       </div>
@@ -182,12 +173,10 @@ export default function SettingsPage() {
         <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="voice-display text-left text-lg">
-              Let everything go?
+              {copy.settings.erase.title}
             </DialogTitle>
             <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
-              This erases every entry on this device, permanently. If you want
-              a copy first, export before you do this. Hold the button down to
-              be sure.
+              {copy.settings.erase.body}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -196,13 +185,13 @@ export default function SettingsPage() {
               className="font-serif"
               onClick={() => setEraseOpen(false)}
             >
-              Keep everything
+              {copy.settings.erase.cancel}
             </Button>
             <HoldToErase
               onComplete={async () => {
                 await db.snippets.clear();
                 setEraseOpen(false);
-                toast("The page is blank again.");
+                toast(copy.settings.toasts.erased);
               }}
             />
           </DialogFooter>
@@ -223,12 +212,12 @@ function WeekStartChoice({
   return (
     <div
       role="radiogroup"
-      aria-label="Start week on"
+      aria-label={copy.settings.calendar.startWeek}
       className="inline-flex shrink-0 gap-0.5 rounded-[7px] bg-paper-recessed p-0.5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.1)]"
     >
       {([
-        [0, "Sunday"],
-        [1, "Monday"],
+        [0, copy.settings.calendar.sunday],
+        [1, copy.settings.calendar.monday],
       ] as const).map(([v, label]) => {
         const active = value === v;
         return (
@@ -400,7 +389,7 @@ function HoldToErase({ onComplete }: { onComplete: () => void }) {
         }}
       />
       <span className="relative">
-        {holding ? "Hold…" : "Hold to erase"}
+        {holding ? copy.settings.erase.holding : copy.settings.erase.hold}
       </span>
     </button>
   );

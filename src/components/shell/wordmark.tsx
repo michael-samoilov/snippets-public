@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
+import { copy } from "@/lib/copy";
 
 /* The masthead wordmark: a pressed wax seal stamped with the letter "S" (it
    replaces the old wax dot), with "nippets" tucked over the seal's right edge.
@@ -58,7 +59,7 @@ export function Wordmark() {
     <Link
       ref={ref}
       href="/"
-      aria-label="Snippets"
+      aria-label={copy.app.name}
       onClick={() => { setPlayKey((k) => k + 1); armSettle(); }}
       className="wordmark voice-display pressable inline-flex items-center text-[1.3rem] italic tracking-tight text-ink"
     >
