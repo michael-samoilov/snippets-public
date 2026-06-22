@@ -2592,6 +2592,10 @@ function ScheduleFeedBase({
   // a dev riff (the today-zone lab): fill today's blank tail with a big
   // "add to today" zone; null in production
   const todayZone = useTodayZone();
+  // a pending kept draft for today means a keep JUST happened (it's cleared once
+  // the live row lands) — the only time today's date should wipe in (never on a
+  // page refresh)
+  const todayJustKept = !!useKeptDraft()?.drafts[todayKey];
   const scrollerRef = useRef<HTMLDivElement>(null);
   // keep a focused composer/editor clear of the keyboard and its floating pills
   useKeyboardRoom(scrollerRef, active);
@@ -2828,11 +2832,14 @@ function ScheduleFeedBase({
                     );
                     // in zone mode today's date sticky-header populates as the
                     // entry arrives — wipe it in from the left, with the card
+                    // wipe the date in only on a fresh keep (todayJustKept),
+                    // never on a page refresh; it leads the card — fast (the
+                    // first fifth of the sweep) so date+card read as one sweep
                     return todayZone && isToday ? (
                       <motion.div
-                        initial={{ opacity: 0, clipPath: "inset(0 100% 0 0)" }}
+                        initial={todayJustKept ? { opacity: 0, clipPath: "inset(0 100% 0 0)" } : false}
                         animate={{ opacity: 1, clipPath: "inset(0 0% 0 0)" }}
-                        transition={{ duration: 0.5, ease: "easeInOut" }}
+                        transition={{ duration: 0.1, ease: "easeInOut" }}
                       >
                         {dateInner}
                       </motion.div>
@@ -2878,7 +2885,6 @@ function ScheduleFeedBase({
                   <TodayZoneFill
                     day={todayKey}
                     riff={todayZone.frame}
-                    submitStyle={todayZone.submit}
                     className="flex-1"
                   />
                 )}
@@ -2889,7 +2895,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone],
+    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone, todayJustKept],
   );
 
   // with the today-zone on, the scroller's content height grows with the zone,
@@ -2940,24 +2946,22 @@ function ScheduleCards({
   // production `flow` is null and the default rise/fade plays
   const flow = useKeepFlow();
   const birth = flow ? birthFor(flow.spec, flow.reduce) : null;
-  // the today-zone exploration births a kept entry one of two ways: SWEEP (the
-  // entry wipes in from the left as the zone slides off right) or MORPH (the
-  // zone itself becomes this card, via a shared layout id)
+  // in the today-zone exploration a kept entry WIPES in from the left — a pure
+  // left→right clip reveal (no float). The margin date wipes just before it, so
+  // the two read as one uniform sweep across the row's width: the date takes the
+  // first fifth, the card the rest (it waits out the date with a delay).
   const todayZone = useTodayZone();
-  const zoneSubmit = todayZone?.submit;
-  // a true wipe-in from the left (a left→right clip reveal), reused for the
-  // kept card and its margin date
   const sweepBirth = {
     initial: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
     animate: { opacity: 1, clipPath: "inset(0 0% 0 0)" },
-    transition: { duration: 0.5, ease: "easeInOut" as const },
+    transition: { duration: 0.4, delay: 0.1, ease: "easeInOut" as const },
   };
   const defaultBirth = birth ?? {
     initial: { opacity: 0, y: -10, scale: 0.985 },
     animate: { opacity: 1, y: 0, scale: 1 },
     transition: { type: "spring" as const, duration: 0.5, bounce: 0.16 },
   };
-  const newBirth = zoneSubmit === "sweep" ? sweepBirth : defaultBirth;
+  const newBirth = todayZone ? sweepBirth : defaultBirth;
 
   // the optimistic just-kept card: render it in its final slot the instant the
   // seal is pressed so the typed words never blink out waiting for the live
@@ -2976,31 +2980,27 @@ function ScheduleCards({
       <AnimatePresence initial={false}>
         {items.map((s) => {
           const isDraft = draftPending && s.id === draft!.id;
-          // MORPH: the kept card shares a layout id with the zone, so the zone's
-          // box flows into this card. SWEEP: the kept card wipes in from the left.
-          const morphCard = isDraft && zoneSubmit === "morph";
           return (
           <motion.li
             key={s.id}
-            layout="position"
-            layoutId={morphCard ? "today-zone-card" : undefined}
+            // the freshly-kept (zone) card wipes in via clip only — no FLIP
+            // position float; other cards keep their layout spring
+            layout={isDraft && todayZone ? false : "position"}
             initial={
               isDraft
-                ? (zoneSubmit === "morph" ? false : sweepBirth.initial)
+                ? (todayZone ? sweepBirth.initial : { opacity: 0 })
                 : presentAtMount.has(s.id)
                   ? false
                   : newBirth.initial
             }
-            animate={isDraft ? (zoneSubmit === "morph" ? { opacity: 1 } : sweepBirth.animate) : newBirth.animate}
+            animate={isDraft ? (todayZone ? sweepBirth.animate : { opacity: 1 }) : newBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
             // focused card up in the entry view) — so the book behind is already
             // at its final state, never showing the struck card collapse
             exit={{ opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0 } }}
             transition={
               isDraft
-                ? (zoneSubmit === "morph"
-                    ? { layout: { duration: 0.6, ease: [0.23, 1, 0.32, 1] }, opacity: { duration: 0.35 } }
-                    : sweepBirth.transition)
+                ? (todayZone ? sweepBirth.transition : { duration: 0.18, ease: [0.23, 1, 0.32, 1] })
                 : newBirth.transition
             }
           >
@@ -4036,35 +4036,38 @@ function FlowBackfillCapture({
   );
 }
 
-/* The foot hairline for the today-zone. The plain scroll terminus, BUT it
-   hides while the fold (viewport bottom) is over the zone — the sticky line
-   would otherwise be pulled up into the middle of the (taller-than-viewport)
-   zone. The zone's own rounded blue bottom border is the bottom edge there, so
-   the only hairline you see over the zone is at the real bottom once you scroll
-   to it. Over the content above the zone it's the normal full-width rule.
+/* The foot hairline for the today-zone. A sticky element at the scroll foot
+   (a DIRECT child of the scroller, so no transformed ancestor breaks `sticky`).
+   It reads, per frame, where the viewport bottom sits:
+    • over the content ABOVE the zone → the plain full-width rule (more below);
+    • over the zone → a rounded blue CAP riding the fold, so the zone always
+      looks like it ends with its rounded bottom at whatever's visible;
+    • scrolled fully to the bottom → nothing (the zone's own box bottom shows).
    Imperative (its own rAF scroll read) so it never re-renders the feed. */
 function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivElement | null> }) {
-  const lineRef = useRef<HTMLDivElement>(null);
+  const ruleRef = useRef<HTMLDivElement>(null);
+  const capRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const sc = scrollerRef.current;
-    const line = lineRef.current;
-    if (!sc || !line) return;
+    const rule = ruleRef.current;
+    const cap = capRef.current;
+    if (!sc || !rule || !cap) return;
     let raf = 0;
     const update = () => {
       raf = 0;
       const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
-      let show = moreBelow;
-      if (show) {
+      let mode: "none" | "rule" | "cap" = moreBelow ? "rule" : "none";
+      if (moreBelow) {
         const vpBottom = sc.getBoundingClientRect().bottom;
         const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
         const box = boxes[boxes.length - 1];
         if (box) {
           const r = box.getBoundingClientRect();
-          // the fold cuts through the zone (zone runs past the viewport bottom)
-          if (r.top <= vpBottom && r.bottom > vpBottom) show = false;
+          if (r.top <= vpBottom && r.bottom > vpBottom) mode = "cap"; // fold is inside the zone
         }
       }
-      line.style.opacity = show ? "1" : "0";
+      rule.style.opacity = mode === "rule" ? "1" : "0";
+      cap.style.opacity = mode === "cap" ? "1" : "0";
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
     sc.addEventListener("scroll", onScroll, { passive: true });
@@ -4078,10 +4081,18 @@ function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLD
     };
   }, [scrollerRef]);
   return (
-    <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
+    <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px">
+      {/* plain rule over the content above the zone */}
       <div
-        ref={lineRef}
+        ref={ruleRef}
         className="absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200"
+        style={{ opacity: 0 }}
+      />
+      {/* rounded blue cap riding the fold over the zone — its sides meet the
+          zone's outline, so it reads as the zone's own rounded bottom edge */}
+      <div
+        ref={capRef}
+        className="absolute inset-x-0 bottom-0 h-4 rounded-b-2xl border-x border-b border-wax/45 transition-opacity duration-200"
         style={{ opacity: 0 }}
       />
     </div>
@@ -4104,13 +4115,11 @@ const FRAME_VARIANTS: Record<string, string> = {
 function TodayZoneFill({
   day,
   riff,
-  submitStyle = "sweep",
   showDate = true,
   className,
 }: {
   day: string;
   riff: string;
-  submitStyle?: "sweep" | "morph";
   showDate?: boolean;
   className?: string;
 }) {
@@ -4132,7 +4141,6 @@ function TodayZoneFill({
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
-  const morph = submitStyle === "morph";
   // the quill appears only once there's a real character typed (not on focus),
   // and stays through the keep
   const hasText = text.length > 0;
@@ -4175,57 +4183,49 @@ function TodayZoneFill({
     // release the held press exactly as the lift-off plays — the press
     // animation continues from the user's press, no un-rotate
     at(LEAD_MS, () => { setHoldDown(false); setPlayKey((k) => k + 1); navigator.vibrate?.(8); });
-    if (morph) {
-      // the zone's box flows up into the kept card (shared layoutId) while a
-      // fresh empty zone wipes down
-      at(LEAD_MS + HOLD_MS, () => { file(); setText(""); setPhase("idle"); setGen((g) => g + 1); });
-    } else {
-      // sweep — three beats, IN ORDER:
-      at(LEAD_MS + HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
-      at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); }); // 2 entry wipes into schedule
-      at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone wipes down
-        setText(""); setPhase("idle"); setGen((g) => g + 1);
-      });
-    }
+    // sweep — three beats, IN ORDER:
+    at(LEAD_MS + HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
+    at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); }); // 2 entry wipes into schedule
+    at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
+      setText(""); setPhase("idle"); setGen((g) => g + 1);
+    });
   };
 
   // locked: the blue outline. The riff now picks a VARIANT of that outline.
   const frame = FRAME_VARIANTS[riff] ?? FRAME_VARIANTS.hairline;
 
   return (
-    // each generation is one element. SWEEP: the old zone (words + settled seal)
-    // slides off the right while a fresh empty zone wipes down. MORPH: the old
-    // zone's box flows into the kept entry card (shared layoutId) as it fades.
+    // each generation is one element: the old zone slides off the right while a
+    // fresh one fades + floats in to take its place.
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
         className={cn("relative w-full pb-3 pt-1", className)}
-        initial={gen === 0 ? false : { y: "-40%", opacity: 0 }}
-        // SWEEP: once slid off the right it STAYS off (through `filling`) so it
-        // never animates back in before the gen bump removes it; y pinned to 0
-        // so it travels straight right, not up-and-right.
+        // the fresh zone fades in with a small float down (no full slide-from-top
+        // that would sweep over the entries above it)
+        initial={gen === 0 ? false : { y: -12, opacity: 0 }}
+        // once slid off the right it STAYS off (through `filling`) so it never
+        // animates back in before the gen bump removes it; y pinned to 0 so it
+        // travels straight right, not up-and-right.
         animate={
-          !morph && (phase === "exiting" || phase === "filling")
+          phase === "exiting" || phase === "filling"
             ? { x: "112%", y: 0, opacity: 0 }
             : { x: 0, y: 0, opacity: 1 }
         }
-        // morph fades the old box as its layoutId carries it into the card;
-        // sweep's visible slide is the `animate` above, so removal is instant
-        exit={morph ? { opacity: 0 } : { opacity: 0, transition: { duration: 0 } }}
-        transition={{ duration: morph ? 0.55 : EXIT_MS / 1000, ease: "easeInOut" }}
+        // the visible slide is the `animate` above, so removal is instant
+        exit={{ opacity: 0, transition: { duration: 0 } }}
+        transition={{ duration: EXIT_MS / 1000, ease: "easeInOut" }}
       >
-        <motion.div
+        <div
           data-today-zone-box
-          // in morph mode the (about-to-exit) box shares its layout id with the
-          // kept card, so it flows into that card's slot as it leaves
-          layoutId={morph && phase === "pressing" ? "today-zone-card" : undefined}
           className={cn(
             // a firm floor so a tall stack of entries can never squeeze the zone
             // smaller than its contents (date + ruled line + the big seal)
-            "flex h-full min-h-[22rem] w-full flex-col items-center justify-center gap-4 rounded-2xl px-4 py-6 text-center",
+            "relative flex h-full min-h-[22rem] w-full flex-col rounded-2xl",
             frame,
           )}
         >
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
           {/* today's date, in the Today-page voice */}
           {showDate && (
             <div className="leading-none">
@@ -4309,7 +4309,8 @@ function TodayZoneFill({
               </motion.span>
             </AnimatePresence>
           </button>
-        </motion.div>
+          </div>
+        </div>
       </motion.div>
     </AnimatePresence>
   );

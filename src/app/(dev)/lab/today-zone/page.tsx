@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-21e · blue-outline variants · sweep / morph submit";
+const BUILD = "build 2026-06-21f · blue-outline variants · sweep keep";
 
 // variants of the locked blue outline
 const RIFFS: { id: string; name: string; desc: string }[] = [
@@ -36,12 +36,6 @@ const RIFFS: { id: string; name: string; desc: string }[] = [
   { id: "double", name: "Double", desc: "A double blue rule." },
   { id: "glow", name: "Glow", desc: "A thin blue outline with a soft blue halo." },
   { id: "soft", name: "Soft", desc: "A faint blue outline." },
-];
-
-// the two keep animations to compare
-const SUBMITS: { id: "sweep" | "morph"; name: string; desc: string }[] = [
-  { id: "sweep", name: "Sweep", desc: "The zone slides off right as the entry wipes into the schedule from the left; a fresh zone wipes down." },
-  { id: "morph", name: "Morph", desc: "The zone's box flows up and becomes the kept entry card in the schedule." },
 ];
 
 // ── compact isolated demo dataset (today starts blank) ──
@@ -138,7 +132,6 @@ function Lab() {
   });
   const [seeded, setSeeded] = useState(false);
   const [riff, setRiff] = useState("hairline");
-  const [submit, setSubmit] = useState<"sweep" | "morph">("sweep");
   const [zoneOn, setZoneOn] = useState(true);
   const [hudOpen, setHudOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Snippet>>({});
@@ -165,8 +158,8 @@ function Lab() {
     [],
   );
   const zoneCfg = useMemo(
-    () => (zoneOn ? { frame: riff, submit } : null),
-    [zoneOn, riff, submit],
+    () => (zoneOn ? { frame: riff } : null),
+    [zoneOn, riff],
   );
 
   const seed = () => void (async () => { await labDb.snippets.clear(); await labDb.snippets.bulkAdd(generateSeed()); })();
@@ -174,7 +167,6 @@ function Lab() {
 
   if (!hasDay || !seeded) return null;
   const cur = RIFFS.find((r) => r.id === riff)!;
-  const curSubmit = SUBMITS.find((s) => s.id === submit)!;
 
   return (
     <KeepFlowContext.Provider value={flow}>
@@ -202,13 +194,6 @@ function Lab() {
                       <Pill key={r.id} active={zoneOn && riff === r.id} onClick={() => { setRiff(r.id); setZoneOn(true); }}>{r.name}</Pill>
                     ))}
                   </div>
-                  {/* submit animation to compare */}
-                  <div className="flex flex-wrap items-center justify-center gap-1">
-                    <span className="voice-label self-center pr-0.5 text-[0.6rem] text-ink-faint">keep:</span>
-                    {SUBMITS.map((s) => (
-                      <Pill key={s.id} active={submit === s.id} onClick={() => setSubmit(s.id)}>{s.name}</Pill>
-                    ))}
-                  </div>
                   <div className="flex flex-wrap items-center justify-center gap-1">
                     <Pill active={zoneOn} onClick={() => setZoneOn((v) => !v)}>zone {zoneOn ? "on" : "off"}</Pill>
                     <Pill onClick={() => setTheme(dark ? "light" : "dark")}>{dark ? "lamplight" : "paper"}</Pill>
@@ -216,7 +201,7 @@ function Lab() {
                     <Pill onClick={clear}>clear</Pill>
                     <Link href="/lab/schedule-submit" className="voice-label rounded-full bg-paper-recessed px-2.5 py-1 text-[0.7rem] leading-none text-ink-soft hover:text-ink">keep lab ↗</Link>
                   </div>
-                  <p className="voice-prose max-w-[22rem] text-center text-[0.7rem] leading-snug text-ink-soft">{cur.name}: {cur.desc} · <span className="text-wax">{curSubmit.name}</span> — {curSubmit.desc}</p>
+                  <p className="voice-prose max-w-[22rem] text-center text-[0.7rem] leading-snug text-ink-soft">{cur.name}: {cur.desc}</p>
                   <span className="voice-data text-[0.6rem] text-ink-faint">{BUILD}</span>
                 </div>
               </div>

@@ -49,15 +49,12 @@ export function useKeptDraft(): KeptDraftStore | null {
 
 /* The today-zone lab fills the blank desk at the foot of the book with a big
    "add to today" zone (a blue-outlined panel housing the large pre-stamp seal).
-   The context carries the chosen outline variant + the submit animation to
-   compare; when set, the per-day inline composer steps aside and the fill zone
-   renders in today's slot. Production has no provider → null → unchanged. */
-export type TodayZoneSubmit = "sweep" | "morph";
+   The context carries the chosen outline variant; when set, the per-day inline
+   composer steps aside and the fill zone renders in today's slot. Production has
+   no provider → null → unchanged. */
 export type TodayZoneCfg = {
   /** the blue-outline variant id (hairline / bold / double / glow / …). */
   frame: string;
-  /** which keep animation plays on submit. */
-  submit: TodayZoneSubmit;
 };
 export const TodayZoneContext = createContext<TodayZoneCfg | null>(null);
 export function useTodayZone(): TodayZoneCfg | null {
