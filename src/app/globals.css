@@ -400,11 +400,11 @@ textarea:focus-visible,
    rule beats every Tailwind utility, which silently ate text-wax &
    co. on labels for weeks. */
 @layer components {
-  /* display: where Fraunces gets to be wonky; pressed into the paper.
+  /* display: Fraunces pressed into the paper (WONK 0 — wonky alternates off).
      The faint currentColor halo feathers the stroke edge — ink, not pixels. */
   .voice-display {
     font-family: var(--font-serif);
-    font-variation-settings: "SOFT" 0, "WONK" 1;
+    font-variation-settings: "SOFT" 0, "WONK" 0;
     font-weight: 560;
     letter-spacing: -0.01em;
     text-shadow:
