@@ -2637,10 +2637,12 @@ function ScheduleFeedBase({
     // until it holds an entry (so the kept card can wipe into an already-mounted
     // list, and nothing remounts mid-animation); the big date lives in the zone.
     days.add(todayKey);
-    if (!todayZone && !map.has(yesterdayKey)) {
-      // yesterday always earns a page so its memory can still be caught — even
-      // when nothing was kept there (off in zone mode, which wants prev-entry →
-      // zone with nothing empty between)
+    // yesterday earns a blank page so a memory from it can still be caught —
+    // but only once the book holds something. A brand-new user (no entries
+    // anywhere yet) opens to today's zone alone: nothing empty to review above
+    // it until they've captured their first thing. (Off in zone mode either
+    // way — it wants prev-entry → zone with nothing empty between.)
+    if (all.length > 0 && !todayZone && !map.has(yesterdayKey)) {
       days.add(yesterdayKey);
     }
     if (probe) days.add(probe);
