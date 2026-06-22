@@ -2893,7 +2893,13 @@ function ScheduleFeedBase({
                     day={todayKey}
                     riff={todayZone.frame}
                     firstEver={bookEmpty}
-                    className="flex-1"
+                    // a hair of breathing room below the zone's border so that at
+                    // the very bottom the border rests just ABOVE the clip line —
+                    // fully painted and crisp, never sitting exactly on the
+                    // sub-pixel clip edge (where it half-vanishes). The foot rule
+                    // then hands off to a border that's already visible: no bare
+                    // gap on the approach, no doubled hairline at rest.
+                    className="flex-1 mb-[3px]"
                   />
                 )}
               </div>
@@ -4069,21 +4075,27 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     let raf = 0;
     const update = () => {
       raf = 0;
-      const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
       const vpBottom = sc.getBoundingClientRect().bottom;
       const box = sc.querySelector<HTMLElement>("[data-today-zone-box]");
       const busy = box?.getAttribute("data-zone-busy") === "1";
       let show = false;
       let blue = false;
       let inset = 0;
-      // At the very bottom (the zone's body is flush with the clip) its OWN
-      // rounded border is the bottom edge — drawing the rule there too would
-      // stack a second hairline on it and read darker than the rest of the
-      // outline. So the rule only appears once the zone's bottom has scrolled
-      // below the fold; until then the box border alone closes the foot.
-      if (moreBelow && box && !busy) {
+      if (box && !busy) {
         const r = box.getBoundingClientRect();
-        if (r.top <= vpBottom && r.bottom > vpBottom) {
+        if (r.bottom <= vpBottom) {
+          // the zone's OWN bottom border has reached the fold and is the visible
+          // edge now. Because the zone is the last thing in the book, this is
+          // true only scrolled flush to the very bottom — so the rule hands off
+          // exactly there, never a few pixels early (which left the foot bare
+          // until the border scrolled in), and never doubled onto the border
+          // (which read darker than the rest of the outline).
+          show = false;
+        } else if (r.top > vpBottom) {
+          // the zone is still entirely below the fold → grey terminus over the days
+          show = true;
+          blue = false;
+        } else {
           // the zone's body crosses the clip line → blue edge at the clip,
           // tracking whichever rounded corner the clip point is passing through
           show = true;
@@ -4092,9 +4104,6 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
           const distBottom = r.bottom - vpBottom; // real bottom's depth below the clip point
           if (distTop < ZONE_CORNER) inset = cornerInset(distTop);
           else if (distBottom < ZONE_CORNER) inset = cornerInset(distBottom);
-        } else {
-          // the clip lies above the zone, over the regular days → grey terminus
-          show = true;
         }
       }
       line.style.opacity = show ? "1" : "0";

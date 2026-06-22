@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-22j · first-ever invite in the zone; copy moved to a single source of truth";
+const BUILD = "build 2026-06-22k · foot hairline only retires at the absolute bottom (no early gap, no double)";
 
 // variants of the locked blue outline
 const RIFFS: { id: string; name: string; desc: string }[] = [
