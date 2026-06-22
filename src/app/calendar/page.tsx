@@ -360,6 +360,13 @@ function Calendar() {
       window.history.replaceState(null, "", pathname);
       window.history.pushState(null, "", `${pathname}?d=${d}`);
       if (e) window.history.pushState(null, "", `${pathname}?d=${d}&e=${e}`);
+    } else {
+      // No deep link: the book (schedule) is home, but the grid is still "a
+      // zoom-out away" — so synthesize the month floor beneath it here too.
+      // Without this the title's ‹ and the back gesture call history.back()
+      // with no calendar entry below and walk off the page entirely.
+      window.history.replaceState(null, "", pathname);
+      window.history.pushState(null, "", `${pathname}?d=${initialDay}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
