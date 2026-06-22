@@ -2915,11 +2915,14 @@ function ScheduleFeedBase({
       tabIndex={-1}
     >
       {body}
-      {/* In zone mode there is NO sticky foot rule: the today zone's own rounded
-          border is the bottom edge (it scrolls with the content and is seen once
-          you reach the bottom) — a sticky line would pin to the viewport bottom
-          mid-zone instead of tracking to the zone's real bottom. */}
-      {!todayZone && <ScrollTerminus show={edges.bottom} />}
+      {/* the foot rule (clips marker) — grey over the days, blue across the
+          zone's straight sides, and ceding to the zone's own rounded bottom in
+          the corner range */}
+      {todayZone ? (
+        <ZoneFootRule scrollerRef={scrollerRef} />
+      ) : (
+        <ScrollTerminus show={edges.bottom} />
+      )}
     </div>
   );
 }
@@ -4034,6 +4037,67 @@ function FlowBackfillCapture({
   );
 }
 
+/* The scroll terminus for the today-zone book. One hairline pinned at the foot
+   of the scroll viewport (where content clips) — it never moves. Imperative
+   (its own rAF scroll read) so it doesn't re-render the feed.
+    • over the days (zone entirely below the fold) → the plain grey rule;
+    • over the zone's straight sides → a flat BLUE line across the clip point
+      (the sides, clipped by the scroller, meet it — no overhang);
+    • in the zone's rounded-corner range (the bottom ~16px coming into view) →
+      hidden: the zone's OWN rounded border is the curve there, so the sides
+      curve into it and nothing extends past the corner;
+    • scrolled fully to the bottom → hidden (the zone's rounded bottom shows). */
+const ZONE_CORNER = 16; // matches the zone box's rounded-2xl radius
+function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivElement | null> }) {
+  const lineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    const line = lineRef.current;
+    if (!sc || !line) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
+      const vpBottom = sc.getBoundingClientRect().bottom;
+      const box = sc.querySelector<HTMLElement>("[data-today-zone-box]");
+      const busy = box?.getAttribute("data-zone-busy") === "1";
+      let mode: "none" | "grey" | "blue" = "none";
+      if (moreBelow && !busy) {
+        if (!box) {
+          mode = "grey";
+        } else {
+          const r = box.getBoundingClientRect();
+          if (r.top > vpBottom) mode = "grey";                  // zone below the fold → over the days
+          else if (r.bottom - vpBottom > ZONE_CORNER) mode = "blue"; // straight region of the zone
+          // else: rounded-corner range → the box's own curve is the hairline
+        }
+      }
+      line.style.opacity = mode === "none" ? "0" : "1";
+      line.style.borderTopColor =
+        mode === "blue" ? "color-mix(in srgb, var(--wax) 45%, transparent)" : "var(--rule-faint)";
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(onScroll);
+    ro.observe(sc);
+    update();
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [scrollerRef]);
+  return (
+    <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
+      <div
+        ref={lineRef}
+        className="absolute inset-x-0 bottom-0 border-t transition-[opacity,border-color] duration-200"
+        style={{ opacity: 0, borderTopColor: "var(--rule-faint)" }}
+      />
+    </div>
+  );
+}
+
 /* Variants of the locked blue outline — the riff now picks one of these. */
 const FRAME_VARIANTS: Record<string, string> = {
   hairline: "border border-wax/45",
@@ -4153,9 +4217,15 @@ function TodayZoneFill({
       >
         <div
           data-today-zone-box
+          // while keeping (sliding/fading) the foot rule steps aside so it
+          // doesn't read a moving box
+          data-zone-busy={phase !== "idle" ? "1" : undefined}
           className={cn(
             // a firm floor so a tall stack of entries can never squeeze the zone
-            // smaller than its contents (date + ruled line + the big seal)
+            // smaller than its contents (date + ruled line + the big seal). The
+            // box's OWN rounded border is the outline — in the rounded-corner
+            // range near the bottom its curve is the hairline (sides curve into
+            // it, no overhang); the flat foot cap covers the straight region.
             "relative flex h-full min-h-[22rem] w-full flex-col rounded-2xl",
             frame,
           )}
