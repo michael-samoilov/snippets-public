@@ -58,7 +58,7 @@ export function Wordmark() {
   return (
     <Link
       ref={ref}
-      href="/"
+      href="/calendar"
       aria-label={copy.app.name}
       onClick={() => { setPlayKey((k) => k + 1); armSettle(); }}
       className="wordmark voice-display pressable inline-flex items-center text-[1.3rem] italic tracking-tight text-ink"

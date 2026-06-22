@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 import { useAllSnippets, useSearch } from "@/hooks/use-snippets";
 import { exportJSON, exportMarkdown } from "@/lib/export";
+import { dayKey } from "@/lib/dates";
 import { copy } from "@/lib/copy";
 
 export function CommandMenu() {
@@ -81,7 +82,7 @@ export function CommandMenu() {
         )}
 
         <CommandGroup heading={copy.commandMenu.goTo}>
-          <CommandItem className="font-serif" onSelect={() => run(() => router.push("/"))}>
+          <CommandItem className="font-serif" onSelect={() => run(() => router.push(`/calendar?d=${dayKey()}`))}>
             {copy.nav.today}
           </CommandItem>
           <CommandItem className="font-serif" onSelect={() => run(() => router.push("/calendar"))}>

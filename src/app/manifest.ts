@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: copy.app.name,
     description: copy.app.description,
     id: "/",
-    start_url: "/",
+    start_url: "/calendar",
     display: "standalone",
     orientation: "portrait",
     background_color: "#e8dcc2",

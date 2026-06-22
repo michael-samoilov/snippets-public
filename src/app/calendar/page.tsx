@@ -254,11 +254,14 @@ function Calendar() {
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : dayKey();
   })();
 
-  // a valid ?d= deep-links straight into the book, open to that day
+  // The book is the app's home: with no deep link, land in today's schedule
+  // (the fill zone at its foot is the capture surface) rather than the month
+  // grid — which is a zoom-out away. A valid ?d= still opens straight to its
+  // day, and ?d=…&e= straight to an entry.
   const [view, setView] = useState<View>(() => {
     const d = params.get("d");
-    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "month";
-    return params.get("e") ? "entry" : "schedule";
+    const validDay = !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    return validDay && params.get("e") ? "entry" : "schedule";
   });
   /** during a zoom both layers render; the camera moves `from` → `to` */
   const [zoom, setZoom] = useState<null | {
@@ -2632,7 +2635,13 @@ function ScheduleFeedBase({
   const rows = useMemo(() => {
     if (!all) return null;
     const groups = groupByDay([...all].reverse()); // oldest → newest
-    const map = new Map(groups.map((g) => [g.day, g.snippets]));
+    // within a day, order by id (a ULID minted at creation) so the newest-kept
+    // entry always sits at the FOOT of its day's stack. Existing rows carry
+    // id = ulid(capturedAt), so for them this is identical to time order; a
+    // backfilled entry (captured at noon of a past day, but minted now) lands
+    // last instead of in the middle.
+    const byId = (a: Snippet, b: Snippet) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const map = new Map(groups.map((g) => [g.day, [...g.snippets].sort(byId)]));
     const days = new Set(map.keys());
     // today always earns its page. In zone mode its section stays invisible
     // until it holds an entry (so the kept card can wipe into an already-mounted
@@ -3900,7 +3909,9 @@ function FlowBackfillCapture({
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
     const capturedAt = isToday ? Date.now() : at.getTime();
-    const id = ulid(capturedAt);
+    // the id is minted NOW (creation order), even for a backfill whose
+    // capturedAt sits in the past — so the entry sorts to the foot of its day
+    const id = ulid();
     // render the kept card optimistically in its final slot AT ONCE, so the
     // typed words stay put instead of blinking out until the live query lands;
     // the real row (same id) takes over seamlessly
@@ -4203,7 +4214,7 @@ function TodayZoneFill({
     if (phase !== "idle") return; // a keep is already running (idempotent)
     const t = text.trim();
     const capturedAt = Date.now();
-    const id = ulid(capturedAt);
+    const id = ulid(); // creation-order id (today: same as capturedAt)
     const file = () => {
       draft?.set({
         id, text: t, kind: null, tags: [], capturedAt, day,

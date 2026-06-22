@@ -1,4 +1,3 @@
-import { ShellNav, ShellTabs } from "@/components/shell/shell-nav";
 import { ProfileMenu } from "@/components/shell/profile-menu";
 import { Sheet } from "@/components/shell/sheet";
 import { SheetScroll } from "@/components/shell/sheet-scroll";
@@ -11,7 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // remaining height and pages scroll inside it, never the page. (An
     // indefinite min-h chain on desktop let h-full children collapse —
     // the calendar's stage shrank to its 1px border.)
-    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[calc(max(env(safe-area-inset-bottom),0.75rem)+3.9rem)] sm:px-8 sm:pb-8">
+    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
       {/* ink-bleed: a hair of edge wobble for masthead type */}
       <svg aria-hidden="true" width="0" height="0" className="absolute">
         <filter id="ink-bleed" x="-5%" y="-5%" width="110%" height="110%">
@@ -31,13 +30,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
         </filter>
       </svg>
-      {/* desk chrome */}
+      {/* desk chrome — the book is the only page now, so there's no nav: just
+          the wordmark and the account mark on the desk's top edge */}
       <header className="flex shrink-0 items-center justify-between px-2 pb-2 pt-2 sm:px-1 sm:pb-3 sm:pt-4">
         <Wordmark />
-        <div className="flex items-center gap-6">
-          <ShellNav />
-          <ProfileMenu />
-        </div>
+        <ProfileMenu />
       </header>
 
       {/* the sheet of paper */}
@@ -57,7 +54,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </SheetScroll>
       </Sheet>
 
-      <ShellTabs />
       <CommandMenu />
     </div>
   );

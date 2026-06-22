@@ -46,7 +46,9 @@ export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
   const now = Date.now();
   const capturedAt = draft.capturedAt ?? now;
   const snippet: Snippet = {
-    id: draft.id ?? ulid(capturedAt),
+    // mint the id from creation time, not capturedAt: a backfilled entry then
+    // sorts to the foot of its (past) day's stack rather than into the middle
+    id: draft.id ?? ulid(now),
     text: draft.text.trim(),
     kind: null,
     tags: [],
@@ -129,7 +131,9 @@ export async function purgeOldDeleted(): Promise<void> {
 // ── reads ───────────────────────────────────────────────────────
 
 export async function snippetsForDay(day: string): Promise<Snippet[]> {
-  const rows = await activeDb.snippets.where("day").equals(day).sortBy("capturedAt");
+  // order by id (a ULID minted at creation) so newly-kept entries fall to the
+  // foot of the day; for existing rows id-order matches capturedAt-order
+  const rows = await activeDb.snippets.where("day").equals(day).sortBy("id");
   return rows.filter(notDeleted);
 }
 
