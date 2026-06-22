@@ -2874,7 +2874,7 @@ function ScheduleFeedBase({
               // row's top — in the same layout pass as any content
               // change, so shrinking rows can never dip scrollHeight
               // and clamp the reader off their page
-              <div className="relative flex h-full flex-col">
+              <div className="relative flex min-h-full flex-col">
                 {pageRow}
                 {/* the zone always carries today's big date — even once today
                     also owns a page above — so the composer always names its day */}
@@ -2900,17 +2900,21 @@ function ScheduleFeedBase({
   );
 
   return (
-    <div
-      ref={scrollerRef}
-      onScroll={active ? onScroll : undefined}
-      // -mt-px: the topmost day's border-t rides up onto the header's bottom
-      // rule, so when today lifts to the top (scrolled all the way down) the two
-      // hairlines coincide instead of doubling a pixel apart
-      className="relative -mt-px h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
-      style={{ scrollbarWidth: "none" }}
-      tabIndex={-1}
-    >
-      {body}
+    // -mt-px: the topmost day's border-t rides up onto the header's bottom rule,
+    // so when today lifts to the top the two hairlines coincide instead of
+    // doubling a pixel apart. The foot rule is a sibling of the scroller (not a
+    // child), pinned to its bottom edge — so it can never scroll with the
+    // content or cache a stale position as the zone grows under it.
+    <div className="relative -mt-px h-full">
+      <div
+        ref={scrollerRef}
+        onScroll={active ? onScroll : undefined}
+        className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+        style={{ scrollbarWidth: "none" }}
+        tabIndex={-1}
+      >
+        {body}
+      </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
           the corner range */}
@@ -3813,17 +3817,34 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
     sc.addEventListener("scroll", onScroll, { passive: true });
+    // recompute on scroll AND on any size change of the scroller or the zone box
+    // — the box grows as lines are typed without a scroll or a scroller resize,
+    // so observing it is what keeps the rule from caching a stale edge
     const ro = new ResizeObserver(onScroll);
     ro.observe(sc);
+    let observedBox: Element | null = null;
+    const trackBox = () => {
+      // the box is replaced on each keep (a new generation), so re-point the
+      // observer whenever the live one changes
+      const box = sc.querySelector("[data-today-zone-box]");
+      if (box === observedBox) return;
+      if (observedBox) ro.unobserve(observedBox);
+      if (box) ro.observe(box);
+      observedBox = box;
+    };
+    const mo = new MutationObserver(trackBox);
+    mo.observe(sc, { childList: true, subtree: true });
+    trackBox();
     update();
     return () => {
       sc.removeEventListener("scroll", onScroll);
       ro.disconnect();
+      mo.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
   }, [scrollerRef]);
   return (
-    <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-[6] h-px">
       <div
         ref={lineRef}
         className="absolute bottom-0 border-t transition-opacity duration-200"
@@ -3926,7 +3947,7 @@ function TodayZoneFill({
         key={gen}
         // no bottom padding: the zone box's bottom border IS the scroll end, so
         // the foot rule never sits below it
-        className={cn("relative w-full pt-1", className)}
+        className={cn("relative flex w-full flex-col pt-1", className)}
         // the fresh zone fades in with a small float down (no full slide-from-top
         // that would sweep over the entries above it)
         initial={gen === 0 ? false : { y: -12, opacity: 0 }}
@@ -3948,12 +3969,12 @@ function TodayZoneFill({
           // doesn't read a moving box
           data-zone-busy={phase !== "idle" ? "1" : undefined}
           className={cn(
-            // a firm floor so a tall stack of entries can never squeeze the zone
-            // smaller than its contents (date + ruled line + the big seal). The
-            // box's OWN rounded border is the outline — in the rounded-corner
-            // range near the bottom its curve is the hairline (sides curve into
-            // it, no overhang); the flat foot cap covers the straight region.
-            "relative flex h-full min-h-[22rem] w-full flex-col rounded-2xl",
+            // flex-1 with a firm floor (min-h): the box fills the blank tail when
+            // there's little to show AND grows with the words as they're typed,
+            // so its outline always wraps the text — never a fixed-height panel
+            // the text spills out the bottom of. The box's OWN rounded border is
+            // the outline; the flat foot cap covers the straight region.
+            "relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl",
             frame,
           )}
         >
@@ -3966,7 +3987,21 @@ function TodayZoneFill({
 
           {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt
               sits on one line */}
-          <div className="w-4/5 min-w-[14rem] max-w-2xl">
+          <div className="relative w-4/5 min-w-[14rem] max-w-2xl">
+            {/* the rules are a pure underlay BEHIND the field — they never sit on
+                the textarea's own box, so the caret, selection, and native text
+                handling all render exactly as a plain field would */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                // rule just below the baseline so standard characters rest ON the
+                // line and only descenders dip across it, like real ruled paper
+                backgroundImage:
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
+                backgroundPositionY: "-0.4rem",
+              }}
+            />
             <textarea
               ref={areaRef}
               value={text}
@@ -3976,17 +4011,8 @@ function TodayZoneFill({
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={firstEver ? copy.todayZone.placeholderFirstEver : copy.todayZone.placeholder}
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
-              className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
-              style={{
-                lineHeight: "1.7rem",
-                minHeight: "5.1rem",
-                // rule just below the baseline so standard characters rest ON the
-                // line and only descenders dip across it, like real ruled paper
-                backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
-                backgroundPositionY: "-0.4rem",
-                backgroundAttachment: "local",
-              }}
+              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              style={{ lineHeight: "1.7rem", minHeight: "5.1rem" }}
             />
           </div>
 
