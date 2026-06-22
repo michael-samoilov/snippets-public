@@ -2915,13 +2915,11 @@ function ScheduleFeedBase({
       tabIndex={-1}
     >
       {body}
-      {todayZone ? (
-        // tracks the visible bottom: blue + rounded over the zone, default rule
-        // elsewhere
-        <TodayZoneTerminus scrollerRef={scrollerRef} />
-      ) : (
-        <ScrollTerminus show={edges.bottom} />
-      )}
+      {/* In zone mode there is NO sticky foot rule: the today zone's own rounded
+          border is the bottom edge (it scrolls with the content and is seen once
+          you reach the bottom) — a sticky line would pin to the viewport bottom
+          mid-zone instead of tracking to the zone's real bottom. */}
+      {!todayZone && <ScrollTerminus show={edges.bottom} />}
     </div>
   );
 }
@@ -4032,76 +4030,6 @@ function FlowBackfillCapture({
           </button>
         </motion.div>
       )}
-    </div>
-  );
-}
-
-/* The foot hairline for the today-zone. A sticky element at the scroll foot
-   (a DIRECT child of the scroller, so no transformed ancestor breaks `sticky`).
-   It reads, per frame, where the viewport bottom sits:
-    • over the content ABOVE the zone → the plain full-width rule (more below);
-    • over the zone → a rounded blue CAP riding the fold, so the zone always
-      looks like it ends with its rounded bottom at whatever's visible;
-    • scrolled fully to the bottom → nothing (the zone's own box bottom shows).
-   Imperative (its own rAF scroll read) so it never re-renders the feed. */
-function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivElement | null> }) {
-  const ruleRef = useRef<HTMLDivElement>(null);
-  const capRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const sc = scrollerRef.current;
-    const rule = ruleRef.current;
-    const cap = capRef.current;
-    if (!sc || !rule || !cap) return;
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
-      const vpBottom = sc.getBoundingClientRect().bottom;
-      const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
-      const box = boxes[boxes.length - 1];
-      let mode: "none" | "rule" | "cap" = "none";
-      if (box) {
-        const r = box.getBoundingClientRect();
-        if (r.top <= vpBottom && r.bottom > vpBottom) {
-          mode = "cap"; // the fold cuts the zone → the zone's rounded bottom rides it
-        } else if (r.top > vpBottom && moreBelow) {
-          mode = "rule"; // the zone is entirely below the fold → plain rule over the content above
-        }
-        // else the zone is fully in view (its bottom at/above the fold): show
-        // nothing — the box's own rounded bottom border IS the edge (no stray
-        // rule in the sliver of padding below it)
-      } else if (moreBelow) {
-        mode = "rule";
-      }
-      rule.style.opacity = mode === "rule" ? "1" : "0";
-      cap.style.opacity = mode === "cap" ? "1" : "0";
-    };
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
-    sc.addEventListener("scroll", onScroll, { passive: true });
-    const ro = new ResizeObserver(onScroll);
-    ro.observe(sc);
-    update();
-    return () => {
-      sc.removeEventListener("scroll", onScroll);
-      ro.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [scrollerRef]);
-  return (
-    <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px">
-      {/* plain rule over the content above the zone */}
-      <div
-        ref={ruleRef}
-        className="absolute inset-x-0 bottom-0 border-t border-rule-faint transition-opacity duration-200"
-        style={{ opacity: 0 }}
-      />
-      {/* rounded blue cap riding the fold over the zone — its sides meet the
-          zone's outline, so it reads as the zone's own rounded bottom edge */}
-      <div
-        ref={capRef}
-        className="absolute inset-x-0 bottom-0 h-4 rounded-b-2xl border-x border-b border-wax/45 transition-opacity duration-200"
-        style={{ opacity: 0 }}
-      />
     </div>
   );
 }

@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-22a · foot rule: rounded cap, no stray line near bottom";
+const BUILD = "build 2026-06-22b · no sticky foot rule — zone's own rounded border is the bottom";
 
 // variants of the locked blue outline
 const RIFFS: { id: string; name: string; desc: string }[] = [
