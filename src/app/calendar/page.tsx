@@ -51,6 +51,7 @@ import {
 } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
+import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
 import { allOccurrences, queryTerms } from "@/lib/search";
@@ -1482,7 +1483,7 @@ function Calendar() {
                   // the bar; standing words keep it open
                   if (searching && !query.trim()) closeSearch();
                 }}
-                placeholder="Find an entry…"
+                placeholder={copy.search.schedule}
                 aria-label="Search entries"
                 tabIndex={searching ? 0 : -1}
                 className="voice-prose min-w-0 flex-1 bg-transparent text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
@@ -2775,6 +2776,10 @@ function ScheduleFeedBase({
     else rowRefs.current.delete(day);
   };
 
+  // the book holds nothing yet — the today zone opens with a warmer first
+  // invitation (and there's no yesterday to review above it)
+  const bookEmpty = (all?.length ?? 0) === 0;
+
   // hundreds of day sections — memoized as elements, so the scroll
   // spy's selection churn (a page re-render per day crossed) bails
   // out of the whole book instead of reconciling it
@@ -2887,6 +2892,7 @@ function ScheduleFeedBase({
                   <TodayZoneFill
                     day={todayKey}
                     riff={todayZone.frame}
+                    firstEver={bookEmpty}
                     className="flex-1"
                   />
                 )}
@@ -2897,7 +2903,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone, todayJustKept],
+    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayZone, todayJustKept, bookEmpty],
   );
 
   // with the today-zone on, the scroller's content height grows with the zone,
@@ -3791,10 +3797,10 @@ function LegacyBackfillCapture({
           rows={1}
           placeholder={
             isToday
-              ? "Add something from today…"
+              ? copy.backfill.today
               : isYesterday
-                ? "Add something from yesterday…"
-                : "Add something you want to remember…"
+                ? copy.backfill.yesterday
+                : copy.backfill.other
           }
           aria-label={`Add an entry to ${friendlyDay(day)}`}
           onChange={(e) => {
@@ -3927,10 +3933,10 @@ function FlowBackfillCapture({
   const showSeal = hasText || (pressing && !flow.reduce);
   const sealCentre = flow.spec.sealPos !== "corner" && pressing;
   const placeholder = isToday
-    ? "Add something from today…"
+    ? copy.backfill.today
     : isYesterday
-      ? "Add something from yesterday…"
-      : "Add something you want to remember…";
+      ? copy.backfill.yesterday
+      : copy.backfill.other;
 
   return (
     <div ref={wrapRef} className={cn("relative", follows && "mt-1")}>
@@ -4139,11 +4145,14 @@ function TodayZoneFill({
   day,
   riff,
   showDate = true,
+  firstEver = false,
   className,
 }: {
   day: string;
   riff: string;
   showDate?: boolean;
+  /** nothing has ever been saved — a warmer first invitation */
+  firstEver?: boolean;
   className?: string;
 }) {
   const [text, setText] = useState("");
@@ -4275,7 +4284,7 @@ function TodayZoneFill({
               readOnly={frozen}
               onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
-              placeholder="Write something from today…"
+              placeholder={firstEver ? copy.todayZone.placeholderFirstEver : copy.todayZone.placeholder}
               aria-label={`Write an entry for ${format(d, "MMMM d")}`}
               className="voice-prose block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
               style={{

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 import { useAllSnippets, useSearch } from "@/hooks/use-snippets";
 import { exportJSON, exportMarkdown } from "@/lib/export";
+import { copy } from "@/lib/copy";
 
 export function CommandMenu() {
   const [open, setOpen] = useState(false);
@@ -53,7 +54,7 @@ export function CommandMenu() {
       <CommandInput
         value={query}
         onValueChange={setQuery}
-        placeholder="Search, or jump somewhere…"
+        placeholder={copy.search.command}
         className="font-serif"
       />
       <CommandList>

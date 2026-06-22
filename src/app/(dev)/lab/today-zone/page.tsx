@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-22i · no double border at the foot; returning users get yesterday's invite";
+const BUILD = "build 2026-06-22j · first-ever invite in the zone; copy moved to a single source of truth";
 
 // variants of the locked blue outline
 const RIFFS: { id: string; name: string; desc: string }[] = [
