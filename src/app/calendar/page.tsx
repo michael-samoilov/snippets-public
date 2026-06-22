@@ -4064,12 +4064,16 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
       const vpBottom = sc.getBoundingClientRect().bottom;
       const box = sc.querySelector<HTMLElement>("[data-today-zone-box]");
       const busy = box?.getAttribute("data-zone-busy") === "1";
-      const show = moreBelow && !busy;
+      let show = moreBelow && !busy;
       let blue = false;
       let inset = 0;
       if (show && box) {
         const r = box.getBoundingClientRect();
-        if (r.top > vpBottom) {
+        if (r.bottom <= vpBottom) {
+          // the clip point is at/below the zone's bottom border — the box's OWN
+          // rounded bottom is the edge there; never draw the rule below it
+          show = false;
+        } else if (r.top > vpBottom) {
           blue = false; // zone entirely below the fold → grey rule over the days
         } else {
           blue = true;
@@ -4080,12 +4084,12 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
           if (distTop < ZONE_CORNER) inset = cornerInset(distTop);
           else if (distBottom < ZONE_CORNER) inset = cornerInset(distBottom);
         }
-      } else if (show && !box) {
-        blue = false;
       }
       line.style.opacity = show ? "1" : "0";
       line.style.left = `${inset}px`;
       line.style.right = `${inset}px`;
+      // colour is set INSTANTLY (no transition) so it never lags blue→grey when
+      // the clip point leaves the zone
       line.style.borderTopColor = blue
         ? "color-mix(in srgb, var(--wax) 45%, transparent)"
         : "var(--rule-faint)";
@@ -4105,7 +4109,7 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     <div aria-hidden className="pointer-events-none sticky bottom-0 z-[6] -mt-px h-px">
       <div
         ref={lineRef}
-        className="absolute bottom-0 border-t transition-[opacity,border-color] duration-200"
+        className="absolute bottom-0 border-t transition-opacity duration-200"
         style={{ opacity: 0, left: 0, right: 0, borderTopColor: "var(--rule-faint)" }}
       />
     </div>
@@ -4213,7 +4217,9 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
-        className={cn("relative w-full pb-3 pt-1", className)}
+        // no bottom padding: the zone box's bottom border IS the scroll end, so
+        // the foot rule never sits below it
+        className={cn("relative w-full pt-1", className)}
         // the fresh zone fades in with a small float down (no full slide-from-top
         // that would sweep over the entries above it)
         initial={gen === 0 ? false : { y: -12, opacity: 0 }}

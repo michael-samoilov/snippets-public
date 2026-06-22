@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-22d · foot rule length tracks the zone's rounded corners — never past the border";
+const BUILD = "build 2026-06-22e · foot rule stops at the zone bottom + instant grey/blue (no lag)";
 
 // variants of the locked blue outline
 const RIFFS: { id: string; name: string; desc: string }[] = [
