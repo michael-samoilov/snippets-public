@@ -4056,15 +4056,22 @@ function TodayZoneTerminus({ scrollerRef }: { scrollerRef: React.RefObject<HTMLD
     const update = () => {
       raf = 0;
       const moreBelow = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1;
-      let mode: "none" | "rule" | "cap" = moreBelow ? "rule" : "none";
-      if (moreBelow) {
-        const vpBottom = sc.getBoundingClientRect().bottom;
-        const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
-        const box = boxes[boxes.length - 1];
-        if (box) {
-          const r = box.getBoundingClientRect();
-          if (r.top <= vpBottom && r.bottom > vpBottom) mode = "cap"; // fold is inside the zone
+      const vpBottom = sc.getBoundingClientRect().bottom;
+      const boxes = sc.querySelectorAll<HTMLElement>("[data-today-zone-box]");
+      const box = boxes[boxes.length - 1];
+      let mode: "none" | "rule" | "cap" = "none";
+      if (box) {
+        const r = box.getBoundingClientRect();
+        if (r.top <= vpBottom && r.bottom > vpBottom) {
+          mode = "cap"; // the fold cuts the zone → the zone's rounded bottom rides it
+        } else if (r.top > vpBottom && moreBelow) {
+          mode = "rule"; // the zone is entirely below the fold → plain rule over the content above
         }
+        // else the zone is fully in view (its bottom at/above the fold): show
+        // nothing — the box's own rounded bottom border IS the edge (no stray
+        // rule in the sliver of padding below it)
+      } else if (moreBelow) {
+        mode = "rule";
       }
       rule.style.opacity = mode === "rule" ? "1" : "0";
       cap.style.opacity = mode === "cap" ? "1" : "0";

@@ -27,7 +27,7 @@ import {
 } from "@/lib/keep-flow";
 import { cn } from "@/lib/utils";
 
-const BUILD = "build 2026-06-21f · blue-outline variants · sweep keep";
+const BUILD = "build 2026-06-22a · foot rule: rounded cap, no stray line near bottom";
 
 // variants of the locked blue outline
 const RIFFS: { id: string; name: string; desc: string }[] = [
