@@ -2637,12 +2637,12 @@ function ScheduleFeedBase({
     // until it holds an entry (so the kept card can wipe into an already-mounted
     // list, and nothing remounts mid-animation); the big date lives in the zone.
     days.add(todayKey);
-    // yesterday earns a blank page so a memory from it can still be caught —
-    // but only once the book holds something. A brand-new user (no entries
-    // anywhere yet) opens to today's zone alone: nothing empty to review above
-    // it until they've captured their first thing. (Off in zone mode either
-    // way — it wants prev-entry → zone with nothing empty between.)
-    if (all.length > 0 && !todayZone && !map.has(yesterdayKey)) {
+    // yesterday earns a page so a memory from it can still be caught — carrying
+    // its own "add something from yesterday" invite when it's empty (below).
+    // Only once the book holds something, though: a brand-new user (nothing
+    // captured anywhere yet) opens to today's zone alone, nothing to review
+    // above it until they've kept their first thing.
+    if (all.length > 0 && !map.has(yesterdayKey)) {
       days.add(yesterdayKey);
     }
     if (probe) days.add(probe);
@@ -2650,7 +2650,7 @@ function ScheduleFeedBase({
       day,
       snippets: map.get(day) ?? ([] as Snippet[]),
     }));
-  }, [all, probe, todayKey, yesterdayKey, todayZone]);
+  }, [all, probe, todayKey, yesterdayKey]);
 
   const scrollToRow = useCallback((day: string, smooth = false) => {
     const el = scrollerRef.current;
@@ -3696,9 +3696,10 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 // is orchestrated by the keep-sequence engine with the canvas quill seal.
 function BackfillCapture(props: { day: string; follows?: boolean }) {
   const flow = useKeepFlow();
-  // the today-zone lab houses today's entry in a big fill zone, so the inline
-  // composer steps aside
-  if (useTodayZone()) return null;
+  // in zone mode today's capture lives in the big fill zone, so today's inline
+  // composer steps aside — but other days keep theirs (yesterday's "add
+  // something from yesterday" invite, or any page you opened to backfill)
+  if (useTodayZone() && props.day === dayKey()) return null;
   return flow ? (
     <FlowBackfillCapture {...props} flow={flow} />
   ) : (
@@ -4049,10 +4050,6 @@ function FlowBackfillCapture({
       bottom), so it never extends past the border;
     • scrolled fully to the bottom → hidden (the zone's rounded bottom shows). */
 const ZONE_CORNER = 16; // matches the zone box's rounded-2xl radius
-// overlap (px) the clip-pinned rule keeps drawing past the box's own bottom
-// border before handing off, so a sub-pixel-vanishing 1px border never leaves
-// the foot with no line at all
-const FOOT_OVERLAP = 2;
 // the rounded rect's horizontal inset `t`px from a corner's edge (0 at the very
 // edge → the straight top/bottom segment is inset by R; R away → full width)
 const cornerInset = (t: number) =>
@@ -4073,27 +4070,23 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
       let show = false;
       let blue = false;
       let inset = 0;
-      if (box && !busy) {
+      // At the very bottom (the zone's body is flush with the clip) its OWN
+      // rounded border is the bottom edge — drawing the rule there too would
+      // stack a second hairline on it and read darker than the rest of the
+      // outline. So the rule only appears once the zone's bottom has scrolled
+      // below the fold; until then the box border alone closes the foot.
+      if (moreBelow && box && !busy) {
         const r = box.getBoundingClientRect();
-        // Keep drawing the blue edge AT the fixed clip line until the box's OWN
-        // bottom border is safely (> FOOT_OVERLAP px) inside the viewport. The
-        // clip-pinned rule renders at a stable position, but the box's 1px
-        // border moves with scroll and at some rest offsets lands on a sub-pixel
-        // boundary and anti-aliases to nothing on retina; without this overlap
-        // the rule would have already handed off, leaving NO line at the foot.
-        const crossesClip = r.top <= vpBottom && r.bottom > vpBottom - FOOT_OVERLAP;
-        if (crossesClip) {
+        if (r.top <= vpBottom && r.bottom > vpBottom) {
+          // the zone's body crosses the clip line → blue edge at the clip,
+          // tracking whichever rounded corner the clip point is passing through
           show = true;
           blue = true;
           const distTop = vpBottom - r.top;     // clip point's depth below the zone's top
           const distBottom = r.bottom - vpBottom; // real bottom's depth below the clip point
-          // follow whichever rounded corner the clip point is passing through
-          // (incl. the overlap band, where distBottom ≤ 0 → fully inset, so the
-          // box's rounded corners complete the edge); full width across the
-          // straight middle
           if (distTop < ZONE_CORNER) inset = cornerInset(distTop);
           else if (distBottom < ZONE_CORNER) inset = cornerInset(distBottom);
-        } else if (moreBelow) {
+        } else {
           // the clip lies above the zone, over the regular days → grey terminus
           show = true;
         }
