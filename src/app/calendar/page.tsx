@@ -2675,14 +2675,25 @@ function ScheduleFeedBase({
       // hold the header on today the whole way down (cleared on arrival / by the
       // backup timer), so passing days don't flicker the Today button back in
       landingTodayRef.current = true;
+      let lastH = -1;
       const toBottom = () => {
         const s = scrollerRef.current;
-        if (s) s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+        if (!s) return;
+        // only re-command the scroll when the bottom moved DOWN (the zone's flex
+        // height grew as it settled). Re-issuing a smooth scroll to the same — or a
+        // nearer — bottom restarts its easing mid-flight, which reads as the motion
+        // lurching to a new speed partway down. A bottom that moved UP (e.g. the
+        // prior day's composer unmounting as Today takes the page) the browser
+        // clamps on its own, so the glide stays one continuous motion.
+        if (s.scrollHeight <= lastH + 1) return;
+        lastH = s.scrollHeight;
+        s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
       };
       toBottom();
       // right after a fresh mount / entering the schedule, the today zone's flex
       // height is still settling, so scrollHeight grows a frame or two later —
-      // re-assert the bottom so Today lands flush, not a little short
+      // re-assert the bottom so Today lands flush, not a little short (skipped
+      // above unless the target genuinely moved)
       todaySettleRef.current.push(
         setTimeout(toBottom, 60),
         setTimeout(toBottom, 280),
