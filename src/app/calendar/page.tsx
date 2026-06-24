@@ -2605,6 +2605,9 @@ function ScheduleFeedBase({
   // a land-on-today scroll re-asserts the bottom a couple times while the zone's
   // flex height settles after a fresh mount; these are its (cancellable) timers
   const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // true while a Today scroll is gliding to the foot: the days it passes must not
+  // claim the header (which would flicker the Today button back in mid-flight)
+  const landingTodayRef = useRef(false);
   // the rows' geometry, read ONCE per layout and cached — the scroll
   // spy then finds the stacked day from scrollTop alone, never reading
   // ~90 rows' offsets on the scroll path (that first read forced the
@@ -2659,15 +2662,19 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el) return false;
-    // any new scroll cancels a still-pending land-on-today re-assert
+    // any new scroll cancels a still-pending land-on-today re-assert/hold
     todaySettleRef.current.forEach(clearTimeout);
     todaySettleRef.current = [];
+    if (day !== todayKey) landingTodayRef.current = false;
     // "today" lives at the very foot (its fill zone fills the tail) — land on
     // the bottom so the zone is shown, not the top of today's row (and when the
     // zone stands in for a blank today there's no today row to land on anyway)
     if (day === todayKey) {
       spyRef.current = day;
       progTargetRef.current = null;
+      // hold the header on today the whole way down (cleared on arrival / by the
+      // backup timer), so passing days don't flicker the Today button back in
+      landingTodayRef.current = true;
       const toBottom = () => {
         const s = scrollerRef.current;
         if (s) s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
@@ -2676,7 +2683,11 @@ function ScheduleFeedBase({
       // right after a fresh mount / entering the schedule, the today zone's flex
       // height is still settling, so scrollHeight grows a frame or two later —
       // re-assert the bottom so Today lands flush, not a little short
-      todaySettleRef.current.push(setTimeout(toBottom, 60), setTimeout(toBottom, 280));
+      todaySettleRef.current.push(
+        setTimeout(toBottom, 60),
+        setTimeout(toBottom, 280),
+        setTimeout(() => { landingTodayRef.current = false; }, 700),
+      );
       return true;
     }
     if (!row) return false;
@@ -2795,16 +2806,27 @@ function ScheduleFeedBase({
         }
         return;
       }
-      // the reader's day is the topmost whose margin date is still
-      // fully stacked — a row whose tail merely peeks under the rail
-      // has already handed over (its date has slid off the pin).
-      // Computed from cached geometry, so the scroll path reads only
-      // scrollTop, never the rows' offsets
-      let cur: string | null = null;
-      for (const g of rowGeomRef.current) {
-        if (g.bottom >= top + g.headH) {
-          cur = g.day; // geometry is sorted by top; the first match wins
-          break;
+      // the very foot IS today's zone (today's own section collapses when empty,
+      // so it never reads as the topmost stacked day) — at the bottom the reader
+      // is on today, and the Today button should collapse. A Today scroll also
+      // stays on today the whole way down. Either way, hold today.
+      const atBottom = top >= el.scrollHeight - el.clientHeight - 4;
+      if (atBottom) landingTodayRef.current = false; // arrived
+      let cur: string | null;
+      if (atBottom || landingTodayRef.current) {
+        cur = todayKey;
+      } else {
+        // the reader's day is the topmost whose margin date is still
+        // fully stacked — a row whose tail merely peeks under the rail
+        // has already handed over (its date has slid off the pin).
+        // Computed from cached geometry, so the scroll path reads only
+        // scrollTop, never the rows' offsets
+        cur = null;
+        for (const g of rowGeomRef.current) {
+          if (g.bottom >= top + g.headH) {
+            cur = g.day; // geometry is sorted by top; the first match wins
+            break;
+          }
         }
       }
       if (cur && cur !== spyRef.current) {
@@ -2942,13 +2964,7 @@ function ScheduleFeedBase({
                   firstEver={bookEmpty}
                   hasEntry={row.snippets.length > 0}
                   onKept={scrollToNewEntry}
-                  // a hair of breathing room below the zone's border so that at
-                  // the very bottom the border rests just ABOVE the clip line —
-                  // fully painted and crisp, never sitting exactly on the
-                  // sub-pixel clip edge (where it half-vanishes). The foot rule
-                  // then hands off to a border that's already visible: no bare
-                  // gap on the approach, no doubled hairline at rest.
-                  className="flex-1 mb-[3px]"
+                  className="flex-1"
                 />
               </div>
             ) : (
@@ -4012,12 +4028,16 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
-        // no bottom padding: the zone box's bottom border IS the scroll end, so
-        // the foot rule never sits below it
-        // when a rule sits above the zone (today empty, prior days present),
-        // hold the same gap below it as a day keeps below its own rule; otherwise
-        // a hair of breathing room
-        className={cn("relative flex w-full flex-col", !hasEntry && !firstEver ? "pt-2.5" : "pt-1", className)}
+        // when a rule sits above the zone (today empty, prior days present), the
+        // zone is centred in the tail: the same gap below it (to the container's
+        // foot) as above it (to the rule). Otherwise no rule, so just a hair of
+        // breathing room above and the tuned sliver below (keeps the foot rule's
+        // border handoff crisp at rest).
+        className={cn(
+          "relative flex w-full flex-col",
+          !hasEntry && !firstEver ? "pt-2.5 mb-2.5" : "pt-1 mb-[3px]",
+          className,
+        )}
         // the fresh zone fades in with a small float down (no full slide-from-top
         // that would sweep over the entries above it)
         initial={gen === 0 ? false : { y: -12, opacity: 0 }}
