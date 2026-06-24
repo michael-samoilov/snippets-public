@@ -121,6 +121,17 @@ export function useKeyboardRoom(
     el.addEventListener("focusout", onFocusOut);
     vv.addEventListener("resize", sync); // the keyboard opens/closes
     vv.addEventListener("scroll", sync);
+    // A field can be focused BEFORE this effect attaches — the entry editor
+    // focuses its textarea and only THEN flips `editing`, which is what enables
+    // us, so its focusin already fired into nothing. Adopt the live field now,
+    // or the room never engages and the keyboard-covered tail can't be reached.
+    const pre = document.activeElement as HTMLElement | null;
+    if (pre && el.contains(pre) && (pre.tagName === "TEXTAREA" || pre.tagName === "INPUT")) {
+      field = pre;
+      ro.observe(pre);
+      sync();
+      settle = setTimeout(correct, 350);
+    }
     return () => {
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
