@@ -4040,13 +4040,15 @@ function TodayZoneFill({
       <motion.div
         key={gen}
         // when a rule sits above the zone (today empty, prior days present), the
-        // zone is centred in the tail: the same gap below it (to the container's
-        // foot) as above it (to the rule). Otherwise no rule, so just a hair of
+        // zone is centred in the tail: the gap from the rule down to the zone's
+        // top edge matches the gap from its bottom edge down to the container's
+        // foot. The top pads 1px short of the bottom because the rule's own
+        // hairline sits in that gap. Otherwise no rule, so just a hair of
         // breathing room above and the tuned sliver below (keeps the foot rule's
         // border handoff crisp at rest).
         className={cn(
           "relative flex w-full flex-col",
-          !hasEntry && !firstEver ? "pt-2.5 mb-2.5" : "pt-1 mb-[3px]",
+          !hasEntry && !firstEver ? "pt-[9px] mb-2.5" : "pt-1 mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
