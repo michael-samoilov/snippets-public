@@ -2602,6 +2602,9 @@ function ScheduleFeedBase({
   // not each claim the title (which flashes the Today button back in)
   const progTargetRef = useRef<number | null>(null);
   const progTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // a land-on-today scroll re-asserts the bottom a couple times while the zone's
+  // flex height settles after a fresh mount; these are its (cancellable) timers
+  const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // the rows' geometry, read ONCE per layout and cached — the scroll
   // spy then finds the stacked day from scrollTop alone, never reading
   // ~90 rows' offsets on the scroll path (that first read forced the
@@ -2656,13 +2659,24 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el) return false;
+    // any new scroll cancels a still-pending land-on-today re-assert
+    todaySettleRef.current.forEach(clearTimeout);
+    todaySettleRef.current = [];
     // "today" lives at the very foot (its fill zone fills the tail) — land on
     // the bottom so the zone is shown, not the top of today's row (and when the
     // zone stands in for a blank today there's no today row to land on anyway)
     if (day === todayKey) {
       spyRef.current = day;
       progTargetRef.current = null;
-      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+      const toBottom = () => {
+        const s = scrollerRef.current;
+        if (s) s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+      };
+      toBottom();
+      // right after a fresh mount / entering the schedule, the today zone's flex
+      // height is still settling, so scrollHeight grows a frame or two later —
+      // re-assert the bottom so Today lands flush, not a little short
+      todaySettleRef.current.push(setTimeout(toBottom, 60), setTimeout(toBottom, 280));
       return true;
     }
     if (!row) return false;
