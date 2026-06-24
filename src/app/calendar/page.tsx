@@ -2689,8 +2689,7 @@ function ScheduleFeedBase({
   const scrollToNewEntry = useCallback((id: string) => {
     const sc = scrollerRef.current;
     if (!sc) return;
-    // the card mounts on the render that files it — wait a frame for its box
-    requestAnimationFrame(() => {
+    const doScroll = () => {
       const card = sc.querySelector<HTMLElement>(`[data-entry="${CSS.escape(id)}"]`);
       const row = rowRefs.current.get(todayKey);
       if (!card || !row) return;
@@ -2701,16 +2700,25 @@ function ScheduleFeedBase({
       const GAP = 16;
       const target =
         cardBottom - rowTop <= viewportH - GAP
-          ? Math.max(0, rowTop - GAP) // date at the top, the whole day below it
+          // today's date flush to the very top: its border-t lands on the
+          // scroller's top edge, which (via the wrapper's -mt-px) coincides with
+          // the header's bottom rule — the two hairlines become one
+          ? Math.max(0, rowTop)
           : Math.max(0, cardBottom - viewportH + GAP); // just enough to show the card
       // hold the header on today through the animated scroll (don't let the days
       // it passes flash the Today button)
       spyRef.current = todayKey;
       progTargetRef.current = target;
       if (progTimerRef.current) clearTimeout(progTimerRef.current);
-      progTimerRef.current = setTimeout(() => { progTargetRef.current = null; }, 800);
+      progTimerRef.current = setTimeout(() => { progTargetRef.current = null; }, 1200);
       sc.scrollTo({ top: target, behavior: "smooth" });
-    });
+    };
+    // scroll as the card wipes in (a frame on, so its box has mounted), then
+    // re-assert once the live query has reshuffled the rows above today — the
+    // first-ever entry adds yesterday's page, which would otherwise shift the
+    // target after the fact and leave today sitting a little below the top
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 450);
   }, [scrollerRef, todayKey, rowRefs, spyRef, progTargetRef, progTimerRef]);
 
   const goTo = useCallback(
