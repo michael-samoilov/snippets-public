@@ -2698,6 +2698,18 @@ function ScheduleFeedBase({
         setTimeout(toBottom, 60),
         setTimeout(toBottom, 280),
         setTimeout(() => { landingTodayRef.current = false; }, 700),
+        // entering fresh (refresh / from the calendar) the today column's height
+        // is still settling as Today is pressed, and scrolling to a not-yet-final
+        // bottom can overshoot — leaving an empty today's rule scrolled ABOVE the
+        // header. Once settled, pull back so the rule rests exactly at the header
+        // (only for an empty today; a today WITH entries means to land at the foot).
+        setTimeout(() => {
+          const s = scrollerRef.current;
+          const sec = rowRefs.current.get(todayKey);
+          if (!s || !sec || sec.querySelector("[data-entry]")) return;
+          const over = s.getBoundingClientRect().top - sec.getBoundingClientRect().top;
+          if (over > 1) s.scrollBy({ top: -over, behavior: "smooth" });
+        }, 450),
       );
       return true;
     }
@@ -3049,10 +3061,8 @@ function ScheduleCards({
   }, [draft, snippets, day, draftStore]);
   const items = draftPending ? [...snippets, draft] : snippets;
 
-  // gap-2.5 between cards == the pad from a day rule to its first/last card, so
-  // a day's stack reads at one even rhythm
   return (
-    <ul className="flex flex-col gap-2.5">
+    <ul className="flex flex-col gap-1">
       <AnimatePresence initial={false}>
         {items.map((s) => {
           const isDraft = draftPending && s.id === draft!.id;
@@ -4041,16 +4051,15 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
-        // when a rule sits above the zone (today empty, prior days present), the
-        // zone is centred in the tail: the gap from the rule down to the zone's
-        // top edge matches the gap from its bottom edge down to the container's
-        // foot. The top pads 1px short of the bottom because the rule's own
-        // hairline sits in that gap. Otherwise no rule, so just a hair of
-        // breathing room above and the tuned sliver below (keeps the foot rule's
-        // border handoff crisp at rest).
+        // when a rule sits above the zone (today empty, prior days present), set
+        // the gap from the rule to the zone's top edge equal to the "chin" — the
+        // space below the scroller, from its bottom down to the sheet's bottom
+        // (~26px). The 1px short is the rule's own hairline sitting in that gap.
+        // Otherwise no rule, so just a hair of breathing room above and the tuned
+        // sliver below (keeps the foot rule's border handoff crisp at rest).
         className={cn(
           "relative flex w-full flex-col",
-          !hasEntry && !firstEver ? "pt-[9px] mb-2.5" : "pt-1 mb-[3px]",
+          !hasEntry && !firstEver ? "pt-[25px] mb-[3px]" : "pt-1 mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
