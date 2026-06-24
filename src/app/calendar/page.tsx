@@ -2912,6 +2912,7 @@ function ScheduleFeedBase({
                 <TodayZoneFill
                   day={todayKey}
                   firstEver={bookEmpty}
+                  hasEntry={row.snippets.length > 0}
                   onKept={scrollToNewEntry}
                   // a hair of breathing room below the zone's border so that at
                   // the very bottom the border rests just ABOVE the clip line —
@@ -3893,12 +3894,15 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
 function TodayZoneFill({
   day,
   firstEver = false,
+  hasEntry = false,
   onKept,
   className,
 }: {
   day: string;
   /** nothing has ever been saved — a warmer first invitation */
   firstEver?: boolean;
+  /** today already holds an entry — invite another */
+  hasEntry?: boolean;
   /** the kept entry's id, once filed — so the book can pan to it wiping in */
   onKept?: (id: string) => void;
   className?: string;
@@ -4047,7 +4051,13 @@ function TodayZoneFill({
               data-room-center=""
               onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
-              placeholder={firstEver ? copy.todayZone.placeholderFirstEver : copy.todayZone.placeholder}
+              placeholder={
+                firstEver
+                  ? copy.todayZone.placeholderFirstEver
+                  : hasEntry
+                    ? copy.todayZone.placeholderHasEntry
+                    : copy.todayZone.placeholder
+              }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
               className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
               style={{ lineHeight: "1.7rem", minHeight: "5.1rem" }}

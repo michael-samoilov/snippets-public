@@ -149,6 +149,8 @@ export const copy = {
     placeholderFirstEver: "Start saving your memories…",
     /** every day after, once the book holds something */
     placeholder: "Write something from today…",
+    /** today already holds an entry — invite another */
+    placeholderHasEntry: "Add something else from today…",
     /** accessible name for the zone's field, e.g. "Write an entry for June 22" */
     ariaWriteFor: (dateLabel: string) => `Write an entry for ${dateLabel}`,
     /** the wax button's accessible name, by whether words are present */
