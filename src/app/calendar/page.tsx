@@ -3049,8 +3049,10 @@ function ScheduleCards({
   }, [draft, snippets, day, draftStore]);
   const items = draftPending ? [...snippets, draft] : snippets;
 
+  // gap-2.5 between cards == the pad from a day rule to its first/last card, so
+  // a day's stack reads at one even rhythm
   return (
-    <ul className="flex flex-col gap-1">
+    <ul className="flex flex-col gap-2.5">
       <AnimatePresence initial={false}>
         {items.map((s) => {
           const isDraft = draftPending && s.id === draft!.id;
