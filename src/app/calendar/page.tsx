@@ -2682,6 +2682,37 @@ function ScheduleFeedBase({
     return true;
   }, [todayKey]);
 
+  // After a keep, pan up from the today zone so the new card can be watched
+  // wiping into the schedule. Land on today's date — unless today's stack is so
+  // tall the fresh card (at its foot) would fall below the fold, in which case
+  // land just high enough that the whole card shows.
+  const scrollToNewEntry = useCallback((id: string) => {
+    const sc = scrollerRef.current;
+    if (!sc) return;
+    // the card mounts on the render that files it — wait a frame for its box
+    requestAnimationFrame(() => {
+      const card = sc.querySelector<HTMLElement>(`[data-entry="${CSS.escape(id)}"]`);
+      const row = rowRefs.current.get(todayKey);
+      if (!card || !row) return;
+      const scTop = sc.getBoundingClientRect().top;
+      const viewportH = sc.clientHeight;
+      const rowTop = sc.scrollTop + (row.getBoundingClientRect().top - scTop);
+      const cardBottom = sc.scrollTop + (card.getBoundingClientRect().bottom - scTop);
+      const GAP = 16;
+      const target =
+        cardBottom - rowTop <= viewportH - GAP
+          ? Math.max(0, rowTop - GAP) // date at the top, the whole day below it
+          : Math.max(0, cardBottom - viewportH + GAP); // just enough to show the card
+      // hold the header on today through the animated scroll (don't let the days
+      // it passes flash the Today button)
+      spyRef.current = todayKey;
+      progTargetRef.current = target;
+      if (progTimerRef.current) clearTimeout(progTimerRef.current);
+      progTimerRef.current = setTimeout(() => { progTargetRef.current = null; }, 800);
+      sc.scrollTo({ top: target, behavior: "smooth" });
+    });
+  }, [scrollerRef, todayKey, rowRefs, spyRef, progTargetRef, progTimerRef]);
+
   const goTo = useCallback(
     (day: string, smooth = false) => {
       setProbe(day);
@@ -2881,6 +2912,7 @@ function ScheduleFeedBase({
                 <TodayZoneFill
                   day={todayKey}
                   firstEver={bookEmpty}
+                  onKept={scrollToNewEntry}
                   // a hair of breathing room below the zone's border so that at
                   // the very bottom the border rests just ABOVE the clip line —
                   // fully painted and crisp, never sitting exactly on the
@@ -2896,7 +2928,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty],
+    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry],
   );
 
   return (
@@ -3861,11 +3893,14 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
 function TodayZoneFill({
   day,
   firstEver = false,
+  onKept,
   className,
 }: {
   day: string;
   /** nothing has ever been saved — a warmer first invitation */
   firstEver?: boolean;
+  /** the kept entry's id, once filed — so the book can pan to it wiping in */
+  onKept?: (id: string) => void;
   className?: string;
 }) {
   const [text, setText] = useState("");
@@ -3930,7 +3965,7 @@ function TodayZoneFill({
     at(LEAD_MS, () => { setHoldDown(false); setPlayKey((k) => k + 1); navigator.vibrate?.(8); });
     // sweep — three beats, IN ORDER:
     at(LEAD_MS + HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
-    at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); }); // 2 entry wipes into schedule
+    at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); onKept?.(id); }); // 2 entry wipes in; pan up to watch it
     at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
       setText(""); setPhase("idle"); setGen((g) => g + 1);
     });
