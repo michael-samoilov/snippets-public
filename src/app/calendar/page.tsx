@@ -2838,12 +2838,18 @@ function ScheduleFeedBase({
             aria-label={friendlyDay(row.day)}
             className={cn(
               "grid grid-cols-[2.1rem_1fr] gap-x-2",
-              !hideToday && "border-t border-rule-faint",
+              // every day rules off from the one above. Today's empty section
+              // collapses to nothing but KEEPS the rule (once the book holds
+              // anything) — so a hairline still marks where the prior days end
+              // and today's zone begins; only the first-ever, empty book has none.
+              (!hideToday || !bookEmpty) && "border-t border-rule-faint",
             )}
           >
                 {/* the date stands in the margin and holds its ground
-                    while its day's entries scroll past */}
-                <div className="sticky top-0 self-start pb-3 pt-2 text-center">
+                    while its day's entries scroll past. Empty today drops the
+                    padding too, so its section collapses to the bare rule and
+                    the zone below fills the viewport right up to it. */}
+                <div className={cn("sticky top-0 self-start text-center", !hideToday && "pb-3 pt-2")}>
                   {!hideToday && (() => {
                     const dateInner = (
                       <>
