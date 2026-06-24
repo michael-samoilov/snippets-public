@@ -2849,7 +2849,7 @@ function ScheduleFeedBase({
                     while its day's entries scroll past. Empty today drops the
                     padding too, so its section collapses to the bare rule and
                     the zone below fills the viewport right up to it. */}
-                <div className={cn("sticky top-0 self-start text-center", !hideToday && "pb-3 pt-2")}>
+                <div className={cn("sticky top-0 self-start text-center", !hideToday && "pb-2.5 pt-2.5")}>
                   {!hideToday && (() => {
                     const dateInner = (
                       <>
@@ -2890,7 +2890,7 @@ function ScheduleFeedBase({
                     );
                   })()}
                 </div>
-                <div className={cn("min-w-0", !hideToday && "pb-3 pt-2")}>
+                <div className={cn("min-w-0", !hideToday && "pb-2.5 pt-2.5")}>
                   <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
                   {showComposer && (
                     <BackfillCapture
@@ -4000,7 +4000,10 @@ function TodayZoneFill({
         key={gen}
         // no bottom padding: the zone box's bottom border IS the scroll end, so
         // the foot rule never sits below it
-        className={cn("relative flex w-full flex-col pt-1", className)}
+        // when a rule sits above the zone (today empty, prior days present),
+        // hold the same gap below it as a day keeps below its own rule; otherwise
+        // a hair of breathing room
+        className={cn("relative flex w-full flex-col", !hasEntry && !firstEver ? "pt-2.5" : "pt-1", className)}
         // the fresh zone fades in with a small float down (no full slide-from-top
         // that would sweep over the entries above it)
         initial={gen === 0 ? false : { y: -12, opacity: 0 }}
