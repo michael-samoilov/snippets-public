@@ -2605,6 +2605,10 @@ function ScheduleFeedBase({
   // a land-on-today scroll re-asserts the bottom a couple times while the zone's
   // flex height settles after a fresh mount; these are its (cancellable) timers
   const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // a land-on-today scroll also watches the scroller's height (the zone's flex
+  // settling, iOS's toolbars reflowing) and re-pins the foot whenever it moves —
+  // fixed timers can all fire before a late settle; this catches it at any time
+  const todayRORef = useRef<ResizeObserver | null>(null);
   // true while a Today scroll is gliding to the foot: the days it passes must not
   // claim the header (which would flicker the Today button back in mid-flight)
   const landingTodayRef = useRef(false);
@@ -2665,6 +2669,8 @@ function ScheduleFeedBase({
     // any new scroll cancels a still-pending land-on-today re-assert/hold
     todaySettleRef.current.forEach(clearTimeout);
     todaySettleRef.current = [];
+    todayRORef.current?.disconnect();
+    todayRORef.current = null;
     if (day !== todayKey) landingTodayRef.current = false;
     // "today" lives at the very foot (its fill zone fills the tail) — land on
     // the bottom so the zone is shown, not the top of today's row (and when the
@@ -2689,27 +2695,45 @@ function ScheduleFeedBase({
         lastH = s.scrollHeight;
         s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
       };
+      // once the layout has stopped moving, snap exactly to the foot — the smooth
+      // glide captured its target before the final settle, so it can land a little
+      // short (zone sitting too low, a gap above its date) OR a touch past. Only
+      // for an empty today (its rule must rest at the header); a today WITH entries
+      // is meant to sit at the foot, which `toBottom` already reaches.
+      const settleFoot = () => {
+        const s = scrollerRef.current;
+        const sec = rowRefs.current.get(todayKey);
+        if (!s || !sec || sec.querySelector("[data-entry]")) return;
+        const max = s.scrollHeight - s.clientHeight;
+        if (Math.abs(s.scrollTop - max) > 1) s.scrollTo({ top: max, behavior: "smooth" });
+      };
       toBottom();
-      // right after a fresh mount / entering the schedule, the today zone's flex
-      // height is still settling, so scrollHeight grows a frame or two later —
-      // re-assert the bottom so Today lands flush, not a little short (skipped
-      // above unless the target genuinely moved)
+      // right after a fresh mount / a dive from the calendar, the today zone's flex
+      // height is still settling — and on iOS the dynamic toolbars reflow the
+      // viewport a beat after the dive — so scrollHeight keeps growing AFTER the
+      // smooth scroll has captured its (shorter) target, landing Today short.
+      // Fixed timers can all fire before that late settle; a ResizeObserver re-pins
+      // the foot whenever the height actually moves, at any timing.
+      const sEl = scrollerRef.current;
+      if (sEl) {
+        const ro = new ResizeObserver(toBottom);
+        // the growing element is the min-h-full wrapper (the scroller's last
+        // child); fall back to the scroller itself
+        ro.observe(sEl.lastElementChild ?? sEl);
+        todayRORef.current = ro;
+      }
       todaySettleRef.current.push(
         setTimeout(toBottom, 60),
         setTimeout(toBottom, 280),
         setTimeout(() => { landingTodayRef.current = false; }, 700),
-        // entering fresh (refresh / from the calendar) the today column's height
-        // is still settling as Today is pressed, and scrolling to a not-yet-final
-        // bottom can overshoot — leaving an empty today's rule scrolled ABOVE the
-        // header. Once settled, pull back so the rule rests exactly at the header
-        // (only for an empty today; a today WITH entries means to land at the foot).
+        // two backstops in case iOS settles its chrome late; the RO usually has it
+        // pinned already, so these are normally no-ops
+        setTimeout(settleFoot, 480),
         setTimeout(() => {
-          const s = scrollerRef.current;
-          const sec = rowRefs.current.get(todayKey);
-          if (!s || !sec || sec.querySelector("[data-entry]")) return;
-          const over = s.getBoundingClientRect().top - sec.getBoundingClientRect().top;
-          if (over > 1) s.scrollBy({ top: -over, behavior: "smooth" });
-        }, 450),
+          settleFoot();
+          todayRORef.current?.disconnect();
+          todayRORef.current = null;
+        }, 880),
       );
       return true;
     }
