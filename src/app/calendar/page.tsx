@@ -660,17 +660,26 @@ function Calendar() {
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
 
+    // the book (schedule) is text-dense, so the full cell-to-stage scale makes
+    // its lines visibly rush up into place — diving onto a date read as a fast
+    // scroll rather than "the page is already open here". Give the book layer a
+    // barely-there settle instead (the grid keeps the full dive, and the date
+    // number still flies between the two), so the book simply arrives at the spot.
+    const BOOK_FACTOR = 1.08;
+    const outFactor = zoom.from === "schedule" ? BOOK_FACTOR : factor;
+    const inFactor = zoom.to === "schedule" ? BOOK_FACTOR : factor;
+
     moves.push(
       // diving: the departing view blows up past its slot; pulling back:
       // it shrinks toward it — and the arriving view does the inverse
       animate(
         outgoing,
-        { scale: [1, deeper ? factor : 1 / factor], opacity: [1, 0] },
+        { scale: [1, deeper ? outFactor : 1 / outFactor], opacity: [1, 0] },
         { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
       ).finished,
       animate(
         incoming,
-        { scale: [deeper ? 1 / factor : factor, 1], opacity: [0, 1] },
+        { scale: [deeper ? 1 / inFactor : inFactor, 1], opacity: [0, 1] },
         { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
       ).finished,
     );
