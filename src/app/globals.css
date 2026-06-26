@@ -395,6 +395,14 @@ textarea:focus-visible,
   box-shadow: var(--float-shadow);
 }
 
+/* during a "dive" camera move the book scroller is flagged so its sticky margin
+   dates fall back to normal flow — the whole page then scales as one rigid
+   block (dates locked to their cards) instead of the dates pinning to the top
+   while the cards slide under them. Unlayered so it beats Tailwind's `sticky`. */
+[data-dive-freeze] .book-margin-date {
+  position: static;
+}
+
 /* ── typographic voices ────────────────────────────────────────
    Layered as components so their colors are defaults: an unlayered
    rule beats every Tailwind utility, which silently ate text-wax &

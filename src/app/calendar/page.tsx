@@ -279,6 +279,37 @@ function Calendar() {
   );
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
 
+  // How the book arrives when you dive onto a date. "fade" (default): it simply
+  // fades in already scrolled to the date — no scale, so its margin dates and
+  // their cards stay locked together. "dive": the camera scale, but with the
+  // margin dates un-stuck for the move so the whole page scales as one block
+  // instead of the dates pinning while the cards slide under them. A debug pill
+  // (shown with ?divedebug or localStorage diveDebug=1) toggles between them.
+  // read once, in the initializer (the page renders client-only under Suspense,
+  // so no hydration mismatch) — and before the view machinery rewrites the URL
+  const [diveMode, setDiveMode] = useState<"fade" | "dive">(() =>
+    typeof window !== "undefined" && localStorage.getItem("diveMode") === "dive"
+      ? "dive"
+      : "fade",
+  );
+  const [diveDebug] = useState(() => {
+    if (typeof window === "undefined") return false;
+    // ?divedebug enables the pill and is remembered (the URL gets rewritten on load)
+    if (new URLSearchParams(window.location.search).has("divedebug")) {
+      try {
+        localStorage.setItem("diveDebug", "1");
+      } catch {}
+      return true;
+    }
+    return localStorage.getItem("diveDebug") === "1";
+  });
+  const pickDiveMode = useCallback((m: "fade" | "dive") => {
+    setDiveMode(m);
+    try {
+      localStorage.setItem("diveMode", m);
+    } catch {}
+  }, []);
+
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
@@ -660,14 +691,16 @@ function Calendar() {
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
 
-    // the book (schedule) is text-dense, so the full cell-to-stage scale makes
-    // its lines visibly rush up into place — diving onto a date read as a fast
-    // scroll rather than "the page is already open here". Give the book layer a
-    // barely-there settle instead (the grid keeps the full dive, and the date
-    // number still flies between the two), so the book simply arrives at the spot.
-    const BOOK_FACTOR = 1.08;
-    const outFactor = zoom.from === "schedule" ? BOOK_FACTOR : factor;
-    const inFactor = zoom.to === "schedule" ? BOOK_FACTOR : factor;
+    // the book (schedule) is text-dense, and its margin dates are sticky — so the
+    // full cell-to-stage scale both made its lines rush up into place AND let the
+    // pinned dates drift out of sync with their cards. In "fade" mode the book
+    // doesn't scale at all (factor 1): it just fades in already at the date, dates
+    // and cards locked. In "dive" mode it scales with the grid, but the margin
+    // dates are un-stuck for the move (see data-dive-freeze) so the page scales as
+    // one block. Either way the date number still flies between the two altitudes.
+    const bookFactor = diveMode === "dive" ? factor : 1;
+    const outFactor = zoom.from === "schedule" ? bookFactor : factor;
+    const inFactor = zoom.to === "schedule" ? bookFactor : factor;
 
     moves.push(
       // diving: the departing view blows up past its slot; pulling back:
@@ -837,7 +870,7 @@ function Calendar() {
     }
 
     void Promise.all(moves).then(finish, finish);
-  }, [zoom, reduceMotion]);
+  }, [zoom, reduceMotion, diveMode]);
 
   const openYear = () => {
     const y = visibleMonth.getFullYear();
@@ -1275,6 +1308,26 @@ function Calendar() {
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
+      {/* debug-only: compare how the book arrives on a dive (fade vs camera
+          scale). Shown with ?divedebug or localStorage diveDebug=1. */}
+      {diveDebug && (
+        <div className="float fixed bottom-3 left-3 z-50 flex items-center gap-0.5 rounded-full p-0.5">
+          {(["fade", "dive"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => pickDiveMode(m)}
+              aria-pressed={diveMode === m}
+              className={cn(
+                "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
+                diveMode === m ? "bg-wax/15 text-wax" : "text-ink-soft",
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat
@@ -1635,6 +1688,7 @@ function Calendar() {
             <ScheduleFeed
               handleRef={scheduleFeedRef}
               active={view === "schedule" && !zoom}
+              diveSync={diveMode === "dive"}
               today={today}
               selected={selected}
               all={all}
@@ -2572,6 +2626,7 @@ function MiniMonth({
 function ScheduleFeedBase({
   handleRef,
   active,
+  diveSync,
   today,
   selected,
   all,
@@ -2580,6 +2635,9 @@ function ScheduleFeedBase({
 }: {
   handleRef: React.MutableRefObject<ScheduleFeedHandle | null>;
   active: boolean;
+  // "dive" mode is on: un-stick the margin dates while the camera is moving (the
+  // feed is inactive) so the whole page scales as one block, dates with cards
+  diveSync: boolean;
   today: Date;
   selected: string;
   all: Snippet[] | undefined;
@@ -2923,7 +2981,7 @@ function ScheduleFeedBase({
                     while its day's entries scroll past. Empty today drops the
                     padding too, so its section collapses to the bare rule and
                     the zone below fills the viewport right up to it. */}
-                <div className={cn("sticky top-0 self-start text-center", !hideToday && "pb-2.5 pt-2.5")}>
+                <div className={cn("book-margin-date sticky top-0 self-start text-center", !hideToday && "pb-2.5 pt-2.5")}>
                   {!hideToday && (() => {
                     const dateInner = (
                       <>
@@ -3024,6 +3082,10 @@ function ScheduleFeedBase({
       <div
         ref={scrollerRef}
         onScroll={active ? onScroll : undefined}
+        // while the camera is moving in "dive" mode, un-stick the margin dates
+        // (see globals.css) so the page scales as one rigid block — otherwise the
+        // sticky dates stay pinned while the cards slide under them
+        data-dive-freeze={(!active && diveSync) || undefined}
         className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
@@ -3134,6 +3196,7 @@ const ScheduleFeed = memo(
   (p, n) =>
     p.handleRef === n.handleRef &&
     p.active === n.active &&
+    p.diveSync === n.diveSync &&
     p.today === n.today &&
     p.all === n.all &&
     p.onVisible === n.onVisible &&
