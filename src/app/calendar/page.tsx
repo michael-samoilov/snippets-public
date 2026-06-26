@@ -2605,10 +2605,6 @@ function ScheduleFeedBase({
   // a land-on-today scroll re-asserts the bottom a couple times while the zone's
   // flex height settles after a fresh mount; these are its (cancellable) timers
   const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // a land-on-today scroll also watches the scroller's height (the zone's flex
-  // settling, iOS's toolbars reflowing) and re-pins the foot whenever it moves —
-  // fixed timers can all fire before a late settle; this catches it at any time
-  const todayRORef = useRef<ResizeObserver | null>(null);
   // true while a Today scroll is gliding to the foot: the days it passes must not
   // claim the header (which would flicker the Today button back in mid-flight)
   const landingTodayRef = useRef(false);
@@ -2669,8 +2665,6 @@ function ScheduleFeedBase({
     // any new scroll cancels a still-pending land-on-today re-assert/hold
     todaySettleRef.current.forEach(clearTimeout);
     todaySettleRef.current = [];
-    todayRORef.current?.disconnect();
-    todayRORef.current = null;
     if (day !== todayKey) landingTodayRef.current = false;
     // "today" lives at the very foot (its fill zone fills the tail) — land on
     // the bottom so the zone is shown, not the top of today's row (and when the
@@ -2692,44 +2686,36 @@ function ScheduleFeedBase({
       // min-h-full wrapper) fills exactly the viewport below the rule, so
       // rule-at-top IS the resting foot. A today WITH entries seats no empty zone,
       // so it lands at the literal foot.
-      const pinFoot = () => {
+      const pinFoot = (behavior: ScrollBehavior) => {
         const s = scrollerRef.current;
         if (!s) return;
         const sec = rowRefs.current.get(todayKey);
         if (sec && !sec.querySelector("[data-entry]")) {
           const delta =
             sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
-          // the same target the whole way (the rule's spot doesn't move when the
-          // zone or viewport resizes), so re-commanding mid-glide continues the
-          // motion rather than lurching it to a new speed
-          if (Math.abs(delta) > 1)
-            s.scrollBy({ top: delta, behavior: smooth ? "smooth" : "instant" });
+          if (Math.abs(delta) > 1) s.scrollBy({ top: delta, behavior });
         } else if (Math.abs(s.scrollTop - (s.scrollHeight - s.clientHeight)) > 1) {
-          s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+          s.scrollTo({ top: s.scrollHeight, behavior });
         }
       };
-      pinFoot();
-      // the dive's transients clear in stages — the tapped day's composer unmounts
-      // a render later, the zoom finishes, iOS settles its chrome last — and each
-      // shifts the rule. A ResizeObserver re-pins on any layout move (a late settle
-      // at any timing); timed passes cover moves that don't resize the box.
-      const sEl = scrollerRef.current;
-      if (sEl) {
-        const ro = new ResizeObserver(pinFoot);
-        ro.observe(sEl); // viewport / toolbar reflow
-        if (sEl.lastElementChild) ro.observe(sEl.lastElementChild); // zone settling
-        todayRORef.current = ro;
+      // ONE smooth glide — never re-commanded mid-flight (overlapping smooth
+      // scrolls are what made this stutter). For the press, wait a frame first so
+      // the probe→today re-render has unmounted the tapped day's composer above us;
+      // gliding before that would land short by its height. (A toolbar reflow needs
+      // no chasing: it's viewport-relative, so it never moves the rule relative to
+      // the top.)
+      if (smooth) {
+        requestAnimationFrame(() => pinFoot("smooth"));
+      } else {
+        pinFoot("instant");
       }
       todaySettleRef.current.push(
-        setTimeout(pinFoot, 60),
-        setTimeout(pinFoot, 280),
-        setTimeout(pinFoot, 480),
         setTimeout(() => { landingTodayRef.current = false; }, 700),
-        setTimeout(() => {
-          pinFoot();
-          todayRORef.current?.disconnect();
-          todayRORef.current = null;
-        }, 900),
+        // INSTANT micro-corrections, only AFTER the glide has settled (never during
+        // — that's the stutter): snap out any residual once the layout is still.
+        // No-ops unless something shifted the rule, so normally invisible.
+        setTimeout(() => pinFoot("instant"), 560),
+        setTimeout(() => pinFoot("instant"), 920),
       );
       return true;
     }
