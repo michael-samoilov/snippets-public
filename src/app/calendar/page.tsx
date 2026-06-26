@@ -2681,59 +2681,55 @@ function ScheduleFeedBase({
       // hold the header on today the whole way down (cleared on arrival / by the
       // backup timer), so passing days don't flicker the Today button back in
       landingTodayRef.current = true;
-      let lastH = -1;
-      const toBottom = () => {
+      // Land Today WITHOUT reading scrollHeight/clientHeight. Those are unstable
+      // through a month→schedule dive — the tapped day's composer is still mounted
+      // above, the zoom is animating, and on iOS the toolbars reflow the viewport
+      // a beat later — so a foot computed from them lands off by a constant (it's
+      // why this misfired only on the first Today press after a dive, never after
+      // a refresh or back-from-entry, where the layout is already at rest). Pin the
+      // today section's rule to the scroller's TOP instead: a relative measure
+      // between two elements, immune to those transients. The zone (flex-1, in a
+      // min-h-full wrapper) fills exactly the viewport below the rule, so
+      // rule-at-top IS the resting foot. A today WITH entries seats no empty zone,
+      // so it lands at the literal foot.
+      const pinFoot = () => {
         const s = scrollerRef.current;
         if (!s) return;
-        // only re-command the scroll when the bottom moved DOWN (the zone's flex
-        // height grew as it settled). Re-issuing a smooth scroll to the same — or a
-        // nearer — bottom restarts its easing mid-flight, which reads as the motion
-        // lurching to a new speed partway down. A bottom that moved UP (e.g. the
-        // prior day's composer unmounting as Today takes the page) the browser
-        // clamps on its own, so the glide stays one continuous motion.
-        if (s.scrollHeight <= lastH + 1) return;
-        lastH = s.scrollHeight;
-        s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
-      };
-      // once the layout has stopped moving, snap exactly to the foot — the smooth
-      // glide captured its target before the final settle, so it can land a little
-      // short (zone sitting too low, a gap above its date) OR a touch past. Only
-      // for an empty today (its rule must rest at the header); a today WITH entries
-      // is meant to sit at the foot, which `toBottom` already reaches.
-      const settleFoot = () => {
-        const s = scrollerRef.current;
         const sec = rowRefs.current.get(todayKey);
-        if (!s || !sec || sec.querySelector("[data-entry]")) return;
-        const max = s.scrollHeight - s.clientHeight;
-        if (Math.abs(s.scrollTop - max) > 1) s.scrollTo({ top: max, behavior: "smooth" });
+        if (sec && !sec.querySelector("[data-entry]")) {
+          const delta =
+            sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
+          // the same target the whole way (the rule's spot doesn't move when the
+          // zone or viewport resizes), so re-commanding mid-glide continues the
+          // motion rather than lurching it to a new speed
+          if (Math.abs(delta) > 1)
+            s.scrollBy({ top: delta, behavior: smooth ? "smooth" : "instant" });
+        } else if (Math.abs(s.scrollTop - (s.scrollHeight - s.clientHeight)) > 1) {
+          s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+        }
       };
-      toBottom();
-      // right after a fresh mount / a dive from the calendar, the today zone's flex
-      // height is still settling — and on iOS the dynamic toolbars reflow the
-      // viewport a beat after the dive — so scrollHeight keeps growing AFTER the
-      // smooth scroll has captured its (shorter) target, landing Today short.
-      // Fixed timers can all fire before that late settle; a ResizeObserver re-pins
-      // the foot whenever the height actually moves, at any timing.
+      pinFoot();
+      // the dive's transients clear in stages — the tapped day's composer unmounts
+      // a render later, the zoom finishes, iOS settles its chrome last — and each
+      // shifts the rule. A ResizeObserver re-pins on any layout move (a late settle
+      // at any timing); timed passes cover moves that don't resize the box.
       const sEl = scrollerRef.current;
       if (sEl) {
-        const ro = new ResizeObserver(toBottom);
-        // the growing element is the min-h-full wrapper (the scroller's last
-        // child); fall back to the scroller itself
-        ro.observe(sEl.lastElementChild ?? sEl);
+        const ro = new ResizeObserver(pinFoot);
+        ro.observe(sEl); // viewport / toolbar reflow
+        if (sEl.lastElementChild) ro.observe(sEl.lastElementChild); // zone settling
         todayRORef.current = ro;
       }
       todaySettleRef.current.push(
-        setTimeout(toBottom, 60),
-        setTimeout(toBottom, 280),
+        setTimeout(pinFoot, 60),
+        setTimeout(pinFoot, 280),
+        setTimeout(pinFoot, 480),
         setTimeout(() => { landingTodayRef.current = false; }, 700),
-        // two backstops in case iOS settles its chrome late; the RO usually has it
-        // pinned already, so these are normally no-ops
-        setTimeout(settleFoot, 480),
         setTimeout(() => {
-          settleFoot();
+          pinFoot();
           todayRORef.current?.disconnect();
           todayRORef.current = null;
-        }, 880),
+        }, 900),
       );
       return true;
     }
