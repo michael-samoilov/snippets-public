@@ -2800,6 +2800,29 @@ function ScheduleFeedBase({
       progTargetRef.current = null;
     }
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
+    if (!smooth) {
+      // a dive lands here against a layout that's still settling — the opened
+      // day's composer (probe) mounts a render later, and late rows/data shift the
+      // days above it — which nudges the page a row AFTER it has appeared, reading
+      // as a small scroll into place. Re-pin the date's top across that window,
+      // INSTANT so the page is simply held put rather than animated. offsetTop is
+      // re-read each time, so it tracks the row wherever the reflow moves it.
+      const pin = () => {
+        const s = scrollerRef.current;
+        const r = rowRefs.current.get(day);
+        if (!s || !r) return;
+        const drift = Math.abs(s.scrollTop - r.offsetTop);
+        // only a reflow-sized nudge (a row or two) — leave a real flick alone, so
+        // a reader who scrolls the instant they land isn't yanked back
+        if (drift > 1 && drift < 120)
+          s.scrollTo({ top: r.offsetTop, behavior: "instant" });
+      };
+      todaySettleRef.current.push(
+        setTimeout(pin, 60),
+        setTimeout(pin, 180),
+        setTimeout(pin, 340),
+      );
+    }
     return true;
   }, [todayKey]);
 
