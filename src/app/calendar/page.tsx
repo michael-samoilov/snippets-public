@@ -279,37 +279,6 @@ function Calendar() {
   );
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
 
-  // How the book arrives when you dive onto a date. "fade" (default): it simply
-  // fades in already scrolled to the date — no scale, so its margin dates and
-  // their cards stay locked together. "dive": the camera scale, but with the
-  // margin dates un-stuck for the move so the whole page scales as one block
-  // instead of the dates pinning while the cards slide under them. A debug pill
-  // (shown with ?divedebug or localStorage diveDebug=1) toggles between them.
-  // read once, in the initializer (the page renders client-only under Suspense,
-  // so no hydration mismatch) — and before the view machinery rewrites the URL
-  const [diveMode, setDiveMode] = useState<"fade" | "dive">(() =>
-    typeof window !== "undefined" && localStorage.getItem("diveMode") === "dive"
-      ? "dive"
-      : "fade",
-  );
-  const [diveDebug] = useState(() => {
-    if (typeof window === "undefined") return false;
-    // ?divedebug enables the pill and is remembered (the URL gets rewritten on load)
-    if (new URLSearchParams(window.location.search).has("divedebug")) {
-      try {
-        localStorage.setItem("diveDebug", "1");
-      } catch {}
-      return true;
-    }
-    return localStorage.getItem("diveDebug") === "1";
-  });
-  const pickDiveMode = useCallback((m: "fade" | "dive") => {
-    setDiveMode(m);
-    try {
-      localStorage.setItem("diveMode", m);
-    } catch {}
-  }, []);
-
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
@@ -691,28 +660,17 @@ function Calendar() {
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
 
-    // the book (schedule) is text-dense, and its margin dates are sticky — so the
-    // full cell-to-stage scale both made its lines rush up into place AND let the
-    // pinned dates drift out of sync with their cards. In "fade" mode the book
-    // doesn't scale at all (factor 1): it just fades in already at the date, dates
-    // and cards locked. In "dive" mode it scales with the grid, but the margin
-    // dates are un-stuck for the move (see data-dive-freeze) so the page scales as
-    // one block. Either way the date number still flies between the two altitudes.
-    const bookFactor = diveMode === "dive" ? factor : 1;
-    const outFactor = zoom.from === "schedule" ? bookFactor : factor;
-    const inFactor = zoom.to === "schedule" ? bookFactor : factor;
-
     moves.push(
       // diving: the departing view blows up past its slot; pulling back:
       // it shrinks toward it — and the arriving view does the inverse
       animate(
         outgoing,
-        { scale: [1, deeper ? outFactor : 1 / outFactor], opacity: [1, 0] },
+        { scale: [1, deeper ? factor : 1 / factor], opacity: [1, 0] },
         { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
       ).finished,
       animate(
         incoming,
-        { scale: [deeper ? 1 / inFactor : inFactor, 1], opacity: [0, 1] },
+        { scale: [deeper ? 1 / factor : factor, 1], opacity: [0, 1] },
         { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
       ).finished,
     );
@@ -870,7 +828,7 @@ function Calendar() {
     }
 
     void Promise.all(moves).then(finish, finish);
-  }, [zoom, reduceMotion, diveMode]);
+  }, [zoom, reduceMotion]);
 
   const openYear = () => {
     const y = visibleMonth.getFullYear();
@@ -1308,26 +1266,6 @@ function Calendar() {
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
-      {/* debug-only: compare how the book arrives on a dive (fade vs camera
-          scale). Shown with ?divedebug or localStorage diveDebug=1. */}
-      {diveDebug && (
-        <div className="float fixed bottom-3 left-3 z-50 flex items-center gap-0.5 rounded-full p-0.5">
-          {(["fade", "dive"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => pickDiveMode(m)}
-              aria-pressed={diveMode === m}
-              className={cn(
-                "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
-                diveMode === m ? "bg-wax/15 text-wax" : "text-ink-soft",
-              )}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      )}
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat
@@ -1688,7 +1626,6 @@ function Calendar() {
             <ScheduleFeed
               handleRef={scheduleFeedRef}
               active={view === "schedule" && !zoom}
-              diveSync={diveMode === "dive"}
               today={today}
               selected={selected}
               all={all}
@@ -2626,7 +2563,6 @@ function MiniMonth({
 function ScheduleFeedBase({
   handleRef,
   active,
-  diveSync,
   today,
   selected,
   all,
@@ -2635,9 +2571,6 @@ function ScheduleFeedBase({
 }: {
   handleRef: React.MutableRefObject<ScheduleFeedHandle | null>;
   active: boolean;
-  // "dive" mode is on: un-stick the margin dates while the camera is moving (the
-  // feed is inactive) so the whole page scales as one block, dates with cards
-  diveSync: boolean;
   today: Date;
   selected: string;
   all: Snippet[] | undefined;
@@ -3046,7 +2979,7 @@ function ScheduleFeedBase({
                   })()}
                 </div>
                 <div className={cn("min-w-0", !hideToday && "pb-2.5 pt-2.5")}>
-                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
+                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} still={!active} />
                   {showComposer && (
                     <BackfillCapture
                       key={row.day}
@@ -3092,7 +3025,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry],
+    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
   );
 
   return (
@@ -3105,10 +3038,10 @@ function ScheduleFeedBase({
       <div
         ref={scrollerRef}
         onScroll={active ? onScroll : undefined}
-        // while the camera is moving in "dive" mode, un-stick the margin dates
-        // (see globals.css) so the page scales as one rigid block — otherwise the
-        // sticky dates stay pinned while the cards slide under them
-        data-dive-freeze={(!active && diveSync) || undefined}
+        // while the camera is moving (the feed is inactive) un-stick the margin
+        // dates (see globals.css) so the whole page scales as one rigid block —
+        // otherwise the sticky dates stay pinned while the cards scale under them
+        data-dive-freeze={!active || undefined}
         className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
@@ -3132,10 +3065,15 @@ function ScheduleCards({
   snippets,
   day,
   onOpen,
+  still,
 }: {
   snippets: Snippet[];
   day: string;
   onOpen: (id: string) => void;
+  // the feed is mid-transition (a dive in/out): suppress the cards' FLIP so a
+  // scroll-and-rerender doesn't animate them across the great distance they
+  // moved — they should simply be in their final place when the page arrives
+  still: boolean;
 }) {
   // entries already on the page at mount don't animate — only changes do
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
@@ -3171,8 +3109,9 @@ function ScheduleCards({
             key={s.id}
             // the freshly-kept card wipes in via clip only — no FLIP position
             // float; cards already present keep their layout spring as the stack
-            // reshuffles around them
-            layout={isDraft ? false : "position"}
+            // reshuffles around them — but never during a dive (`still`), when a
+            // scroll-driven position change would otherwise animate as a slide
+            layout={isDraft || still ? false : "position"}
             initial={presentAtMount.has(s.id) ? false : sweepBirth.initial}
             animate={sweepBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
@@ -3219,7 +3158,6 @@ const ScheduleFeed = memo(
   (p, n) =>
     p.handleRef === n.handleRef &&
     p.active === n.active &&
-    p.diveSync === n.diveSync &&
     p.today === n.today &&
     p.all === n.all &&
     p.onVisible === n.onVisible &&
