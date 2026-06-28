@@ -209,9 +209,40 @@ function indexAt(offsets: number[], y: number): number {
   return ans;
 }
 
+// A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd),
+// so the ledger's frame and rules show the instant the HTML lands instead of a
+// blank sheet — the real book (client-only, behind useSearchParams) settles onto
+// it a beat later. No spinner; just the ruled paper waiting.
+function CalendarSkeleton() {
+  return (
+    <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
+      <div className="sticky top-0 z-30">
+        <div className="flex items-center justify-between">
+          <div
+            className="my-1 h-8 w-36 rounded-[5px] opacity-60"
+            style={{ background: "var(--rule-faint)" }}
+          />
+          <div className="size-9" />
+        </div>
+      </div>
+      <div className="relative -mt-px min-h-0 flex-1 overflow-hidden">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
+          >
+            <div />
+            <div className="h-14" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CalendarPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<CalendarSkeleton />}>
       <Calendar />
     </Suspense>
   );
@@ -278,6 +309,34 @@ function Calendar() {
     startOfMonth(dateFromDayKey(initialDay)),
   );
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
+
+  // Perf A/B (temporary): flatten the book cards' ink/layers to test whether the
+  // mix-blend compositing is what causes scroll input-lag and the pinch-zoom
+  // crash on low-power iPhones. Toggled by a pill shown with ?perfdebug; the
+  // choice rides a data attribute on <html> that globals.css keys off. Read once
+  // in the initializer (client-only render under Suspense — no hydration skew).
+  const [perfFlat, setPerfFlat] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("perfFlat") === "1",
+  );
+  const [perfDebug] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (new URLSearchParams(window.location.search).has("perfdebug")) {
+      try { localStorage.setItem("perfDebug", "1"); } catch {}
+      return true;
+    }
+    return localStorage.getItem("perfDebug") === "1";
+  });
+  useEffect(() => {
+    if (perfFlat) document.documentElement.dataset.perfFlat = "1";
+    else delete document.documentElement.dataset.perfFlat;
+  }, [perfFlat]);
+  const togglePerf = useCallback(() => {
+    setPerfFlat((v) => {
+      const next = !v;
+      try { localStorage.setItem("perfFlat", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  }, []);
 
   const counts = useDayCounts();
   const all = useAllSnippets();
@@ -1266,6 +1325,23 @@ function Calendar() {
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
+      {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book cards'
+          ink between blended and flat to test scroll/zoom jank on-device */}
+      {perfDebug && (
+        <div className="float fixed bottom-3 left-3 z-50 flex items-center rounded-full p-0.5">
+          <button
+            type="button"
+            onClick={togglePerf}
+            aria-pressed={perfFlat}
+            className={cn(
+              "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
+              perfFlat ? "bg-wax/15 text-wax" : "text-ink-soft",
+            )}
+          >
+            {perfFlat ? "flat ink" : "blend ink"}
+          </button>
+        </div>
+      )}
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat
@@ -3130,13 +3206,13 @@ function ScheduleCards({
               // on scroll instead of re-blending the prose every frame
               // against the fixed sheet (the book's scroll-start jank)
               className={cn(
-                "pressable isolate block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                "book-card pressable isolate block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
                 "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
               )}
             >
               <p
                 className={cn(
-                  "voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+                  "book-card-prose voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
                   s.kind === "quote" && "hang-quotes italic",
                 )}
               >

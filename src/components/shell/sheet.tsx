@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, useSyncExternalStore } from "react";
+import { Component, useEffect, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -58,9 +58,23 @@ export function Sheet({
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === "dark";
 
+  // While the page is pinch-zoomed in, iOS re-rasterizes the composited page at
+  // the zoom scale; a full-sheet WebGL layer on top of that GPU load can tip a
+  // low-memory device over (the app crashing on extreme zoom). The texture is
+  // grace, not load-bearing, so shed it past a modest zoom and bring it back on
+  // the way out — one fewer heavy layer exactly when memory is tight.
+  const [zoomedIn, setZoomedIn] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onZoom = () => setZoomedIn(vv.scale > 1.2);
+    vv.addEventListener("resize", onZoom);
+    return () => vv.removeEventListener("resize", onZoom);
+  }, []);
+
   return (
     <div className={cn("sheet", className)}>
-      {isMounted && !saveData() && (
+      {isMounted && !saveData() && !zoomedIn && (
         <TextureBoundary>
         <div
           aria-hidden="true"

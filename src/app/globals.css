@@ -403,6 +403,20 @@ textarea:focus-visible,
   position: static;
 }
 
+/* Perf A/B (toggled by the debug pill, ?perfdebug): drop the per-card ink blend
+   and the layer it forces. The book's prose normally multiplies into the paper
+   (ink-into-paper) and each card `isolate`s to bake that blend — but blending +
+   compositing hundreds of card layers is the suspect behind scroll input-lag and
+   the pinch-zoom crash on low-power iPhones. With this on, card ink is a flat
+   colour and the cards stop forcing their own layers, so the book composites
+   cheaply. Lets the owner feel the trade-off on-device before we commit. */
+[data-perf-flat] .book-card {
+  isolation: auto;
+}
+[data-perf-flat] .book-card-prose {
+  mix-blend-mode: normal;
+}
+
 /* ── typographic voices ────────────────────────────────────────
    Layered as components so their colors are defaults: an unlayered
    rule beats every Tailwind utility, which silently ate text-wax &
