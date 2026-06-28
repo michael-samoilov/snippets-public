@@ -74,7 +74,7 @@ export function Wordmark() {
             tint={dark ? DEEP_BLUE : LIGHT_BLUE}
             glyphColor={dark ? LIGHT_S_INK : DARK_S_INK}
             variant="spring"
-            superSample={3}
+            superSample={2}
           />
         )}
       </span>

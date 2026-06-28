@@ -350,7 +350,8 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
   const wasPressed = useRef(false); // tap mode: was the thumb down last frame (to ease back on cancel)
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
-  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number; bakedGlyphScale: number } | null>(null);
+  const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number; bakedGlyphScale: number; warmed?: boolean } | null>(null);
+  const warmRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useLayoutEffect(() => {
     colors.current = resolveColors(tint); // tint > dev override > --wax* tokens
@@ -402,6 +403,22 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     // embossed-glyph colour: an explicit glyphColor wins, else white, else wax.
     const gcol: Rgb | null = glyphColor ? hexToRgb01(glyphColor) : whiteGlyph ? [1, 1, 1] : null;
     const cy = dim * 0.46;
+    // Cold-start warmup: the per-pixel lighting (paintSeal) is interpreted by V8
+    // until its hot loops are optimized, so the FIRST press runs choppy and only
+    // later presses are smooth. After mount, once idle, run paintSeal a few times
+    // across the press timeline to trigger that optimization ahead of the first
+    // real press. It writes only to the scratch buffer (B.img) — never the visible
+    // canvas — so it's invisible. Once per backing buffer.
+    clearTimeout(warmRef.current);
+    if (!B.warmed) {
+      B.warmed = true;
+      warmRef.current = setTimeout(() => {
+        for (const t of [0.3, 0.5, 0.7, 0.9, 1]) {
+          const k = stateAt(t, variant, ease, bounce, rotate);
+          paintSeal(B, dim, MR, cy, k.relief, k.lobe, k.dome, k.cf, colors.current, prof, domeAmp, domePow, speckle, cloud, gcol);
+        }
+      }, 250);
+    }
     const draw = (k: Beat, p: Profile = prof) => {
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
@@ -452,7 +469,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
         : mode === "tap" ? tapBeat(tt * tapTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
         : stateAt(tt, variant, ease, bounce, rotate));
     };
-    const cleanup = () => { cancelAnimationFrame(raf); (window as SeekWin).__stampSeek = undefined; };
+    const cleanup = () => { cancelAnimationFrame(raf); clearTimeout(warmRef.current); (window as SeekWin).__stampSeek = undefined; };
 
     const reduced = ignoreReducedMotion ? false : reduce.current;
     if (still || reduced) { draw(mode === "tap" ? domeBeat(1, 1) : stateAt(1, variant, ease, bounce, rotate)); return cleanup; }
