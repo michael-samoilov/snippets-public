@@ -629,7 +629,19 @@ function Calendar() {
               )
             : null;
           if (day && dateEl) {
+            // the dive freezes the book's margin dates to static (so the page
+            // can scale as one rigid block), which drops a sticky date out of
+            // its pinned slot and back to its scrolled-away natural spot — the
+            // very case the reader sees: a day scrolled past, its number stuck
+            // at the top. Lift the freeze for this one synchronous measure so we
+            // read the true sticky slot, then restore it before paint.
+            const frozen = scheduleLayerRef.current?.querySelector<HTMLElement>(
+              "[data-dive-freeze]",
+            );
+            const wasFrozen = frozen?.hasAttribute("data-dive-freeze") ?? false;
+            if (wasFrozen) frozen!.removeAttribute("data-dive-freeze");
             const r = textRect(dateEl);
+            if (wasFrozen) frozen!.setAttribute("data-dive-freeze", "");
             const font = readFont(dateEl);
             const cx = r.left + r.width / 2 - stageRect.left;
             const cy = r.top + r.height / 2 - stageRect.top;
