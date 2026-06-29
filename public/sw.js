@@ -1,5 +1,5 @@
 /* Snippets service worker — app shell offline, data lives in IndexedDB. */
-const VERSION = "snippets-v2";
+const VERSION = "snippets-v3";
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {
@@ -30,22 +30,35 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
 
-  // Navigations: network first, fall back to the cached shell offline.
+  // Navigations: stale-while-revalidate, cached per-URL. Serve the cached
+  // document instantly (a refresh paints without waiting on the network — the
+  // book is client-rendered from IndexedDB regardless), then refresh the cache
+  // in the background for next time. First-ever visit (no cache) waits on the
+  // network; offline with no entry falls back to the shell. A deploy bumps
+  // VERSION, which clears the old cache on activate, so the first load after a
+  // deploy is network-fresh and only later loads are served stale.
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(VERSION).then((cache) => cache.put(SHELL_URL, copy));
-          return response;
-        })
-        .catch(() =>
-          caches.match(SHELL_URL).then(
-            (cached) =>
-              cached ??
-              new Response("Offline", { status: 503, statusText: "Offline" }),
-          ),
-        ),
+      (async () => {
+        const cache = await caches.open(VERSION);
+        const cached = await cache.match(request);
+        const fromNetwork = fetch(request)
+          .then((response) => {
+            cache.put(request, response.clone());
+            return response;
+          })
+          .catch(() => null);
+        if (cached) {
+          event.waitUntil(fromNetwork); // revalidate without blocking the paint
+          return cached;
+        }
+        const network = await fromNetwork;
+        return (
+          network ??
+          (await cache.match(SHELL_URL)) ??
+          new Response("Offline", { status: 503, statusText: "Offline" })
+        );
+      })(),
     );
     return;
   }
