@@ -1,9 +1,10 @@
 "use client";
 
-import { Component, useEffect, useState, useSyncExternalStore } from "react";
+import { Component, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { useZooming } from "@/hooks/use-zoom-relief";
 
 /** The texture is grace, not load-bearing: if WebGL misbehaves on some
  *  device, the plain paper beneath simply shows through. */
@@ -61,16 +62,11 @@ export function Sheet({
   // While the page is pinch-zoomed in, iOS re-rasterizes the composited page at
   // the zoom scale; a full-sheet WebGL layer on top of that GPU load can tip a
   // low-memory device over (the app crashing on extreme zoom). The texture is
-  // grace, not load-bearing, so shed it past a modest zoom and bring it back on
-  // the way out — one fewer heavy layer exactly when memory is tight.
-  const [zoomedIn, setZoomedIn] = useState(false);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onZoom = () => setZoomedIn(vv.scale > 1.2);
-    vv.addEventListener("resize", onZoom);
-    return () => vv.removeEventListener("resize", onZoom);
-  }, []);
+  // grace, not load-bearing, so shed it the instant a pinch begins (the shared
+  // zoom-relief flag fires at the gesture's first touch, before iOS magnifies
+  // anything) and bring it back once the scale settles — one fewer heavy layer
+  // exactly when memory is tight.
+  const zoomedIn = useZooming();
 
   return (
     <div className={cn("sheet", className)}>

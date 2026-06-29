@@ -417,6 +417,32 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
+/* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
+   A pinch makes iOS re-rasterize the whole composited page at the magnified
+   scale — and these grace layers, cheap at 1×, cost scale² when blown up: the
+   full-viewport soft-light desk grain, the ink-into-paper `multiply` on every
+   line, each card's isolated blend layer, the WONK ink-bleed displacement
+   filter. On a low-memory iPhone that overflows the compositor and Safari kills
+   the page. `data-zooming` is set at the gesture's FIRST touch (before any
+   magnification) and held until the scale returns to rest, so for the duration
+   of the pinch there is simply nothing expensive to re-raster. Zoom is never
+   blocked; it just renders flat, and the grace returns on release. (The WebGL
+   sheet texture is shed the same way, in sheet.tsx.) */
+[data-zooming] body::after {
+  display: none;
+}
+[data-zooming] .book-card {
+  isolation: auto;
+}
+[data-zooming] .book-card-prose,
+[data-zooming] .voice-prose,
+[data-zooming] .voice-display {
+  mix-blend-mode: normal;
+}
+[data-zooming] .ink-bleed {
+  filter: none;
+}
+
 /* ── typographic voices ────────────────────────────────────────
    Layered as components so their colors are defaults: an unlayered
    rule beats every Tailwind utility, which silently ate text-wax &

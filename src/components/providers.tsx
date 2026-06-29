@@ -7,9 +7,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { purgeOldDeleted } from "@/lib/db";
 import { retryPendingEnrichment } from "@/lib/enrich";
 import { KeptDraftContext, type KeptDraftStore } from "@/lib/kept-draft";
+import { useZoomRelief } from "@/hooks/use-zoom-relief";
 import type { Snippet } from "@/lib/types";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  // shed the heavy GPU layers the instant a pinch begins (the zoom-crash fix)
+  useZoomRelief();
+
   useEffect(() => {
     purgeOldDeleted().catch(() => {});
     retryPendingEnrichment();
