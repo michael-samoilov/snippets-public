@@ -389,6 +389,38 @@ textarea:focus-visible,
   box-shadow: var(--sheet-shadow);
 }
 
+/* The sheet's paper grain — a static bitmap baked from the (speed=0) paper
+   shader (public/textures; re-bake via /lab/texture). It replaces the live
+   WebGL layer that iOS had to re-rasterize at the pinch scale (the zoom crash);
+   a plain image folds into the sheet's own paint, so it re-rasters cheaply at
+   any scale — it can stay put through a zoom, with nothing to shed — and the
+   shader bundle never loads. The baked image already carries the paper colour,
+   so at this opacity it reads identically over the real paper; strongest up top
+   where the lamplight pools, fading out down the page. Dropped under
+   prefers-reduced-data. */
+.sheet-grain {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: min(135vh, 100%);
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: url("/textures/sheet-light.webp");
+  background-size: 100% 100%;
+  opacity: 0.65;
+  -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 98%);
+  mask-image: linear-gradient(to bottom, black 55%, transparent 98%);
+}
+.dark .sheet-grain {
+  background-image: url("/textures/sheet-dark.webp");
+  opacity: 0.5;
+}
+@media (prefers-reduced-data: reduce) {
+  .sheet-grain {
+    background-image: none;
+  }
+}
+
 /* anything raised off the sheet (dialogs, menus, toasts) */
 .float {
   background: var(--paper-raised);
@@ -426,8 +458,8 @@ textarea:focus-visible,
    the page. `data-zooming` is set at the gesture's FIRST touch (before any
    magnification) and held until the scale returns to rest, so for the duration
    of the pinch there is simply nothing expensive to re-raster. Zoom is never
-   blocked; it just renders flat, and the grace returns on release. (The WebGL
-   sheet texture is shed the same way, in sheet.tsx.) */
+   blocked; it just renders flat, and the grace returns on release. (The paper
+   grain is a static bitmap now — cheap to re-raster — so it stays put.) */
 [data-zooming] body::after {
   display: none;
 }

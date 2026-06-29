@@ -9,9 +9,10 @@ import { useEffect, useSyncExternalStore } from "react";
  * A pinch makes iOS re-rasterize the whole composited page at the magnified
  * scale. The app's grace layers are cheap at 1× but murderous when blown up: the
  * full-viewport soft-light desk grain, the ink-into-paper `multiply` blends on
- * every line of prose, the per-card isolation, the WONK ink-bleed SVG filter,
- * the WebGL sheet texture. Multiplied by scale² on a device with little GPU
- * memory, the compositor runs out and Safari kills the page.
+ * every line of prose, the per-card isolation, the WONK ink-bleed SVG filter.
+ * Multiplied by scale² on a device with little GPU memory, the compositor runs
+ * out and Safari kills the page. (The sheet's paper grain is a static bitmap —
+ * cheap to re-raster — so it's kept, not shed.)
  *
  * Earlier mitigations *reacted* to `visualViewport.scale > 1.2` — i.e. mid-pinch,
  * after the oversized layers were already being allocated, so they were always
