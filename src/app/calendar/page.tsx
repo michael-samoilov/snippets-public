@@ -2672,6 +2672,12 @@ function ScheduleFeedBase({
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
   const [probe, setProbe] = useState<string | null>(selected);
+  // First paint renders only a screenful of recent days; the rest of the history
+  // mounts a frame later, off the critical path — so opening the book costs a
+  // constant ~screenful no matter how many years it holds. The book opens at the
+  // foot (today), so the recent days ARE what's on screen. Skipped for a deep-link
+  // to an old day, which must render in full to be scrolled to.
+  const [fullBook, setFullBook] = useState(false);
   // a pending kept draft for today means a keep JUST happened (it's cleared once
   // the live row lands) — the only time today's date should wipe in (never on a
   // page refresh)
@@ -2743,6 +2749,18 @@ function ScheduleFeedBase({
       snippets: map.get(day) ?? ([] as Snippet[]),
     }));
   }, [all, probe, todayKey, yesterdayKey]);
+
+  // the rows actually rendered on first paint: only the most recent FIRST_PAINT_DAYS
+  // (the book opens at the foot/today, so these are what's visible) until the full
+  // book mounts a frame later. A deep-link to a past day renders the whole ledger
+  // so its row exists to land on.
+  const FIRST_PAINT_DAYS = 35;
+  const windowRows = useMemo(() => {
+    if (!rows) return rows;
+    if (fullBook || selected !== todayKey || rows.length <= FIRST_PAINT_DAYS)
+      return rows;
+    return rows.slice(-FIRST_PAINT_DAYS);
+  }, [rows, fullBook, selected, todayKey]);
 
   const scrollToRow = useCallback((day: string, smooth = false) => {
     const el = scrollerRef.current;
@@ -2928,6 +2946,26 @@ function ScheduleFeedBase({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, scrollToRow, measureRows]);
 
+  // once the first (windowed) paint is on screen, mount the rest of the history
+  // off the critical path — a frame later, as a low-priority transition
+  useEffect(() => {
+    if (fullBook || !rows) return;
+    const id = requestAnimationFrame(() =>
+      startTransition(() => setFullBook(true)),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [fullBook, rows]);
+
+  // the rest of the history mounts ABOVE today, growing the scroll height; with
+  // overflow-anchor off that would shove today off-screen, so re-pin to the foot
+  // in the same commit (a layout effect, before paint — no visible jump)
+  useLayoutEffect(() => {
+    if (!fullBook || selected !== todayKey) return;
+    measureRows();
+    scrollToRow(todayKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullBook]);
+
   const onScroll = () => {
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
@@ -2988,10 +3026,10 @@ function ScheduleFeedBase({
   // out of the whole book instead of reconciling it
   const body = useMemo(
     () =>
-      rows?.map((row, i) => {
+      windowRows?.map((row, i) => {
         const d = dateFromDayKey(row.day);
         const newMonth =
-          i === 0 || rows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
+          i === 0 || windowRows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
         const isToday = row.day === todayKey;
         // today always invites; yesterday invites while it's still empty;
         // and the page you opened keeps its composer
@@ -2999,7 +3037,7 @@ function ScheduleFeedBase({
           isToday ||
           row.day === probe ||
           (row.day === yesterdayKey && row.snippets.length === 0);
-        const last = i === rows.length - 1;
+        const last = i === windowRows.length - 1;
         // in zone mode today's own section stays invisible until it holds an
         // entry — its date lives in the zone, and the kept card wipes into this
         // (already-mounted) list. Its ScheduleCards stays rendered so the
@@ -3111,7 +3149,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
+    [windowRows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
   );
 
   return (
