@@ -199,9 +199,20 @@ function SkeletonDebug() {
 export default function CalendarPage() {
   return (
     <Suspense fallback={<CalendarSkeleton />}>
-      <Calendar />
+      <CalendarGate />
     </Suspense>
   );
+}
+
+// ?skeldebug parks on the held skeleton (SkeletonDebug). It has to gate here,
+// BEFORE Calendar mounts — Calendar's mount effects rewrite the URL to ?d=…, and
+// since useSearchParams is reactive that would drop the param and swap the real
+// calendar in. Keeping Calendar unmounted means its effects never run, so the
+// skeleton stays put to be stared at.
+function CalendarGate() {
+  const params = useSearchParams();
+  if (params.has("skeldebug")) return <SkeletonDebug />;
+  return <Calendar />;
 }
 
 type View = "year" | "month" | "schedule" | "entry";
@@ -222,10 +233,6 @@ interface ScheduleFeedHandle {
 function Calendar() {
   const params = useSearchParams();
   const pathname = usePathname();
-  // ?skeldebug parks on the pageload skeleton so its look can be tuned (the
-  // branch is taken at the single return below, after every hook has run, so
-  // hook order stays stable). Suspense already SSR's the same skeleton.
-  const skelDebug = params.has("skeldebug");
   const initialDay = (() => {
     const d = params.get("d");
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : dayKey();
@@ -1319,8 +1326,6 @@ function Calendar() {
     !searchActive && (view === "schedule" || zoom?.from === "schedule");
   const showEntryLayer =
     !searchActive && (view === "entry" || zoom?.from === "entry");
-
-  if (skelDebug) return <SkeletonDebug />;
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
