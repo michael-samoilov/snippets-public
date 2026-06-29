@@ -179,6 +179,23 @@ function CalendarSkeleton() {
   );
 }
 
+// Dev-only: ?skeldebug holds the pageload skeleton on screen so its look can be
+// inspected and tuned (it normally flashes by in the Suspense gap). The real
+// skeleton verbatim, plus a quiet pill — same recipe as the perf A/B pill — so
+// it's clear you're parked in the held view, not stuck loading.
+function SkeletonDebug() {
+  return (
+    <>
+      <CalendarSkeleton />
+      <div className="float fixed bottom-3 left-3 z-50 rounded-full px-2.5 py-1">
+        <span className="voice-label text-[0.72rem] text-ink-soft">
+          skeleton — held
+        </span>
+      </div>
+    </>
+  );
+}
+
 export default function CalendarPage() {
   return (
     <Suspense fallback={<CalendarSkeleton />}>
@@ -205,6 +222,10 @@ interface ScheduleFeedHandle {
 function Calendar() {
   const params = useSearchParams();
   const pathname = usePathname();
+  // ?skeldebug parks on the pageload skeleton so its look can be tuned (the
+  // branch is taken at the single return below, after every hook has run, so
+  // hook order stays stable). Suspense already SSR's the same skeleton.
+  const skelDebug = params.has("skeldebug");
   const initialDay = (() => {
     const d = params.get("d");
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : dayKey();
@@ -1298,6 +1319,8 @@ function Calendar() {
     !searchActive && (view === "schedule" || zoom?.from === "schedule");
   const showEntryLayer =
     !searchActive && (view === "entry" || zoom?.from === "entry");
+
+  if (skelDebug) return <SkeletonDebug />;
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
