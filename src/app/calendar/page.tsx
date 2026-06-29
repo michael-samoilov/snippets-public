@@ -209,12 +209,20 @@ function Calendar() {
     const d = params.get("d");
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : dayKey();
   })();
+  // a bare ?y=YYYY (no ?d/?e) opens straight to the year glance
+  const initialYear = (() => {
+    const y = params.get("y");
+    return !params.get("d") && !params.get("e") && y && /^\d{4}$/.test(y)
+      ? Number(y)
+      : null;
+  })();
 
   // The book is the app's home: with no deep link, land in today's schedule
   // (the fill zone at its foot is the capture surface) rather than the month
   // grid — which is a zoom-out away. A valid ?d= still opens straight to its
   // day, and ?d=…&e= straight to an entry.
   const [view, setView] = useState<View>(() => {
+    if (initialYear != null) return "year";
     const d = params.get("d");
     const validDay = !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
     return validDay && params.get("e") ? "entry" : "schedule";
@@ -234,9 +242,15 @@ function Calendar() {
   const [warm, setWarm] = useState(false);
   const [selected, setSelected] = useState(initialDay);
   /** what the title shows — follows the feeds' scroll */
-  const [visibleMonth, setVisibleMonth] = useState(() =>
-    startOfMonth(dateFromDayKey(initialDay)),
-  );
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    if (initialYear != null) {
+      const now = dateFromDayKey(dayKey());
+      return startOfMonth(
+        new Date(initialYear, initialYear === now.getFullYear() ? now.getMonth() : 0, 1),
+      );
+    }
+    return startOfMonth(dateFromDayKey(initialDay));
+  });
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
 
   // Perf A/B (temporary): flatten the book cards' ink/layers to test whether the
@@ -339,10 +353,16 @@ function Calendar() {
     const sp = new URLSearchParams(window.location.search);
     const d = sp.get("d");
     const e = sp.get("e");
+    const y = sp.get("y");
     if (d) {
       window.history.replaceState(null, "", pathname);
       window.history.pushState(null, "", `${pathname}?d=${d}`);
       if (e) window.history.pushState(null, "", `${pathname}?d=${d}&e=${e}`);
+    } else if (y && /^\d{4}$/.test(y)) {
+      // arrived at the year glance: floor it on the month canvas, then the year,
+      // so Back drops to the month rather than walking off the page
+      window.history.replaceState(null, "", pathname);
+      window.history.pushState(null, "", `${pathname}?y=${y}`);
     } else {
       // No deep link: the book (schedule) is home, but the grid is still "a
       // zoom-out away" — so synthesize the month floor beneath it here too.
@@ -818,11 +838,28 @@ function Calendar() {
     void Promise.all(moves).then(finish, finish);
   }, [zoom, reduceMotion]);
 
+  // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
+  // the popstate handler replays these on a browser back/forward — bringing the
+  // year glance to parity with the book and entry, which already ride history.
+  const climbToYear = useCallback(
+    (y: number) => {
+      setVisibleYear(y);
+      yearFeedRef.current?.goTo(y, false); // stand on the year before measuring
+      runZoom("month", "year", ym(startOfMonth(visibleMonthRef.current)));
+    },
+    [runZoom],
+  );
+  const descendFromYear = useCallback(() => {
+    const m = startOfMonth(visibleMonthRef.current);
+    setVisibleMonth(m);
+    monthFeedRef.current?.goTo(m, false);
+    runZoom("year", "month", ym(m));
+  }, [runZoom]);
+
   const openYear = () => {
     const y = visibleMonth.getFullYear();
-    setVisibleYear(y);
-    yearFeedRef.current?.goTo(y, false); // stand on the year before measuring
-    runZoom("month", "year", ym(visibleMonth));
+    window.history.pushState(null, "", `${pathname}?y=${y}`);
+    climbToYear(y);
   };
 
   const pickMonth = useCallback(
@@ -845,13 +882,15 @@ function Calendar() {
     if (zooming.current) return;
     const cur = viewRef.current;
     if (cur === "month") return; // already the canvas
+    // year sits one history entry above month (openYear pushed `?y=`), so a
+    // single pop drops to the canvas — popstate runs the descendFromYear zoom
     if (cur === "year") {
-      pickMonth(startOfMonth(visibleMonthRef.current));
+      window.history.back();
       return;
     }
     homeward.current = true;
     window.history.back();
-  }, [pickMonth]);
+  }, []);
 
   useEffect(() => {
     const onHome = () => goToCanvas();
@@ -895,17 +934,25 @@ function Calendar() {
         ? "entry"
         : sp.get("d")
           ? "schedule"
-          : "month";
+          : sp.get("y")
+            ? "year"
+            : "month";
       const cur = viewRef.current;
       if (target === cur) return;
       if (DEPTH[target] < DEPTH[cur]) {
+        // climbing to a higher altitude (the camera pulls out / up)
         if (cur === "entry") descendFromEntry();
         else if (cur === "schedule") descendFromSchedule();
+        else if (cur === "month" && target === "year")
+          climbToYear(Number(sp.get("y")));
       } else {
-        // the forward gesture re-dives
+        // the forward gesture re-dives (camera pushes in / down)
         const d = sp.get("d");
         const e = sp.get("e");
-        if (cur === "month" && d) {
+        if (cur === "year") {
+          // backing out of the year glance lands on the month floor
+          descendFromYear();
+        } else if (cur === "month" && d) {
           setSelected(d);
           scheduleFeedRef.current?.goTo(d);
           runZoom("month", "schedule", d);
@@ -917,7 +964,7 @@ function Calendar() {
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [descendFromEntry, descendFromSchedule, runZoom]);
+  }, [descendFromEntry, descendFromSchedule, climbToYear, descendFromYear, runZoom]);
 
   const closeSchedule = () => window.history.back();
 
@@ -1607,7 +1654,12 @@ function Calendar() {
               today={today}
               years={glanceYears}
               counts={counts}
-              onPickMonth={pickMonth}
+              onPickMonth={(m) => {
+                // picking a month leaves the glance for the canvas — drop the
+                // `?y=` so the URL reflects the month (no stale year param)
+                window.history.replaceState(null, "", pathname);
+                pickMonth(m);
+              }}
               onVisible={setVisibleYear}
             />
           )}
