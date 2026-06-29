@@ -11,18 +11,20 @@
  * See DESIGN.md for the constitution.
  */
 
-/* Chrome/Android interprets a left-edge drag as history navigation;
-   declining the overscroll gesture keeps the calendar's own back swipe
-   in charge there. (iOS Safari's edge swipe is system chrome — the
-   calendar answers it through real history entries instead.)
-   Declining the *vertical* gesture too is what keeps a drag that
-   escapes a scroll container — most easily a short entry, where the
-   card fits its words and so nothing scrolls — from chaining out to a
-   pull-to-refresh. `contain` still lets the page rubber-band over the
-   desk; it only takes the page-reload off the table. */
+/* The app is one fixed screen — content always fits the viewport and every
+   real scroll lives in an inner container (the sheet's main, the calendar
+   feeds, the entry card), each `overscroll-contain`ed so a fling inside never
+   chains out. Declining the document's own overscroll on BOTH axes therefore
+   has no downside and closes three gaps: Chrome/Android reads a left-edge drag
+   as history-nav (the calendar answers swipes through real history entries
+   instead); a vertical drag that escapes a short, non-scrolling entry would
+   chain out to pull-to-refresh; and a drag on the page itself would rubber-band
+   the whole sheet up off the desk (you could "scroll below the bottom" and park
+   it there). `none` — not `contain` — declines that page bounce outright, so
+   the sheet stays put. The desk still fills behind through any pinch-zoom gap
+   (it's painted on the root), just with no findable scroll. */
 html {
-  overscroll-behavior-x: none;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: none;
 }
 
 :root {
@@ -259,18 +261,14 @@ textarea {
   hanging-punctuation: none;
 }
 
-/* The desk is painted on the root: the canvas background fills any
-   overscroll area and never translates, so Safari's rubber-band moves
-   the sheet and chrome over a desk that holds perfectly still. The
-   bounce stays; the page-reload does not (overscroll-behavior-y:
-   contain on the root), so a drag that finds no scroll to do bounces
-   the desk rather than refreshing. Nothing actually scrolls — content
-   fits the viewport — and every real scroll lives in a container (the
-   sheet's main, the calendar feeds, the entry card), each
-   overscroll-contained so a fling inside never chains out. */
+/* The desk is painted on the root so it fills behind the sheet through any
+   pinch-zoom gap and never translates. Nothing at the document level scrolls —
+   content fits the viewport and the page bounce is declined above — so the
+   sheet can't be dragged up off the desk; every real scroll lives in an inner
+   container instead. */
 html {
-  /* color only — the canvas extends it through every overscroll and
-     zoom gap, so the desk has no findable edge */
+  /* color only — the canvas extends it through every zoom gap, so the desk
+     has no findable edge */
   background: var(--desk);
 }
 
