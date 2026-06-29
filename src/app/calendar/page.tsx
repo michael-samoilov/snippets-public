@@ -1859,6 +1859,10 @@ function ScheduleFeedBase({
   // a land-on-today scroll re-asserts the bottom a couple times while the zone's
   // flex height settles after a fresh mount; these are its (cancellable) timers
   const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // the reader has grabbed the scroll themselves — a still-pending land-on-today
+  // re-pin (settle timers, or the full-book mount) must then stand down so it
+  // can't yank them back to the foot after they've started scrolling
+  const tookOverRef = useRef(false);
   // true while a Today scroll is gliding to the foot: the days it passes must not
   // claim the header (which would flicker the Today button back in mid-flight)
   const landingTodayRef = useRef(false);
@@ -1928,9 +1932,12 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el) return false;
-    // any new scroll cancels a still-pending land-on-today re-assert/hold
+    // any new scroll cancels a still-pending land-on-today re-assert/hold; this
+    // is a deliberate (programmatic) landing, so we own the scroll again until
+    // the reader next grabs it
     todaySettleRef.current.forEach(clearTimeout);
     todaySettleRef.current = [];
+    tookOverRef.current = false;
     if (day !== todayKey) landingTodayRef.current = false;
     // "today" lives at the very foot (its fill zone fills the tail) — land on
     // the bottom so the zone is shown, not the top of today's row (and when the
@@ -1979,9 +1986,10 @@ function ScheduleFeedBase({
         setTimeout(() => { landingTodayRef.current = false; }, 700),
         // INSTANT micro-corrections, only AFTER the glide has settled (never during
         // — that's the stutter): snap out any residual once the layout is still.
-        // No-ops unless something shifted the rule, so normally invisible.
-        setTimeout(() => pinFoot("instant"), 560),
-        setTimeout(() => pinFoot("instant"), 920),
+        // No-ops unless something shifted the rule, so normally invisible — and
+        // skipped entirely if the reader has started scrolling (don't yank them).
+        setTimeout(() => { if (!tookOverRef.current) pinFoot("instant"); }, 560),
+        setTimeout(() => { if (!tookOverRef.current) pinFoot("instant"); }, 920),
       );
       return true;
     }
@@ -2032,6 +2040,7 @@ function ScheduleFeedBase({
   const scrollToNewEntry = useCallback((id: string) => {
     const sc = scrollerRef.current;
     if (!sc) return;
+    tookOverRef.current = false; // a keep owns the scroll (pan up to the new card)
     const doScroll = () => {
       const card = sc.querySelector<HTMLElement>(`[data-entry="${CSS.escape(id)}"]`);
       const row = rowRefs.current.get(todayKey);
@@ -2120,13 +2129,31 @@ function ScheduleFeedBase({
 
   // the rest of the history mounts ABOVE today, growing the scroll height; with
   // overflow-anchor off that would shove today off-screen, so re-pin to the foot
-  // in the same commit (a layout effect, before paint — no visible jump)
+  // in the same commit (a layout effect, before paint — no visible jump). Skip if
+  // the reader has already grabbed the scroll, so the mount doesn't yank them.
   useLayoutEffect(() => {
-    if (!fullBook || selected !== todayKey) return;
+    if (!fullBook || selected !== todayKey || tookOverRef.current) return;
     measureRows();
     scrollToRow(todayKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBook]);
+
+  // the moment the reader scrolls/touches the book themselves, stand down any
+  // pending land-on-today re-pin (settle timers + the full-book mount) so it
+  // can't reset them to the foot mid-scroll
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onUser = () => { tookOverRef.current = true; };
+    el.addEventListener("wheel", onUser, { passive: true });
+    el.addEventListener("touchstart", onUser, { passive: true });
+    el.addEventListener("pointerdown", onUser, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", onUser);
+      el.removeEventListener("touchstart", onUser);
+      el.removeEventListener("pointerdown", onUser);
+    };
+  }, []);
 
   const onScroll = () => {
     if (rafRef.current) return;
