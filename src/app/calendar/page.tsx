@@ -535,6 +535,24 @@ function Calendar() {
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
     const moves: Promise<unknown>[] = [];
 
+    // the painted box of an element's text, not its line box — block
+    // boxes carry leading the glyphs don't, and the difference reads as
+    // a flyer landing low, then skipping into place
+    const textRect = (el: HTMLElement) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const r = range.getBoundingClientRect();
+      return r.width > 0 ? r : el.getBoundingClientRect();
+    };
+    const ensureFlyerBox = () => {
+      if (flyerBox) return flyerBox;
+      flyerBox = document.createElement("div");
+      flyerBox.style.cssText =
+        "position:absolute;inset:0;pointer-events:none;z-index:30;";
+      stage.appendChild(flyerBox);
+      return flyerBox;
+    };
+
     // book⇄entry is not a camera scale but a shared element: the tapped
     // tile expands to fill the stage (and shrinks back), the same paper
     // card the whole way. The schedule fades under it; the full content
@@ -594,6 +612,37 @@ function Calendar() {
               "padding:10px;box-sizing:border-box;transform-origin:0 0;" +
               "pointer-events:none;opacity:0;";
             entryCard.appendChild(standIn);
+          }
+        }
+        // closing: the day's sticky margin number belongs to the book we're
+        // returning to, but it lives in the schedule layer that fades up from
+        // nothing — so it would pop in only as the card lands. Lift it into a
+        // still stand-in over the fading book (the flyer box at full opacity),
+        // pinned to its final sticky slot, with the real number hidden until the
+        // finish — so the date is already in its correct place from the first
+        // frame while the card shrinks home.
+        if (!deeper) {
+          const day = tile.closest<HTMLElement>("[data-day]")?.dataset.day;
+          const dateEl = day
+            ? scheduleLayerRef.current?.querySelector<HTMLElement>(
+                `[data-flydate="${CSS.escape(day)}"]`,
+              )
+            : null;
+          if (day && dateEl) {
+            const r = textRect(dateEl);
+            const font = readFont(dateEl);
+            const cx = r.left + r.width / 2 - stageRect.left;
+            const cy = r.top + r.height / 2 - stageRect.top;
+            const point = document.createElement("span");
+            point.style.cssText = `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${cx}px,${cy}px);`;
+            const num = String(Number(day.slice(8)));
+            const color = day === dayKey() ? "var(--wax)" : "var(--ink)";
+            const glyph = flyGlyph(num, font, color);
+            glyph.style.fontSize = `${font.size}px`;
+            point.appendChild(glyph);
+            ensureFlyerBox().appendChild(point);
+            dateEl.style.visibility = "hidden";
+            hiddenNumbers.push(dateEl);
           }
         }
         // promote both moving surfaces to their own GPU layers: scaling
@@ -710,24 +759,6 @@ function Calendar() {
         { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
       ).finished,
     );
-
-    // the painted box of an element's text, not its line box — block
-    // boxes carry leading the glyphs don't, and the difference reads as
-    // a flyer landing low, then skipping into place
-    const textRect = (el: HTMLElement) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const r = range.getBoundingClientRect();
-      return r.width > 0 ? r : el.getBoundingClientRect();
-    };
-    const ensureFlyerBox = () => {
-      if (flyerBox) return flyerBox;
-      flyerBox = document.createElement("div");
-      flyerBox.style.cssText =
-        "position:absolute;inset:0;pointer-events:none;z-index:30;";
-      stage.appendChild(flyerBox);
-      return flyerBox;
-    };
 
     // shared-element flight: a date standing in both altitudes travels
     // from its grid cell to its ledger slot (and back) instead of
