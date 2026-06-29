@@ -25,7 +25,6 @@ import {
   startOfMonth,
 } from "date-fns";
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
-import { highlight as drawHighlight } from "@highlighters/core";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
 import { ulid } from "ulidx";
@@ -3722,13 +3721,21 @@ function RoughMark({ children }: { children: string }) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const color =
-      getComputedStyle(el).getPropertyValue("--marker").trim() || "#e8c558";
-    const h = drawHighlight(
-      el,
-      {
-        color,
-        opacity: 0.8,
+    // @highlighters/core is heavy and only ever needed here (the rough mark on
+    // search-matched words), never on the first book view — so load it on demand.
+    // The <mark> already carries its flat CSS highlight; this rough overlay paints
+    // a beat later once the chunk arrives, keeping it out of the initial bundle.
+    let h: { remove: () => void } | undefined;
+    let cancelled = false;
+    void import("@highlighters/core").then(({ highlight }) => {
+      if (cancelled || !ref.current) return;
+      const color =
+        getComputedStyle(el).getPropertyValue("--marker").trim() || "#e8c558";
+      h = highlight(
+        el,
+        {
+          color,
+          opacity: 0.8,
         // the owner's hand: a fine nib at a slight slant, generous wet
         // flow with full streak lanes, soft capillary fray, round caps
         // on gently wavering rails — and the parameter that matters
@@ -3761,11 +3768,15 @@ function RoughMark({ children }: { children: string }) {
       // targets default their overlay to document.body (which would
       // stand still while the filtered book scrolls), and the clip box
       // shears off any band that strays past the six visible lines
-      (el.closest("[data-mark-clip]") as HTMLElement | null) ??
-        el.closest("button") ??
-        undefined,
-    );
-    return () => h.remove();
+        (el.closest("[data-mark-clip]") as HTMLElement | null) ??
+          el.closest("button") ??
+          undefined,
+      );
+    });
+    return () => {
+      cancelled = true;
+      h?.remove();
+    };
   }, [children]);
   return (
     <mark ref={ref} className="snippet-mark">
