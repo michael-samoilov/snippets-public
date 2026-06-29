@@ -209,10 +209,29 @@ function indexAt(offsets: number[], y: number): number {
   return ans;
 }
 
-// A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd),
-// so the ledger's frame and rules show the instant the HTML lands instead of a
-// blank sheet — the real book (client-only, behind useSearchParams) settles onto
-// it a beat later. No spinner; just the ruled paper waiting.
+// The book's faint ruled rows — shown while the real entries are still loading
+// so the ledger reads as "settling in" rather than blank. Shared by the SSR
+// Suspense fallback AND the in-feed loading state, so the paper stays put
+// continuously (no skeleton→blank→book flash) right up until the book lands.
+function LedgerRows() {
+  return (
+    <>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
+        >
+          <div />
+          <div className="h-14" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+// A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
+// the ledger frame shows the instant the HTML lands instead of a blank sheet.
 function CalendarSkeleton() {
   return (
     <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
@@ -226,15 +245,7 @@ function CalendarSkeleton() {
         </div>
       </div>
       <div className="relative -mt-px min-h-0 flex-1 overflow-hidden">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <div
-            key={i}
-            className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
-          >
-            <div />
-            <div className="h-14" />
-          </div>
-        ))}
+        <LedgerRows />
       </div>
     </div>
   );
@@ -3122,7 +3133,10 @@ function ScheduleFeedBase({
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {body}
+        {/* until the live query returns, `body` is undefined — keep the ruled
+            paper showing (same rows as the SSR skeleton) so the wait reads as a
+            continuous "settling in", never a blank gap that then pops */}
+        {body ?? <LedgerRows />}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
