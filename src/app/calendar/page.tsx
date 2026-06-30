@@ -547,8 +547,12 @@ function Calendar() {
     const ensureFlyerBox = () => {
       if (flyerBox) return flyerBox;
       flyerBox = document.createElement("div");
+      // its own composited layer (translateZ) at a high z so a flyer always sits
+      // above the layers it travels over — including the entry card's own
+      // will-change layer, which on iOS can otherwise paint above a plain
+      // z-indexed sibling
       flyerBox.style.cssText =
-        "position:absolute;inset:0;pointer-events:none;z-index:30;";
+        "position:absolute;inset:0;pointer-events:none;z-index:45;transform:translateZ(0);";
       stage.appendChild(flyerBox);
       return flyerBox;
     };
@@ -628,33 +632,38 @@ function Calendar() {
                 `[data-flydate="${CSS.escape(day)}"]`,
               )
             : null;
-          if (day && dateEl) {
-            // the dive freezes the book's margin dates to static (so the page
-            // can scale as one rigid block), which drops a sticky date out of
-            // its pinned slot and back to its scrolled-away natural spot — the
-            // very case the reader sees: a day scrolled past, its number stuck
-            // at the top. Lift the freeze for this one synchronous measure so we
-            // read the true sticky slot, then restore it before paint.
-            const frozen = scheduleLayerRef.current?.querySelector<HTMLElement>(
-              "[data-dive-freeze]",
-            );
-            const wasFrozen = frozen?.hasAttribute("data-dive-freeze") ?? false;
-            if (wasFrozen) frozen!.removeAttribute("data-dive-freeze");
-            const r = textRect(dateEl);
-            if (wasFrozen) frozen!.setAttribute("data-dive-freeze", "");
-            const font = readFont(dateEl);
-            const cx = r.left + r.width / 2 - stageRect.left;
-            const cy = r.top + r.height / 2 - stageRect.top;
-            const point = document.createElement("span");
-            point.style.cssText = `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${cx}px,${cy}px);`;
-            const num = String(Number(day.slice(8)));
-            const color = day === dayKey() ? "var(--wax)" : "var(--ink)";
-            const glyph = flyGlyph(num, font, color);
-            glyph.style.fontSize = `${font.size}px`;
-            point.appendChild(glyph);
-            ensureFlyerBox().appendChild(point);
-            dateEl.style.visibility = "hidden";
-            hiddenNumbers.push(dateEl);
+          // the whole margin cell (weekday + number), so the stand-in reads
+          // "Sun 21" exactly, with its real type and colour
+          const cell = dateEl?.closest<HTMLElement>(".book-margin-date") ?? dateEl;
+          // the book scroller carries data-dive-freeze during the move; it's the
+          // sticky boundary the date pins to
+          const scroller = scheduleLayerRef.current?.querySelector<HTMLElement>(
+            "[data-dive-freeze]",
+          );
+          if (day && dateEl && cell && scroller) {
+            // The dive freezes the margin dates to static (so the page can scale
+            // as one rigid block), which drops a sticky date out of its pinned
+            // slot back to its scrolled-away natural spot — exactly the reader's
+            // case: a day scrolled past, its number stuck at the top. Reading the
+            // frozen rect then clamping its top to the scroller's top reconstructs
+            // the true sticky slot deterministically (no reflow toggling that iOS
+            // may not honour synchronously).
+            const c = cell.getBoundingClientRect();
+            const sc = scroller.getBoundingClientRect();
+            const top = Math.max(c.top, sc.top); // sticky: never above the fold
+            const clone = cell.cloneNode(true) as HTMLElement;
+            clone.style.position = "absolute";
+            clone.style.margin = "0";
+            clone.style.left = `${c.left - stageRect.left}px`;
+            clone.style.top = `${top - stageRect.top}px`;
+            clone.style.width = `${c.width}px`;
+            clone.style.opacity = "1";
+            clone.style.visibility = "visible";
+            ensureFlyerBox().appendChild(clone);
+            // hide the real cell (the whole sticky margin block) until the finish,
+            // so the only date on screen is the stand-in held over the fading book
+            cell.style.visibility = "hidden";
+            hiddenNumbers.push(cell);
           }
         }
         // promote both moving surfaces to their own GPU layers: scaling
