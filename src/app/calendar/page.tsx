@@ -514,12 +514,24 @@ function Calendar() {
       }
       if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
-      flyerBox?.remove();
-      for (const el of hiddenNumbers) el.style.visibility = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       setZoom(null);
       zooming.current = false;
+      // Hand the stand-ins back to the real elements ONE FRAME LATER — after the
+      // setZoom(null) commit has re-stickied them (data-dive-freeze lifts with
+      // it). Doing it in this tick reveals the real cell while it's still frozen
+      // out of its sticky slot, then the stand-in vanishes: a one-frame blink of
+      // the date. Revealing the real cell and removing the stand-in together, on
+      // the next frame, hands off with no gap.
+      if (flyerBox || hiddenNumbers.length) {
+        const fb = flyerBox;
+        const reals = hiddenNumbers;
+        requestAnimationFrame(() => {
+          for (const el of reals) el.style.visibility = "";
+          fb?.remove();
+        });
+      }
     };
 
     if (reduceMotion) {
