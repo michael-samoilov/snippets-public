@@ -519,11 +519,10 @@ function Calendar() {
       setZoom(null);
       zooming.current = false;
       // Hand the stand-ins back to the real elements ONE FRAME LATER — after the
-      // setZoom(null) commit has re-stickied them (data-dive-freeze lifts with
-      // it). Doing it in this tick reveals the real cell while it's still frozen
-      // out of its sticky slot, then the stand-in vanishes: a one-frame blink of
-      // the date. Revealing the real cell and removing the stand-in together, on
-      // the next frame, hands off with no gap.
+      // setZoom(null) commit has restored the real book (its layer opacity clears
+      // to full). Revealing the real cell and removing the stand-in together, on
+      // the next frame, overlaps them for the swap instead of leaving a one-frame
+      // gap where the date blinks out.
       if (flyerBox || hiddenNumbers.length) {
         const fb = flyerBox;
         const reals = hiddenNumbers;
@@ -647,27 +646,17 @@ function Calendar() {
           // the whole margin cell (weekday + number), so the stand-in reads
           // "Sun 21" exactly, with its real type and colour
           const cell = dateEl?.closest<HTMLElement>(".book-margin-date") ?? dateEl;
-          // the book scroller carries data-dive-freeze during the move; it's the
-          // sticky boundary the date pins to
-          const scroller = scheduleLayerRef.current?.querySelector<HTMLElement>(
-            "[data-dive-freeze]",
-          );
-          if (day && dateEl && cell && scroller) {
-            // The dive freezes the margin dates to static (so the page can scale
-            // as one rigid block), which drops a sticky date out of its pinned
-            // slot back to its scrolled-away natural spot — exactly the reader's
-            // case: a day scrolled past, its number stuck at the top. Reading the
-            // frozen rect then clamping its top to the scroller's top reconstructs
-            // the true sticky slot deterministically (no reflow toggling that iOS
-            // may not honour synchronously).
+          if (day && dateEl && cell) {
+            // entry⇄schedule no longer freezes the dates (see diveFreeze), so the
+            // cell is already in its true sticky slot — measure it directly. (The
+            // schedule still fades in from nothing, which is why we lift the date
+            // into a full-opacity stand-in on top rather than let it fade up.)
             const c = cell.getBoundingClientRect();
-            const sc = scroller.getBoundingClientRect();
-            const top = Math.max(c.top, sc.top); // sticky: never above the fold
             const clone = cell.cloneNode(true) as HTMLElement;
             clone.style.position = "absolute";
             clone.style.margin = "0";
             clone.style.left = `${c.left - stageRect.left}px`;
-            clone.style.top = `${top - stageRect.top}px`;
+            clone.style.top = `${c.top - stageRect.top}px`;
             clone.style.width = `${c.width}px`;
             clone.style.opacity = "1";
             clone.style.visibility = "visible";
@@ -1775,6 +1764,17 @@ function Calendar() {
             <ScheduleFeed
               handleRef={scheduleFeedRef}
               active={view === "schedule" && !zoom}
+              // un-stick the margin dates ONLY while the book is being scaled as
+              // a rigid block (month/year⇄schedule). An entry⇄schedule move just
+              // fades the book — no scale — so the dates must stay sticky there,
+              // or the focused day's number jumps from its pinned slot to its
+              // section top for the length of the card animation.
+              diveFreeze={
+                !!zoom &&
+                zoom.from !== "entry" &&
+                zoom.to !== "entry" &&
+                (zoom.from === "schedule" || zoom.to === "schedule")
+              }
               today={today}
               selected={selected}
               all={all}
@@ -1903,6 +1903,7 @@ function Calendar() {
 function ScheduleFeedBase({
   handleRef,
   active,
+  diveFreeze,
   today,
   selected,
   all,
@@ -1911,6 +1912,7 @@ function ScheduleFeedBase({
 }: {
   handleRef: React.MutableRefObject<ScheduleFeedHandle | null>;
   active: boolean;
+  diveFreeze: boolean;
   today: Date;
   selected: string;
   all: Snippet[] | undefined;
@@ -2443,10 +2445,12 @@ function ScheduleFeedBase({
       <div
         ref={scrollerRef}
         onScroll={active ? onScroll : undefined}
-        // while the camera is moving (the feed is inactive) un-stick the margin
-        // dates (see globals.css) so the whole page scales as one rigid block —
-        // otherwise the sticky dates stay pinned while the cards scale under them
-        data-dive-freeze={!active || undefined}
+        // while the book is SCALED as a rigid block (month/year⇄schedule) un-stick
+        // the margin dates (see globals.css), or they'd stay pinned while the cards
+        // scale under them. Not during an entry⇄schedule move, which only fades the
+        // book — there the dates must stay sticky so the focused day's number holds
+        // its pinned slot instead of jumping to its section top.
+        data-dive-freeze={diveFreeze || undefined}
         className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
@@ -2566,6 +2570,7 @@ const ScheduleFeed = memo(
   (p, n) =>
     p.handleRef === n.handleRef &&
     p.active === n.active &&
+    p.diveFreeze === n.diveFreeze &&
     p.today === n.today &&
     p.all === n.all &&
     p.onVisible === n.onVisible &&
