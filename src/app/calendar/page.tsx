@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -3016,6 +3017,21 @@ function TodayZoneFill({
   // the seal's press is driven imperatively (see onPointerDown) so it rotates in
   // the touch's own frame; no React state stands between the tap and the motion
   const sealCtl = useRef<SealControl | null>(null);
+  // pointer bookkeeping for the seal button. A touch pointer is implicitly
+  // captured on pointerdown, so pointerup (and the synthetic click) fire on the
+  // button even when the finger lifts off it — we can't trust the event target.
+  // overSeal tracks whether the pointer is within the button's box (from move
+  // geometry); keeping is a synchronous mirror of "a keep is running" (React
+  // state is stale inside these back-to-back handlers); pointerHandled swallows
+  // the trailing synthetic click so it doesn't double-fire the pointer path.
+  const sealDown = useRef(false); // a pointer is currently pressing the seal
+  const overSeal = useRef(false); // …and is within the button's box
+  const keeping = useRef(false);
+  const pointerHandled = useRef(false);
+  const inSeal = (e: ReactPointerEvent) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  };
   // holds the seal pressed-down (rotated) from the tap through the lead, so the
   // press animation LIFTS OFF from that same press — no un-rotate-then-replay
   const [holdDown, setHoldDown] = useState(false);
@@ -3050,6 +3066,7 @@ function TodayZoneFill({
       return;
     }
     if (phase !== "idle") return; // a keep is already running (idempotent)
+    keeping.current = true; // synchronous mirror for the pointer handlers
     const t = text.trim();
     const capturedAt = Date.now();
     const id = ulid(); // creation-order id (today: same as capturedAt)
@@ -3077,7 +3094,7 @@ function TodayZoneFill({
     at(LEAD_MS + HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
     at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); onKept?.(id); }); // 2 entry wipes in; pan up to watch it
     at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
-      setText(""); setPhase("idle"); setGen((g) => g + 1);
+      setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
     });
   };
 
@@ -3186,14 +3203,52 @@ function TodayZoneFill({
             type="button"
             aria-label={hasText ? copy.todayZone.keepEntry : copy.todayZone.speakEntry}
             // press the seal imperatively on pointerdown (rotates in this very
-            // frame — no state round-trip). On release, a keep hands the pressed
-            // pose to holdDown (no un-rotate); otherwise ease it back. onClick
-            // covers keyboard; it's idempotent.
-            onClick={submit}
+            // frame — no state round-trip). Dragging off the button lifts the
+            // seal back up (release there cancels); dragging back on presses it
+            // again. Release ON the button keeps (hands the pressed pose to
+            // holdDown, no un-rotate); release OFF cancels. onClick covers
+            // keyboard activation only — the trailing synthetic click from a
+            // pointer is swallowed so it can't re-fire the pointer path.
+            onClick={() => {
+              if (pointerHandled.current) { pointerHandled.current = false; return; }
+              submit();
+            }}
             disabled={frozen}
-            onPointerDown={(e) => { e.preventDefault(); sealCtl.current?.press(true); }}
-            onPointerUp={() => { if (hasText) submit(); else sealCtl.current?.press(false); }}
-            onPointerLeave={() => { if (!holdDown) sealCtl.current?.press(false); }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              sealDown.current = true;
+              overSeal.current = true;
+              sealCtl.current?.press(true);
+            }}
+            onPointerMove={(e) => {
+              if (!sealDown.current || keeping.current) return;
+              const inside = inSeal(e);
+              if (inside !== overSeal.current) { overSeal.current = inside; sealCtl.current?.press(inside); }
+            }}
+            onPointerUp={(e) => {
+              if (!sealDown.current || keeping.current) return;
+              sealDown.current = false;
+              pointerHandled.current = true;
+              const inside = inSeal(e);
+              overSeal.current = false;
+              // released on the button: keep it (submit hands the press to
+              // holdDown) or, with no text, focus to begin. Released off: cancel
+              // — ease the seal back, no submit.
+              if (inside) submit();
+              if (!inside || !hasText) sealCtl.current?.press(false);
+            }}
+            onPointerCancel={() => {
+              if (keeping.current) return;
+              sealDown.current = false;
+              overSeal.current = false;
+              sealCtl.current?.press(false);
+            }}
+            onPointerLeave={(e) => {
+              // a reliable lift for mouse (no implicit capture); harmless for touch
+              if (!sealDown.current || keeping.current || !overSeal.current) return;
+              overSeal.current = false;
+              if (!inSeal(e)) sealCtl.current?.press(false);
+            }}
             className="relative grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
