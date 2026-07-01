@@ -6,14 +6,13 @@ import { cn } from "@/lib/utils";
  * the page — a static bitmap baked once from the paper shader (see
  * `public/textures`, re-bake via `/lab/texture`).
  *
- * It used to be a live WebGL shader. That was a heavy GPU layer iOS had to
- * re-rasterize at the pinch scale — a cause of the zoom crash on low-memory
- * iPhones — so it was shed mid-zoom, which left an ugly flat sheet. A plain
- * image folds into the sheet's own paint instead: cheap to re-raster at any
- * scale (so it can stay put through a zoom, nothing to shed) and it costs
- * nothing at startup, since the shader bundle is never loaded. Plain paper
- * beneath it always — the grain is grace, not load-bearing — and it's dropped
- * entirely under prefers-reduced-data (see globals.css).
+ * It used to be a live WebGL shader — a heavy GPU layer, and a cause of the
+ * zoom crash on low-memory iPhones. A plain image folds into the sheet's own
+ * paint instead and costs nothing at startup (the shader bundle never loads).
+ * A full-sheet bitmap still re-rasters at scale² when magnified, though, so
+ * it's shed during a pinch the same as the shader was (globals.css,
+ * [data-zooming] .sheet-grain). Plain paper beneath it always — the grain is
+ * grace, not load-bearing — and it's dropped under prefers-reduced-data too.
  */
 export function Sheet({
   children,
