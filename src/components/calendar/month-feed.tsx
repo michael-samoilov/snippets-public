@@ -19,7 +19,7 @@ import {
   isSameMonth,
   startOfMonth,
 } from "date-fns";
-import { motion } from "motion/react";
+import { motion, useMotionValue, animate } from "motion/react";
 import { dayKey, dateFromDayKey } from "@/lib/dates";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,7 @@ import {
   settleBottom,
   monthsBetween,
   ym,
-  ringSpring,
+  ringSpringFor,
 } from "./shared";
 import type { MonthGeom, MonthFeedHandle } from "./shared";
 
@@ -276,6 +276,39 @@ function MonthFeedBase({
     };
   })();
 
+  // Drive the ring with motion values so its spring can be firmed per-move: a
+  // spring overshoots a fixed fraction of the distance, so a long jump lurches
+  // whole cells past the target. Animate imperatively from where the ring
+  // actually is (mid-flight included) to where it's headed, choosing a damping
+  // that caps the overshoot at one cell. First appearance jumps into place (no
+  // slide from a stale spot), matching the old initial={false}.
+  const rx = useMotionValue(0);
+  const ry = useMotionValue(0);
+  const ringSeen = useRef(false);
+  useLayoutEffect(() => {
+    if (!ring || !geom) {
+      ringSeen.current = false;
+      return;
+    }
+    if (!ringSeen.current) {
+      rx.set(ring.x);
+      ry.set(ring.y);
+      ringSeen.current = true;
+      return;
+    }
+    const dist = Math.hypot(ring.x - rx.get(), ring.y - ry.get());
+    const t = ringSpringFor(dist, geom.cell);
+    const cx = animate(rx, ring.x, t);
+    const cy = animate(ry, ring.y, t);
+    return () => {
+      cx.stop();
+      cy.stop();
+    };
+    // depend on the ring's coordinates + cell only; the ring/geom objects change
+    // identity every render and would restart the spring on each one
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ring?.x, ring?.y, geom?.cell, rx, ry]);
+
   const edges = useScrollEdges(scrollerRef, [span, metrics?.h]);
 
   return (
@@ -307,11 +340,8 @@ function MonthFeedBase({
           {ring && (
             <motion.span
               aria-hidden="true"
-              initial={false}
-              animate={{ x: ring.x, y: ring.y }}
-              transition={ringSpring}
               className="pointer-events-none absolute left-0 top-0 z-10 rounded-[5px] border-[1.5px] border-wax bg-wax/5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.06)]"
-              style={{ width: geom.cell - 6, height: geom.cell - 6 }}
+              style={{ x: rx, y: ry, width: geom.cell - 6, height: geom.cell - 6 }}
             />
           )}
           {geom.months.slice(from, to + 1).map((m, k) => (

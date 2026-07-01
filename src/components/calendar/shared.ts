@@ -10,6 +10,29 @@ export function leadOffset(date: Date, weekStart: 0 | 1): number {
   return (getDay(date) - weekStart + 7) % 7;
 }
 export const ringSpring = { type: "spring", stiffness: 380, damping: 30 } as const;
+
+// A spring's overshoot is a fixed FRACTION of the distance travelled, so the
+// selection ring's little bounce — barely noticeable across a cell or two —
+// becomes a wild lurch across a multi-year jump (2%+ of a couple thousand px is
+// several cells). Firm up the damping just enough that the *absolute* overshoot
+// never exceeds one grid cell, while short moves keep the natural pop.
+const RING_STIFF = 380;
+const RING_ZETA = 30 / (2 * Math.sqrt(RING_STIFF)); // base damping ratio ≈ 0.77
+// peak overshoot fraction of a step response for a given damping ratio ζ<1
+const overshoot = (z: number) => Math.exp((-z * Math.PI) / Math.sqrt(1 - z * z));
+const RING_BASE_OVERSHOOT = overshoot(RING_ZETA);
+
+export function ringSpringFor(distance: number, cell: number) {
+  const cap = cell; // don't overshoot past a full grid cell from the target
+  const target =
+    distance > 0 ? Math.min(RING_BASE_OVERSHOOT, cap / distance) : RING_BASE_OVERSHOOT;
+  if (target >= RING_BASE_OVERSHOOT) return ringSpring; // short move — keep the pop
+  // invert overshoot(ζ)=target for ζ: with a = -ln(target)/π, ζ = a/√(1+a²)
+  const a = -Math.log(target) / Math.PI;
+  const zeta = a / Math.sqrt(1 + a * a);
+  const damping = 2 * zeta * Math.sqrt(RING_STIFF);
+  return { type: "spring", stiffness: RING_STIFF, damping } as const;
+}
 export const ym = (d: Date) => format(d, "yyyy-MM");
 
 /* ── feed geometry: decades of time, computed, never reflowed ──────
