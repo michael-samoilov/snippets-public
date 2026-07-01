@@ -9,10 +9,11 @@ import { cn } from "@/lib/utils";
  * It used to be a live WebGL shader — a heavy GPU layer, and a cause of the
  * zoom crash on low-memory iPhones. A plain image folds into the sheet's own
  * paint instead and costs nothing at startup (the shader bundle never loads).
- * A full-sheet bitmap still re-rasters at scale² when magnified, though, so
- * it's shed during a pinch the same as the shader was (globals.css,
- * [data-zooming] .sheet-grain). Plain paper beneath it always — the grain is
- * grace, not load-bearing — and it's dropped under prefers-reduced-data too.
+ * Because it's a static bitmap, a pinch only re-rasters the visible tiles
+ * (viewport-bounded), not the whole thing at the zoom scale, so it stays put
+ * through a zoom — unlike the shader, it needn't be shed. Plain paper beneath it
+ * always — the grain is grace, not load-bearing — and it's dropped under
+ * prefers-reduced-data too.
  */
 export function Sheet({
   children,

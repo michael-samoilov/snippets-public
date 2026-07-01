@@ -460,12 +460,9 @@ textarea:focus-visible,
 [data-zooming] body::after {
   display: none;
 }
-/* the paper grain is a static bitmap, but a full-sheet image still re-rasters at
-   scale² when magnified — shed it too (the old WebGL grain was), or extreme zoom
-   can OOM the compositor exactly as before */
-[data-zooming] .sheet-grain {
-  display: none;
-}
+/* the paper grain stays: it's a plain static bitmap, so a pinch only re-rasters
+   the visible tiles (viewport-bounded), not the whole image × scale² the way the
+   old WebGL layer did — shedding it just left an ugly flat sheet for no gain. */
 /* the lamplight pool and the sheet's soft layered shadow are big blurred fills;
    re-rastering blur at a deep zoom is among the most expensive things a tile can
    do, so flatten them for the pinch */
