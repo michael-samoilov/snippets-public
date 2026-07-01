@@ -350,6 +350,13 @@ input,
 textarea {
   user-select: text;
   -webkit-user-select: text;
+  /* the schedule/entry/year layers set touch-action: pan-y to own their
+     swipe-back gesture, but a non-auto touch-action over an editable field makes
+     iOS treat it as not-quite-a-textbox: the multi-tap selection escalation
+     (double-tap word → triple sentence → quad paragraph) and the selection loupe
+     stop working. Restore full native text interaction on the fields themselves;
+     the gesture layers already ignore touches that begin on a field (armSwipe). */
+  touch-action: auto;
 }
 
 ::selection {

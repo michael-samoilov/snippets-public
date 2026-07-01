@@ -66,29 +66,11 @@ export function useKeyboardRoom(
       // the top of the keyboard's floating accessory band (autofill pills +
       // dismiss button) — the real ceiling the words must stay above
       const bandTop = vv.offsetTop + vv.height - FLOAT;
-      if (field.hasAttribute("data-room-center")) {
-        // a tall, growing field (the today zone) keeps the line being written
-        // CENTRED between the top of the writing area and that band, so the
-        // current line never creeps down under the keyboard as the entry grows.
-        const availTop = el.getBoundingClientRect().top;
-        const targetY = (availTop + bandTop) / 2;
-        // reserve enough room below the content that even the last line can be
-        // lifted all the way to the centre (half the available height + the
-        // keyboard itself), then glue the caret's line to that centre line
-        const halfAvail = Math.max(0, (bandTop - availTop) / 2);
-        el.style.paddingBottom = `${kb + FLOAT + halfAvail}px`;
-        el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
-        const lineH = parseFloat(getComputedStyle(field).lineHeight) || 24;
-        const lineCentre = field.getBoundingClientRect().bottom - lineH / 2;
-        const delta = lineCentre - targetY;
-        if (Math.abs(delta) > 1) el.scrollTop += delta;
-      } else {
-        // a short field: just float its foot above the band, no more
-        el.style.paddingBottom = `${kb + FLOAT}px`;
-        el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
-        const over = field.getBoundingClientRect().bottom - bandTop;
-        if (over > 0.5) el.scrollTop += over;
-      }
+      // float the field's foot above the band, no more
+      el.style.paddingBottom = `${kb + FLOAT}px`;
+      el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
+      const over = field.getBoundingClientRect().bottom - bandTop;
+      if (over > 0.5) el.scrollTop += over;
     };
     // Run the correction NOW and again after the browser's own scrolling
     // settles. iOS runs its OWN focus/caret scroll across a focus, each newline,
@@ -131,11 +113,17 @@ export function useKeyboardRoom(
     // passes re-measure after the reflow, so the caret still ends up placed.
     const ro = new ResizeObserver(() => run());
     const onInput = () => run();
+    // a field marked data-room-center anchors its own tail (the today zone owns
+    // its scroll) — this generic room stays out of its way entirely.
+    const managed = (t: HTMLElement | null) =>
+      !!t &&
+      (t.tagName === "TEXTAREA" || t.tagName === "INPUT") &&
+      !t.hasAttribute("data-room-center");
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) {
+      if (managed(t)) {
         field = t;
-        ro.observe(t);
+        ro.observe(t!);
         // extra late passes to outlast the keyboard's rise (~250ms) and iOS's
         // settle-scroll after it
         run([140, 300, 450]);
@@ -160,7 +148,7 @@ export function useKeyboardRoom(
     // us, so its focusin already fired into nothing. Adopt the live field now,
     // or the room never engages and the keyboard-covered tail can't be reached.
     const pre = document.activeElement as HTMLElement | null;
-    if (pre && el.contains(pre) && (pre.tagName === "TEXTAREA" || pre.tagName === "INPUT")) {
+    if (pre && el.contains(pre) && managed(pre)) {
       field = pre;
       ro.observe(pre);
       run([140, 300, 450]);

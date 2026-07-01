@@ -2545,6 +2545,7 @@ function ScheduleFeedBase({
     <div className="relative -mt-px h-full">
       <div
         ref={scrollerRef}
+        data-book-scroller=""
         onScroll={active ? onScroll : undefined}
         // while the book is SCALED as a rigid block (month/year⇄schedule) un-stick
         // the margin dates (see globals.css), or they'd stay pinned while the cards
@@ -3053,6 +3054,53 @@ function TodayZoneFill({
   const quill = hasText || frozen; // which glyph the seal wears + presses
   useEffect(() => clearTimers, []);
 
+  // Tail anchoring: as the entry grows, the seal button and the last line must
+  // appear to STAY PUT while the text extends upward (older lines scroll off the
+  // top), instead of the zone growing down past the fold where the words can't
+  // be seen. We hold the seal at the viewport position it has at rest and scroll
+  // the sheet to cancel out its downward drift as the field grows; a bottom pad
+  // on the scroller gives the room to lift it. (The generic keyboard-room hook
+  // deliberately ignores this field — see use-keyboard-room — so nothing fights.)
+  const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
+  const sealAnchorY = useRef<number | null>(null);
+  const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scrollerOf = () =>
+    btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
+  const anchorTail = () => {
+    const btn = btnRef.current, area = areaRef.current, sc = scrollerOf();
+    if (!btn || !area || !sc) return;
+    const grown = area.scrollHeight > REST_FIELD + 1;
+    if (!grown) {
+      // still at rest (≤3 lines: the field hasn't grown yet) — the seal sits at
+      // its natural spot; keep sampling it (this also tracks the keyboard's rise)
+      // so it's the target to hold once the entry does grow.
+      sc.style.paddingBottom = "";
+      sealAnchorY.current = btn.getBoundingClientRect().bottom;
+      return;
+    }
+    // enough room below the zone to lift the whole grown field up to the anchor
+    sc.style.paddingBottom = `${area.scrollHeight}px`;
+    if (sealAnchorY.current == null) sealAnchorY.current = btn.getBoundingClientRect().bottom;
+    const delta = btn.getBoundingClientRect().bottom - sealAnchorY.current;
+    if (Math.abs(delta) > 0.5) sc.scrollTop += delta;
+  };
+  const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
+  // run now, next frame, and across the keyboard's rise so the hold wins over
+  // the browser's own focus/caret scroll
+  const scheduleAnchor = () => {
+    anchorTail();
+    requestAnimationFrame(anchorTail);
+    clearAnchorTimers();
+    anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(anchorTail, ms));
+  };
+  const releaseTail = () => {
+    clearAnchorTimers();
+    sealAnchorY.current = null;
+    const sc = scrollerOf();
+    if (sc) sc.style.paddingBottom = "";
+  };
+  useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
   const LEAD_MS = 380;
@@ -3095,6 +3143,7 @@ function TodayZoneFill({
     at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); onKept?.(id); }); // 2 entry wipes in; pan up to watch it
     at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
       setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
+      releaseTail();
     });
   };
 
@@ -3191,8 +3240,12 @@ function TodayZoneFill({
               readOnly={frozen}
               // keep the line being written centred above the keyboard, not just
               // clear of it (this field grows long; see useKeyboardRoom)
+              // this field anchors its own tail (the today zone owns the scroll —
+              // see anchorTail); the generic keyboard-room hook skips it
               data-room-center=""
-              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); }}
+              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); scheduleAnchor(); }}
+              onFocus={scheduleAnchor}
+              onBlur={releaseTail}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={
                 firstEver
