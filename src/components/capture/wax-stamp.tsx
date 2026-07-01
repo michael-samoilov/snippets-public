@@ -358,10 +358,10 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }, [tint]);
 
-  // layout effect, not passive: a press flips `pressed` on pointerdown, and we
-  // want the seal to begin rotating in that same commit's paint — a passive
-  // effect fires only AFTER paint, so the rotation lagged the touch by a frame.
-  useLayoutEffect(() => {
+  // passive (post-paint): the per-pixel seal draw is heavy, and running it in a
+  // layout effect blocked first paint on mobile — the book couldn't get past the
+  // skeleton while the always-present wordmark seal drew synchronously.
+  useEffect(() => {
     const cv = canvas.current;
     if (!cv) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -501,7 +501,6 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
           draw(pushdownBeat(eo(q), rotate));
           if (q < 1) raf = requestAnimationFrame(frame);
         };
-        frame(t0); // first beat synchronously, in this pre-paint commit — no RAF lag
         raf = requestAnimationFrame(frame);
         return cleanup;
       }
