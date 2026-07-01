@@ -422,7 +422,22 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
         }
       }, 250);
     }
+    // The animation loops call draw() every rAF, but whole stretches hold a
+    // fixed beat — most of all the 1s linger, where tapBeat returns the same
+    // state each frame. Re-running the per-pixel paintSeal for an identical beat
+    // is pure waste that steals the main thread from the slide/scroll/wipe
+    // happening alongside a keep. Skip the paint when the beat (and profile)
+    // hasn't changed; the canvas already holds that exact frame.
+    let lastK: Beat | null = null;
+    let lastP: Profile | null = null;
+    const beatSame = (a: Beat, b: Beat) =>
+      a.scale === b.scale && a.dome === b.dome && a.relief === b.relief &&
+      a.lobe === b.lobe && a.cf === b.cf && a.rot === b.rot &&
+      a.o === b.o && a.oy === b.oy && a.iconWhite === b.iconWhite;
     const draw = (k: Beat, p: Profile = prof) => {
+      if (lastK && lastP === p && beatSame(k, lastK)) return;
+      lastK = k;
+      lastP = p;
       ctx.clearRect(0, 0, dim, dim);
       if (k.o <= 0.003) return;
       // one continuous object at a FIXED size (scale is a transform below, so the
