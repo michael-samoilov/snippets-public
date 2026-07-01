@@ -2508,11 +2508,13 @@ function ScheduleFeedBase({
               </p>
             )}
             {last ? (
-              // min-height pins one viewport of room below the final
-              // row's top — in the same layout pass as any content
-              // change, so shrinking rows can never dip scrollHeight
-              // and clamp the reader off their page
-              <div className="relative flex min-h-full flex-col">
+              // pageRow and the zone are siblings under the scroller (no wrapper),
+              // so the zone's own min-h-full resolves against the scroller — it's
+              // always a full viewport tall regardless of what today holds above
+              // it, never shrunk to share the fold with today's entries. (It also
+              // still guarantees a viewport of room below the final row, so a
+              // shrinking row can't dip scrollHeight and clamp the reader.)
+              <Fragment>
                 {pageRow}
                 {/* the zone always carries today's big date — even once today
                     also owns a page above — so the composer always names its day */}
@@ -2521,9 +2523,9 @@ function ScheduleFeedBase({
                   firstEver={bookEmpty}
                   hasEntry={row.snippets.length > 0}
                   onKept={scrollToNewEntry}
-                  className="flex-1"
+                  className="min-h-full"
                 />
-              </div>
+              </Fragment>
             ) : (
               pageRow
             )}
@@ -2988,10 +2990,11 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
   );
 }
 
-/* The today zone: a big "add to today" panel that FILLS the blank tail of
-   today's page (flex-1 within the min-h-full), housing the large pre-stamp wax
-   button inside a hairline blue outline. It shrinks as today fills with entries
-   above it. This is the app's capture surface. */
+/* The today zone: a big "add to today" panel, housing the large pre-stamp wax
+   button inside a hairline blue outline. It's always a full viewport tall (its
+   own min-h-full, measured against the scroller) — the same size whether today
+   is blank or already holds entries above it — and grows past that with the
+   words as they're typed. This is the app's capture surface. */
 function TodayZoneFill({
   day,
   firstEver = false,
