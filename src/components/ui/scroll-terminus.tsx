@@ -22,8 +22,14 @@ export function useScrollEdges(
   ref: RefObject<HTMLElement | null>,
   deps: DependencyList = [],
   liveHeight = false,
+  // The real content height, when the scroller carries an empty tail below it (a
+  // min-h-full spacer that pads the feed to a viewport). Passing it keeps the
+  // foot from lighting over that blank tail — it marks only content clipped
+  // below the fold, so the line shows solely where it overlaps real content.
+  contentHeight?: number,
 ): { top: boolean; bottom: boolean } {
   const [edges, setEdges] = useState({ top: false, bottom: false });
+  const contentHRef = useRef(contentHeight);
   // the scroll content's height changes only on resize or a content
   // change (the deps), so it's cached — that keeps the heavy read
   // (scrollHeight, which can force a layout of a long feed) off the
@@ -44,9 +50,12 @@ export function useScrollEdges(
     // tracks the real, current bottom instead of a cached, shorter one. A long
     // virtual feed leaves it cached (the read there can force a full layout).
     const scrollH = liveHeight ? el.scrollHeight : scrollHRef.current;
-    const can = scrollH > clientH + 1;
+    // measure the foot against real content when given, so a padding tail can't
+    // keep it lit; the top still tracks the true scroll position
+    const contentH = contentHRef.current ?? scrollH;
     const top = el.scrollTop > 1;
-    const bottom = can && el.scrollTop + clientH < scrollH - 1;
+    const bottom =
+      contentH > clientH + 1 && el.scrollTop + clientH < contentH - 1;
     setEdges((p) => (p.top === top && p.bottom === bottom ? p : { top, bottom }));
   }, [ref, liveHeight]);
   const refresh = useCallback(() => {
@@ -66,6 +75,7 @@ export function useScrollEdges(
     });
   }, [compute]);
   useLayoutEffect(() => {
+    contentHRef.current = contentHeight; // written in effect, not during render
     refresh();
     const el = ref.current;
     if (!el) return;
@@ -78,7 +88,7 @@ export function useScrollEdges(
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refresh, onScroll, ...deps]);
+  }, [refresh, onScroll, contentHeight, ...deps]);
   return edges;
 }
 

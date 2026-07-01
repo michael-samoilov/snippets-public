@@ -309,7 +309,13 @@ function MonthFeedBase({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ring?.x, ring?.y, geom?.cell, rx, ry]);
 
-  const edges = useScrollEdges(scrollerRef, [span, metrics?.h]);
+  // the foot marks real content only, never the min-h-full padding tail below it
+  const edges = useScrollEdges(
+    scrollerRef,
+    [span, metrics?.h],
+    false,
+    geom ? geom.offsets[geom.offsets.length - 1] : undefined,
+  );
 
   return (
     <div

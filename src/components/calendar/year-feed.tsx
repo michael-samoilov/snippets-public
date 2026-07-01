@@ -38,6 +38,11 @@ const MONTH_LABELS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+// How a future day reads in a month mini. A hollow ring (rather than nothing)
+// keeps the constellation whole, so a month holding only today doesn't show one
+// lonely dot. Flip to "bg-transparent" to hide future days again.
+const FUTURE_DOT = "border-[0.5px] border-rule-faint bg-transparent";
+
 interface YearGeom {
   years: number[];
   offsets: number[];
@@ -304,7 +309,13 @@ function YearFeedBase({
     [geom, from, to, today, counts, onPickMonth],
   );
 
-  const edges = useScrollEdges(scrollerRef, [years, metrics?.h]);
+  // the foot marks real content only, never the min-h-full padding tail below it
+  const edges = useScrollEdges(
+    scrollerRef,
+    [years, metrics?.h],
+    false,
+    geom ? geom.offsets[geom.offsets.length - 1] : undefined,
+  );
 
   return (
     <div
@@ -392,7 +403,7 @@ function MiniMonth({
                 : kept
                   ? "bg-ink-soft"
                   : future
-                    ? "bg-transparent"
+                    ? FUTURE_DOT
                     : "bg-rule-faint",
             )}
           />
