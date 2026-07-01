@@ -309,6 +309,37 @@ function Calendar() {
     });
   }, []);
 
+  // Back-out A/B (temporary; ?backdebug pill): how climbing schedule→calendar
+  // behaves. "dive" = the zoom-out (current); "snap" = no dive, land straight on
+  // the day last read; "rubber" = land on the pre-dive spot, then spring the
+  // ring + scroll to that day. Lets the owner feel each on-device before we pick.
+  type BackMode = "dive" | "snap" | "rubber";
+  const [backMode, setBackMode] = useState<BackMode>(() => {
+    if (typeof window === "undefined") return "dive";
+    const q = new URLSearchParams(window.location.search).get("backmode");
+    if (q === "dive" || q === "snap" || q === "rubber") {
+      try { localStorage.setItem("backMode", q); } catch {}
+      return q;
+    }
+    const s = localStorage.getItem("backMode");
+    return s === "snap" || s === "rubber" ? s : "dive";
+  });
+  const [backDebug] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (new URLSearchParams(window.location.search).has("backdebug")) {
+      try { localStorage.setItem("backDebug", "1"); } catch {}
+      return true;
+    }
+    return localStorage.getItem("backDebug") === "1";
+  });
+  const cycleBackMode = useCallback(() => {
+    setBackMode((m) => {
+      const next: BackMode = m === "dive" ? "snap" : m === "snap" ? "rubber" : "dive";
+      try { localStorage.setItem("backMode", next); } catch {}
+      return next;
+    });
+  }, []);
+
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
@@ -378,6 +409,13 @@ function Calendar() {
   // right after a scroll lands on the day actually on screen, not the previous
   // one, and so there's no stale-then-correct re-animation.
   const liveDayRef = useRef(selected);
+  // the day the calendar's ring sat on before the last dive into the book — the
+  // "stale" spot a browser-back returns to; the rubber-band mode springs from it
+  const preDiveDayRef = useRef(selected);
+  const backModeRef = useRef(backMode);
+  useEffect(() => {
+    backModeRef.current = backMode;
+  }, [backMode]);
 
   // every dive is a real history entry, so the browser's own back —
   // the iOS edge swipe included — pops one altitude instead of leaving
@@ -431,6 +469,7 @@ function Calendar() {
   /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
     (key: string) => {
+      preDiveDayRef.current = liveDayRef.current; // the ring's spot before this dive
       liveDayRef.current = key;
       setSelected(key);
       navigator.vibrate?.(6);
@@ -1013,6 +1052,69 @@ function Calendar() {
     runZoom("schedule", "month", day);
   }, [runZoom]);
 
+  // Back-out alternatives to the dive (behind ?backdebug). A browser back-swipe
+  // on iOS plays its OWN native page-transition first, so the app's dive then
+  // runs on top — the book reappears and re-shrinks after you've already left
+  // it. These skip the dive and just present the canvas instead.
+
+  // the dive into the book left the month layer inline-hidden (runZoom's finish
+  // keeps the departed layer hidden until its class returns); a non-zoom climb
+  // must clear that itself, or the canvas comes back blank
+  const wakeMonthLayer = () => {
+    const el = monthLayerRef.current;
+    if (!el) return;
+    el.style.visibility = "";
+    el.style.transform = "";
+    el.style.opacity = "";
+  };
+
+  // snap: no animation — land straight on the canvas, on the day last read
+  const climbSnap = useCallback(() => {
+    if (viewRef.current !== "schedule") return;
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    wakeMonthLayer();
+    const day = liveDayRef.current;
+    const m = startOfMonth(dateFromDayKey(day));
+    setVisibleMonth(m);
+    setVisibleYear(m.getFullYear());
+    setSelected(day);
+    monthFeedRef.current?.goTo(m, false); // instant — no dive
+    setView("month");
+  }, []);
+
+  // rubber: present the canvas on the pre-dive spot (matching what the native
+  // back-swipe shows), then spring the ring + scroll to the day last read, so
+  // the correction reads as one gentle rubber-band rather than a re-dive
+  const climbRubber = useCallback(() => {
+    if (viewRef.current !== "schedule") return;
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    wakeMonthLayer();
+    const from = preDiveDayRef.current;
+    const fromM = startOfMonth(dateFromDayKey(from));
+    setVisibleMonth(fromM);
+    setVisibleYear(fromM.getFullYear());
+    setSelected(from);
+    monthFeedRef.current?.goTo(fromM, false);
+    setView("month");
+    // next frame (canvas now on the stale spot), spring across to the real day
+    requestAnimationFrame(() => {
+      const day = liveDayRef.current;
+      const m = startOfMonth(dateFromDayKey(day));
+      setVisibleMonth(m);
+      setVisibleYear(m.getFullYear());
+      setSelected(day);
+      monthFeedRef.current?.goTo(m, true); // smooth scroll; the ring springs
+    });
+  }, []);
+
+  // route a schedule→canvas back through the chosen mode (dive is the default)
+  const climbFromSchedule = useCallback(() => {
+    const mode = backModeRef.current;
+    if (mode === "snap") climbSnap();
+    else if (mode === "rubber") climbRubber();
+    else descendFromSchedule();
+  }, [climbSnap, climbRubber, descendFromSchedule]);
+
   const descendFromEntry = useCallback(() => {
     runZoom("entry", "schedule", focusedIdRef.current ?? "");
   }, [runZoom]);
@@ -1037,7 +1139,7 @@ function Calendar() {
       if (DEPTH[target] < DEPTH[cur]) {
         // climbing to a higher altitude (the camera pulls out / up)
         if (cur === "entry") descendFromEntry();
-        else if (cur === "schedule") descendFromSchedule();
+        else if (cur === "schedule") climbFromSchedule();
         else if (cur === "month" && target === "year")
           climbToYear(Number(sp.get("y")));
       } else {
@@ -1048,6 +1150,7 @@ function Calendar() {
           // backing out of the year glance lands on the month floor
           descendFromYear();
         } else if (cur === "month" && d) {
+          preDiveDayRef.current = liveDayRef.current;
           liveDayRef.current = d;
           setSelected(d);
           scheduleFeedRef.current?.goTo(d);
@@ -1060,7 +1163,7 @@ function Calendar() {
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [descendFromEntry, descendFromSchedule, climbToYear, descendFromYear, runZoom]);
+  }, [descendFromEntry, climbFromSchedule, climbToYear, descendFromYear, runZoom]);
 
   const closeSchedule = () => window.history.back();
 
@@ -1415,6 +1518,19 @@ function Calendar() {
             )}
           >
             {perfFlat ? "flat ink" : "blend ink"}
+          </button>
+        </div>
+      )}
+      {/* back-out A/B pill (temporary; shown with ?backdebug) — cycle how a
+          schedule→calendar back behaves: dive · snap · rubber */}
+      {backDebug && (
+        <div className="float fixed bottom-3 right-3 z-50 flex items-center rounded-full p-0.5">
+          <button
+            type="button"
+            onClick={cycleBackMode}
+            className="voice-label pressable rounded-full bg-wax/15 px-2.5 py-1 text-[0.72rem] text-wax"
+          >
+            back: {backMode}
           </button>
         </div>
       )}
