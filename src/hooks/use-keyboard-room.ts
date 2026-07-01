@@ -39,7 +39,6 @@ export function useKeyboardRoom(
     if (!vv || !el) return;
     let field: HTMLElement | null = null;
     let raf = 0;
-    let settle: ReturnType<typeof setTimeout> | null = null;
 
     const correct = () => {
       if (!field) {
@@ -80,47 +79,67 @@ export function useKeyboardRoom(
         if (over > 0.5) el.scrollTop += over;
       }
     };
-    // always deferred: a frame after the triggering event iOS has done its own
-    // focus-scroll, so ours is the offset that sticks
-    const sync = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        correct();
-      });
+    // Run the correction NOW and again after the browser's own scrolling
+    // settles. iOS runs its OWN focus/caret scroll across a focus, each newline,
+    // and the keyboard's rise, and parks the caret right at the keyboard top
+    // (under the floating band). A purely synchronous correction lands BEFORE
+    // that scroll and gets overridden — which is why the current line dropped
+    // under the keyboard on a newline (our pass lost the race) yet reappeared on
+    // the next keystroke (iOS's own caret-scroll). So every trigger fires several
+    // passes: immediate (wins on Android/desktop, where nothing fights us), the
+    // next frame (after iOS's own scroll), and after short settles (after the
+    // rise / a late caret-scroll). Each pass only moves the caret line toward its
+    // target, so they converge instead of fighting.
+    const settles = new Set<ReturnType<typeof setTimeout>>();
+    const clearSettles = () => {
+      settles.forEach(clearTimeout);
+      settles.clear();
+    };
+    const run = (late: number[] = [140]) => {
+      correct();
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          correct();
+        });
+      clearSettles();
+      for (const ms of late) {
+        const id = setTimeout(() => {
+          settles.delete(id);
+          correct();
+        }, ms);
+        settles.add(id);
+      }
     };
     // The field grows a whole line at a time as it's typed into; an input event
     // fires BEFORE the autosize reflow (it bubbles to us ahead of React's
-    // onChange), so reacting to input alone lands a beat behind — a newline
-    // drops the caret under the keyboard until the next keystroke catches up.
-    // A ResizeObserver on the field instead fires AFTER layout, on the actual
-    // height change, so the correction tracks every line as it appears — no
-    // back-and-forth jank.
-    const ro = new ResizeObserver(() => correct());
+    // onChange), so reacting to input alone lands a beat behind. A ResizeObserver
+    // on the field instead fires AFTER layout, on the actual height change, so the
+    // correction tracks every line as it appears.
+    const ro = new ResizeObserver(() => run());
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) {
         field = t;
         ro.observe(t);
-        sync();
-        // one more pass past the keyboard's rise (~250ms), in case iOS's
-        // settle-scroll lands after our frame
-        if (settle) clearTimeout(settle);
-        settle = setTimeout(correct, 350);
+        // extra late passes to outlast the keyboard's rise (~250ms) and iOS's
+        // settle-scroll after it
+        run([140, 300, 450]);
       }
     };
     const onFocusOut = () => {
       if (field) ro.unobserve(field);
       field = null;
-      if (settle) clearTimeout(settle);
-      settle = null;
+      clearSettles();
       el.style.paddingBottom = "";
       el.style.scrollPaddingBottom = "";
     };
+    const onVvResize = () => run([140, 300]); // the keyboard opens/closes
+    const onVvScroll = () => run();
     el.addEventListener("focusin", onFocusIn);
     el.addEventListener("focusout", onFocusOut);
-    vv.addEventListener("resize", sync); // the keyboard opens/closes
-    vv.addEventListener("scroll", sync);
+    vv.addEventListener("resize", onVvResize);
+    vv.addEventListener("scroll", onVvScroll);
     // A field can be focused BEFORE this effect attaches — the entry editor
     // focuses its textarea and only THEN flips `editing`, which is what enables
     // us, so its focusin already fired into nothing. Adopt the live field now,
@@ -129,17 +148,16 @@ export function useKeyboardRoom(
     if (pre && el.contains(pre) && (pre.tagName === "TEXTAREA" || pre.tagName === "INPUT")) {
       field = pre;
       ro.observe(pre);
-      sync();
-      settle = setTimeout(correct, 350);
+      run([140, 300, 450]);
     }
     return () => {
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
-      vv.removeEventListener("resize", sync);
-      vv.removeEventListener("scroll", sync);
+      vv.removeEventListener("resize", onVvResize);
+      vv.removeEventListener("scroll", onVvScroll);
       ro.disconnect();
       if (raf) cancelAnimationFrame(raf);
-      if (settle) clearTimeout(settle);
+      clearSettles();
       el.style.paddingBottom = "";
       el.style.scrollPaddingBottom = "";
     };

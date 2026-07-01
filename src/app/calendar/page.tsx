@@ -3163,7 +3163,13 @@ function TodayZoneFill({
                 handling all render exactly as a plain field would */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
+              // extend a hair BELOW the field: the repeating gradient doesn't
+              // paint the rule of its final partial period, so a field exactly N
+              // lines tall dropped the Nth (bottom-most) line's rule — every line
+              // but the one being written got ruled. The extra 0.75rem gives that
+              // last period room to complete so the current line is ruled too;
+              // it's less than a line's height, so no spurious rule appears below.
+              className="pointer-events-none absolute inset-x-0 top-0 -bottom-3"
               style={{
                 // rule just below the baseline so standard characters rest ON the
                 // line and only descenders dip across it, like real ruled paper
