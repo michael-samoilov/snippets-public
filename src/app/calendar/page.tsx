@@ -372,6 +372,12 @@ function Calendar() {
     focusedIdRef.current = focusedId;
     visibleMonthRef.current = visibleMonth;
   });
+  // The day the book is currently on, written SYNCHRONOUSLY (unlike `selected`,
+  // which the scroll spy sets inside a startTransition, so it — and selectedRef —
+  // lag a beat). Climbing out of the book reads this so a browser-back fired
+  // right after a scroll lands on the day actually on screen, not the previous
+  // one, and so there's no stale-then-correct re-animation.
+  const liveDayRef = useRef(selected);
 
   // every dive is a real history entry, so the browser's own back —
   // the iOS edge swipe included — pops one altitude instead of leaving
@@ -425,6 +431,7 @@ function Calendar() {
   /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
     (key: string) => {
+      liveDayRef.current = key;
       setSelected(key);
       navigator.vibrate?.(6);
       if (urlTimer.current) clearTimeout(urlTimer.current);
@@ -441,6 +448,7 @@ function Calendar() {
       critical path, so the start of a scroll stays smooth. */
   const onScheduleDay = useCallback(
     (key: string) => {
+      liveDayRef.current = key; // synchronous — the climb reads this, not deferred state
       startTransition(() => {
         setSelected(key);
         const m = startOfMonth(dateFromDayKey(key));
@@ -990,13 +998,19 @@ function Calendar() {
      browser's own back gesture and ours are the same action */
 
   const descendFromSchedule = useCallback(() => {
-    // stand the canvas on the month being read before pulling back
-    const m = startOfMonth(dateFromDayKey(selectedRef.current));
+    // already climbed out (e.g. a deferred popstate retry firing late) — don't
+    // re-run the book→canvas zoom, which would flash the departed book back in
+    if (viewRef.current !== "schedule") return;
+    // stand the canvas on the day actually on screen (liveDayRef, written
+    // synchronously) before pulling back — selectedRef can still be a scroll
+    // behind, which lands the canvas on the wrong month and then corrects
+    const day = liveDayRef.current;
+    const m = startOfMonth(dateFromDayKey(day));
     setVisibleMonth(m);
     setVisibleYear(m.getFullYear());
     monthFeedRef.current?.goTo(m, false);
     if (urlTimer.current) clearTimeout(urlTimer.current);
-    runZoom("schedule", "month", selectedRef.current);
+    runZoom("schedule", "month", day);
   }, [runZoom]);
 
   const descendFromEntry = useCallback(() => {
@@ -1034,6 +1048,7 @@ function Calendar() {
           // backing out of the year glance lands on the month floor
           descendFromYear();
         } else if (cur === "month" && d) {
+          liveDayRef.current = d;
           setSelected(d);
           scheduleFeedRef.current?.goTo(d);
           runZoom("month", "schedule", d);
@@ -1058,6 +1073,7 @@ function Calendar() {
       // it hold still while the weekday and date wipe in
       const s = all?.find((x) => x.id === id);
       if (s) {
+        liveDayRef.current = s.day;
         setSelected(s.day);
         const m = startOfMonth(dateFromDayKey(s.day));
         setVisibleMonth(m);
@@ -1129,6 +1145,7 @@ function Calendar() {
 
   /** move the book to a day: selection, title, URL, scroll */
   const jumpTo = (key: string, smooth = false) => {
+    liveDayRef.current = key;
     setSelected(key);
     const m = startOfMonth(dateFromDayKey(key));
     setVisibleMonth(m);
@@ -1205,6 +1222,7 @@ function Calendar() {
   };
 
   const goToday = () => {
+    liveDayRef.current = dayKey();
     setSelected(dayKey());
     if (view === "entry") {
       // pop to the book (the handler runs the zoom), then turn it
@@ -1349,6 +1367,7 @@ function Calendar() {
     // from the glance the camera dives into the day's month-mini and
     // arrives directly at the book — the same dive as pick, one
     // altitude steeper
+    liveDayRef.current = day;
     setSelected(day);
     navigator.vibrate?.(6);
     if (urlTimer.current) clearTimeout(urlTimer.current);
