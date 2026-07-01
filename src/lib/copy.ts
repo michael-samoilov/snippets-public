@@ -244,6 +244,7 @@ export const copy = {
   /** the Settings page */
   settings: {
     title: "Settings",
+    back: "Back to the book",
     appearance: {
       heading: "Appearance",
       /** the theme radiogroup's accessible name */
