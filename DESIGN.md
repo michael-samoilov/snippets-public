@@ -374,9 +374,9 @@ never red.
 - **Ink on paper:** `.voice-prose`/`.voice-display` use
   `mix-blend-mode: multiply` in Paper mode so the sheet's fibers show
   through the strokes (Lamplight stays unblended — luminous ink), plus
-  a hair of `currentColor` text-shadow feathering the edges; the four
-  mastheads get `.ink-bleed` (SVG `feDisplacementMap`, scale 1.6 —
-  display sizes only, it's paint-expensive).
+  a hair of `currentColor` text-shadow feathering the edges. (Mastheads
+  once wore an `.ink-bleed` SVG displacement; it was retired — the
+  text-shadow feathering carries the edges.)
 - Speech: two engines behind one hook. Aqua/Avalon (primary, when
   keyed): record with the live wax waveform (`InkBars`), words set
   ~450ms after stop; works in every browser. Web Speech (fallback):

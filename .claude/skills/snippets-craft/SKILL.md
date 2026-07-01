@@ -63,7 +63,7 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    (`--marker`) belongs to found words in search, nothing else;
    gilt = favorites only. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
-   mode; `.ink-bleed` is for mastheads only.
+   mode.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,
    `…`. No exclamation marks, emoji, or sparkle-AI framing. Streaks
    past-tense; gaps blank, never red.

@@ -11,25 +11,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // indefinite min-h chain on desktop let h-full children collapse —
     // the calendar's stage shrank to its 1px border.)
     <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
-      {/* ink-bleed: a hair of edge wobble for masthead type */}
-      <svg aria-hidden="true" width="0" height="0" className="absolute">
-        <filter id="ink-bleed" x="-5%" y="-5%" width="110%" height="110%">
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.22"
-            numOctaves="2"
-            seed="3"
-            result="n"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="n"
-            scale="1.6"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </svg>
       {/* desk chrome — the book is the only page now, so there's no nav: just
           the wordmark and the account mark on the desk's top edge */}
       <header className="flex shrink-0 items-center justify-between px-2 pb-2 pt-2 sm:px-1 sm:pb-3 sm:pt-4">

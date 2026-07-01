@@ -451,8 +451,8 @@ textarea:focus-visible,
    A pinch makes iOS re-rasterize the whole composited page at the magnified
    scale — and these grace layers, cheap at 1×, cost scale² when blown up: the
    full-viewport soft-light desk grain, the ink-into-paper `multiply` on every
-   line, each card's isolated blend layer, the WONK ink-bleed displacement
-   filter. On a low-memory iPhone that overflows the compositor and Safari kills
+   line, each card's isolated blend layer, plus the big blurred fills below. On a
+   low-memory iPhone that overflows the compositor and Safari kills
    the page. `data-zooming` is set at the gesture's FIRST touch (before any
    magnification) and held until the scale returns to rest, so for the duration
    of the pinch there is simply nothing expensive to re-raster. Zoom is never
@@ -482,9 +482,6 @@ textarea:focus-visible,
 [data-zooming] .voice-prose,
 [data-zooming] .voice-display {
   mix-blend-mode: normal;
-}
-[data-zooming] .ink-bleed {
-  filter: none;
 }
 
 /* ── typographic voices ────────────────────────────────────────
@@ -557,11 +554,6 @@ textarea:focus-visible,
    dark sheet; in Paper they're plain ink. */
 .wordmark {
   mix-blend-mode: normal;
-}
-
-/* true edge bleed, mastheads only — displacement is paint-expensive */
-.ink-bleed {
-  filter: url(#ink-bleed);
 }
 
 .voice-prose blockquote,
