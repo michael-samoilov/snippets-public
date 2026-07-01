@@ -3172,10 +3172,16 @@ function TodayZoneFill({
               className="pointer-events-none absolute inset-x-0 top-0 -bottom-3"
               style={{
                 // rule just below the baseline so standard characters rest ON the
-                // line and only descenders dip across it, like real ruled paper
+                // line and only descenders dip across it, like real ruled paper.
+                // The period is a whole PIXEL (27px), matched exactly by the
+                // textarea's line-height: a fractional line height (1.7rem =
+                // 27.2px) let WebKit snap each textarea line box to an integer
+                // device pixel while this gradient stayed fractional, so text and
+                // rules drifted apart over dozens of lines. Integer px on both
+                // keeps every line sitting on its rule, however long the entry.
                 backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7rem - 1px), var(--rule-faint) calc(1.7rem - 1px), var(--rule-faint) 1.7rem)",
-                backgroundPositionY: "-0.4rem",
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent 26px, var(--rule-faint) 26px, var(--rule-faint) 27px)",
+                backgroundPositionY: "-6px",
               }}
             />
             <textarea
@@ -3197,7 +3203,10 @@ function TodayZoneFill({
               }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
               className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
-              style={{ lineHeight: "1.7rem", minHeight: "5.1rem" }}
+              // line-height in whole px, exactly matching the ruled underlay's
+              // 27px period (see the rules above) so text never drifts off its
+              // line; 3 lines (81px) is the resting height
+              style={{ lineHeight: "27px", minHeight: "81px" }}
             />
           </div>
 

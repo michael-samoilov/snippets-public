@@ -39,6 +39,13 @@ export function useKeyboardRoom(
     if (!vv || !el) return;
     let field: HTMLElement | null = null;
     let raf = 0;
+    // the visual viewport's height with NO keyboard, tracked as its running max.
+    // The keyboard's inset is then how far the viewport has shrunk from that —
+    // which works whether iOS keeps window.innerHeight full and only shrinks
+    // visualViewport (Safari) OR shrinks the layout viewport too (standalone
+    // PWA), where the old `innerHeight - vv.height` read zero and the correction
+    // never engaged.
+    let baseVh = vv.height;
 
     const correct = () => {
       if (!field) {
@@ -46,8 +53,12 @@ export function useKeyboardRoom(
         el.style.scrollPaddingBottom = "";
         return;
       }
-      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      if (!kb) {
+      baseVh = Math.max(baseVh, vv.height);
+      const kb = Math.max(
+        window.innerHeight - vv.height - vv.offsetTop, // Safari: layout stays full
+        baseVh - vv.height, // PWA: layout viewport shrinks with the keyboard
+      );
+      if (kb < 60) {
         el.style.paddingBottom = "";
         el.style.scrollPaddingBottom = "";
         return;
@@ -111,12 +122,15 @@ export function useKeyboardRoom(
         settles.add(id);
       }
     };
-    // The field grows a whole line at a time as it's typed into; an input event
-    // fires BEFORE the autosize reflow (it bubbles to us ahead of React's
-    // onChange), so reacting to input alone lands a beat behind. A ResizeObserver
-    // on the field instead fires AFTER layout, on the actual height change, so the
-    // correction tracks every line as it appears.
+    // The field grows a whole line at a time as it's typed into. Two triggers,
+    // because either alone has failed: a ResizeObserver on the field fires AFTER
+    // layout on the real height change (tracks each line as it appears), and the
+    // raw `input` event catches the change even where the observer doesn't land a
+    // callback for a programmatic height set. `input` fires BEFORE the autosize
+    // reflow, so its immediate pass reads the old height — but run()'s deferred
+    // passes re-measure after the reflow, so the caret still ends up placed.
     const ro = new ResizeObserver(() => run());
+    const onInput = () => run();
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) {
@@ -138,6 +152,7 @@ export function useKeyboardRoom(
     const onVvScroll = () => run();
     el.addEventListener("focusin", onFocusIn);
     el.addEventListener("focusout", onFocusOut);
+    el.addEventListener("input", onInput);
     vv.addEventListener("resize", onVvResize);
     vv.addEventListener("scroll", onVvScroll);
     // A field can be focused BEFORE this effect attaches — the entry editor
@@ -153,6 +168,7 @@ export function useKeyboardRoom(
     return () => {
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
+      el.removeEventListener("input", onInput);
       vv.removeEventListener("resize", onVvResize);
       vv.removeEventListener("scroll", onVvScroll);
       ro.disconnect();
