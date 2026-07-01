@@ -286,6 +286,11 @@ function tapBeat(
   return domeBeat(lp(0.2, 1, eo(p)), clamp((e - tExit) / 150));
 }
 
+/** imperative handle: drive the press-down straight from the pointer event,
+    bypassing React's render round-trip so the seal rotates in the touch's own
+    frame (no input lag). `press(true)` on pointerdown, `press(false)` to cancel. */
+export type SealControl = { press: (down: boolean) => void };
+
 export type WaxStampProps = {
   /** increment once per keep; any change replays the press. */
   playKey: number;
@@ -317,6 +322,9 @@ export type WaxStampProps = {
   iconScale?: number;
   /** lab/tap: held-down feedback while the thumb is on the button (before release). */
   pressed?: boolean;
+  /** tap mode: an imperative handle for driving the press-down from the pointer
+      event itself (no React re-render), so rotation starts with no input lag. */
+  controlRef?: { current: SealControl | null };
   /** metallic glint strength (0 = none); micro-facets that catch the light. */
   speckle?: number;
   /** molten-cloud strength (0 = none); a low-frequency swirl in the lightness. */
@@ -343,11 +351,16 @@ export type WaxStampProps = {
   className?: string;
 };
 
-export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 30, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, speckle = 0, cloud = 0, still = false, restGlyph = true, whiteGlyph = false, glyphColor, glyphScale = 0.46, superSample = 1, ignoreReducedMotion = false, className }: WaxStampProps) {
+export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", ease = "front", bounce = 1.5, rotate = 30, mode = "press", lingerMs = 1000, exitMs = 200, exit = "grow", tint, puck = 1, iconScale = 0.4, pressed = false, controlRef, speckle = 0, cloud = 0, still = false, restGlyph = true, whiteGlyph = false, glyphColor, glyphScale = 0.46, superSample = 1, ignoreReducedMotion = false, className }: WaxStampProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduce = useRef(false);
   const lastKey = useRef<number | null>(null); // tap mode: distinguish mount from a tap
-  const wasPressed = useRef(false); // tap mode: was the thumb down last frame (to ease back on cancel)
+  // imperative press: qRef holds the live pushdown progress (0 rest → 1 pressed),
+  // driven either by the pointer (via controlRef) or the `pressed` prop; pressRaf
+  // is its own animation loop, independent of the main lifecycle rAF.
+  const qRef = useRef(0);
+  const pressRafRef = useRef(0);
+  const pressFnRef = useRef<((down: boolean) => void) | null>(null);
   const colors = useRef<Colors>(DEFAULT_COLORS);
   // scratch buffers, (re)allocated when the backing size changes
   const buf = useRef<{ dim: number; hgt: Float32Array; msk: Float32Array; gly: Float32Array; glyR: Float32Array; off: HTMLCanvasElement; comp: HTMLCanvasElement; iconImg: HTMLCanvasElement; img: ImageData; baked: string; bakedScale: number; bakedGlyphScale: number; warmed?: boolean } | null>(null);
@@ -357,6 +370,23 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     colors.current = resolveColors(tint); // tint > dev override > --wax* tokens
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }, [tint]);
+
+  // Expose a stable imperative handle that always delegates to the freshest press
+  // ramp (rebuilt each main-effect run, closing over the current draw). The button
+  // calls this straight from onPointerDown, so the rotation starts in the touch's
+  // own frame rather than after a setState → re-render → post-paint effect chain.
+  useEffect(() => {
+    if (!controlRef) return;
+    const ctl: SealControl = { press: (down) => pressFnRef.current?.(down) };
+    controlRef.current = ctl;
+    return () => {
+      if (controlRef.current === ctl) controlRef.current = null;
+    };
+  }, [controlRef]);
+
+  // stop any in-flight press ramp when the seal unmounts (the main effect's
+  // cleanup deliberately leaves pressRaf alone so it survives incidental re-renders)
+  useEffect(() => () => cancelAnimationFrame(pressRafRef.current), []);
 
   // passive (post-paint): the per-pixel seal draw is heavy, and running it in a
   // layout effect blocked first paint on mobile — the book couldn't get past the
@@ -475,6 +505,30 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
       ctx.restore();
     };
 
+    // The pushdown ramp (rest ⇄ pressed), on its own rAF so it can be driven
+    // imperatively from a pointer event with no React round-trip. Eases from the
+    // live qRef toward the target, so a pointer-press → holdDown handoff (or a
+    // keyboard submit that skipped the pointer entirely) is continuous, never a jump.
+    const ramp = (target: number) => {
+      cancelAnimationFrame(pressRafRef.current);
+      const from = qRef.current;
+      if (Math.abs(from - target) < 0.0005) {
+        qRef.current = target;
+        draw(target < 0.0005 ? domeBeat(1, 1) : pushdownBeat(target, rotate));
+        return;
+      }
+      const s0 = performance.now();
+      const rampFrame = (now: number) => {
+        const p = clamp((now - s0) / 150);
+        const q = from + (target - from) * eo(p);
+        qRef.current = q;
+        draw(q < 0.0005 ? domeBeat(1, 1) : pushdownBeat(q, rotate));
+        if (p < 1) pressRafRef.current = requestAnimationFrame(rampFrame);
+      };
+      pressRafRef.current = requestAnimationFrame(rampFrame);
+    };
+    pressFnRef.current = (down: boolean) => ramp(down ? 1 : 0);
+
     const cycleTotal = DROP_MS + IDLE_MS + PRESS_MS + lingerMs + exitMs;
     const tapTotal = TAP_TOTAL(lingerMs, exitMs);
     let raf = 0;
@@ -509,38 +563,28 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     if (mode === "tap") { // rest as the dome; play one lifecycle when tapped (playKey change)
       const tapped = lastKey.current !== null && lastKey.current !== playKey;
       lastKey.current = playKey;
-      if (pressed) { // thumb is down — ease into the pressed-down (pre-rotated) state and hold
-        wasPressed.current = true;
+      if (tapped) {
+        // a keep — the press lifecycle lifts off from the pressed pose the finger
+        // left us in (tapBeat(0) === pressed), so cancel the ramp and clear qRef so
+        // rest returns to the dome once the lifecycle settles.
+        cancelAnimationFrame(pressRafRef.current);
+        qRef.current = 0;
         const frame = (now: number) => {
-          const q = clamp((now - t0) / 150);
-          draw(pushdownBeat(eo(q), rotate));
-          if (q < 1) raf = requestAnimationFrame(frame);
+          const e = now - t0;
+          if (e >= tapTotal) { draw(domeBeat(1, 1)); return; }  // settle back to the resting dome
+          draw(tapBeat(e, variant, ease, bounce, rotate, lingerMs, exitMs, exit));
+          raf = requestAnimationFrame(frame);
         };
         raf = requestAnimationFrame(frame);
         return cleanup;
       }
-      if (!tapped && wasPressed.current) {
-        // released without keeping (cancelled) — ease the press-down + rotation
-        // back to rest instead of snapping
-        wasPressed.current = false;
-        const frame = (now: number) => {
-          const q = clamp((now - t0) / 150);
-          draw(pushdownBeat(1 - eo(q), rotate));
-          if (q < 1) raf = requestAnimationFrame(frame);
-          else draw(domeBeat(1, 1));
-        };
-        raf = requestAnimationFrame(frame);
-        return cleanup;
-      }
-      wasPressed.current = false;
-      if (!tapped) { draw(domeBeat(1, 1)); return cleanup; } // mount / non-tap dep change → just rest
-      const frame = (now: number) => {
-        const e = now - t0;
-        if (e >= tapTotal) { draw(domeBeat(1, 1)); return; }  // settle back to the resting dome
-        draw(tapBeat(e, variant, ease, bounce, rotate, lingerMs, exitMs, exit));
-        raf = requestAnimationFrame(frame);
-      };
-      raf = requestAnimationFrame(frame);
+      // held down (holdDown from submit, or a keyboard submit that skipped the
+      // pointer) → make sure we're pressed; the ramp continues from wherever the
+      // finger already drove qRef, so there's no re-press jump.
+      if (pressed) { ramp(1); return cleanup; }
+      // rest — hold whatever pose the finger last left us in (pressed while a
+      // pointer-driven ramp is mid-flight, else the dome), never snapping.
+      draw(qRef.current > 0.0005 ? pushdownBeat(qRef.current, rotate) : domeBeat(1, 1));
       return cleanup;
     }
 

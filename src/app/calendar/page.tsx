@@ -24,7 +24,7 @@ import {
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { ulid } from "ulidx";
-import { WaxStamp as CanvasSeal } from "@/components/capture/wax-stamp";
+import { WaxStamp as CanvasSeal, type SealControl } from "@/components/capture/wax-stamp";
 import { KEEP_BEATS, useKeepSequence } from "@/components/schedule/keep-sequence";
 import { useKeptDraft } from "@/lib/kept-draft";
 import {
@@ -3013,7 +3013,9 @@ function TodayZoneFill({
 }) {
   const [text, setText] = useState("");
   const [playKey, setPlayKey] = useState(0);
-  const [down, setDown] = useState(false);
+  // the seal's press is driven imperatively (see onPointerDown) so it rotates in
+  // the touch's own frame; no React state stands between the tap and the motion
+  const sealCtl = useRef<SealControl | null>(null);
   // holds the seal pressed-down (rotated) from the tap through the lead, so the
   // press animation LIFTS OFF from that same press — no un-rotate-then-replay
   const [holdDown, setHoldDown] = useState(false);
@@ -3183,14 +3185,15 @@ function TodayZoneFill({
             ref={btnRef}
             type="button"
             aria-label={hasText ? copy.todayZone.keepEntry : copy.todayZone.speakEntry}
-            // keep on pointer-up (released ON the button) so setDown(false) and
-            // the hold batch in one render — the press never un-rotates. onClick
+            // press the seal imperatively on pointerdown (rotates in this very
+            // frame — no state round-trip). On release, a keep hands the pressed
+            // pose to holdDown (no un-rotate); otherwise ease it back. onClick
             // covers keyboard; it's idempotent.
             onClick={submit}
             disabled={frozen}
-            onPointerDown={(e) => { e.preventDefault(); setDown(true); }}
-            onPointerUp={() => { setDown(false); if (hasText) submit(); }}
-            onPointerLeave={() => setDown(false)}
+            onPointerDown={(e) => { e.preventDefault(); sealCtl.current?.press(true); }}
+            onPointerUp={() => { if (hasText) submit(); else sealCtl.current?.press(false); }}
+            onPointerLeave={() => { if (!holdDown) sealCtl.current?.press(false); }}
             className="relative grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
@@ -3209,7 +3212,8 @@ function TodayZoneFill({
                   glyph={quill ? "e:quill" : "c:mic"}
                   iconScale={quill ? 0.36 : 0.46}
                   mode="tap"
-                  pressed={down || holdDown}
+                  controlRef={sealCtl}
+                  pressed={holdDown}
                   variant="spring"
                   ease="front"
                   bounce={1.5}
