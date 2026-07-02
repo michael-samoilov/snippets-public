@@ -3063,6 +3063,7 @@ function TodayZoneFill({
   // deliberately ignores this field — see use-keyboard-room — so nothing fights.)
   const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
   const sealAnchorY = useRef<number | null>(null);
+  const zoneRestH = useRef<number | null>(null);
   const tailSpacerRef = useRef<HTMLDivElement>(null);
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollerOf = () =>
@@ -3070,13 +3071,16 @@ function TodayZoneFill({
   const anchorTail = () => {
     const btn = btnRef.current, area = areaRef.current, sp = tailSpacerRef.current, sc = scrollerOf();
     if (!btn || !area || !sp || !sc) return;
+    const box = btn.closest<HTMLElement>("[data-today-zone-box]");
     const g = Math.max(0, area.scrollHeight - REST_FIELD); // how far the field grew
     if (g === 0) {
-      // at rest (≤3 lines): no growth to mirror; remember where the seal sits so
-      // we can hold it there once the entry grows (also tracks the keyboard rise)
+      // at rest (≤3 lines): no growth to mirror; remember where the seal sits —
+      // and how tall the zone is — so we can hold both once the entry grows
+      // (re-sampled every pass, so it also tracks the keyboard's rise)
       sp.style.height = "";
       sc.style.paddingBottom = "";
       sealAnchorY.current = btn.getBoundingClientRect().bottom;
+      if (box) zoneRestH.current = box.getBoundingClientRect().height;
       return;
     }
     // The field grows DOWNWARD, but the composition is vertically centred, so a
@@ -3086,11 +3090,32 @@ function TodayZoneFill({
     // and the centred block's midpoint — the seal and last line — don't move.
     // No scroll, no fight with the browser's scroll, nothing to jank.
     sp.style.height = `${g}px`;
-    // Once the block outgrows the viewport, centring stops and the seal starts to
-    // drift DOWN — now always a positive delta, which scrolling CAN catch (the
-    // upward-drift phase was absorbed by the spacer). A viewport of bottom room
-    // guarantees the scroller can move far enough.
-    sc.style.paddingBottom = `${sc.clientHeight}px`;
+    // …but never past the zone's own rest height. Uncapped, the mirror made the
+    // ZONE grow (+G above and +G below the seal), opening a huge void under the
+    // seal. Cap the spacer to the centring slack actually left: give back any
+    // overflow the mirror caused, so the zone stays exactly its rest size.
+    let slackLeft = true;
+    if (box && zoneRestH.current != null) {
+      const over = box.getBoundingClientRect().height - zoneRestH.current;
+      if (over > 0) {
+        sp.style.height = `${Math.max(0, g - over)}px`;
+        slackLeft = false;
+      }
+    }
+    if (slackLeft) {
+      // the spacer alone holds the seal — and the pad must stay OFF here: the
+      // zone's min-h-full resolves against the scroller's CONTENT box, which
+      // padding eats into, so a pad in this phase shrank the zone itself and
+      // wobbled the whole composition.
+      sc.style.paddingBottom = "";
+      return;
+    }
+    // Slack spent: the seal now drifts DOWN as the field grows — always a
+    // positive delta, which scrolling CAN catch (the upward-drift phase was
+    // absorbed by the spacer). The total drift can never exceed the growth, so
+    // g of bottom room is enough; the zone is content-sized past its min-height
+    // here, so the pad can't shrink it anymore.
+    sc.style.paddingBottom = `${g}px`;
     if (sealAnchorY.current == null) sealAnchorY.current = btn.getBoundingClientRect().bottom;
     const delta = btn.getBoundingClientRect().bottom - sealAnchorY.current;
     if (delta > 0.5) sc.scrollTop += delta;

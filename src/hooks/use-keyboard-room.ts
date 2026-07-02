@@ -39,6 +39,18 @@ export function useKeyboardRoom(
     if (!vv || !el) return;
     let field: HTMLElement | null = null;
     let raf = 0;
+    // whether WE wrote the scroller's bottom padding. The today zone manages its
+    // own padding on this same scroller (see anchorTail in calendar/page.tsx) and
+    // its textarea's input events bubble here — an unconditional clear on the
+    // "no managed field" path was silently wiping the zone's padding a frame
+    // after every keystroke, clamping its scroll correction.
+    let padOurs = false;
+    const clearPad = () => {
+      if (!padOurs) return;
+      padOurs = false;
+      el.style.paddingBottom = "";
+      el.style.scrollPaddingBottom = "";
+    };
     // the visual viewport's height with NO keyboard, tracked as its running max.
     // The keyboard's inset is then how far the viewport has shrunk from that —
     // which works whether iOS keeps window.innerHeight full and only shrinks
@@ -49,8 +61,7 @@ export function useKeyboardRoom(
 
     const correct = () => {
       if (!field) {
-        el.style.paddingBottom = "";
-        el.style.scrollPaddingBottom = "";
+        clearPad();
         return;
       }
       baseVh = Math.max(baseVh, vv.height);
@@ -59,14 +70,14 @@ export function useKeyboardRoom(
         baseVh - vv.height, // PWA: layout viewport shrinks with the keyboard
       );
       if (kb < 60) {
-        el.style.paddingBottom = "";
-        el.style.scrollPaddingBottom = "";
+        clearPad();
         return;
       }
       // the top of the keyboard's floating accessory band (autofill pills +
       // dismiss button) — the real ceiling the words must stay above
       const bandTop = vv.offsetTop + vv.height - FLOAT;
       // float the field's foot above the band, no more
+      padOurs = true;
       el.style.paddingBottom = `${kb + FLOAT}px`;
       el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
       const over = field.getBoundingClientRect().bottom - bandTop;
@@ -133,8 +144,7 @@ export function useKeyboardRoom(
       if (field) ro.unobserve(field);
       field = null;
       clearSettles();
-      el.style.paddingBottom = "";
-      el.style.scrollPaddingBottom = "";
+      clearPad();
     };
     const onVvResize = () => run([140, 300]); // the keyboard opens/closes
     const onVvScroll = () => run();
@@ -162,8 +172,7 @@ export function useKeyboardRoom(
       ro.disconnect();
       if (raf) cancelAnimationFrame(raf);
       clearSettles();
-      el.style.paddingBottom = "";
-      el.style.scrollPaddingBottom = "";
+      clearPad();
     };
   }, [scrollerRef, enabled]);
 }
