@@ -42,11 +42,12 @@ import {
 } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
+import { isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
 import { queryTerms } from "@/lib/search";
-import { cn } from "@/lib/utils";
+import { cn, joinText } from "@/lib/utils";
 import {
   weekdays,
   ym,
@@ -3048,10 +3049,6 @@ function TodayZoneFill({
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
-  // the quill appears only once there's a real character typed (not on focus),
-  // and stays through the keep
-  const hasText = text.length > 0;
-  const quill = hasText || frozen; // which glyph the seal wears + presses
   useEffect(() => clearTimers, []);
 
   // Tail anchoring. The zone's composition is fixed BY LAYOUT, identical at
@@ -3103,6 +3100,66 @@ function TodayZoneFill({
   const releaseTail = clearAnchorTimers;
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Voice: the seal is the microphone. Spoken words merge after whatever's
+  // already written; the field grows and the tail re-pins in the same frame
+  // (a state-driven value change bypasses onChange, so both are done by hand).
+  // Unmounting mid-take (changing altitude, opening an entry) aborts the
+  // recorder and drops the audio — accepted for now.
+  const voiceUsed = useRef(false);
+  const speech = useSpeech((spoken) => {
+    voiceUsed.current = true;
+    setText((prev) => joinText(prev, spoken));
+    requestAnimationFrame(() => {
+      const el = areaRef.current;
+      if (!el) return;
+      autosizeArea(el);
+      anchorTail();
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  });
+  const listening = speech.status === "listening";
+  const transcribing = speech.status === "transcribing";
+  // the web engine streams words live — show them on the rules as they come.
+  // (Aqua records quietly and sets the words all at once after the stop.)
+  const liveSpoken =
+    speech.engine === "web" && listening
+      ? [...speech.segments.map((s) => s.text), speech.interim]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+  const shownText = liveSpoken ? joinText(text, liveSpoken) : text;
+  useLayoutEffect(() => {
+    if (!liveSpoken) return;
+    const el = areaRef.current;
+    if (!el) return;
+    autosizeArea(el);
+    anchorTail();
+  }, [liveSpoken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // voice must never fail silently — every failure says what happened
+  useEffect(() => {
+    if (!speech.failure) return;
+    const f = copy.capture.voiceFailures;
+    const m: { title: string; description: string } =
+      speech.failure === "service"
+        ? {
+            title: f.service.title,
+            description: isIOSStandalone()
+              ? f.service.descriptionInstalledIOS
+              : f.service.descriptionOtherwise,
+          }
+        : f[speech.failure];
+    toast(m.title, { description: m.description });
+  }, [speech.failure]);
+
+  // the quill appears only once there's a real character typed (not on focus),
+  // and stays through the keep
+  const hasText = text.length > 0;
+  // which glyph the seal wears + presses: the mic holds through a whole take
+  // (listening and settling), then cross-slides to the quill with the words
+  const quill = (hasText || frozen) && !listening && !transcribing;
+
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
   const LEAD_MS = 380;
@@ -3111,8 +3168,16 @@ function TodayZoneFill({
   const ENTRY_MS = 560; // sweep step 2: the entry wipes into the schedule
 
   const submit = () => {
+    if (transcribing) return; // the words are settling — a beat, not a state to act in
+    if (listening) {
+      speech.stop(); // tap again → stop the take
+      return;
+    }
     if (!hasText) {
-      areaRef.current?.focus(); // mic: begin the entry (voice capture is a TODO)
+      // mic: begin the entry by speaking — or, where voice isn't offered
+      // (or the probe hasn't resolved yet), by writing
+      if (speech.resolved && speech.supported) speech.start();
+      else areaRef.current?.focus();
       return;
     }
     if (phase !== "idle") return; // a keep is already running (idempotent)
@@ -3121,11 +3186,12 @@ function TodayZoneFill({
     const capturedAt = Date.now();
     const id = ulid(); // creation-order id (today: same as capturedAt)
     const file = () => {
+      const source = voiceUsed.current ? "voice" : "typed";
       draft?.set({
         id, text: t, kind: null, tags: [], capturedAt, day,
-        source: "typed", favorite: 0, enriched: "pending", updatedAt: capturedAt,
+        source, favorite: 0, enriched: "pending", updatedAt: capturedAt,
       });
-      void addSnippet({ id, text: t, source: "typed", capturedAt }).then(enrichSnippet);
+      void addSnippet({ id, text: t, source, capturedAt }).then(enrichSnippet);
     };
     // freeze the words; hold the seal pressed-down through the lead; dismiss the
     // keyboard and bring the seal fully into view
@@ -3145,6 +3211,7 @@ function TodayZoneFill({
     at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); onKept?.(id); }); // 2 entry wipes in; pan up to watch it
     at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
       setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
+      voiceUsed.current = false;
       releaseTail();
     });
   };
@@ -3226,9 +3293,12 @@ function TodayZoneFill({
           <div className="relative w-[calc(100%-29.6px)] min-w-[14rem]">
             <textarea
               ref={areaRef}
-              value={text}
+              value={shownText}
               rows={3}
-              readOnly={frozen}
+              // read-only through a voice take: the field is the transcript's
+              // page while words arrive (typing mid-take would bake the live
+              // words into state and double them when the take settles)
+              readOnly={frozen || listening || transcribing}
               // this field anchors its own tail (see anchorTail); the generic
               // keyboard-room hook skips fields marked data-room-center
               data-room-center=""
@@ -3240,11 +3310,15 @@ function TodayZoneFill({
               onBlur={releaseTail}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={
-                firstEver
-                  ? copy.todayZone.placeholderFirstEver
-                  : hasEntry
-                    ? copy.todayZone.placeholderHasEntry
-                    : copy.todayZone.placeholder
+                listening
+                  ? copy.capture.listeningPlaceholder
+                  : transcribing
+                    ? copy.capture.settingWords
+                    : firstEver
+                      ? copy.todayZone.placeholderFirstEver
+                      : hasEntry
+                        ? copy.todayZone.placeholderHasEntry
+                        : copy.todayZone.placeholder
               }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
               // 0.9rem: the SAME type as the schedule card's preview, at the
@@ -3282,7 +3356,17 @@ function TodayZoneFill({
           <button
             ref={btnRef}
             type="button"
-            aria-label={hasText ? copy.todayZone.keepEntry : copy.todayZone.speakEntry}
+            aria-label={
+              transcribing
+                ? copy.capture.seal.busy
+                : listening
+                  ? copy.capture.seal.stop
+                  : hasText
+                    ? copy.todayZone.keepEntry
+                    : copy.todayZone.speakEntry
+            }
+            aria-pressed={listening}
+            aria-busy={transcribing}
             // press the seal imperatively on pointerdown (rotates in this very
             // frame — no state round-trip). Dragging off the button lifts the
             // seal back up (release there cancels); dragging back on presses it
@@ -3312,11 +3396,12 @@ function TodayZoneFill({
               pointerHandled.current = true;
               const inside = inSeal(e);
               overSeal.current = false;
-              // released on the button: keep it (submit hands the press to
-              // holdDown) or, with no text, focus to begin. Released off: cancel
-              // — ease the seal back, no submit.
+              // released on the button: act (submit keeps, or starts/stops a
+              // voice take). Released off: cancel — ease the seal back, no
+              // submit. The press is handed to holdDown only when a keep
+              // actually began; every mic action eases the dome back up.
               if (inside) submit();
-              if (!inside || !hasText) sealCtl.current?.press(false);
+              if (!inside || !keeping.current) sealCtl.current?.press(false);
             }}
             onPointerCancel={() => {
               if (keeping.current) return;
@@ -3336,9 +3421,29 @@ function TodayZoneFill({
             // writing (iOS parks the page bottom at the keyboard top), and the
             // same stance at rest. See the date's mt note: the pair equalizes
             // the perceived gaps around the composition.
-            className="relative mb-[58px] grid place-items-center rounded-full"
+            className={cn(
+              "relative mb-[58px] grid place-items-center rounded-full",
+              listening && "seal-breathe",
+              transcribing && "animate-pulse opacity-80",
+            )}
             style={{ width: 128, height: 128 }}
           >
+            {/* the seal's breathing while listening. The wax is painted high
+                in its 128px canvas (~27px of dead canvas under the visible
+                dome — see the date's mt note), so the rings take explicit
+                insets over the dome the eye sees, not inset-0. */}
+            {listening && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="seal-ring pointer-events-none absolute left-[18px] right-[18px] top-[16px] bottom-[20px] rounded-full bg-wax"
+                />
+                <span
+                  aria-hidden="true"
+                  className="seal-ring seal-ring-late pointer-events-none absolute left-[18px] right-[18px] top-[16px] bottom-[20px] rounded-full bg-wax"
+                />
+              </>
+            )}
             <AnimatePresence initial={false}>
               <motion.span
                 key={quill ? "quill" : "mic"}
@@ -3371,6 +3476,14 @@ function TodayZoneFill({
               </motion.span>
             </AnimatePresence>
           </button>
+          {/* placeholders aren't announced — voice the take's state aloud */}
+          <span className="sr-only" role="status">
+            {listening
+              ? copy.capture.listeningPlaceholder
+              : transcribing
+                ? copy.capture.settingWords
+                : ""}
+          </span>
           </div>
         </div>
       </motion.div>

@@ -40,12 +40,20 @@ pnpm dev            # http://localhost:3000
 Both are optional; the app is fully functional with neither.
 
 ```sh
-# Voice transcription via Aqua Voice's Avalon (works in every browser).
-# Without it, voice falls back to the browser's own speech engine
+# Voice transcription (works in every browser). The proxy speaks the
+# OpenAI Whisper dialect; the default provider is Aqua Voice's Avalon.
+# Without a key, voice falls back to the browser's own speech engine
 # (Chrome, Safari, Edge) — typing works everywhere regardless.
-AQUA_API_KEY=…
-# AQUA_BASE_URL=https://api.aqua.sh/v1   # override if Aqua's base moves
-# AQUA_MODEL=avalon-1                    # override the model name
+TRANSCRIBE_API_KEY=…
+# TRANSCRIBE_BASE_URL=https://api.aqua.sh/v1   # default: Aqua
+# TRANSCRIBE_MODEL=avalon-1                    # default: Avalon
+# (the older AQUA_API_KEY / AQUA_BASE_URL / AQUA_MODEL names still work)
+#
+# Any Whisper-compatible provider is a two-line swap:
+#   OpenAI  TRANSCRIBE_BASE_URL=https://api.openai.com/v1
+#           TRANSCRIBE_MODEL=gpt-4o-transcribe
+#   Groq    TRANSCRIBE_BASE_URL=https://api.groq.com/openai/v1
+#           TRANSCRIBE_MODEL=whisper-large-v3-turbo
 
 # Automatic filing (title/kind/tags) via Claude.
 # Without it, filing falls back to heuristics and one-tap chips.

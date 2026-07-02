@@ -14,13 +14,7 @@ import {
 import { StampMark } from "@/components/stamp-mark";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { copy } from "@/lib/copy";
-import { cn } from "@/lib/utils";
-
-function joinText(a: string, b: string): string {
-  if (!a.trim()) return b;
-  if (!b.trim()) return a;
-  return `${a.replace(/\s+$/, "")} ${b}`;
-}
+import { cn, joinText } from "@/lib/utils";
 
 function autosize(el: HTMLTextAreaElement) {
   el.style.height = "auto";

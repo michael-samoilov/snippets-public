@@ -31,16 +31,19 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (`deletedAt`) with 30-day purge; `favorite` is `0|1` because IndexedDB
   can't index booleans. Live UI via `dexie-react-hooks` in
   `src/hooks/use-snippets.ts`.
-- **Speech:** `src/hooks/use-speech.ts` is one hook with two engines.
-  Primary: Aqua Voice's Avalon via `src/app/api/transcribe/route.ts`
-  (Whisper-compatible proxy; `AQUA_API_KEY`, optional `AQUA_BASE_URL`/
-  `AQUA_MODEL`) — MediaRecorder → upload on stop → text settles ~450ms
-  later; works in every browser incl. Firefox/Brave/installed iOS PWA.
-  Fallback: Web Speech API streaming live words (tap-to-toggle,
-  auto-restarts dropped mobile sessions, iOS runs non-continuous,
-  circuit breaker against dead services). Engine chosen by probing
-  `GET /api/transcribe`. Every failure surfaces a typed reason
-  (`SpeechFailure`) that capture.tsx turns into specific copy.
+- **Speech:** `src/hooks/use-speech.ts` is one hook with two engines,
+  wired to the today zone's wax seal in `src/app/calendar/page.tsx`.
+  Primary: a Whisper-dialect proxy at `src/app/api/transcribe/route.ts`
+  (`TRANSCRIBE_API_KEY`, optional `TRANSCRIBE_BASE_URL`/
+  `TRANSCRIBE_MODEL`; `AQUA_*` honored as aliases; default provider
+  Aqua Voice's Avalon — swap recipes in README.md) — MediaRecorder →
+  upload on stop → text settles ~450ms later; works in every browser
+  incl. Firefox/Brave/installed iOS PWA. Fallback: Web Speech API
+  streaming live words (tap-to-toggle, auto-restarts dropped mobile
+  sessions, iOS runs non-continuous, circuit breaker against dead
+  services). Engine chosen by probing `GET /api/transcribe`. Every
+  failure surfaces a typed reason (`SpeechFailure`) turned into
+  specific copy from `copy.capture.voiceFailures`.
 - **Enrichment:** `src/app/api/enrich/route.ts` (Claude Haiku via
   `@anthropic-ai/sdk`, structured output with `zodOutputFormat`,
   model overridable via `ENRICH_MODEL`). Client orchestration +
