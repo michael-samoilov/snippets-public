@@ -3074,6 +3074,10 @@ function TodayZoneFill({
   const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
   const zoneRestH = useRef<number | null>(null);
   const spacerMax = useRef<number | null>(null); // the rest bottom-slack, learned at first overflow
+  // the visual viewport's height with NO keyboard (its running max) — on iOS,
+  // window.innerHeight itself shrinks with the keyboard, so innerHeight-based
+  // detection reads zero there (same trap use-keyboard-room documents)
+  const baseVh = useRef(0);
   const tailSpacerRef = useRef<HTMLDivElement>(null);
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollerOf = () =>
@@ -3081,6 +3085,11 @@ function TodayZoneFill({
   const anchorTail = () => {
     const btn = btnRef.current, area = areaRef.current, sp = tailSpacerRef.current;
     if (!btn || !area || !sp) return;
+    // sample the no-keyboard viewport height FIRST — the focus-time pass runs
+    // before the keyboard rises, and the rest branch below returns early, so
+    // sampling any later would only ever see the keyboard-shrunk height on iOS
+    if (window.visualViewport)
+      baseVh.current = Math.max(baseVh.current, window.visualViewport.height);
     const box = btn.closest<HTMLElement>("[data-today-zone-box]");
     const g = Math.max(0, area.offsetHeight - REST_FIELD); // how far the field grew
     if (g === 0) {
@@ -3117,7 +3126,16 @@ function TodayZoneFill({
     const scB = sc.getBoundingClientRect().bottom;
     const gapAbove = btn.getBoundingClientRect().top - area.getBoundingClientRect().bottom;
     const vv = window.visualViewport;
-    const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    // keyboard inset, robust to BOTH viewport models: Safari-desktop-style
+    // (innerHeight stays full, only vv shrinks) AND iOS (innerHeight shrinks
+    // with the keyboard, so measure against vv.height's no-keyboard maximum,
+    // sampled at the top of this function)
+    const kb = vv
+      ? Math.max(
+          window.innerHeight - vv.height - vv.offsetTop,
+          baseVh.current - vv.height,
+        )
+      : 0;
     const ceiling = vv && kb >= 60 ? vv.offsetTop + vv.height - FLOAT : Infinity;
     const target = Math.min(scB - gapAbove, ceiling);
     // Holding the seal above the terminus needs material below it inside the
