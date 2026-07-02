@@ -3085,7 +3085,7 @@ function TodayZoneFill({
   const centerField = () => {
     const s1 = topSlackRef.current, s2 = restSpacerRef.current, area = areaRef.current;
     if (!s1 || !s2 || !area) return;
-    if (area.scrollHeight > 163) return; // 6 rest lines = 162px; already writing
+    if (area.scrollHeight > 61) return; // 3 rest lines = 60px; already writing
     const spare = s1.offsetHeight + (parseFloat(s2.style.height) || 0);
     s2.style.height = `${Math.max(0, spare / 2)}px`;
   };
@@ -3215,16 +3215,15 @@ function TodayZoneFill({
               the schedule card's preview text: the row grid indents 2.1rem +
               0.5rem gap (41.6px) and the card wears 1px borders + p-2.5 (22px),
               so preview text = scroller − 63.6px; this column sits inside the
-              zone's 1px borders + px-4 (34px), leaving 29.6px to shave. With the
-              field's type a touch larger than the preview's (0.95rem vs 0.9rem),
-              words that fit the 6 rest rules here are guaranteed to fit the
-              card's 6-line clamp without truncation. */}
+              zone's 1px borders + px-4 (34px), leaving 29.6px to shave. Same
+              width + the same 0.9rem type as the preview ⇒ identical wrapping:
+              words that fill N rules here fill N preview lines there, and six
+              rules is exactly the card's clamp. */}
           <div className="relative w-[calc(100%-29.6px)] min-w-[14rem]">
             <textarea
               ref={areaRef}
               value={text}
-              // 6 rest lines — the same cap the schedule's entry previews wear
-              rows={6}
+              rows={3}
               readOnly={frozen}
               // this field anchors its own tail (see anchorTail); the generic
               // keyboard-room hook skips fields marked data-room-center
@@ -3244,21 +3243,25 @@ function TodayZoneFill({
                     : copy.todayZone.placeholder
               }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
-              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              // 0.9rem: the SAME type as the schedule card's preview, at the
+              // same width — so the wrapping here is character-for-character
+              // the wrapping there, and N rules filled = N preview lines.
+              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.9rem] outline-none placeholder:italic placeholder:text-ink-faint"
               // The ruled paper lives ON the textarea (background-attachment:
               // local, so the rules always track the words exactly). The rule
               // sits just below the baseline — standard characters rest ON the
               // line, only descenders dip across — and the period is a whole
-              // PIXEL (27px) matched exactly by the line-height: fractional
-              // values (1.7rem = 27.2px) let WebKit snap line boxes to device
-              // pixels while the gradient stayed fractional, so text drifted
-              // off its rules over dozens of lines.
+              // PIXEL (20px ≈ the card preview's 0.9rem × 1.42 = 20.45px
+              // rhythm) matched exactly by the line-height: a fractional
+              // line-height lets WebKit snap line boxes to device pixels while
+              // the gradient stays fractional, so text drifts off its rules
+              // over dozens of lines.
               style={{
-                lineHeight: "27px",
-                minHeight: "162px",
+                lineHeight: "20px",
+                minHeight: "60px",
                 backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0, transparent 26px, var(--rule-faint) 26px, var(--rule-faint) 27px)",
-                backgroundPositionY: "-6px",
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent 19px, var(--rule-faint) 19px, var(--rule-faint) 20px)",
+                backgroundPositionY: "-4px",
                 backgroundAttachment: "local",
               }}
             />
