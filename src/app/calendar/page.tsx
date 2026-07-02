@@ -3162,11 +3162,13 @@ function TodayZoneFill({
         // the gap from the rule to the zone's top edge equal to the "chin" — the
         // space below the scroller, from its bottom down to the sheet's bottom
         // (~26px). The 1px short is the rule's own hairline sitting in that gap.
-        // Otherwise no rule, so just a hair of breathing room above and the tuned
-        // sliver below (keeps the foot rule's border handoff crisp at rest).
+        // When today's CARDS sit above instead, keep the same 26px rhythm:
+        // pt-4 (16px) + the section's own pb-2.5 (10px) = the chin again — so
+        // the zone always begins a chin's breath below whatever precedes it.
+        // First-ever keeps just a hair (nothing above to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          !hasEntry && !firstEver ? "pt-[25px] mb-[3px]" : "pt-1 mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-4 mb-[3px]" : "pt-[25px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
