@@ -3128,8 +3128,16 @@ function TodayZoneFill({
       baseVh.current - vv.height,
     );
     if (measured >= 60) return { kb: measured, visBottom: vv.offsetTop + vv.height };
+    // The pan comes in TWO disguises: a visual-viewport pan (offsetTop) — or
+    // iOS scrolling the DOCUMENT itself to reveal the caret, overflow-hidden
+    // shell and all, which leaves offsetTop at zero and window.scrollY as the
+    // only trace. Client rects already account for a document scroll, so the
+    // visBottom formula is the same either way.
     const coarse = window.matchMedia?.("(pointer: coarse)").matches;
-    if (coarse && vv.offsetTop > 40) {
+    const pan =
+      vv.offsetTop +
+      (document.scrollingElement?.scrollTop ?? window.scrollY ?? 0);
+    if (coarse && pan > 40) {
       const est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
       return { kb: est, visBottom: vv.offsetTop + vv.height - est };
     }
@@ -3227,6 +3235,10 @@ function TodayZoneFill({
       vvListenerRef.current = onViewport;
       window.visualViewport.addEventListener("resize", onViewport);
       window.visualViewport.addEventListener("scroll", onViewport);
+      // iOS's document-scroll flavour of the keyboard pan (window scroll
+      // events don't bubble from inner scrollers, so this hears ONLY the
+      // document — i.e. only iOS's own keyboard avoidance)
+      window.addEventListener("scroll", onViewport);
       window.addEventListener("focus", onViewport);
       document.addEventListener("visibilitychange", onViewport);
     }
@@ -3238,6 +3250,7 @@ function TodayZoneFill({
     if (vvListenerRef.current && window.visualViewport) {
       window.visualViewport.removeEventListener("resize", vvListenerRef.current);
       window.visualViewport.removeEventListener("scroll", vvListenerRef.current);
+      window.removeEventListener("scroll", vvListenerRef.current);
       window.removeEventListener("focus", vvListenerRef.current);
       document.removeEventListener("visibilitychange", vvListenerRef.current);
       vvListenerRef.current = null;
