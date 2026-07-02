@@ -3085,7 +3085,7 @@ function TodayZoneFill({
   const centerField = () => {
     const s1 = topSlackRef.current, s2 = restSpacerRef.current, area = areaRef.current;
     if (!s1 || !s2 || !area) return;
-    if (area.scrollHeight > 82) return; // 3 rest lines = 81px; already writing
+    if (area.scrollHeight > 163) return; // 6 rest lines = 162px; already writing
     const spare = s1.offsetHeight + (parseFloat(s2.style.height) || 0);
     s2.style.height = `${Math.max(0, spare / 2)}px`;
   };
@@ -3211,13 +3211,20 @@ function TodayZoneFill({
               the entry grows into this, top first, so its foot never moves */}
           <div ref={topSlackRef} className="w-px flex-1" aria-hidden />
 
-          {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt
-              sits on one line */}
-          <div className="relative w-4/5 min-w-[14rem] max-w-2xl">
+          {/* the ruled "paper" — the clickable entry. Its width exactly matches
+              the schedule card's preview text: the row grid indents 2.1rem +
+              0.5rem gap (41.6px) and the card wears 1px borders + p-2.5 (22px),
+              so preview text = scroller − 63.6px; this column sits inside the
+              zone's 1px borders + px-4 (34px), leaving 29.6px to shave. With the
+              field's type a touch larger than the preview's (0.95rem vs 0.9rem),
+              words that fit the 6 rest rules here are guaranteed to fit the
+              card's 6-line clamp without truncation. */}
+          <div className="relative w-[calc(100%-29.6px)] min-w-[14rem]">
             <textarea
               ref={areaRef}
               value={text}
-              rows={3}
+              // 6 rest lines — the same cap the schedule's entry previews wear
+              rows={6}
               readOnly={frozen}
               // this field anchors its own tail (see anchorTail); the generic
               // keyboard-room hook skips fields marked data-room-center
@@ -3248,7 +3255,7 @@ function TodayZoneFill({
               // off its rules over dozens of lines.
               style={{
                 lineHeight: "27px",
-                minHeight: "81px",
+                minHeight: "162px",
                 backgroundImage:
                   "repeating-linear-gradient(to bottom, transparent 0, transparent 26px, var(--rule-faint) 26px, var(--rule-faint) 27px)",
                 backgroundPositionY: "-6px",
