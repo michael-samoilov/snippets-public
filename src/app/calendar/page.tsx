@@ -3169,21 +3169,24 @@ function TodayZoneFill({
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
   const vvListenerRef = useRef<(() => void) | null>(null);
+  const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
-    const pass = () => { sizeKbSpacer(); anchorTail(); };
-    pass();
-    requestAnimationFrame(pass);
+    anchorPass();
+    requestAnimationFrame(anchorPass);
     clearAnchorTimers();
-    // re-measure across the keyboard's rise (~300ms) — the first passes run
-    // before the viewport has finished shrinking
-    anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(pass, ms));
-    // track the keyboard while focused: dismissing it (without blurring — the
-    // keyboard's collapse key keeps focus) must fold the reach away; only the
-    // spacer is resized, never the scroll, so a reader mid-page isn't yanked
+    // re-measure across the keyboard's rise — the first passes run before the
+    // viewport has finished changing, and on-device the rise (plus the
+    // browser's own caret-reveal scroll) can settle after 360ms, so a late
+    // pass covers the tail. Every pass converges on the same visual target,
+    // so repeats are invisible — the last writer just lands the same pixel.
+    anchorTimers.current = [80, 200, 360, 600].map((ms) => setTimeout(anchorPass, ms));
+    // track the keyboard while focused: a resize re-runs the FULL pass —
+    // dismissing the keyboard (which keeps focus) folds the reach away, and
+    // the resize at the end of a slow rise re-pins after iOS has settled
     if (!vvListenerRef.current && window.visualViewport) {
-      vvListenerRef.current = sizeKbSpacer;
-      window.visualViewport.addEventListener("resize", sizeKbSpacer);
+      vvListenerRef.current = anchorPass;
+      window.visualViewport.addEventListener("resize", anchorPass);
     }
   };
   const releaseTail = () => {
@@ -3331,10 +3334,19 @@ function TodayZoneFill({
               // this field anchors its own tail (see anchorTail); the generic
               // keyboard-room hook skips fields marked data-room-center
               data-room-center=""
-              // grow the field, then re-anchor ONCE, synchronously in this same
-              // turn — deferred passes each moved layout across several painted
-              // frames, which read as the viewport bouncing before settling
-              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); anchorTail(); }}
+              // grow the field, then re-anchor: once synchronously, and again
+              // just behind the browser's own caret-reveal scroll (rAF + a
+              // beat), which otherwise lands after us and drags the stance
+              // down. All passes converge on the same fixed visual target, so
+              // the repeats can't bounce — unlike the old layout-moving passes.
+              onChange={(e) => {
+                setText(e.target.value);
+                autosizeArea(e.target);
+                anchorTail();
+                requestAnimationFrame(anchorTail);
+                clearAnchorTimers();
+                anchorTimers.current = [setTimeout(anchorTail, 120)];
+              }}
               onFocus={scheduleAnchor}
               onBlur={releaseTail}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
