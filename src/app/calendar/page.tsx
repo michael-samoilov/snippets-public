@@ -2443,7 +2443,13 @@ function ScheduleFeedBase({
                     while its day's entries scroll past. Empty today drops the
                     padding too, so its section collapses to the bare rule and
                     the zone below fills the viewport right up to it. */}
-                <div className={cn("book-margin-date sticky top-0 self-start text-center", !hideToday && "pb-2.5 pt-2.5")}>
+                <div className={cn(
+                  "book-margin-date sticky top-0 self-start text-center",
+                  // today's section cedes its bottom padding to the zone below
+                  // (the zone owns the whole 26px gap — see TodayZoneFill), so
+                  // the full breath is visible when the book rests at its foot
+                  !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"),
+                )}>
                   {!hideToday && (() => {
                     const dateInner = (
                       <>
@@ -2484,7 +2490,7 @@ function ScheduleFeedBase({
                     );
                   })()}
                 </div>
-                <div className={cn("min-w-0", !hideToday && "pb-2.5 pt-2.5")}>
+                <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
                   <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} still={!active} />
                   {showComposer && (
                     <BackfillCapture
@@ -3162,13 +3168,15 @@ function TodayZoneFill({
         // the gap from the rule to the zone's top edge equal to the "chin" — the
         // space below the scroller, from its bottom down to the sheet's bottom
         // (~26px). The 1px short is the rule's own hairline sitting in that gap.
-        // When today's CARDS sit above instead, keep the same 26px rhythm:
-        // pt-4 (16px) + the section's own pb-2.5 (10px) = the chin again — so
-        // the zone always begins a chin's breath below whatever precedes it.
+        // When today's CARDS sit above instead, the zone owns the WHOLE 26px
+        // itself (today's section cedes its bottom padding): the row is
+        // min-h-full INCLUDING this padding, so at the book's foot the entire
+        // breath sits inside the viewport between the top terminus and the
+        // zone's border — not partly spent on the card section above the fold.
         // First-ever keeps just a hair (nothing above to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-4 mb-[3px]" : "pt-[25px] mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[26px] mb-[3px]" : "pt-[25px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
