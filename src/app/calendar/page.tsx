@@ -3055,65 +3055,60 @@ function TodayZoneFill({
   useEffect(() => clearTimers, []);
 
   // Tail anchoring: as the entry grows, the seal button and the last line must
-  // appear to STAY PUT while the text extends upward (older lines scroll off the
-  // top), instead of the zone growing down past the fold where the words can't
-  // be seen. Two mechanisms, and nothing else ever moves or scrolls:
+  // appear to STAY PUT while the text extends UPWARD — older lines climb past
+  // the top, the whole entry stays readable on the page, and nothing is ever
+  // added below the zone. Two mechanisms:
   //  1. While the zone still has centring slack, the field's growth is MIRRORED
   //     as empty space below the seal (the tail spacer): +G above, +G below, so
   //     the centred block's midpoint — the seal and the last line — stays put.
-  //  2. The moment the mirror would make the zone itself grow, the field's
-  //     height is FROZEN and the textarea scrolls internally: old lines slide up
-  //     inside the field while the caret's line stays at its foot. The zone, the
-  //     seal, and the book never move again — so the book scroller needs no
-  //     bottom padding, and nothing is ever added below the zone.
+  //  2. When the mirror reaches the zone's rest size, the SPACER freezes at the
+  //     rest bottom-slack (so below the seal always looks exactly like rest) and
+  //     the zone grows with the words — while the book scroller stays pinned to
+  //     its foot. Max-scroll grows 1:1 with the zone, so the pin always lands:
+  //     the zone bottom, seal, and caret line hold still and the growth has
+  //     nowhere to go but up. No bottom padding, no space below the zone, ever.
   // (The generic keyboard-room hook ignores this field — see use-keyboard-room.)
   const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
-  const LINE = 27;
   const zoneRestH = useRef<number | null>(null);
+  const spacerMax = useRef<number | null>(null); // the rest bottom-slack, learned at first overflow
   const tailSpacerRef = useRef<HTMLDivElement>(null);
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scrollerOf = () =>
+    btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
   const anchorTail = () => {
     const btn = btnRef.current, area = areaRef.current, sp = tailSpacerRef.current;
     if (!btn || !area || !sp) return;
     const box = btn.closest<HTMLElement>("[data-today-zone-box]");
-    // rendered growth (offsetHeight, not scrollHeight: once frozen the words
-    // keep growing inside, but the box — and so the mirror — must not)
-    const g = Math.max(0, area.offsetHeight - REST_FIELD);
-    if (area.scrollHeight <= REST_FIELD + 1) {
-      // truly at rest (≤3 lines of words): nothing to mirror, nothing frozen;
-      // remember the zone's rest size so we can tell the moment the mirror
-      // would outgrow it
+    const g = Math.max(0, area.offsetHeight - REST_FIELD); // how far the field grew
+    if (g === 0) {
+      // at rest (≤3 lines): nothing to mirror; remember the zone's rest size so
+      // we can tell the moment the mirror reaches it, and re-learn the slack
       sp.style.height = "";
-      area.style.maxHeight = "";
+      spacerMax.current = null;
       if (box) zoneRestH.current = box.getBoundingClientRect().height;
       return;
     }
-    sp.style.height = `${g}px`;
-    if (box && zoneRestH.current != null) {
+    sp.style.height = `${spacerMax.current != null ? Math.min(g, spacerMax.current) : g}px`;
+    if (spacerMax.current == null && box && zoneRestH.current != null) {
       const over = box.getBoundingClientRect().height - zoneRestH.current;
       if (over > 0) {
-        // The mirror just outgrew the zone — freeze the field at the tallest
-        // whole-line height that still fits, and mirror that frozen size. The
-        // overflow splits evenly between the field and its mirror (they shrink
-        // together), hence over/2 — this also re-derives the right freeze from
-        // scratch on a refocus, where the field mounts at its full unfrozen
-        // height and `over` is far larger than one line.
-        const frozen = Math.max(
-          REST_FIELD,
-          REST_FIELD + Math.floor((g - over / 2) / LINE) * LINE,
-        );
-        area.style.maxHeight = `${frozen}px`;
-        sp.style.height = `${frozen - REST_FIELD}px`;
+        // the mirror just reached the zone's rest size — freeze the spacer at
+        // the exact remaining slack (the overflow splits evenly between the
+        // field and its mirror, hence over/2), so the gap under the seal stays
+        // precisely the rest gap from here on
+        spacerMax.current = Math.max(0, g - over / 2);
+        sp.style.height = `${spacerMax.current}px`;
       }
     }
-    // once frozen, writing at the end must keep the caret's line in view — the
-    // autosize height churn can clobber the browser's own caret-reveal
-    if (area.style.maxHeight && area.selectionStart === area.value.length)
-      area.scrollTop = area.scrollHeight;
+    // pin the book to its foot: any further growth then extends UPWARD (the
+    // zone bottom, seal, and caret line stay put; older lines climb past the
+    // top, where the page scrolls to read them)
+    const sc = scrollerOf();
+    if (sc) sc.scrollTop = sc.scrollHeight - sc.clientHeight;
   };
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-run across the keyboard's rise (~300ms) — the passes only size the
-  // spacer / re-freeze against the settled layout, they never scroll the book.
+  // spacer against the settled layout.
   const scheduleAnchor = () => {
     anchorTail();
     requestAnimationFrame(anchorTail);
@@ -3122,12 +3117,11 @@ function TodayZoneFill({
   };
   const releaseTail = () => {
     clearAnchorTimers();
-    if (tailSpacerRef.current) tailSpacerRef.current.style.height = "";
-    // at rest the entry reads as normal paper: unfreeze so the field shows all
-    // its lines and the page scrolls the book, not a box. NOT during a keep —
-    // the lead blurs the field mid-animation, and the zone must hold its shape
-    // through the sweep (the fresh generation mounts unfrozen anyway).
-    if (!keeping.current && areaRef.current) areaRef.current.style.maxHeight = "";
+    // at rest the entry reads as normal paper: drop the spacer so the words fill
+    // the zone naturally. NOT during a keep — the lead blurs the field
+    // mid-animation and the zone must hold its shape through the sweep (the
+    // fresh generation mounts clean anyway).
+    if (!keeping.current && tailSpacerRef.current) tailSpacerRef.current.style.height = "";
   };
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3260,18 +3254,15 @@ function TodayZoneFill({
                     : copy.todayZone.placeholder
               }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
-              // overflow-y-auto: while the field is under its frozen height it
-              // can't scroll anyway; past it, the words scroll INSIDE the field
-              // (see anchorTail) — old lines slide up, the caret's line holds
-              className="voice-prose relative block w-full resize-none overflow-y-auto overflow-x-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint [scrollbar-width:none]"
+              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.95rem] outline-none placeholder:italic placeholder:text-ink-faint"
               // The ruled paper lives ON the textarea (background-attachment:
-              // local) so the rules scroll WITH the words once the field scrolls
-              // internally. The rule sits just below the baseline — standard
-              // characters rest ON the line, only descenders dip across — and
-              // the period is a whole PIXEL (27px) matched exactly by the
-              // line-height: fractional values (1.7rem = 27.2px) let WebKit snap
-              // line boxes to device pixels while the gradient stayed
-              // fractional, so text drifted off its rules over dozens of lines.
+              // local, so the rules always track the words exactly). The rule
+              // sits just below the baseline — standard characters rest ON the
+              // line, only descenders dip across — and the period is a whole
+              // PIXEL (27px) matched exactly by the line-height: fractional
+              // values (1.7rem = 27.2px) let WebKit snap line boxes to device
+              // pixels while the gradient stayed fractional, so text drifted
+              // off its rules over dozens of lines.
               style={{
                 lineHeight: "27px",
                 minHeight: "81px",
