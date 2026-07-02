@@ -2822,9 +2822,11 @@ function FlowBackfillCapture({
           transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
           // pressable-composer: the same press-down dip as the entry cards
           // beside it, only for the press that begins writing. The dip holds
-          // through a drag (like a button's :active) and releases wherever the
-          // pointer lifts — one-shot window listeners, since after dragging off
-          // the card the element itself never hears the pointerup
+          // through a drag like a button's :active — pointercancel (fired the
+          // moment the browser takes the gesture for scrolling) is deliberately
+          // NOT a release; the touch stream keeps flowing through a scroll, so
+          // touchend marks the true lift. One-shot window listeners, since
+          // after dragging off the card the element never hears the release.
           className="group pressable-composer relative"
           data-dip={dip || undefined}
           onPointerDown={() => {
@@ -2832,7 +2834,8 @@ function FlowBackfillCapture({
             setDip(true);
             const clear = () => setDip(false);
             window.addEventListener("pointerup", clear, { once: true });
-            window.addEventListener("pointercancel", clear, { once: true });
+            window.addEventListener("touchend", clear, { once: true });
+            window.addEventListener("touchcancel", clear, { once: true });
           }}
         >
           <span
@@ -3121,21 +3124,18 @@ function TodayZoneFill({
     if (!sp) return;
     const vv = window.visualViewport;
     if (vv) baseVh.current = Math.max(baseVh.current, vv.height);
-    // keyboard inset under BOTH viewport models (innerHeight full vs shrunk);
-    // iOS still under-reports in some configurations, so on touch devices a
-    // focused field also gets a flat ~42%-of-screen floor (a keyboard's usual
-    // share) — over-provisioning only means a little more overscroll room
+    // keyboard inset under BOTH viewport models (innerHeight full vs shrunk).
+    // Sized to the REAL inset only — the reach exists exactly while a keyboard
+    // actually covers the page (+64 for its floating accessory band), and
+    // collapses the moment it's dismissed, even if the field stays focused
+    // (the vv resize listener below re-runs this on dismissal).
     const kb = vv
       ? Math.max(
           window.innerHeight - vv.height - vv.offsetTop,
           baseVh.current - vv.height,
         )
       : 0;
-    const coarse = window.matchMedia?.("(pointer: coarse)").matches;
-    const floor = coarse
-      ? Math.round(Math.max(window.innerHeight, baseVh.current) * 0.42)
-      : 0;
-    sp.style.height = `${Math.max(kb >= 60 ? kb + 64 : 0, floor)}px`;
+    sp.style.height = kb >= 60 ? `${kb + 64}px` : "";
   };
   // Centre the empty field: split the spare height evenly between the flexible
   // slack above it and the rigid spacer below it. Idempotent (the total is
@@ -3153,6 +3153,7 @@ function TodayZoneFill({
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
+  const vvListenerRef = useRef<(() => void) | null>(null);
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
     const pass = () => { sizeKbSpacer(); anchorTail(); };
@@ -3162,11 +3163,22 @@ function TodayZoneFill({
     // re-measure across the keyboard's rise (~300ms) — the first passes run
     // before the viewport has finished shrinking
     anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(pass, ms));
+    // track the keyboard while focused: dismissing it (without blurring — the
+    // keyboard's collapse key keeps focus) must fold the reach away; only the
+    // spacer is resized, never the scroll, so a reader mid-page isn't yanked
+    if (!vvListenerRef.current && window.visualViewport) {
+      vvListenerRef.current = sizeKbSpacer;
+      window.visualViewport.addEventListener("resize", sizeKbSpacer);
+    }
   };
   const releaseTail = () => {
     clearAnchorTimers();
     // the extra reach below the zone exists only while writing
     if (kbSpacerRef.current) kbSpacerRef.current.style.height = "";
+    if (vvListenerRef.current && window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", vvListenerRef.current);
+      vvListenerRef.current = null;
+    }
   };
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
 
