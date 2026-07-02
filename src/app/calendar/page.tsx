@@ -3054,19 +3054,22 @@ function TodayZoneFill({
   const quill = hasText || frozen; // which glyph the seal wears + presses
   useEffect(() => clearTimers, []);
 
-  // Tail anchoring: as the entry grows, the seal button and the last line must
-  // appear to STAY PUT while the text extends UPWARD — older lines climb past
-  // the top, the whole entry stays readable on the page, and nothing is ever
-  // added below the zone. Two mechanisms:
+  // Tail anchoring: as the entry grows, the text must appear to extend UPWARD —
+  // older lines climb past the top, the whole entry stays readable on the page,
+  // and nothing is ever added below the zone. Three regimes:
   //  1. While the zone still has centring slack, the field's growth is MIRRORED
   //     as empty space below the seal (the tail spacer): +G above, +G below, so
   //     the centred block's midpoint — the seal and the last line — stays put.
-  //  2. When the mirror reaches the zone's rest size, the SPACER freezes at the
-  //     rest bottom-slack (so below the seal always looks exactly like rest) and
-  //     the zone grows with the words — while the book scroller stays pinned to
-  //     its foot. Max-scroll grows 1:1 with the zone, so the pin always lands:
-  //     the zone bottom, seal, and caret line hold still and the growth has
-  //     nowhere to go but up. No bottom padding, no space below the zone, ever.
+  //  2. When the mirror reaches the zone's rest size, the spacer SHRINKS as the
+  //     field keeps growing (the zone holds its rest size; the seal and caret
+  //     line glide down together), spending the rest slack under the seal
+  //     instead of leaving it as dead space above the keyboard.
+  //  3. Spacer gone: the zone grows with the words and the book scroller keeps
+  //     the seal at its compact stance — the gap from the seal down to the
+  //     scroll terminus equals the gap from the last ruled line down to the
+  //     seal. Max-scroll grows 1:1 with the zone, so the target always lands:
+  //     seal and caret line hold still, growth has nowhere to go but up.
+  // No bottom padding, no space below the zone, ever.
   // (The generic keyboard-room hook ignores this field — see use-keyboard-room.)
   const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
   const zoneRestH = useRef<number | null>(null);
@@ -3088,23 +3091,32 @@ function TodayZoneFill({
       if (box) zoneRestH.current = box.getBoundingClientRect().height;
       return;
     }
-    sp.style.height = `${spacerMax.current != null ? Math.min(g, spacerMax.current) : g}px`;
-    if (spacerMax.current == null && box && zoneRestH.current != null) {
+    // the triangle profile: mirror the growth up to the slack, then give the
+    // slack back line by line, then stay flat (regimes 1 → 2 → 3 above)
+    const cap = spacerMax.current;
+    sp.style.height = `${cap == null ? g : Math.min(g, Math.max(0, 2 * cap - g))}px`;
+    if (cap == null && box && zoneRestH.current != null) {
       const over = box.getBoundingClientRect().height - zoneRestH.current;
       if (over > 0) {
-        // the mirror just reached the zone's rest size — freeze the spacer at
-        // the exact remaining slack (the overflow splits evenly between the
-        // field and its mirror, hence over/2), so the gap under the seal stays
-        // precisely the rest gap from here on
+        // the mirror just reached the zone's rest size — the slack is the
+        // mirror's share of the overflow (it splits evenly between the field
+        // and its mirror, hence over/2)
         spacerMax.current = Math.max(0, g - over / 2);
         sp.style.height = `${spacerMax.current}px`;
       }
     }
-    // pin the book to its foot: any further growth then extends UPWARD (the
-    // zone bottom, seal, and caret line stay put; older lines climb past the
-    // top, where the page scrolls to read them)
+    // scroll so the seal sits at its compact stance: as much room between the
+    // seal's foot and the scroll terminus as between the last ruled line and
+    // the seal. Clamped at the scroll extents, which produces the glide of
+    // regime 2 (the target isn't reachable until the growth has consumed the
+    // slack) and the hold of regime 3 (it lands exactly).
     const sc = scrollerOf();
-    if (sc) sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+    if (sc) {
+      const btnR = btn.getBoundingClientRect();
+      const gapAbove = btnR.top - area.getBoundingClientRect().bottom;
+      const target = sc.getBoundingClientRect().bottom - gapAbove;
+      sc.scrollTop += btnR.bottom - target;
+    }
   };
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-run across the keyboard's rise (~300ms) — the passes only size the
