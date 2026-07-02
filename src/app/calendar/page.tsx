@@ -2821,15 +2821,19 @@ function FlowBackfillCapture({
           animate={{ clipPath: "inset(0 0 0 0)" }}
           transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
           // pressable-composer: the same press-down dip as the entry cards
-          // beside it, only for the press that begins writing
+          // beside it, only for the press that begins writing. The dip holds
+          // through a drag (like a button's :active) and releases wherever the
+          // pointer lifts — one-shot window listeners, since after dragging off
+          // the card the element itself never hears the pointerup
           className="group pressable-composer relative"
           data-dip={dip || undefined}
           onPointerDown={() => {
-            if (document.activeElement !== areaRef.current) setDip(true);
+            if (document.activeElement === areaRef.current) return;
+            setDip(true);
+            const clear = () => setDip(false);
+            window.addEventListener("pointerup", clear, { once: true });
+            window.addEventListener("pointercancel", clear, { once: true });
           }}
-          onPointerUp={() => setDip(false)}
-          onPointerCancel={() => setDip(false)}
-          onPointerLeave={() => setDip(false)}
         >
           <span
             aria-hidden="true"
@@ -3094,11 +3098,44 @@ function TodayZoneFill({
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const topSlackRef = useRef<HTMLDivElement>(null);
   const restSpacerRef = useRef<HTMLDivElement>(null);
+  // extra scrollable area while the keyboard is up (a sibling BELOW the zone,
+  // never scroller padding — padding shrinks the scroller's content box, which
+  // is what the zone's min-h-full resolves against). Without it the region the
+  // keyboard covers is unreachable: the book is already at max scroll, so the
+  // caret line can't be pulled up above the keyboard by hand. Sized on focus,
+  // cleared on blur.
+  const kbSpacerRef = useRef<HTMLDivElement>(null);
+  const baseVh = useRef(0); // vv height with no keyboard (running max)
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
   const anchorTail = () => {
     const sc = scrollerOf();
-    if (sc) sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+    if (!sc) return;
+    // pin to the zone's foot — the keyboard spacer below it is reachable room
+    // for the READER's thumb, not part of the resting stance
+    const kbRoom = kbSpacerRef.current?.offsetHeight ?? 0;
+    sc.scrollTop = sc.scrollHeight - sc.clientHeight - kbRoom;
+  };
+  const sizeKbSpacer = () => {
+    const sp = kbSpacerRef.current;
+    if (!sp) return;
+    const vv = window.visualViewport;
+    if (vv) baseVh.current = Math.max(baseVh.current, vv.height);
+    // keyboard inset under BOTH viewport models (innerHeight full vs shrunk);
+    // iOS still under-reports in some configurations, so on touch devices a
+    // focused field also gets a flat ~42%-of-screen floor (a keyboard's usual
+    // share) — over-provisioning only means a little more overscroll room
+    const kb = vv
+      ? Math.max(
+          window.innerHeight - vv.height - vv.offsetTop,
+          baseVh.current - vv.height,
+        )
+      : 0;
+    const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+    const floor = coarse
+      ? Math.round(Math.max(window.innerHeight, baseVh.current) * 0.42)
+      : 0;
+    sp.style.height = `${Math.max(kb >= 60 ? kb + 64 : 0, floor)}px`;
   };
   // Centre the empty field: split the spare height evenly between the flexible
   // slack above it and the rigid spacer below it. Idempotent (the total is
@@ -3118,12 +3155,19 @@ function TodayZoneFill({
   // own focus-scroll nudges the book off its foot.
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
-    anchorTail();
-    requestAnimationFrame(anchorTail);
+    const pass = () => { sizeKbSpacer(); anchorTail(); };
+    pass();
+    requestAnimationFrame(pass);
     clearAnchorTimers();
-    anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(anchorTail, ms));
+    // re-measure across the keyboard's rise (~300ms) — the first passes run
+    // before the viewport has finished shrinking
+    anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(pass, ms));
   };
-  const releaseTail = clearAnchorTimers;
+  const releaseTail = () => {
+    clearAnchorTimers();
+    // the extra reach below the zone exists only while writing
+    if (kbSpacerRef.current) kbSpacerRef.current.style.height = "";
+  };
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
@@ -3176,8 +3220,9 @@ function TodayZoneFill({
   const frame = "border border-wax/45";
 
   return (
-    // each generation is one element: the old zone slides off the right while a
-    // fresh one fades + floats in to take its place.
+    <>
+    {/* each generation is one element: the old zone slides off the right while a
+        fresh one fades + floats in to take its place. */}
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
@@ -3402,5 +3447,11 @@ function TodayZoneFill({
         </div>
       </motion.div>
     </AnimatePresence>
+    {/* keyboard reach: extra scrollable room below the zone while writing, so
+        the thumb can pull the caret line up above the keyboard (see
+        sizeKbSpacer). A SIBLING of the min-h-full row on purpose — scroller
+        padding would shrink the content box the row's height resolves against. */}
+    <div ref={kbSpacerRef} aria-hidden className="w-px" />
+    </>
   );
 }
