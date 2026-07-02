@@ -234,10 +234,15 @@ function CalendarGate() {
 function KbDebug() {
   const [txt, setTxt] = useState("");
   const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number } | null>(null);
+  const [panelTop, setPanelTop] = useState(4);
   const baseVh = useRef(0);
   useEffect(() => {
     const update = () => {
       const vv = window.visualViewport;
+      // keep the panel INSIDE the visual viewport — a pan slides fixed
+      // elements out of view, which is itself a diagnostic, but an unreadable
+      // panel helps no one
+      setPanelTop(Math.round((vv?.offsetTop ?? 0) + 4));
       const doc = document.scrollingElement?.scrollTop ?? 0;
       const seal = [...document.querySelectorAll("button")].find((x) =>
         /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
@@ -260,6 +265,8 @@ function KbDebug() {
         tgt = vis - 72;
       }
       setMarks({ vis, tgt, raw });
+      type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
+      const a = (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor;
       setTxt(
         [
           `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
@@ -270,6 +277,9 @@ function KbDebug() {
           `kb ${Math.round(kb)}  est ${est}  vis ${Math.round(vis)}  tgt ${Math.round(tgt)}`,
           `sealB ${seal ? Math.round(seal.getBoundingClientRect().bottom) : "-"}  scST ${sc ? Math.round(sc.scrollTop) : "-"}  spcr ${sp?.style.height || "0"}`,
           `focus ${document.activeElement?.tagName ?? "-"}`,
+          a
+            ? `LAST ${a.branch}@${a.t}: kb ${Math.round(a.kb)} tgt ${Math.round(a.tgt)} sealB ${Math.round(a.sealB)}\n  st ${Math.round(a.st0)}→${Math.round(a.st1)} max ${Math.round(a.max)} spcr ${Math.round(a.spcr)}${a.branch === "pin" && Math.abs(a.st0 + a.sealB - a.tgt - a.st1) > 2 ? " CLAMPED" : ""}`
+            : "LAST -",
         ].join("\n"),
       );
     };
@@ -288,7 +298,10 @@ function KbDebug() {
   }, []);
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]">
-      <pre className="absolute left-1 top-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300">
+      <pre
+        className="absolute left-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300"
+        style={{ top: panelTop }}
+      >
         {txt}
       </pre>
       {marks && (
@@ -3240,11 +3253,18 @@ function TodayZoneFill({
     const btn = btnRef.current;
     if (!sc || !btn) return;
     const { kb, visBottom } = kbGeom();
+    // breadcrumbs for ?kbdebug — the overlay paints the LAST pass, so a
+    // device screenshot shows which branch ran and whether the scroll clamped
+    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
+    const w = window as Window & { __kbAnchor?: KbAnchorLog };
+    const st0 = sc.scrollTop;
+    const max = sc.scrollHeight - sc.clientHeight;
+    const spcr = kbSpacerRef.current?.offsetHeight ?? 0;
     if (kb < 60) {
       // no keyboard: rest at the zone's foot — the spacer below (if any
       // remains mid-collapse) is reachable room, not part of the stance
-      const kbRoom = kbSpacerRef.current?.offsetHeight ?? 0;
-      sc.scrollTop = sc.scrollHeight - sc.clientHeight - kbRoom;
+      sc.scrollTop = sc.scrollHeight - sc.clientHeight - spcr;
+      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: -1, sealB: -1, st0, st1: sc.scrollTop, max, spcr, branch: "foot" };
       return;
     }
     // Keyboard up: pin against what's actually VISIBLE, not a layout
@@ -3252,7 +3272,9 @@ function TodayZoneFill({
     // fixed layout stance can land under the keyboard and every re-pin would
     // hold it there. visBottom is read LIVE each pass.
     const target = visBottom - 64 - 8; // the accessory band + a hair of air
-    sc.scrollTop += btn.getBoundingClientRect().bottom - target;
+    const sealB = btn.getBoundingClientRect().bottom;
+    sc.scrollTop += sealB - target;
+    w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
