@@ -212,8 +212,100 @@ export default function CalendarPage() {
 // skeleton stays put to be stared at.
 function CalendarGate() {
   const params = useSearchParams();
+  // ?kbdebug overlays live viewport numbers. Captured in the lazy initializer —
+  // during RENDER, before any effect: Calendar's mount effects (children run
+  // first) rewrite the URL, so by effect time the param is already gone.
+  const [kbdebug] = useState(
+    () => typeof window !== "undefined" && window.location.search.includes("kbdebug"),
+  );
   if (params.has("skeldebug")) return <SkeletonDebug />;
-  return <Calendar />;
+  return (
+    <>
+      <Calendar />
+      {kbdebug && <KbDebug />}
+    </>
+  );
+}
+
+// TODO(remove after the keyboard investigation): ?kbdebug — paints every live
+// viewport number the keyboard logic reads, plus marker lines at the computed
+// visible-bottom (red) and the seal's pin target (orange). A screenshot of a
+// device with the keyboard up tells us exactly what its viewport reports.
+function KbDebug() {
+  const [txt, setTxt] = useState("");
+  const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number } | null>(null);
+  const baseVh = useRef(0);
+  useEffect(() => {
+    const update = () => {
+      const vv = window.visualViewport;
+      const doc = document.scrollingElement?.scrollTop ?? 0;
+      const seal = [...document.querySelectorAll("button")].find((x) =>
+        /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
+      );
+      const sc = document.querySelector("[data-book-scroller]");
+      const sp = [...document.querySelectorAll("div[aria-hidden].w-px")].pop() as HTMLElement | undefined;
+      let vis = 0, tgt = 0, raw = 0, kb = 0, est = 0;
+      if (vv) {
+        baseVh.current = Math.max(baseVh.current, vv.height);
+        const measured = Math.max(
+          window.innerHeight - vv.height - vv.offsetTop,
+          baseVh.current - vv.height,
+        );
+        raw = vv.offsetTop + vv.height;
+        const pan = vv.offsetTop + doc;
+        est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
+        if (measured >= 60) { kb = measured; vis = raw; }
+        else if (pan > 40) { kb = est; vis = raw - est; }
+        else { kb = 0; vis = raw; }
+        tgt = vis - 72;
+      }
+      setMarks({ vis, tgt, raw });
+      setTxt(
+        [
+          `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
+          vv
+            ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
+            : "no visualViewport",
+          `docST ${Math.round(doc)}  winSY ${Math.round(window.scrollY)}  baseVh ${Math.round(baseVh.current)}`,
+          `kb ${Math.round(kb)}  est ${est}  vis ${Math.round(vis)}  tgt ${Math.round(tgt)}`,
+          `sealB ${seal ? Math.round(seal.getBoundingClientRect().bottom) : "-"}  scST ${sc ? Math.round(sc.scrollTop) : "-"}  spcr ${sp?.style.height || "0"}`,
+          `focus ${document.activeElement?.tagName ?? "-"}`,
+        ].join("\n"),
+      );
+    };
+    update();
+    const iv = setInterval(update, 300);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    window.addEventListener("scroll", update);
+    return () => {
+      clearInterval(iv);
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+      window.removeEventListener("scroll", update);
+    };
+  }, []);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[9999]">
+      <pre className="absolute left-1 top-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300">
+        {txt}
+      </pre>
+      {marks && (
+        <>
+          <div className="absolute inset-x-0 border-t-2 border-red-500" style={{ top: marks.vis }}>
+            <span className="bg-red-500 px-1 font-mono text-[9px] text-white">vis {Math.round(marks.vis)}</span>
+          </div>
+          <div className="absolute inset-x-0 border-t-2 border-orange-400" style={{ top: marks.tgt }}>
+            <span className="bg-orange-400 px-1 font-mono text-[9px] text-black">tgt {Math.round(marks.tgt)}</span>
+          </div>
+          <div className="absolute inset-x-0 border-t border-dashed border-sky-400" style={{ top: marks.raw }}>
+            <span className="bg-sky-400 px-1 font-mono text-[9px] text-black">vvBottom {Math.round(marks.raw)}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 type View = "year" | "month" | "schedule" | "entry";
