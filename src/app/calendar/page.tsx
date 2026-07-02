@@ -3063,30 +3063,42 @@ function TodayZoneFill({
   // deliberately ignores this field — see use-keyboard-room — so nothing fights.)
   const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
   const sealAnchorY = useRef<number | null>(null);
+  const tailSpacerRef = useRef<HTMLDivElement>(null);
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
   const anchorTail = () => {
-    const btn = btnRef.current, area = areaRef.current, sc = scrollerOf();
-    if (!btn || !area || !sc) return;
-    const grown = area.scrollHeight > REST_FIELD + 1;
-    if (!grown) {
-      // still at rest (≤3 lines: the field hasn't grown yet) — the seal sits at
-      // its natural spot; keep sampling it (this also tracks the keyboard's rise)
-      // so it's the target to hold once the entry does grow.
+    const btn = btnRef.current, area = areaRef.current, sp = tailSpacerRef.current, sc = scrollerOf();
+    if (!btn || !area || !sp || !sc) return;
+    const g = Math.max(0, area.scrollHeight - REST_FIELD); // how far the field grew
+    if (g === 0) {
+      // at rest (≤3 lines): no growth to mirror; remember where the seal sits so
+      // we can hold it there once the entry grows (also tracks the keyboard rise)
+      sp.style.height = "";
       sc.style.paddingBottom = "";
       sealAnchorY.current = btn.getBoundingClientRect().bottom;
       return;
     }
-    // enough room below the zone to lift the whole grown field up to the anchor
-    sc.style.paddingBottom = `${area.scrollHeight}px`;
+    // The field grows DOWNWARD, but the composition is vertically centred, so a
+    // naive grow drifts the seal — and re-centring can even push it UP, which no
+    // scroll can counter (scrollTop can't go negative). So mirror the growth as
+    // empty space BELOW the seal: +G above (the field), +G below (this spacer),
+    // and the centred block's midpoint — the seal and last line — don't move.
+    // No scroll, no fight with the browser's scroll, nothing to jank.
+    sp.style.height = `${g}px`;
+    // Once the block outgrows the viewport, centring stops and the seal starts to
+    // drift DOWN — now always a positive delta, which scrolling CAN catch (the
+    // upward-drift phase was absorbed by the spacer). A viewport of bottom room
+    // guarantees the scroller can move far enough.
+    sc.style.paddingBottom = `${sc.clientHeight}px`;
     if (sealAnchorY.current == null) sealAnchorY.current = btn.getBoundingClientRect().bottom;
     const delta = btn.getBoundingClientRect().bottom - sealAnchorY.current;
-    if (Math.abs(delta) > 0.5) sc.scrollTop += delta;
+    if (delta > 0.5) sc.scrollTop += delta;
   };
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
-  // run now, next frame, and across the keyboard's rise so the hold wins over
-  // the browser's own focus/caret scroll
+  // FOCUS only: the keyboard rises over ~300ms and the viewport shifts across it,
+  // so re-sample as it settles. (While the field is still at rest this only
+  // captures the anchor — it never scrolls — so there's no bounce on focus.)
   const scheduleAnchor = () => {
     anchorTail();
     requestAnimationFrame(anchorTail);
@@ -3096,6 +3108,7 @@ function TodayZoneFill({
   const releaseTail = () => {
     clearAnchorTimers();
     sealAnchorY.current = null;
+    if (tailSpacerRef.current) tailSpacerRef.current.style.height = "";
     const sc = scrollerOf();
     if (sc) sc.style.paddingBottom = "";
   };
@@ -3243,7 +3256,11 @@ function TodayZoneFill({
               // this field anchors its own tail (the today zone owns the scroll —
               // see anchorTail); the generic keyboard-room hook skips it
               data-room-center=""
-              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); scheduleAnchor(); }}
+              // grow the field, then correct the scroll ONCE, synchronously in
+              // this same turn (no deferred rAF/timeout passes — those wrote a
+              // different scrollTop across several frames, so the viewport
+              // visibly bounced to a wrong spot and back before settling)
+              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); anchorTail(); }}
               onFocus={scheduleAnchor}
               onBlur={releaseTail}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
@@ -3352,6 +3369,13 @@ function TodayZoneFill({
               </motion.span>
             </AnimatePresence>
           </button>
+
+          {/* tail spacer: mirrors the field's growth below the seal so the
+              centred composition's midpoint (and thus the seal + last line)
+              stays put as the entry grows — see anchorTail. -mt-4 cancels the
+              column gap so at rest (height 0) it adds nothing and the empty
+              composition is unchanged. */}
+          <div ref={tailSpacerRef} aria-hidden className="-mt-4 w-px shrink-0" />
           </div>
         </div>
       </motion.div>
