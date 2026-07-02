@@ -3111,45 +3111,57 @@ function TodayZoneFill({
   const baseVh = useRef(0); // vv height with no keyboard (running max)
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
-  // keyboard inset under BOTH viewport models (innerHeight full vs shrunk)
-  const kbInset = () => {
+  // Keyboard geometry under THREE viewport models: (a) innerHeight stays full
+  // and vv shrinks, (b) both shrink (layout resize), (c) NEITHER shrinks — the
+  // device only PANS (vv.offsetTop) and the heights are useless. (c) is real
+  // (observed on iPhone Safari): there the pan itself is the signal — our
+  // composition rests at the book's foot, so a keyboard always forces a pan —
+  // and the keyboard's height is estimated at ~45% of the screen (worst case
+  // the seal sits a little higher than needed; the -72 band margin absorbs
+  // small under-estimates).
+  const kbGeom = () => {
     const vv = window.visualViewport;
-    if (!vv) return 0;
+    if (!vv) return { kb: 0, visBottom: window.innerHeight };
     baseVh.current = Math.max(baseVh.current, vv.height);
-    return Math.max(
+    const measured = Math.max(
       window.innerHeight - vv.height - vv.offsetTop,
       baseVh.current - vv.height,
     );
+    if (measured >= 60) return { kb: measured, visBottom: vv.offsetTop + vv.height };
+    const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+    if (coarse && vv.offsetTop > 40) {
+      const est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
+      return { kb: est, visBottom: vv.offsetTop + vv.height - est };
+    }
+    return { kb: 0, visBottom: vv.offsetTop + vv.height };
   };
   const anchorTail = () => {
     const sc = scrollerOf();
     const btn = btnRef.current;
     if (!sc || !btn) return;
-    const vv = window.visualViewport;
-    const kb = kbInset();
-    if (!vv || kb < 60) {
+    const { kb, visBottom } = kbGeom();
+    if (kb < 60) {
       // no keyboard: rest at the zone's foot — the spacer below (if any
       // remains mid-collapse) is reachable room, not part of the stance
       const kbRoom = kbSpacerRef.current?.offsetHeight ?? 0;
       sc.scrollTop = sc.scrollHeight - sc.clientHeight - kbRoom;
       return;
     }
-    // Keyboard up: pin against the VISUAL viewport, not a layout position.
-    // What's on screen is [vv.offsetTop, vv.offsetTop + vv.height] — and iOS
-    // picks offsetTop from wherever the page sat when the field was focused,
-    // so a fixed layout stance can land under the keyboard and every re-pin
-    // would hold it there. Reading offsetTop LIVE each pass keeps the seal
-    // just above the accessory band regardless of the focus-time pan.
-    const target = vv.offsetTop + vv.height - 64 - 8; // band + a hair of air
+    // Keyboard up: pin against what's actually VISIBLE, not a layout
+    // position — iOS picks its pan from wherever the page sat at focus, so a
+    // fixed layout stance can land under the keyboard and every re-pin would
+    // hold it there. visBottom is read LIVE each pass.
+    const target = visBottom - 64 - 8; // the accessory band + a hair of air
     sc.scrollTop += btn.getBoundingClientRect().bottom - target;
   };
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
     if (!sp) return;
-    // the bare inset — just enough room that the visual pin (and a thumb) can
-    // lift the zone's tail clear of the keyboard; collapses on dismissal even
-    // while focused (the vv resize listener re-runs this)
-    const kb = kbInset();
+    // just enough room that the visual pin (and a thumb) can lift the zone's
+    // tail clear of the keyboard; collapses on dismissal even while focused
+    // (the vv listeners re-run this — on pan-only devices dismissal shows up
+    // as the pan returning to zero)
+    const { kb } = kbGeom();
     sp.style.height = kb >= 60 ? `${kb}px` : "";
   };
   // Centre the empty field: split the spare height evenly between the flexible
@@ -3170,6 +3182,8 @@ function TodayZoneFill({
   // own focus-scroll nudges the book off its foot.
   const vvListenerRef = useRef<(() => void) | null>(null);
   const touchCancelRef = useRef<(() => void) | null>(null);
+  const touchUpRef = useRef<(() => void) | null>(null);
+  const touchActiveRef = useRef(false);
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
@@ -3187,17 +3201,34 @@ function TodayZoneFill({
     // …but never against the reader: the moment a finger lands on the page,
     // the remaining passes stand down (typing re-arms its own short re-pin)
     if (!touchCancelRef.current) {
-      const standDown = () => { clearAnchorTimers(); };
+      const standDown = () => { touchActiveRef.current = true; clearAnchorTimers(); };
+      const touchUp = () => { touchActiveRef.current = false; };
       touchCancelRef.current = standDown;
+      touchUpRef.current = touchUp;
       window.addEventListener("touchstart", standDown, { passive: true });
+      window.addEventListener("touchend", touchUp, { passive: true });
+      window.addEventListener("touchcancel", touchUp, { passive: true });
       window.addEventListener("wheel", standDown, { passive: true });
     }
-    // track the keyboard while focused: a resize re-runs the FULL pass —
-    // dismissing the keyboard (which keeps focus) folds the reach away, and
-    // the resize at the end of a slow rise re-pins after iOS has settled
+    // Track the viewport while focused — 'resize' where heights change, and
+    // 'scroll' for PAN-ONLY devices whose heights never move (there the pan is
+    // the only keyboard signal: rise, dismissal, and the re-pan when returning
+    // from an app switch all arrive here). Guarded so a pinch (scale > 1) or
+    // an active finger is never fought. Returning from the app switcher also
+    // lands via window focus / visibilitychange, where iOS may restore the
+    // scroll into the reach region with no viewport event at all.
     if (!vvListenerRef.current && window.visualViewport) {
-      vvListenerRef.current = anchorPass;
-      window.visualViewport.addEventListener("resize", anchorPass);
+      const onViewport = () => {
+        const vv = window.visualViewport;
+        if (vv && vv.scale > 1.01) return;
+        if (touchActiveRef.current) return;
+        anchorPass();
+      };
+      vvListenerRef.current = onViewport;
+      window.visualViewport.addEventListener("resize", onViewport);
+      window.visualViewport.addEventListener("scroll", onViewport);
+      window.addEventListener("focus", onViewport);
+      document.addEventListener("visibilitychange", onViewport);
     }
   };
   const releaseTail = () => {
@@ -3206,6 +3237,9 @@ function TodayZoneFill({
     if (kbSpacerRef.current) kbSpacerRef.current.style.height = "";
     if (vvListenerRef.current && window.visualViewport) {
       window.visualViewport.removeEventListener("resize", vvListenerRef.current);
+      window.visualViewport.removeEventListener("scroll", vvListenerRef.current);
+      window.removeEventListener("focus", vvListenerRef.current);
+      document.removeEventListener("visibilitychange", vvListenerRef.current);
       vvListenerRef.current = null;
     }
     if (touchCancelRef.current) {
@@ -3213,6 +3247,12 @@ function TodayZoneFill({
       window.removeEventListener("wheel", touchCancelRef.current);
       touchCancelRef.current = null;
     }
+    if (touchUpRef.current) {
+      window.removeEventListener("touchend", touchUpRef.current);
+      window.removeEventListener("touchcancel", touchUpRef.current);
+      touchUpRef.current = null;
+    }
+    touchActiveRef.current = false;
   };
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
 
