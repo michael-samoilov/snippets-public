@@ -3111,31 +3111,46 @@ function TodayZoneFill({
   const baseVh = useRef(0); // vv height with no keyboard (running max)
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
+  // keyboard inset under BOTH viewport models (innerHeight full vs shrunk)
+  const kbInset = () => {
+    const vv = window.visualViewport;
+    if (!vv) return 0;
+    baseVh.current = Math.max(baseVh.current, vv.height);
+    return Math.max(
+      window.innerHeight - vv.height - vv.offsetTop,
+      baseVh.current - vv.height,
+    );
+  };
   const anchorTail = () => {
     const sc = scrollerOf();
-    if (!sc) return;
-    // pin to the zone's foot — the keyboard spacer below it is reachable room
-    // for the READER's thumb, not part of the resting stance
-    const kbRoom = kbSpacerRef.current?.offsetHeight ?? 0;
-    sc.scrollTop = sc.scrollHeight - sc.clientHeight - kbRoom;
+    const btn = btnRef.current;
+    if (!sc || !btn) return;
+    const vv = window.visualViewport;
+    const kb = kbInset();
+    if (!vv || kb < 60) {
+      // no keyboard: rest at the zone's foot — the spacer below (if any
+      // remains mid-collapse) is reachable room, not part of the stance
+      const kbRoom = kbSpacerRef.current?.offsetHeight ?? 0;
+      sc.scrollTop = sc.scrollHeight - sc.clientHeight - kbRoom;
+      return;
+    }
+    // Keyboard up: pin against the VISUAL viewport, not a layout position.
+    // What's on screen is [vv.offsetTop, vv.offsetTop + vv.height] — and iOS
+    // picks offsetTop from wherever the page sat when the field was focused,
+    // so a fixed layout stance can land under the keyboard and every re-pin
+    // would hold it there. Reading offsetTop LIVE each pass keeps the seal
+    // just above the accessory band regardless of the focus-time pan.
+    const target = vv.offsetTop + vv.height - 64 - 8; // band + a hair of air
+    sc.scrollTop += btn.getBoundingClientRect().bottom - target;
   };
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
     if (!sp) return;
-    const vv = window.visualViewport;
-    if (vv) baseVh.current = Math.max(baseVh.current, vv.height);
-    // keyboard inset under BOTH viewport models (innerHeight full vs shrunk).
-    // Sized to the REAL inset only — the reach exists exactly while a keyboard
-    // actually covers the page (+64 for its floating accessory band), and
-    // collapses the moment it's dismissed, even if the field stays focused
-    // (the vv resize listener below re-runs this on dismissal).
-    const kb = vv
-      ? Math.max(
-          window.innerHeight - vv.height - vv.offsetTop,
-          baseVh.current - vv.height,
-        )
-      : 0;
-    sp.style.height = kb >= 60 ? `${kb + 64}px` : "";
+    // the bare inset — just enough room that the visual pin (and a thumb) can
+    // lift the zone's tail clear of the keyboard; collapses on dismissal even
+    // while focused (the vv resize listener re-runs this)
+    const kb = kbInset();
+    sp.style.height = kb >= 60 ? `${kb}px` : "";
   };
   // Centre the empty field: split the spare height evenly between the flexible
   // slack above it and the rigid spacer below it. Idempotent (the total is
