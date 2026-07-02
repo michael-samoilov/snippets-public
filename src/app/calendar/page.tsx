@@ -3200,10 +3200,14 @@ function TodayZoneFill({
           )}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
-          {/* today's date, in the Today-page voice — mt-[72px] + py-6 (24px)
-              seats it 96px under the zone's top, mirroring the seal's 96px
-              clearance above the terminus */}
-          <div className="mt-[72px] leading-none">
+          {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
+              seats it 107px under the zone's top. That's 11px more than the
+              seal's box clearance below, on purpose: the wax is painted high in
+              its canvas (room for lobes + drop shadow), leaving ~27px of
+              invisible canvas under the visible seal — the split-the-difference
+              offsets here and on the button equalize the gaps the EYE sees
+              (~110px above the date, ~110px below the wax). */}
+          <div className="mt-[83px] leading-none">
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
@@ -3326,11 +3330,13 @@ function TodayZoneFill({
               overSeal.current = false;
               if (!inSeal(e)) sealCtl.current?.press(false);
             }}
-            // mb-[69px]: with the zone's own foot (py-6 = 24px + 3px chin) this
-            // rests the seal 96px above the scroll terminus — clear of the
-            // keyboard's floating accessory band while writing (iOS parks the
-            // page bottom at the keyboard top), and the same stance at rest
-            className="relative mb-[69px] grid place-items-center rounded-full"
+            // mb-[58px]: with the zone's own foot (py-6 = 24px + 3px chin) this
+            // rests the seal's BOX 85px above the scroll terminus — the visible
+            // wax ~112px, clear of the keyboard's floating accessory band while
+            // writing (iOS parks the page bottom at the keyboard top), and the
+            // same stance at rest. See the date's mt note: the pair equalizes
+            // the perceived gaps around the composition.
+            className="relative mb-[58px] grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
             <AnimatePresence initial={false}>
