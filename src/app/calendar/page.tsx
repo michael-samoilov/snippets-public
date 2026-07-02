@@ -3094,7 +3094,8 @@ function TodayZoneFill({
     // the triangle profile: mirror the growth up to the slack, then give the
     // slack back line by line, then stay flat (regimes 1 → 2 → 3 above)
     const cap = spacerMax.current;
-    sp.style.height = `${cap == null ? g : Math.min(g, Math.max(0, 2 * cap - g))}px`;
+    const mirror = cap == null ? g : Math.min(g, Math.max(0, 2 * cap - g));
+    sp.style.height = `${mirror}px`;
     if (cap == null && box && zoneRestH.current != null) {
       const over = box.getBoundingClientRect().height - zoneRestH.current;
       if (over > 0) {
@@ -3105,18 +3106,32 @@ function TodayZoneFill({
         sp.style.height = `${spacerMax.current}px`;
       }
     }
-    // scroll so the seal sits at its compact stance: as much room between the
-    // seal's foot and the scroll terminus as between the last ruled line and
-    // the seal. Clamped at the scroll extents, which produces the glide of
-    // regime 2 (the target isn't reachable until the growth has consumed the
-    // slack) and the hold of regime 3 (it lands exactly).
     const sc = scrollerOf();
-    if (sc) {
-      const btnR = btn.getBoundingClientRect();
-      const gapAbove = btnR.top - area.getBoundingClientRect().bottom;
-      const target = sc.getBoundingClientRect().bottom - gapAbove;
-      sc.scrollTop += btnR.bottom - target;
+    if (!sc) return;
+    // The seal's compact stance: as much room between its foot and the scroll
+    // terminus as between the last ruled line and its top — BUT never under the
+    // keyboard's floating accessory band (the password/wallet/location pills,
+    // FLOAT px above the visual viewport's bottom; see use-keyboard-room),
+    // which otherwise overlaps the seal.
+    const FLOAT = 64;
+    const scB = sc.getBoundingClientRect().bottom;
+    const gapAbove = btn.getBoundingClientRect().top - area.getBoundingClientRect().bottom;
+    const vv = window.visualViewport;
+    const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    const ceiling = vv && kb >= 60 ? vv.offsetTop + vv.height - FLOAT : Infinity;
+    const target = Math.min(scB - gapAbove, ceiling);
+    // Holding the seal above the terminus needs material below it inside the
+    // scroller (the page can't scroll past its own end). Once past the mirror
+    // phase, keep the spacer at least that tall — the extra sits hidden under
+    // the keyboard, and blur clears it (27 = the zone's own foot: py-6 + chin).
+    if (spacerMax.current != null) {
+      const floor = Math.max(0, scB - target - 27);
+      if (floor > parseFloat(sp.style.height || "0")) sp.style.height = `${floor}px`;
     }
+    // Clamped at the scroll extents, this produces the glide of regime 2 (the
+    // target isn't reachable until growth has made room) and the hold of
+    // regime 3 (it lands exactly).
+    sc.scrollTop += btn.getBoundingClientRect().bottom - target;
   };
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-run across the keyboard's rise (~300ms) — the passes only size the
