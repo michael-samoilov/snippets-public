@@ -239,11 +239,11 @@ function KbDebug() {
   useEffect(() => {
     const update = () => {
       const vv = window.visualViewport;
-      // keep the panel INSIDE the visual viewport — a pan slides fixed
-      // elements out of view, which is itself a diagnostic, but an unreadable
-      // panel helps no one
-      setPanelTop(Math.round((vv?.offsetTop ?? 0) + 4));
       const doc = document.scrollingElement?.scrollTop ?? 0;
+      // layout-relative visual-viewport offset (see kbGeom: iOS's offsetTop is
+      // document-relative); keeps the panel inside the visible window
+      const layoutTop = vv ? vv.pageTop - doc : 0;
+      setPanelTop(Math.round(layoutTop + 4));
       const seal = [...document.querySelectorAll("button")].find((x) =>
         /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
       );
@@ -253,11 +253,11 @@ function KbDebug() {
       if (vv) {
         baseVh.current = Math.max(baseVh.current, vv.height);
         const measured = Math.max(
-          window.innerHeight - vv.height - vv.offsetTop,
+          window.innerHeight - vv.height - layoutTop,
           baseVh.current - vv.height,
         );
-        raw = vv.offsetTop + vv.height;
-        const pan = vv.offsetTop + doc;
+        raw = layoutTop + vv.height;
+        const pan = Math.max(vv.pageTop, doc);
         est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
         if (measured >= 60) { kb = measured; vis = raw; }
         else if (pan > 40) { kb = est; vis = raw - est; }
@@ -3228,25 +3228,31 @@ function TodayZoneFill({
     const vv = window.visualViewport;
     if (!vv) return { kb: 0, visBottom: window.innerHeight };
     baseVh.current = Math.max(baseVh.current, vv.height);
+    // The visual viewport's offset in LAYOUT coordinates — the frame client
+    // rects live in. NOT vv.offsetTop: iOS reports that document-relative
+    // (identical to pageTop), so with the document scrolled it double-counts
+    // and a "visible bottom" computed from it lands under the keyboard
+    // (observed on-device: offsetTop 198 == pageTop 198 == scrollY 198, true
+    // layout offset 0). pageTop minus the document scroll IS the layout
+    // offset, by definition, on every engine.
+    const doc = document.scrollingElement?.scrollTop ?? window.scrollY ?? 0;
+    const layoutTop = vv.pageTop - doc;
+    const visBottom = layoutTop + vv.height;
     const measured = Math.max(
-      window.innerHeight - vv.height - vv.offsetTop,
+      window.innerHeight - vv.height - layoutTop,
       baseVh.current - vv.height,
     );
-    if (measured >= 60) return { kb: measured, visBottom: vv.offsetTop + vv.height };
-    // The pan comes in TWO disguises: a visual-viewport pan (offsetTop) — or
-    // iOS scrolling the DOCUMENT itself to reveal the caret, overflow-hidden
-    // shell and all, which leaves offsetTop at zero and window.scrollY as the
-    // only trace. Client rects already account for a document scroll, so the
-    // visBottom formula is the same either way.
+    if (measured >= 60) return { kb: measured, visBottom };
+    // The pan comes in two disguises — a visual-viewport pan or iOS scrolling
+    // the document itself (overflow-hidden shell notwithstanding); pageTop
+    // covers both.
     const coarse = window.matchMedia?.("(pointer: coarse)").matches;
-    const pan =
-      vv.offsetTop +
-      (document.scrollingElement?.scrollTop ?? window.scrollY ?? 0);
+    const pan = Math.max(vv.pageTop, doc);
     if (coarse && pan > 40) {
       const est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
-      return { kb: est, visBottom: vv.offsetTop + vv.height - est };
+      return { kb: est, visBottom: visBottom - est };
     }
-    return { kb: 0, visBottom: vv.offsetTop + vv.height };
+    return { kb: 0, visBottom };
   };
   const anchorTail = () => {
     const sc = scrollerOf();
