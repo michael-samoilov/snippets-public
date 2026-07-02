@@ -3137,7 +3137,16 @@ function TodayZoneFill({
         )
       : 0;
     const ceiling = vv && kb >= 60 ? vv.offsetTop + vv.height - FLOAT : Infinity;
-    const target = Math.min(scB - gapAbove, ceiling);
+    // On a touch device, this code only runs while the field is focused — the
+    // keyboard is up by definition — and iOS parks the page bottom at the
+    // keyboard's top, so the band floats over the terminus itself. Raise the
+    // stance clear of it UNCONDITIONALLY there, because iOS's viewport numbers
+    // under-report the keyboard in too many configurations to trust the vv
+    // ceiling alone (which stays as an extra guard where it IS honest).
+    const raise = window.matchMedia?.("(pointer: coarse)").matches
+      ? FLOAT + 16
+      : 0;
+    const target = Math.min(scB - gapAbove - raise, ceiling);
     // Holding the seal above the terminus needs material below it inside the
     // scroller (the page can't scroll past its own end). Once past the mirror
     // phase, keep the spacer at least that tall — the extra sits hidden under
