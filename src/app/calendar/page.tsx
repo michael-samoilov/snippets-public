@@ -3054,29 +3054,47 @@ function TodayZoneFill({
   const quill = hasText || frozen; // which glyph the seal wears + presses
   useEffect(() => clearTimers, []);
 
-  // Tail anchoring. The zone's composition is bottom-anchored BY LAYOUT: a
-  // flex-1 spacer above the date soaks the zone's spare height, and the seal
-  // rests a fixed band-clearance above the scroll terminus — the same stance it
-  // holds while writing, so nothing ever has to move to get there. As the entry
-  // grows the block extends UPWARD natively (the field's foot and the seal are
-  // anchored to the zone's bottom); once the words outgrow the zone, the zone
-  // grows and the book scroller just stays pinned to its foot — max-scroll
-  // grows 1:1 with the zone, so the seal and caret line hold perfectly still
-  // and older lines climb past the top, where the page scrolls to read them.
-  // No bottom padding, no space below the zone, no keyboard detection — the
-  // stance already clears the keyboard's floating accessory band.
+  // Tail anchoring. The zone's composition is fixed BY LAYOUT, identical at
+  // rest and while writing, so nothing ever has to move: the date sits a fixed
+  // clearance under the zone's top, the seal rests the mirrored clearance above
+  // the scroll terminus, and the ruled field sits centred between them — a
+  // flex-1 slack above the field soaks half the spare height, and a spacer
+  // below it (sized ONCE at rest to match) holds the other half rigid. As the
+  // entry grows it consumes the flexible slack above — the field's top climbs,
+  // its foot and the seal stay put — and once the words outgrow the zone, the
+  // zone grows while the book scroller stays pinned to its foot (max-scroll
+  // grows 1:1, so the caret line holds still and older lines climb past the
+  // top, where the page scrolls to read them). No bottom padding, no space
+  // below the zone, no keyboard detection — the stance clears the keyboard's
+  // floating accessory band by construction.
   // (The generic keyboard-room hook ignores this field — see use-keyboard-room.)
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const topSlackRef = useRef<HTMLDivElement>(null);
+  const restSpacerRef = useRef<HTMLDivElement>(null);
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
   const anchorTail = () => {
     const sc = scrollerOf();
     if (sc) sc.scrollTop = sc.scrollHeight - sc.clientHeight;
   };
+  // Centre the empty field: split the spare height evenly between the flexible
+  // slack above it and the rigid spacer below it. Idempotent (the total is
+  // conserved), sized only while the field is at rest — once writing begins the
+  // spacer is frozen so growth spends the top slack alone and the caret line
+  // never moves.
+  const centerField = () => {
+    const s1 = topSlackRef.current, s2 = restSpacerRef.current, area = areaRef.current;
+    if (!s1 || !s2 || !area) return;
+    if (area.scrollHeight > 82) return; // 3 rest lines = 81px; already writing
+    const spare = s1.offsetHeight + (parseFloat(s2.style.height) || 0);
+    s2.style.height = `${Math.max(0, spare / 2)}px`;
+  };
+  useLayoutEffect(centerField, [gen, day]);
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
   const scheduleAnchor = () => {
+    centerField(); // a viewport change while resting re-centres before writing
     anchorTail();
     requestAnimationFrame(anchorTail);
     clearAnchorTimers();
@@ -3182,15 +3200,16 @@ function TodayZoneFill({
           )}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
-          {/* bottom-anchor the composition: this soaks the zone's spare height
-              so the seal rests at the same fixed clearance above the terminus
-              it holds while writing — nothing moves between rest and writing */}
-          <div className="flex-1" aria-hidden />
-          {/* today's date, in the Today-page voice */}
-          <div className="leading-none">
+          {/* today's date, in the Today-page voice — mt-[72px] + py-6 (24px)
+              seats it 96px under the zone's top, mirroring the seal's 96px
+              clearance above the terminus */}
+          <div className="mt-[72px] leading-none">
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
+          {/* the flexible half of the field's centring slack (see centerField);
+              the entry grows into this, top first, so its foot never moves */}
+          <div ref={topSlackRef} className="w-px flex-1" aria-hidden />
 
           {/* the ruled "paper" — the clickable entry; 4/5 wide so the prompt
               sits on one line */}
@@ -3237,6 +3256,11 @@ function TodayZoneFill({
               }}
             />
           </div>
+
+          {/* the rigid half of the field's centring slack — sized once at rest
+              (see centerField) and frozen through the writing, so the field's
+              foot keeps this exact distance from the seal for the whole entry */}
+          <div ref={restSpacerRef} className="-mt-4 w-px shrink-0" aria-hidden />
 
           {/* the wax button — mic at rest, quill once typing starts; the whole
               button cross-slides (left↔right carousel) on the swap. press it to
