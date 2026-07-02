@@ -3054,129 +3054,35 @@ function TodayZoneFill({
   const quill = hasText || frozen; // which glyph the seal wears + presses
   useEffect(() => clearTimers, []);
 
-  // Tail anchoring: as the entry grows, the text must appear to extend UPWARD —
-  // older lines climb past the top, the whole entry stays readable on the page,
-  // and nothing is ever added below the zone. Three regimes:
-  //  1. While the zone still has centring slack, the field's growth is MIRRORED
-  //     as empty space below the seal (the tail spacer): +G above, +G below, so
-  //     the centred block's midpoint — the seal and the last line — stays put.
-  //  2. When the mirror reaches the zone's rest size, the spacer SHRINKS as the
-  //     field keeps growing (the zone holds its rest size; the seal and caret
-  //     line glide down together), spending the rest slack under the seal
-  //     instead of leaving it as dead space above the keyboard.
-  //  3. Spacer gone: the zone grows with the words and the book scroller keeps
-  //     the seal at its compact stance — the gap from the seal down to the
-  //     scroll terminus equals the gap from the last ruled line down to the
-  //     seal. Max-scroll grows 1:1 with the zone, so the target always lands:
-  //     seal and caret line hold still, growth has nowhere to go but up.
-  // No bottom padding, no space below the zone, ever.
+  // Tail anchoring. The zone's composition is bottom-anchored BY LAYOUT: a
+  // flex-1 spacer above the date soaks the zone's spare height, and the seal
+  // rests a fixed band-clearance above the scroll terminus — the same stance it
+  // holds while writing, so nothing ever has to move to get there. As the entry
+  // grows the block extends UPWARD natively (the field's foot and the seal are
+  // anchored to the zone's bottom); once the words outgrow the zone, the zone
+  // grows and the book scroller just stays pinned to its foot — max-scroll
+  // grows 1:1 with the zone, so the seal and caret line hold perfectly still
+  // and older lines climb past the top, where the page scrolls to read them.
+  // No bottom padding, no space below the zone, no keyboard detection — the
+  // stance already clears the keyboard's floating accessory band.
   // (The generic keyboard-room hook ignores this field — see use-keyboard-room.)
-  const REST_FIELD = 81; // 3 lines at 27px — the resting height, before growth
-  const zoneRestH = useRef<number | null>(null);
-  const spacerMax = useRef<number | null>(null); // the rest bottom-slack, learned at first overflow
-  // the visual viewport's height with NO keyboard (its running max) — on iOS,
-  // window.innerHeight itself shrinks with the keyboard, so innerHeight-based
-  // detection reads zero there (same trap use-keyboard-room documents)
-  const baseVh = useRef(0);
-  const tailSpacerRef = useRef<HTMLDivElement>(null);
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
   const anchorTail = () => {
-    const btn = btnRef.current, area = areaRef.current, sp = tailSpacerRef.current;
-    if (!btn || !area || !sp) return;
-    // sample the no-keyboard viewport height FIRST — the focus-time pass runs
-    // before the keyboard rises, and the rest branch below returns early, so
-    // sampling any later would only ever see the keyboard-shrunk height on iOS
-    if (window.visualViewport)
-      baseVh.current = Math.max(baseVh.current, window.visualViewport.height);
-    const box = btn.closest<HTMLElement>("[data-today-zone-box]");
-    const g = Math.max(0, area.offsetHeight - REST_FIELD); // how far the field grew
-    if (g === 0) {
-      // at rest (≤3 lines): nothing to mirror; remember the zone's rest size so
-      // we can tell the moment the mirror reaches it, and re-learn the slack
-      sp.style.height = "";
-      spacerMax.current = null;
-      if (box) zoneRestH.current = box.getBoundingClientRect().height;
-      return;
-    }
-    // the triangle profile: mirror the growth up to the slack, then give the
-    // slack back line by line, then stay flat (regimes 1 → 2 → 3 above)
-    const cap = spacerMax.current;
-    const mirror = cap == null ? g : Math.min(g, Math.max(0, 2 * cap - g));
-    sp.style.height = `${mirror}px`;
-    if (cap == null && box && zoneRestH.current != null) {
-      const over = box.getBoundingClientRect().height - zoneRestH.current;
-      if (over > 0) {
-        // the mirror just reached the zone's rest size — the slack is the
-        // mirror's share of the overflow (it splits evenly between the field
-        // and its mirror, hence over/2)
-        spacerMax.current = Math.max(0, g - over / 2);
-        sp.style.height = `${spacerMax.current}px`;
-      }
-    }
     const sc = scrollerOf();
-    if (!sc) return;
-    // The seal's compact stance: as much room between its foot and the scroll
-    // terminus as between the last ruled line and its top — BUT never under the
-    // keyboard's floating accessory band (the password/wallet/location pills,
-    // FLOAT px above the visual viewport's bottom; see use-keyboard-room),
-    // which otherwise overlaps the seal.
-    const FLOAT = 64;
-    const scB = sc.getBoundingClientRect().bottom;
-    const gapAbove = btn.getBoundingClientRect().top - area.getBoundingClientRect().bottom;
-    const vv = window.visualViewport;
-    // keyboard inset, robust to BOTH viewport models: Safari-desktop-style
-    // (innerHeight stays full, only vv shrinks) AND iOS (innerHeight shrinks
-    // with the keyboard, so measure against vv.height's no-keyboard maximum,
-    // sampled at the top of this function)
-    const kb = vv
-      ? Math.max(
-          window.innerHeight - vv.height - vv.offsetTop,
-          baseVh.current - vv.height,
-        )
-      : 0;
-    const ceiling = vv && kb >= 60 ? vv.offsetTop + vv.height - FLOAT : Infinity;
-    // On a touch device, this code only runs while the field is focused — the
-    // keyboard is up by definition — and iOS parks the page bottom at the
-    // keyboard's top, so the band floats over the terminus itself. Raise the
-    // stance clear of it UNCONDITIONALLY there, because iOS's viewport numbers
-    // under-report the keyboard in too many configurations to trust the vv
-    // ceiling alone (which stays as an extra guard where it IS honest).
-    const raise = window.matchMedia?.("(pointer: coarse)").matches
-      ? FLOAT + 16
-      : 0;
-    const target = Math.min(scB - gapAbove - raise, ceiling);
-    // Holding the seal above the terminus needs material below it inside the
-    // scroller (the page can't scroll past its own end). Once past the mirror
-    // phase, keep the spacer at least that tall — the extra sits hidden under
-    // the keyboard, and blur clears it (27 = the zone's own foot: py-6 + chin).
-    if (spacerMax.current != null) {
-      const floor = Math.max(0, scB - target - 27);
-      if (floor > parseFloat(sp.style.height || "0")) sp.style.height = `${floor}px`;
-    }
-    // Clamped at the scroll extents, this produces the glide of regime 2 (the
-    // target isn't reachable until growth has made room) and the hold of
-    // regime 3 (it lands exactly).
-    sc.scrollTop += btn.getBoundingClientRect().bottom - target;
+    if (sc) sc.scrollTop = sc.scrollHeight - sc.clientHeight;
   };
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
-  // FOCUS: re-run across the keyboard's rise (~300ms) — the passes only size the
-  // spacer against the settled layout.
+  // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
+  // own focus-scroll nudges the book off its foot.
   const scheduleAnchor = () => {
     anchorTail();
     requestAnimationFrame(anchorTail);
     clearAnchorTimers();
     anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(anchorTail, ms));
   };
-  const releaseTail = () => {
-    clearAnchorTimers();
-    // at rest the entry reads as normal paper: drop the spacer so the words fill
-    // the zone naturally. NOT during a keep — the lead blurs the field
-    // mid-animation and the zone must hold its shape through the sweep (the
-    // fresh generation mounts clean anyway).
-    if (!keeping.current && tailSpacerRef.current) tailSpacerRef.current.style.height = "";
-  };
+  const releaseTail = clearAnchorTimers;
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
@@ -3275,7 +3181,11 @@ function TodayZoneFill({
             frame,
           )}
         >
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6 text-center">
+          <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
+          {/* bottom-anchor the composition: this soaks the zone's spare height
+              so the seal rests at the same fixed clearance above the terminus
+              it holds while writing — nothing moves between rest and writing */}
+          <div className="flex-1" aria-hidden />
           {/* today's date, in the Today-page voice */}
           <div className="leading-none">
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
@@ -3382,7 +3292,11 @@ function TodayZoneFill({
               overSeal.current = false;
               if (!inSeal(e)) sealCtl.current?.press(false);
             }}
-            className="relative grid place-items-center rounded-full"
+            // mb-[69px]: with the zone's own foot (py-6 = 24px + 3px chin) this
+            // rests the seal 96px above the scroll terminus — clear of the
+            // keyboard's floating accessory band while writing (iOS parks the
+            // page bottom at the keyboard top), and the same stance at rest
+            className="relative mb-[69px] grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
             <AnimatePresence initial={false}>
@@ -3417,13 +3331,6 @@ function TodayZoneFill({
               </motion.span>
             </AnimatePresence>
           </button>
-
-          {/* tail spacer: mirrors the field's growth below the seal so the
-              centred composition's midpoint (and thus the seal + last line)
-              stays put as the entry grows — see anchorTail. -mt-4 cancels the
-              column gap so at rest (height 0) it adds nothing and the empty
-              composition is unchanged. */}
-          <div ref={tailSpacerRef} aria-hidden className="-mt-4 w-px shrink-0" />
           </div>
         </div>
       </motion.div>
