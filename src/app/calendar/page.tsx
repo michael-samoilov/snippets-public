@@ -2746,6 +2746,9 @@ function FlowBackfillCapture({
   const draftStore = useKeptDraft();
   // the thumb-down dip (the seal's `pressed` feedback before release)
   const [pressedDown, setPressedDown] = useState(false);
+  // the card's press-down dip (see .pressable-composer) — only for the press
+  // that BEGINS writing; once the caret is inside, taps just place the caret
+  const [dip, setDip] = useState(false);
   const isToday = day === dayKey();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -2817,17 +2820,26 @@ function FlowBackfillCapture({
           initial={seq.phase === "composing" ? { clipPath: "inset(0 100% 0 0)" } : false}
           animate={{ clipPath: "inset(0 0 0 0)" }}
           transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
-          className="group relative"
+          // pressable-composer: the same press-down dip as the entry cards
+          // beside it, only for the press that begins writing
+          className="group pressable-composer relative"
+          data-dip={dip || undefined}
+          onPointerDown={() => {
+            if (document.activeElement !== areaRef.current) setDip(true);
+          }}
+          onPointerUp={() => setDip(false)}
+          onPointerCancel={() => setDip(false)}
+          onPointerLeave={() => setDip(false)}
         >
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
+            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised"
           />
           <span
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
-              "border-rule-faint group-focus-within:border-rule",
+              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-[opacity,background-color] duration-150",
+              "border-rule-faint group-focus-within:border-rule group-hover:bg-paper-raised",
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />

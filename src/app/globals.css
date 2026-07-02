@@ -583,6 +583,18 @@ textarea:focus-visible,
   transform: scale(0.97);
 }
 
+/* a composer that reads as a card until it's being written in: it dips like
+   every pressable on press-down, but once the caret is inside, taps place the
+   caret without the button theatre. Driven by [data-dip] from JS rather than
+   :active:not(:focus-within) — the press itself focuses the field on
+   pointerdown, so focus-within is already true before :active could paint */
+.pressable-composer {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.pressable-composer[data-dip] {
+  transform: scale(0.97);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .hover-lift {
     transition:
