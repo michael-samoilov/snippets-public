@@ -2452,7 +2452,12 @@ function ScheduleFeedBase({
                 )}>
                   {!hideToday && (() => {
                     const dateInner = (
-                      <>
+                      // py-[3.5px] sizes the block to exactly a single-line
+                      // card's height (42.5px: its 35.4px of text + 7.1px), so
+                      // the date reads centre-aligned beside a one-line entry —
+                      // and a single-line day has zero sticky travel, killing
+                      // the tiny header-crawl while scrolling past it
+                      <div className="py-[3.5px]">
                         <span
                           className={cn(
                             "voice-label block text-[0.62rem] leading-tight",
@@ -2470,7 +2475,7 @@ function ScheduleFeedBase({
                         >
                           {format(d, "d")}
                         </span>
-                      </>
+                      </div>
                     );
                     // today's date sticky-header populates as the first entry
                     // arrives — wipe it in from the left to lead the kept card,
