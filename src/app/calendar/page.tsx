@@ -3169,18 +3169,29 @@ function TodayZoneFill({
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
   const vvListenerRef = useRef<(() => void) | null>(null);
+  const touchCancelRef = useRef<(() => void) | null>(null);
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
     anchorPass();
     requestAnimationFrame(anchorPass);
     clearAnchorTimers();
-    // re-measure across the keyboard's rise — the first passes run before the
-    // viewport has finished changing, and on-device the rise (plus the
-    // browser's own caret-reveal scroll) can settle after 360ms, so a late
-    // pass covers the tail. Every pass converges on the same visual target,
-    // so repeats are invisible — the last writer just lands the same pixel.
-    anchorTimers.current = [80, 200, 360, 600].map((ms) => setTimeout(anchorPass, ms));
+    // Re-pin across the keyboard's rise AND well past it: iOS runs its own
+    // caret-reveal scroll after the keyboard fully settles — later than the
+    // rise-end visualViewport resize — and whoever writes last wins. Every
+    // pass converges on the same visual target, so repeats are invisible;
+    // the long tail just makes sure ours is the final word.
+    anchorTimers.current = [80, 200, 360, 600, 900, 1300].map((ms) =>
+      setTimeout(anchorPass, ms),
+    );
+    // …but never against the reader: the moment a finger lands on the page,
+    // the remaining passes stand down (typing re-arms its own short re-pin)
+    if (!touchCancelRef.current) {
+      const standDown = () => { clearAnchorTimers(); };
+      touchCancelRef.current = standDown;
+      window.addEventListener("touchstart", standDown, { passive: true });
+      window.addEventListener("wheel", standDown, { passive: true });
+    }
     // track the keyboard while focused: a resize re-runs the FULL pass —
     // dismissing the keyboard (which keeps focus) folds the reach away, and
     // the resize at the end of a slow rise re-pins after iOS has settled
@@ -3196,6 +3207,11 @@ function TodayZoneFill({
     if (vvListenerRef.current && window.visualViewport) {
       window.visualViewport.removeEventListener("resize", vvListenerRef.current);
       vvListenerRef.current = null;
+    }
+    if (touchCancelRef.current) {
+      window.removeEventListener("touchstart", touchCancelRef.current);
+      window.removeEventListener("wheel", touchCancelRef.current);
+      touchCancelRef.current = null;
     }
   };
   useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
