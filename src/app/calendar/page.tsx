@@ -282,7 +282,7 @@ function KbDebug() {
         [
           // bumped per deploy so an on-device report is unambiguous about
           // which build produced it
-          "BUILD settle-4",
+          "BUILD settle-5",
           `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
           vv
             ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
@@ -298,6 +298,25 @@ function KbDebug() {
             type ZoneTapLog = { t: number; via: string; why: string };
             const zt = (window as Window & { __zoneTap?: ZoneTapLog }).__zoneTap;
             return zt ? `TAP ${zt.via}@${zt.t}: ${zt.why}` : "TAP -";
+          })(),
+          // live rule-delta + the last landing-system scroll writes: the
+          // refresh-wobble oscillator will name itself here
+          (() => {
+            const s = sc as HTMLElement | null;
+            if (!s) return "RULE -";
+            const p2 = (n: number) => String(n).padStart(2, "0");
+            const now = new Date();
+            const tk = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}`;
+            const secEl = s.querySelector(`section[data-day="${tk}"]`);
+            const rd = secEl
+              ? Math.round((secEl.getBoundingClientRect().top - s.getBoundingClientRect().top) * 10) / 10
+              : null;
+            return `RULE ${rd ?? "-"}  max-st ${Math.round(s.scrollHeight - s.clientHeight - s.scrollTop)}`;
+          })(),
+          (() => {
+            type SetLog = { t: number; src: string; d: number; st0: number; st1: number };
+            const log = (window as Window & { __settleLog?: SetLog[] }).__settleLog ?? [];
+            return log.slice(-3).map((e) => `SET ${e.src}@${e.t} d${e.d} ${e.st0}→${e.st1}`).join("\n") || "SET -";
           })(),
         ].join("\n"),
       );
@@ -2304,11 +2323,22 @@ function ScheduleFeedBase({
           return sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
         return s.scrollHeight - s.clientHeight - s.scrollTop;
       };
-      const pinFoot = (behavior: ScrollBehavior) => {
+      // ?kbdebug breadcrumb: every landing-system scroll write, with source
+      // and measurement, so an on-device recording can NAME the oscillator
+      type SetLog = { t: number; src: string; d: number; st0: number; st1: number };
+      const logSet = (src: string, d: number, st0: number, st1: number) => {
+        const w = window as Window & { __settleLog?: SetLog[] };
+        w.__settleLog = [...(w.__settleLog ?? []).slice(-11), { t: Date.now() % 100000, src, d: Math.round(d * 10) / 10, st0: Math.round(st0), st1: Math.round(st1) }];
+      };
+      const pinFoot = (behavior: ScrollBehavior, src = "pin") => {
         const s = scrollerRef.current;
         if (!s) return;
         const d = footDelta();
-        if (d != null && Math.abs(d) > 1) s.scrollBy({ top: d, behavior });
+        if (d != null && Math.abs(d) > 1) {
+          const st0 = s.scrollTop;
+          s.scrollBy({ top: d, behavior });
+          logSet(src, d, st0, s.scrollTop);
+        }
       };
       // a micro-correction may only fire against a STILL layout: the same
       // delta observed on two consecutive frames. iOS settles its toolbars
@@ -2325,7 +2355,11 @@ function ScheduleFeedBase({
           const d2 = footDelta();
           if (d2 == null || Math.abs(d2) <= 1) return;
           if (Math.abs(d2 - d1) > 1) return; // layout in motion — not a settle moment
-          scrollerRef.current?.scrollBy({ top: d2, behavior: "instant" });
+          const s2 = scrollerRef.current;
+          if (!s2) return;
+          const st0 = s2.scrollTop;
+          s2.scrollBy({ top: d2, behavior: "instant" });
+          logSet("settle", d2, st0, s2.scrollTop);
         });
       };
       // ONE smooth glide — never re-commanded mid-flight (overlapping smooth
@@ -2365,7 +2399,7 @@ function ScheduleFeedBase({
       const reseat = () => {
         if (tookOverRef.current) return;
         if (document.activeElement?.tagName === "TEXTAREA") return; // keyboard pin owns it
-        pinFoot("instant");
+        pinFoot("instant", "breath");
       };
       const ro = new ResizeObserver(reseat);
       const sEl = scrollerRef.current;
