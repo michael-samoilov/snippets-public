@@ -185,11 +185,15 @@ function int16ToBase64(pcm: Int16Array): string {
   return btoa(bin);
 }
 
-/** Server messages we act on (ElevenLabs realtime STT dialect). */
+/** Server messages we act on (ElevenLabs realtime STT dialect).
+ *  The wire field is `text` (per the generated AsyncAPI types) — the
+ *  SDK docs' `transcript` is tolerated in case the dialect drifts. */
 interface ScribeMessage {
   message_type?: string;
+  text?: string;
   transcript?: string;
 }
+const transcriptOf = (m: ScribeMessage): string => m.text ?? m.transcript ?? "";
 
 /* ── public surface ────────────────────────────────────────────────── */
 
@@ -557,18 +561,21 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       }
       switch (data.message_type) {
         case "partial_transcript": {
-          const text = data.transcript ?? "";
+          const text = transcriptOf(data);
           interimRef.current = text;
           setInterim(text);
           break;
         }
         case "committed_transcript":
-          if (data.transcript?.trim()) pushSegment(data.transcript);
+        case "committed_transcript_with_timestamps": {
+          const text = transcriptOf(data);
+          if (text.trim()) pushSegment(text);
           interimRef.current = "";
           setInterim("");
           // stopping — this commit is the flush we were waiting for
           if (!wantedRef.current) settleScribe();
           break;
+        }
         case "session_time_limit_exceeded":
           wantedRef.current = false;
           settleScribe();
