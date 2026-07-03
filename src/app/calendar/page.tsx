@@ -3526,6 +3526,25 @@ function TodayZoneFill({
           const sc = scrollerOf();
           if (sc && now > walkRef.current.until) walkRef.current.sanctioned = sc.scrollTop;
           walkRef.current.until = now + 600;
+          // DOWNWARD follow is ours alone, and it must be immediate: WebKit
+          // follows a walking caret upward natively but walks it down only to
+          // the last visible line and stops — its auto-scroll never engages
+          // downward in an inner scroller, and the late reveal can't help
+          // because a caret parked at the bottom edge is still "in view". As
+          // the caret enters the bottom band, step the book to open the next
+          // lines; each further line re-steps, so holding the cursor low
+          // scrolls the entry down. Typing never lands here — the pin keeps
+          // the caret a whole seal above the keyboard.
+          if (sc) {
+            const { kb, visBottom } = kbGeom();
+            if (kb >= 60) {
+              const caretB = caretClientBottom();
+              if (caretB != null && caretB > visBottom - 44) {
+                sc.scrollTop += caretB - (visBottom - 84);
+                walkRef.current.sanctioned = sc.scrollTop;
+              }
+            }
+          }
         }
         // The reveal is a LATE rescue, never a live follower. WebKit follows
         // a walking caret natively and smoothly; an immediate reveal raced it
