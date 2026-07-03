@@ -2286,7 +2286,14 @@ function ScheduleFeedBase({
         const s = scrollerRef.current;
         if (!s) return null;
         const sec = rowRefs.current.get(todayKey);
-        if (sec && !sec.querySelector("[data-entry]"))
+        // a re-render (live data arriving, rows remounting) unmaps the
+        // section ref for a beat. The literal-foot fallback sits 6px off the
+        // rule-pin stance, so a pass landing in that window wrote the OTHER
+        // stance and the page flip-flopped as it set — skip instead; the
+        // next pass reads the settled truth. Literal foot is only ever the
+        // right answer for a today that truly has entries.
+        if (!sec) return null;
+        if (!sec.querySelector("[data-entry]"))
           return sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
         return s.scrollHeight - s.clientHeight - s.scrollTop;
       };
