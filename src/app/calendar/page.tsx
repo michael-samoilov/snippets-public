@@ -233,8 +233,9 @@ function CalendarGate() {
 // device with the keyboard up tells us exactly what its viewport reports.
 function KbDebug() {
   const [txt, setTxt] = useState("");
-  const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number } | null>(null);
+  const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number; shift: number } | null>(null);
   const [panelTop, setPanelTop] = useState(4);
+  const panelRef = useRef<HTMLPreElement>(null);
   const baseVh = useRef(0);
   useEffect(() => {
     const update = () => {
@@ -244,6 +245,15 @@ function KbDebug() {
       // document-relative); keeps the panel inside the visible window
       const layoutTop = vv ? vv.pageTop - doc : 0;
       setPanelTop(Math.round(layoutTop + 4));
+      // The FIXED layer and the RECT frame disagree on this device under the
+      // keyboard scroll — measure the shift from the panel's own rect (its
+      // rect vs the fixed top it is CURRENTLY rendered at) so the ruler lines
+      // can be labeled in TRUE rect coordinates.
+      let shift = 0;
+      if (panelRef.current) {
+        const applied = parseFloat(panelRef.current.style.top || "4");
+        shift = Math.round(panelRef.current.getBoundingClientRect().top - applied);
+      }
       const seal = [...document.querySelectorAll("button")].find((x) =>
         /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
       );
@@ -264,7 +274,7 @@ function KbDebug() {
         else { kb = 0; vis = raw; }
         tgt = vis - 72;
       }
-      setMarks({ vis, tgt, raw });
+      setMarks({ vis, tgt, raw, shift });
       type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
       const a = (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor;
       setTxt(
@@ -276,7 +286,7 @@ function KbDebug() {
           `docST ${Math.round(doc)}  winSY ${Math.round(window.scrollY)}  baseVh ${Math.round(baseVh.current)}`,
           `kb ${Math.round(kb)}  est ${est}  vis ${Math.round(vis)}  tgt ${Math.round(tgt)}`,
           `sealB ${seal ? Math.round(seal.getBoundingClientRect().bottom) : "-"}  scST ${sc ? Math.round(sc.scrollTop) : "-"}  spcr ${sp?.style.height || "0"}`,
-          `focus ${document.activeElement?.tagName ?? "-"}`,
+          `focus ${document.activeElement?.tagName ?? "-"}  shift ${shift}  fieldB ${(() => { const f = document.querySelector("[data-today-zone-box] textarea"); return f ? Math.round(f.getBoundingClientRect().bottom) : "-"; })()}`,
           a
             ? `LAST ${a.branch}@${a.t}: kb ${Math.round(a.kb)} tgt ${Math.round(a.tgt)} sealB ${Math.round(a.sealB)}\n  st ${Math.round(a.st0)}→${Math.round(a.st1)} max ${Math.round(a.max)} spcr ${Math.round(a.spcr)}${a.branch === "pin" && Math.abs(a.st0 + a.sealB - a.tgt - a.st1) > 2 ? " CLAMPED" : ""}`
             : "LAST -",
@@ -299,6 +309,7 @@ function KbDebug() {
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]">
       <pre
+        ref={panelRef}
         className="absolute left-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300"
         style={{ top: panelTop }}
       >
@@ -312,9 +323,17 @@ function KbDebug() {
           <div className="absolute inset-x-0 border-t-2 border-orange-400" style={{ top: marks.tgt }}>
             <span className="bg-orange-400 px-1 font-mono text-[9px] text-black">tgt {Math.round(marks.tgt)}</span>
           </div>
-          <div className="absolute inset-x-0 border-t border-dashed border-sky-400" style={{ top: marks.raw }}>
-            <span className="bg-sky-400 px-1 font-mono text-[9px] text-black">vvBottom {Math.round(marks.raw)}</span>
-          </div>
+          {/* the RULER: a line every 50px of the fixed layer, each labeled with
+              its TRUE rect-frame y (fixed y + measured shift). The label sitting
+              at the keyboard's top edge in a screenshot IS the correct
+              visible-bottom in the coordinates anchorTail scrolls in. */}
+          {Array.from({ length: 20 }, (_, k) => k * 50).map((y) => (
+            <div key={y} className="absolute inset-x-0 border-t border-fuchsia-500/70" style={{ top: y }}>
+              <span className="absolute right-0 bg-fuchsia-600 px-1 font-mono text-[9px] text-white">
+                r{y + marks.shift}
+              </span>
+            </div>
+          ))}
         </>
       )}
     </div>
