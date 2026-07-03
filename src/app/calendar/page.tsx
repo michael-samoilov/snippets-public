@@ -3505,8 +3505,14 @@ function TodayZoneFill({
           if (sc && now > walkRef.current.until) walkRef.current.sanctioned = sc.scrollTop;
           walkRef.current.until = now + 600;
         }
+        // The reveal is a LATE rescue, never a live follower. WebKit follows
+        // a walking caret natively and smoothly; an immediate reveal raced it
+        // and double-scrolled — the view hopped in steps while the trackpad
+        // moved. Each selectionchange resets these timers, so mid-walk the
+        // reveal never fires at all: it runs only once the caret has settled,
+        // and only if WebKit left it stranded out of view.
         clearAnchorTimers();
-        anchorTimers.current = [0, 120, 300, 600].map((ms) =>
+        anchorTimers.current = [450, 900].map((ms) =>
           setTimeout(() => { if (!touchActiveRef.current) revealCaret(); }, ms),
         );
       };
@@ -3537,7 +3543,11 @@ function TodayZoneFill({
           const lo = visTop + 8;
           const hi = visBottom - 24;
           const atStart = (area.selectionStart ?? 0) === 0 && area.value.length > 0;
-          if (caretB >= lo && caretB <= hi) {
+          // legitimacy is judged against the FULL window (WebKit parks a
+          // walking caret right at the keyboard top, a hair below our hi —
+          // that must not read as "left behind"); hi stays the pull-back
+          // target so corrections land clear of the accessory pills
+          if (caretB >= lo && caretB <= visBottom) {
             // in view = legitimate follow — EXCEPT digging into history with
             // the caret already at the very start: nothing left to reveal,
             // hold line 1 at the top edge
