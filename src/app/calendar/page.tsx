@@ -3458,6 +3458,13 @@ function TodayZoneFill({
   // scrolls are never mistaken for foreign ones); `prevSt` gives each scroll
   // event its direction. A real finger on the page dissolves the walk.
   const walkRef = useRef({ until: 0, sanctioned: -1, prevSt: -1, prevSel: -1 });
+  // the walk SESSION: true from the first caret move of a walk until an event
+  // that proves the gesture ended (page touch, typing, blur, app switch,
+  // keyboard resize). Unlike walk.until it survives pauses — the trackpad
+  // finger can hover motionless for seconds and the anchor must stay silent.
+  const walkSessionRef = useRef(false);
+  const lastInputRef = useRef(0); // when the field last received a keystroke
+  const vvEndListenerRef = useRef<(() => void) | null>(null);
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
@@ -3475,7 +3482,7 @@ function TodayZoneFill({
     // …but never against the reader: the moment a finger lands on the page,
     // the remaining passes stand down (typing re-arms its own short re-pin)
     if (!touchCancelRef.current) {
-      const standDown = () => { touchActiveRef.current = true; walkRef.current.until = 0; clearAnchorTimers(); };
+      const standDown = () => { touchActiveRef.current = true; walkRef.current.until = 0; walkSessionRef.current = false; clearAnchorTimers(); };
       const touchUp = () => { touchActiveRef.current = false; };
       touchCancelRef.current = standDown;
       touchUpRef.current = touchUp;
@@ -3492,27 +3499,44 @@ function TodayZoneFill({
     // lands via window focus / visibilitychange, where iOS may restore the
     // scroll into the reach region with no viewport event at all.
     if (!vvListenerRef.current && window.visualViewport) {
-      const onViewport = () => {
+      // Two classes of viewport event, split by what they mean for a caret
+      // walk. The trackpad is a SESSION: it survives pauses (the finger can
+      // hover motionless for seconds), so suppressing re-anchors only within
+      // 600ms of the last caret move wasn't enough — a pause let the walk
+      // lapse, the next little iOS pan fired a full anchor pass, and the
+      // book yanked to the seal stance mid-gesture. The session ends only on
+      // events that PROVE the gesture is over: a finger on the page, typing,
+      // blur, an app switch, or the keyboard actually changing size.
+      const onViewportEnd = () => {
+        // resize / window focus / visibilitychange: keyboard geometry moved
+        // or we're returning from elsewhere — the walk (if any) is over and
+        // the stance must re-assert (dismissal collapse, app-switch re-seat)
         const vv = window.visualViewport;
         if (vv && vv.scale > 1.01) return;
         if (touchActiveRef.current) return;
-        // during a caret walk the WALK owns the view: iOS pans the visual
-        // viewport in little steps while the trackpad finger rides the
-        // screen edge, and re-anchoring on each pan yanked the book toward
-        // the seal stance mid-walk — the back-and-forth jitter. Dismissal
-        // still passes (kb drops below 60): the spacer and foot must reset.
-        if (performance.now() < walkRef.current.until && kbGeom().kb >= 60) return;
+        walkSessionRef.current = false;
         anchorPass();
       };
-      vvListenerRef.current = onViewport;
-      window.visualViewport.addEventListener("resize", onViewport);
-      window.visualViewport.addEventListener("scroll", onViewport);
+      const onViewportPan = () => {
+        // vv/document scroll: iOS pans — during a walk session the WALK owns
+        // the view and these must not re-anchor (that was the mid-glide
+        // back-and-forth); outside one, re-pin against the live pan
+        const vv = window.visualViewport;
+        if (vv && vv.scale > 1.01) return;
+        if (touchActiveRef.current) return;
+        if (walkSessionRef.current && kbGeom().kb >= 60) return;
+        anchorPass();
+      };
+      vvListenerRef.current = onViewportPan;
+      vvEndListenerRef.current = onViewportEnd;
+      window.visualViewport.addEventListener("resize", onViewportEnd);
+      window.visualViewport.addEventListener("scroll", onViewportPan);
       // iOS's document-scroll flavour of the keyboard pan (window scroll
       // events don't bubble from inner scrollers, so this hears ONLY the
       // document — i.e. only iOS's own keyboard avoidance)
-      window.addEventListener("scroll", onViewport);
-      window.addEventListener("focus", onViewport);
-      document.addEventListener("visibilitychange", onViewport);
+      window.addEventListener("scroll", onViewportPan);
+      window.addEventListener("focus", onViewportEnd);
+      document.addEventListener("visibilitychange", onViewportEnd);
     }
     // Follow the CARET, not just the viewport: iOS places a tapped caret on
     // its own schedule, and a tap that moves the caret in an ALREADY-focused
@@ -3533,6 +3557,10 @@ function TodayZoneFill({
           const sc = scrollerOf();
           if (sc && now > walkRef.current.until) walkRef.current.sanctioned = sc.scrollTop;
           walkRef.current.until = now + 600;
+          // only a caret that moved WITHOUT typing opens a session — a
+          // keystroke's own selectionchange is the keys talking, not the
+          // trackpad, and typing must leave the pan re-anchors armed
+          if (now - lastInputRef.current > 300) walkSessionRef.current = true;
           // DOWNWARD follow is ours alone, and it must be immediate: WebKit
           // follows a walking caret upward natively but walks it down only to
           // the last visible line and stops — its auto-scroll never engages
@@ -3635,12 +3663,15 @@ function TodayZoneFill({
     // the extra reach below the zone exists only while writing
     if (kbSpacerRef.current) kbSpacerRef.current.style.height = "";
     if (vvListenerRef.current && window.visualViewport) {
-      window.visualViewport.removeEventListener("resize", vvListenerRef.current);
       window.visualViewport.removeEventListener("scroll", vvListenerRef.current);
       window.removeEventListener("scroll", vvListenerRef.current);
-      window.removeEventListener("focus", vvListenerRef.current);
-      document.removeEventListener("visibilitychange", vvListenerRef.current);
       vvListenerRef.current = null;
+    }
+    if (vvEndListenerRef.current && window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", vvEndListenerRef.current);
+      window.removeEventListener("focus", vvEndListenerRef.current);
+      document.removeEventListener("visibilitychange", vvEndListenerRef.current);
+      vvEndListenerRef.current = null;
     }
     if (selChangeRef.current) {
       document.removeEventListener("selectionchange", selChangeRef.current);
@@ -3651,6 +3682,7 @@ function TodayZoneFill({
       scScrollRef.current = null;
     }
     walkRef.current.until = 0;
+    walkSessionRef.current = false;
     if (touchCancelRef.current) {
       window.removeEventListener("touchstart", touchCancelRef.current);
       window.removeEventListener("wheel", touchCancelRef.current);
@@ -3901,6 +3933,11 @@ function TodayZoneFill({
               onChange={(e) => {
                 setText(e.target.value);
                 autosizeArea(e.target);
+                // typing ends any trackpad walk session (the finger is on the
+                // keys) and marks the moment, so this keystroke's own
+                // selectionchange doesn't reopen one
+                lastInputRef.current = performance.now();
+                walkSessionRef.current = false;
                 // full passes (spacer + pin), not bare anchorTail: growth can
                 // need MORE reach, and if a selectionchange wiped the focus
                 // choreography this is what seeds the spacer at all
