@@ -3120,10 +3120,12 @@ function TodayZoneFill({
   });
   const listening = speech.status === "listening";
   const transcribing = speech.status === "transcribing";
-  // the web engine streams words live — show them on the rules as they come.
-  // (Aqua records quietly and sets the words all at once after the stop.)
+  // the streaming engines (scribe, web) put words on the rules as they come;
+  // the batch engine records quietly and sets them all at once after the stop.
+  // Kept through `transcribing` so the words don't blink out while the last
+  // segment settles.
   const liveSpoken =
-    speech.engine === "web" && listening
+    listening || transcribing
       ? [...speech.segments.map((s) => s.text), speech.interim]
           .filter(Boolean)
           .join(" ")

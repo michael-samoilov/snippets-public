@@ -10,12 +10,14 @@ life is full of stories.
 
 ## What it does
 
-- **Speak it or write it.** Tap the wax seal and talk. With an Aqua
-  Voice key configured, recordings are transcribed by Avalon — the most
-  accurate dictation model going — about half a second after you stop,
-  in any browser that has a microphone. Without one, the browser's own
-  speech engine streams words live (Chrome, Safari, Edge). Or just
-  type. Nothing is asked of you at the moment of capture.
+- **Speak it or write it.** Tap the wax seal and talk. With an
+  ElevenLabs key configured, Scribe v2 Realtime sets your words on the
+  page as you speak — live, in any browser that has a microphone, in
+  90+ languages. With a Whisper-dialect key instead, recordings are
+  transcribed about half a second after you stop. Without either, the
+  browser's own speech engine streams words live (Chrome, Safari,
+  Edge). Or just type. Nothing is asked of you at the moment of
+  capture.
 - **Filed for you, quietly.** A few seconds after you keep an entry,
   Claude titles it, files it under a kind (story · joke · quote · idea ·
   phrase · observation), and tags it. No key configured? One-tap chips
@@ -40,20 +42,28 @@ pnpm dev            # http://localhost:3000
 Both are optional; the app is fully functional with neither.
 
 ```sh
-# Voice transcription (works in every browser). The proxy speaks the
-# OpenAI Whisper dialect; the default provider is Aqua Voice's Avalon.
-# Without a key, voice falls back to the browser's own speech engine
-# (Chrome, Safari, Edge) — typing works everywhere regardless.
-TRANSCRIBE_API_KEY=…
-# TRANSCRIBE_BASE_URL=https://api.aqua.sh/v1   # default: Aqua
-# TRANSCRIBE_MODEL=avalon-1                    # default: Avalon
+# Live voice transcription via ElevenLabs Scribe v2 Realtime — words
+# stream onto the page as you speak, in any browser with a microphone.
+# The key never reaches the browser; the server mints single-use
+# tokens (/api/scribe-token) for each take.
+ELEVENLABS_API_KEY=…
+# SCRIBE_MODEL=scribe_v2_realtime              # override the model
+# ELEVENLABS_BASE_URL=https://api.elevenlabs.io
+
+# Batch fallback (used when no ElevenLabs key is set): a proxy that
+# speaks the OpenAI Whisper dialect — recordings upload when you stop.
+# TRANSCRIBE_API_KEY=…
+# TRANSCRIBE_BASE_URL=https://api.aqua.sh/v1   # default: Aqua's Avalon
+# TRANSCRIBE_MODEL=avalon-1
 # (the older AQUA_API_KEY / AQUA_BASE_URL / AQUA_MODEL names still work)
-#
 # Any Whisper-compatible provider is a two-line swap:
 #   OpenAI  TRANSCRIBE_BASE_URL=https://api.openai.com/v1
 #           TRANSCRIBE_MODEL=gpt-4o-transcribe
 #   Groq    TRANSCRIBE_BASE_URL=https://api.groq.com/openai/v1
 #           TRANSCRIBE_MODEL=whisper-large-v3-turbo
+#
+# With neither key, voice falls back to the browser's own speech engine
+# (Chrome, Safari, Edge) — typing works everywhere regardless.
 
 # Automatic filing (title/kind/tags) via Claude.
 # Without it, filing falls back to heuristics and one-tap chips.

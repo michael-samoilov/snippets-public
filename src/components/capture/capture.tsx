@@ -49,11 +49,11 @@ export function Capture() {
 
   const listening = speech.status === "listening";
   const transcribing = speech.status === "transcribing";
-  // the web engine streams words live; aqua records, then sets them
+  // the streaming engines put words down live; batch records, then sets them
   const liveWords =
-    speech.engine === "web" &&
+    speech.engine !== "batch" &&
     (listening || speech.segments.length > 0 || speech.interim.length > 0);
-  const recordingQuietly = speech.engine === "aqua" && listening;
+  const recordingQuietly = speech.engine === "batch" && listening;
 
   // voice must never fail silently — every failure says what happened
   useEffect(() => {
