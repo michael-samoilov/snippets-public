@@ -3232,6 +3232,7 @@ function TodayZoneFill({
   // caret line can't be pulled up above the keyboard by hand. Sized on focus,
   // cleared on blur.
   const kbSpacerRef = useRef<HTMLDivElement>(null);
+  const lastFocusAt = useRef(0); // when the field last GAINED focus (see the zone tap)
   const baseVh = useRef(0); // vv height with no keyboard (running max)
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
@@ -3595,14 +3596,35 @@ function TodayZoneFill({
           // rose. A click here (never fired for a scroll gesture, and carrying
           // the user activation iOS needs to open the keyboard) hands the tap
           // to the field, caret at the end — "continue writing".
+          //
+          // The trap inside: iOS's dismiss pill hides the keyboard but KEEPS
+          // the field focused (seen on-device: `focus TEXTAREA` with the
+          // keyboard down). Then focus() is a no-op and even a caret tap on
+          // the words summons nothing — no focus event, no keyboard. So on a
+          // touch device with the keyboard down and focus held, the tap
+          // cycles blur→focus (inside its own user activation) to force a
+          // REAL focus, restoring the selection iOS just placed.
           onClick={(e) => {
             if (frozen) return;
-            if ((e.target as HTMLElement).closest("button, textarea")) return;
+            const t = e.target as HTMLElement;
+            if (t.closest("button")) return;
             const area = areaRef.current;
             if (!area) return;
+            const onField = t.closest("textarea") === area;
+            const focused = document.activeElement === area;
+            const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+            // …but never cycle a FRESH focus: on a first engaging tap the
+            // focus lands at pointerdown and the keyboard is still rising at
+            // click time, so kb reads 0 — only a focus old enough to predate
+            // this gesture means the keyboard was truly dismissed under it
+            const stale = performance.now() - lastFocusAt.current > 700;
+            const mustCycle = focused && coarse && stale && kbGeom().kb < 60;
+            if (onField && !mustCycle) return; // the field's own tap already works
+            const selS = onField ? (area.selectionStart ?? area.value.length) : area.value.length;
+            const selE = onField ? (area.selectionEnd ?? selS) : selS;
+            if (mustCycle) area.blur();
             area.focus();
-            const end = area.value.length;
-            area.setSelectionRange(end, end);
+            area.setSelectionRange(selS, selE);
           }}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
@@ -3651,7 +3673,7 @@ function TodayZoneFill({
                 clearAnchorTimers();
                 anchorTimers.current = [setTimeout(anchorTail, 120)];
               }}
-              onFocus={scheduleAnchor}
+              onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={
