@@ -3357,6 +3357,35 @@ function TodayZoneFill({
     sc.scrollTop += sealDelta;
     w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
+  // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
+  // anchoring moment. A normal textbox scrolls only when the caret would
+  // leave view — and scrolling mid-gesture is what broke the native text
+  // interactions (multi-tap escalation counts taps on STATIONARY text; the
+  // trackpad fights any scroll under it). So caret moves get this instead of
+  // anchorTail: act only on a collapsed caret that strayed OUT of the visible
+  // window, and then only nudge it just inside the near edge.
+  const revealCaret = () => {
+    const sc = scrollerOf();
+    if (!sc) return;
+    const { kb, visBottom, visTop } = kbGeom();
+    if (kb < 60) return; // no keyboard, nothing to keep clear of
+    const area = areaRef.current;
+    if (!area || area.selectionStart !== area.selectionEnd) return; // selecting
+    const caretB = caretClientBottom();
+    if (caretB == null) return;
+    const lo = visTop + 8;
+    const hi = visBottom - 24;
+    if (caretB >= lo && caretB <= hi) return; // already in view: hands off
+    const tgt = caretB < lo ? visTop + 28 : hi;
+    const st0 = sc.scrollTop;
+    sc.scrollTop += caretB - tgt;
+    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
+    (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor = {
+      t: Date.now() % 100000, kb, vis: visBottom, tgt, sealB: caretB, st0,
+      st1: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight,
+      spcr: kbSpacerRef.current?.offsetHeight ?? 0, branch: "reveal",
+    };
+  };
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
     if (!sp) return;
@@ -3439,18 +3468,19 @@ function TodayZoneFill({
       document.addEventListener("visibilitychange", onViewport);
     }
     // Follow the CARET, not just the viewport: iOS places a tapped caret on
-    // its own schedule (often after the focus passes have all measured the
-    // stale end-of-text position), and a tap that moves the caret in an
-    // ALREADY-focused field fires no focus and no input — this is the only
-    // event that hears it. Passes are deferred and finger-guarded: mid-drag
-    // (magnifier) they pass silently; the last selectionchange of the drag
-    // lands its later passes after the lift.
+    // its own schedule, and a tap that moves the caret in an ALREADY-focused
+    // field fires no focus and no input — this is the only event that hears
+    // it. The response is the gentle revealCaret (never the anchoring pass —
+    // scrolling on every caret move broke multi-tap selection and the
+    // spacebar trackpad), deferred and finger-guarded: mid-drag (loupe) the
+    // passes sit out; the last selectionchange of a drag lands its later
+    // passes after the lift.
     if (!selChangeRef.current) {
       const onSelChange = () => {
         if (document.activeElement !== areaRef.current) return;
         clearAnchorTimers();
         anchorTimers.current = [0, 120, 300, 600].map((ms) =>
-          setTimeout(() => { if (!touchActiveRef.current) anchorPass(); }, ms),
+          setTimeout(() => { if (!touchActiveRef.current) revealCaret(); }, ms),
         );
       };
       selChangeRef.current = onSelChange;
