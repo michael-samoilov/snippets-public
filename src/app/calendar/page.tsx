@@ -3327,6 +3327,7 @@ function TodayZoneFill({
       // no keyboard: rest at the zone's foot — the spacer below (if any
       // remains mid-collapse) is reachable room, not part of the stance
       sc.scrollTop = sc.scrollHeight - sc.clientHeight - spcr;
+      walkRef.current.floor = sc.scrollTop;
       w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: -1, sealB: -1, st0, st1: sc.scrollTop, max, spcr, branch: "foot" };
       return;
     }
@@ -3351,10 +3352,12 @@ function TodayZoneFill({
     if (caretB != null && caretB - sealDelta < visTop + 8) {
       const mid = (visTop + visBottom) / 2 + 10;
       sc.scrollTop += caretB - mid;
+      walkRef.current.floor = sc.scrollTop;
       w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
       return;
     }
     sc.scrollTop += sealDelta;
+    walkRef.current.floor = sc.scrollTop;
     w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
@@ -3379,6 +3382,7 @@ function TodayZoneFill({
     const tgt = caretB < lo ? visTop + 28 : hi;
     const st0 = sc.scrollTop;
     sc.scrollTop += caretB - tgt;
+    walkRef.current.floor = sc.scrollTop; // this follow is the walk's new floor
     type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
     (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor = {
       t: Date.now() % 100000, kb, vis: visBottom, tgt, sealB: caretB, st0,
@@ -3414,9 +3418,19 @@ function TodayZoneFill({
   // own focus-scroll nudges the book off its foot.
   const vvListenerRef = useRef<(() => void) | null>(null);
   const selChangeRef = useRef<(() => void) | null>(null);
+  const scScrollRef = useRef<(() => void) | null>(null);
   const touchCancelRef = useRef<(() => void) | null>(null);
   const touchUpRef = useRef<(() => void) | null>(null);
   const touchActiveRef = useRef(false);
+  // A CARET WALK (iOS's spacebar trackpad, arrow keys): selectionchange events
+  // stream with NO touch on the page — the finger is on the keyboard. WebKit's
+  // selection auto-scroll doesn't know the caret stops at the field's first
+  // line: push the trackpad past the top and it keeps scrolling the BOOK, sailing
+  // past the entry into history. During a walk, `floor` is the lowest scrollTop
+  // our own follow logic sanctioned; any scroll under it is the auto-scroller
+  // overshooting and gets snapped back — the walk ends at the top of the words
+  // and STOPS. A real finger on the page (touchstart) dissolves the walk.
+  const walkRef = useRef({ until: 0, floor: -1 });
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
@@ -3434,7 +3448,7 @@ function TodayZoneFill({
     // …but never against the reader: the moment a finger lands on the page,
     // the remaining passes stand down (typing re-arms its own short re-pin)
     if (!touchCancelRef.current) {
-      const standDown = () => { touchActiveRef.current = true; clearAnchorTimers(); };
+      const standDown = () => { touchActiveRef.current = true; walkRef.current.until = 0; clearAnchorTimers(); };
       const touchUp = () => { touchActiveRef.current = false; };
       touchCancelRef.current = standDown;
       touchUpRef.current = touchUp;
@@ -3477,7 +3491,16 @@ function TodayZoneFill({
     // passes after the lift.
     if (!selChangeRef.current) {
       const onSelChange = () => {
-        if (document.activeElement !== areaRef.current) return;
+        const area = areaRef.current;
+        if (document.activeElement !== area) return;
+        // a collapsed-caret move with no finger on the page = a caret walk;
+        // open (or extend) the walk window the scroll clamp acts within
+        if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
+          const now = performance.now();
+          const sc = scrollerOf();
+          if (sc && now > walkRef.current.until) walkRef.current.floor = sc.scrollTop;
+          walkRef.current.until = now + 600;
+        }
         clearAnchorTimers();
         anchorTimers.current = [0, 120, 300, 600].map((ms) =>
           setTimeout(() => { if (!touchActiveRef.current) revealCaret(); }, ms),
@@ -3485,6 +3508,26 @@ function TodayZoneFill({
       };
       selChangeRef.current = onSelChange;
       document.addEventListener("selectionchange", onSelChange);
+    }
+    // The walk's scroll clamp: snap any sub-floor scroll (WebKit's selection
+    // auto-scroll overshooting the field top) back to the sanctioned floor.
+    // Our own snap fires one more scroll event that no-ops at the floor.
+    if (!scScrollRef.current) {
+      const sc = scrollerOf();
+      if (sc) {
+        const onScScroll = () => {
+          if (touchActiveRef.current) return;
+          const walk = walkRef.current;
+          if (performance.now() > walk.until || walk.floor < 0) return;
+          if (sc.scrollTop < walk.floor - 1) {
+            if (kbGeom().kb < 60) return;
+            sc.scrollTop = walk.floor;
+            walk.until = performance.now() + 600; // it's still pushing: hold the line
+          }
+        };
+        scScrollRef.current = onScScroll;
+        sc.addEventListener("scroll", onScScroll, { passive: true });
+      }
     }
   };
   const releaseTail = () => {
@@ -3503,6 +3546,11 @@ function TodayZoneFill({
       document.removeEventListener("selectionchange", selChangeRef.current);
       selChangeRef.current = null;
     }
+    if (scScrollRef.current) {
+      scrollerOf()?.removeEventListener("scroll", scScrollRef.current);
+      scScrollRef.current = null;
+    }
+    walkRef.current.until = 0;
     if (touchCancelRef.current) {
       window.removeEventListener("touchstart", touchCancelRef.current);
       window.removeEventListener("wheel", touchCancelRef.current);
