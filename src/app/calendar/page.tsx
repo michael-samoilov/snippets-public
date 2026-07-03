@@ -282,7 +282,7 @@ function KbDebug() {
         [
           // bumped per deploy so an on-device report is unambiguous about
           // which build produced it
-          "BUILD settle-3",
+          "BUILD settle-4",
           `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
           vv
             ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
@@ -2185,6 +2185,8 @@ function ScheduleFeedBase({
   // a land-on-today scroll re-asserts the bottom a couple times while the zone's
   // flex height settles after a fresh mount; these are its (cancellable) timers
   const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // holds the foot against post-landing layout breath (see scrollToRow)
+  const todayRORef = useRef<{ disconnect: () => void } | null>(null);
   // the reader has grabbed the scroll themselves — a still-pending land-on-today
   // re-pin (settle timers, or the full-book mount) must then stand down so it
   // can't yank them back to the foot after they've started scrolling
@@ -2263,6 +2265,8 @@ function ScheduleFeedBase({
     // the reader next grabs it
     todaySettleRef.current.forEach(clearTimeout);
     todaySettleRef.current = [];
+    todayRORef.current?.disconnect();
+    todayRORef.current = null;
     tookOverRef.current = false;
     if (day !== todayKey) landingTodayRef.current = false;
     // "today" lives at the very foot (its fill zone fills the tail) — land on
@@ -2346,6 +2350,42 @@ function ScheduleFeedBase({
         // a pass skipped for a mid-flight layout retries here, well after the
         // toolbars have settled
         setTimeout(settleFoot, 1400),
+      );
+      // The content keeps BREATHING after the landing — live rows arriving,
+      // enrichment chips, font swaps each nudge the heights above the foot —
+      // and iOS has no scroll anchoring to absorb that, so the page visibly
+      // shifts and a timer-based correction lands up to half a second LATER:
+      // that lag is the refresh wobble (?kbdebug showed the flip with LAST -,
+      // i.e. no anchor writes at all — pure layout breath + late settles).
+      // A ResizeObserver fires post-layout, PRE-PAINT: re-seating the foot in
+      // its callback corrects in the same frame as the disturbance, which is
+      // invisible. Lives only through the settle window; a reader's takeover
+      // or a focused field (the keyboard pin owns the scroll then) stands it
+      // down.
+      const reseat = () => {
+        if (tookOverRef.current) return;
+        if (document.activeElement?.tagName === "TEXTAREA") return; // keyboard pin owns it
+        pinFoot("instant");
+      };
+      const ro = new ResizeObserver(reseat);
+      const sEl = scrollerRef.current;
+      const observeKids = () => {
+        ro.disconnect();
+        if (sEl) [...sEl.children].forEach((c) => ro.observe(c));
+      };
+      observeKids();
+      // a re-render can REPLACE children outright (escaping the RO's
+      // subscriptions): the MutationObserver both re-seats on DOM churn and
+      // re-points the RO at the current children. Both fire before paint.
+      const mo = new MutationObserver(() => { reseat(); observeKids(); });
+      if (sEl) mo.observe(sEl, { childList: true, subtree: true, characterData: true });
+      const holder = { disconnect: () => { ro.disconnect(); mo.disconnect(); } };
+      todayRORef.current = holder;
+      todaySettleRef.current.push(
+        setTimeout(() => {
+          holder.disconnect();
+          if (todayRORef.current === holder) todayRORef.current = null;
+        }, 5000),
       );
       return true;
     }
