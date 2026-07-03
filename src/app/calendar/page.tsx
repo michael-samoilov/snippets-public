@@ -238,6 +238,53 @@ function KbDebug() {
   const [panelTop, setPanelTop] = useState(4);
   const panelRef = useRef<HTMLPreElement>(null);
   const baseVh = useRef(0);
+  // Debug-only forensics: every scroll EVENT on the book (a ring of t+st — a
+  // lone step vs an animated run distinguishes a browser adjustment from a
+  // smooth glide) and every PROGRAMMATIC scroll call (scrollBy/scrollTo/
+  // scrollTop-set intercepted at the prototype). A drift that shows events
+  // but no intercepted call is the browser's own doing — that fork is the
+  // whole question in the refresh-wobble hunt.
+  useEffect(() => {
+    const sc = document.querySelector("[data-book-scroller]");
+    if (!sc) return;
+    type Ev = { t: number; st: number };
+    type Call = { t: number; via: string; arg: string };
+    const w = window as Window & { __scrollEvents?: Ev[]; __scrollCalls?: Call[] };
+    const onScroll = () => {
+      w.__scrollEvents = [...(w.__scrollEvents ?? []).slice(-19), { t: Date.now() % 100000, st: Math.round((sc as HTMLElement).scrollTop * 10) / 10 }];
+    };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    const logCall = (via: string, arg: string) => {
+      w.__scrollCalls = [...(w.__scrollCalls ?? []).slice(-11), { t: Date.now() % 100000, via, arg }];
+    };
+    const proto = Element.prototype;
+    const origBy = proto.scrollBy;
+    const origTo = proto.scrollTo;
+    const stDesc = Object.getOwnPropertyDescriptor(proto, "scrollTop");
+    (proto as { scrollBy: typeof origBy }).scrollBy = function (this: Element, ...a: unknown[]) {
+      if (this === sc) logCall("by", JSON.stringify(a[0] ?? a));
+      return (origBy as (...x: unknown[]) => void).apply(this, a);
+    } as typeof origBy;
+    (proto as { scrollTo: typeof origTo }).scrollTo = function (this: Element, ...a: unknown[]) {
+      if (this === sc) logCall("to", JSON.stringify(a[0] ?? a));
+      return (origTo as (...x: unknown[]) => void).apply(this, a);
+    } as typeof origTo;
+    if (stDesc?.set && stDesc.get) {
+      Object.defineProperty(proto, "scrollTop", {
+        ...stDesc,
+        set(this: Element, v: number) {
+          if (this === sc) logCall("st=", String(Math.round(v)));
+          stDesc.set!.call(this, v);
+        },
+      });
+    }
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      proto.scrollBy = origBy;
+      proto.scrollTo = origTo;
+      if (stDesc) Object.defineProperty(proto, "scrollTop", stDesc);
+    };
+  }, []);
   useEffect(() => {
     const update = () => {
       const vv = window.visualViewport;
@@ -282,7 +329,7 @@ function KbDebug() {
         [
           // bumped per deploy so an on-device report is unambiguous about
           // which build produced it
-          "BUILD settle-5",
+          "BUILD settle-6",
           `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
           vv
             ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
@@ -317,6 +364,16 @@ function KbDebug() {
             type SetLog = { t: number; src: string; d: number; st0: number; st1: number };
             const log = (window as Window & { __settleLog?: SetLog[] }).__settleLog ?? [];
             return log.slice(-3).map((e) => `SET ${e.src}@${e.t} d${e.d} ${e.st0}→${e.st1}`).join("\n") || "SET -";
+          })(),
+          (() => {
+            type Call = { t: number; via: string; arg: string };
+            const calls = (window as Window & { __scrollCalls?: Call[] }).__scrollCalls ?? [];
+            return calls.slice(-3).map((c) => `CALL ${c.via}@${c.t} ${c.arg}`).join("\n") || "CALL -";
+          })(),
+          (() => {
+            type Ev = { t: number; st: number };
+            const evs = (window as Window & { __scrollEvents?: Ev[] }).__scrollEvents ?? [];
+            return "EV " + (evs.slice(-7).map((e) => `${e.t % 10000}:${e.st}`).join(" ") || "-");
           })(),
         ].join("\n"),
       );
@@ -2330,13 +2387,19 @@ function ScheduleFeedBase({
         const w = window as Window & { __settleLog?: SetLog[] };
         w.__settleLog = [...(w.__settleLog ?? []).slice(-11), { t: Date.now() % 100000, src, d: Math.round(d * 10) / 10, st0: Math.round(st0), st1: Math.round(st1) }];
       };
+      // ABSOLUTE writes only, never scrollBy: the on-device settle log showed
+      // every relative write overshooting by its own delta one beat later —
+      // iOS's async scrolling applying the scrollBy AGAIN after the JS-visible
+      // update (settle d-4 landed at target then drifted -4 more; the landing
+      // pin ended hard at max). An absolute target is idempotent under that
+      // double-application.
       const pinFoot = (behavior: ScrollBehavior, src = "pin") => {
         const s = scrollerRef.current;
         if (!s) return;
         const d = footDelta();
         if (d != null && Math.abs(d) > 1) {
           const st0 = s.scrollTop;
-          s.scrollBy({ top: d, behavior });
+          s.scrollTo({ top: st0 + d, behavior });
           logSet(src, d, st0, s.scrollTop);
         }
       };
@@ -2358,7 +2421,7 @@ function ScheduleFeedBase({
           const s2 = scrollerRef.current;
           if (!s2) return;
           const st0 = s2.scrollTop;
-          s2.scrollBy({ top: d2, behavior: "instant" });
+          s2.scrollTo({ top: st0 + d2, behavior: "instant" }); // absolute (see pinFoot)
           logSet("settle", d2, st0, s2.scrollTop);
         });
       };
