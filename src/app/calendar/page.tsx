@@ -3349,15 +3349,30 @@ function TodayZoneFill({
     // the caret rides just above the seal, always in view.
     const sealDelta = sealB - target;
     const caretB = caretClientBottom();
+    // Trim the reach spacer to the stance: the seal pin is the DEEPEST scroll
+    // anyone needs, so size the spacer to put max-scroll a hair beyond it —
+    // seeded at the whole keyboard inset, it let the book scroll far into
+    // blank paper below the zone. Runs on every pass, so it re-grows when a
+    // clamped pin needs more room and re-trims as the words come and go.
+    const trimSpacer = () => {
+      const sp = kbSpacerRef.current;
+      if (!sp || sp.offsetHeight <= 0) return;
+      const stPin = sc.scrollTop + (btn.getBoundingClientRect().bottom - target);
+      const bare = sc.scrollHeight - sp.offsetHeight - sc.clientHeight;
+      const h = Math.max(0, Math.round(stPin + 24 - bare));
+      if (Math.abs(h - sp.offsetHeight) > 1) sp.style.height = `${h}px`;
+    };
     if (caretB != null && caretB - sealDelta < visTop + 8) {
       const mid = (visTop + visBottom) / 2 + 10;
       sc.scrollTop += caretB - mid;
       walkRef.current.sanctioned = sc.scrollTop;
+      trimSpacer();
       w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
       return;
     }
     sc.scrollTop += sealDelta;
     walkRef.current.sanctioned = sc.scrollTop;
+    trimSpacer();
     w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
@@ -3393,12 +3408,19 @@ function TodayZoneFill({
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
     if (!sp) return;
-    // just enough room that the visual pin (and a thumb) can lift the zone's
-    // tail clear of the keyboard; collapses on dismissal even while focused
-    // (the vv listeners re-run this — on pan-only devices dismissal shows up
-    // as the pan returning to zero)
+    // room below the zone so the visual pin can lift the tail clear of the
+    // keyboard; collapses on dismissal even while focused (the vv listeners
+    // re-run this — on pan-only devices dismissal shows up as the pan
+    // returning to zero). SEEDED at the full keyboard inset only so the
+    // first pin can reach; the pin pass immediately TRIMS it so the stance
+    // is the deepest scroll (see anchorTail) — left at a full keyboard of
+    // reach, the book scrolled far into blank paper below the zone.
     const { kb } = kbGeom();
-    sp.style.height = kb >= 60 ? `${kb}px` : "";
+    if (kb < 60) {
+      sp.style.height = "";
+      return;
+    }
+    if (!sp.style.height) sp.style.height = `${kb}px`;
   };
   // Centre the empty field: split the spare height evenly between the flexible
   // slack above it and the rigid spacer below it. Idempotent (the total is
