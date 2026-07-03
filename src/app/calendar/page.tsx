@@ -3421,29 +3421,9 @@ function TodayZoneFill({
             // writing (iOS parks the page bottom at the keyboard top), and the
             // same stance at rest. See the date's mt note: the pair equalizes
             // the perceived gaps around the composition.
-            className={cn(
-              "relative mb-[58px] grid place-items-center rounded-full",
-              listening && "seal-breathe",
-              transcribing && "animate-pulse opacity-80",
-            )}
+            className="relative mb-[58px] grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
-            {/* the seal's breathing while listening. The wax is painted high
-                in its 128px canvas (~27px of dead canvas under the visible
-                dome — see the date's mt note), so the rings take explicit
-                insets over the dome the eye sees, not inset-0. */}
-            {listening && (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="seal-ring pointer-events-none absolute left-[18px] right-[18px] top-[16px] bottom-[20px] rounded-full bg-wax"
-                />
-                <span
-                  aria-hidden="true"
-                  className="seal-ring seal-ring-late pointer-events-none absolute left-[18px] right-[18px] top-[16px] bottom-[20px] rounded-full bg-wax"
-                />
-              </>
-            )}
             <AnimatePresence initial={false}>
               <motion.span
                 key={quill ? "quill" : "mic"}
