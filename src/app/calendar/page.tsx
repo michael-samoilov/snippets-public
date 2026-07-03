@@ -3245,7 +3245,7 @@ function TodayZoneFill({
   // small under-estimates).
   const kbGeom = () => {
     const vv = window.visualViewport;
-    if (!vv) return { kb: 0, visBottom: window.innerHeight };
+    if (!vv) return { kb: 0, visBottom: window.innerHeight, visTop: 0 };
     baseVh.current = Math.max(baseVh.current, vv.height);
     // The visual viewport's offset in LAYOUT coordinates — the frame client
     // rects live in. NOT vv.offsetTop: iOS reports that document-relative
@@ -3261,7 +3261,7 @@ function TodayZoneFill({
       window.innerHeight - vv.height - layoutTop,
       baseVh.current - vv.height,
     );
-    if (measured >= 60) return { kb: measured, visBottom };
+    if (measured >= 60) return { kb: measured, visBottom, visTop: layoutTop };
     // The pan comes in two disguises — a visual-viewport pan or iOS scrolling
     // the document itself (overflow-hidden shell notwithstanding); pageTop
     // covers both.
@@ -3269,15 +3269,42 @@ function TodayZoneFill({
     const pan = Math.max(vv.pageTop, doc);
     if (coarse && pan > 40) {
       const est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
-      return { kb: est, visBottom: visBottom - est };
+      return { kb: est, visBottom: visBottom - est, visTop: layoutTop };
     }
-    return { kb: 0, visBottom };
+    return { kb: 0, visBottom, visTop: layoutTop };
+  };
+  // Where the CARET's line ends in the frame (client-coords bottom). Textareas
+  // expose no caret geometry, so mirror the text up to the caret into a hidden
+  // div with the same font, line grid, width and wrapping — its height IS the
+  // caret line's offset within the field.
+  const caretMirror = useRef<HTMLDivElement | null>(null);
+  const caretClientBottom = () => {
+    const area = areaRef.current;
+    if (!area || document.activeElement !== area) return null;
+    let m = caretMirror.current;
+    if (!m) {
+      m = document.createElement("div");
+      m.style.cssText =
+        "position:fixed;top:-9999px;left:0;visibility:hidden;pointer-events:none;white-space:pre-wrap;overflow-wrap:break-word;";
+      document.body.appendChild(m);
+      caretMirror.current = m;
+    }
+    const cs = getComputedStyle(area);
+    m.style.font = cs.font;
+    m.style.lineHeight = cs.lineHeight;
+    m.style.letterSpacing = cs.letterSpacing;
+    m.style.width = `${area.clientWidth}px`;
+    const upToCaret = area.value.slice(0, area.selectionStart ?? area.value.length);
+    // a trailing newline (or nothing at all) renders zero-height — pad the
+    // caret's empty line so it still counts
+    m.textContent = upToCaret === "" || upToCaret.endsWith("\n") ? upToCaret + "​" : upToCaret;
+    return area.getBoundingClientRect().top + Math.max(m.offsetHeight, 20);
   };
   const anchorTail = () => {
     const sc = scrollerOf();
     const btn = btnRef.current;
     if (!sc || !btn) return;
-    const { kb, visBottom } = kbGeom();
+    const { kb, visBottom, visTop } = kbGeom();
     // breadcrumbs for ?kbdebug — the overlay paints the LAST pass, so a
     // device screenshot shows which branch ran and whether the scroll clamped
     type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
@@ -3302,7 +3329,21 @@ function TodayZoneFill({
     // double-count and park the seal too high.
     const target = visBottom - 16;
     const sealB = btn.getBoundingClientRect().bottom;
-    sc.scrollTop += sealB - target;
+    // …but the pin serves the WRITER: if the caret sits on an early line of a
+    // long entry (re-focused by tapping its top), the seal stance would strand
+    // the caret above the fold. Predict where the caret line lands under the
+    // seal pin; if it would be out of view, centre the caret line in the
+    // visible window instead. Typing at the end keeps the seal stance — there
+    // the caret rides just above the seal, always in view.
+    const sealDelta = sealB - target;
+    const caretB = caretClientBottom();
+    if (caretB != null && caretB - sealDelta < visTop + 8) {
+      const mid = (visTop + visBottom) / 2 + 10;
+      sc.scrollTop += caretB - mid;
+      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
+      return;
+    }
+    sc.scrollTop += sealDelta;
     w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   const sizeKbSpacer = () => {
@@ -3410,7 +3451,14 @@ function TodayZoneFill({
     }
     touchActiveRef.current = false;
   };
-  useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(
+    () => () => {
+      releaseTail();
+      caretMirror.current?.remove();
+      caretMirror.current = null;
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
