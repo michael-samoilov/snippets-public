@@ -2281,17 +2281,37 @@ function ScheduleFeedBase({
       // min-h-full wrapper) fills exactly the viewport below the rule, so
       // rule-at-top IS the resting foot. A today WITH entries seats no empty zone,
       // so it lands at the literal foot.
+      const footDelta = () => {
+        const s = scrollerRef.current;
+        if (!s) return null;
+        const sec = rowRefs.current.get(todayKey);
+        if (sec && !sec.querySelector("[data-entry]"))
+          return sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
+        return s.scrollHeight - s.clientHeight - s.scrollTop;
+      };
       const pinFoot = (behavior: ScrollBehavior) => {
         const s = scrollerRef.current;
         if (!s) return;
-        const sec = rowRefs.current.get(todayKey);
-        if (sec && !sec.querySelector("[data-entry]")) {
-          const delta =
-            sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
-          if (Math.abs(delta) > 1) s.scrollBy({ top: delta, behavior });
-        } else if (Math.abs(s.scrollTop - (s.scrollHeight - s.clientHeight)) > 1) {
-          s.scrollTo({ top: s.scrollHeight, behavior });
-        }
+        const d = footDelta();
+        if (d != null && Math.abs(d) > 1) s.scrollBy({ top: d, behavior });
+      };
+      // a micro-correction may only fire against a STILL layout: the same
+      // delta observed on two consecutive frames. iOS settles its toolbars
+      // ~1.5s after a load, and a correction measured mid-transient wrote a
+      // 6px "fix" onto an already-correct page — which the next pass then
+      // pulled back: a visible wobble as the page set. Mid-flight reads skip;
+      // the next scheduled pass retries against the settled truth.
+      const settleFoot = () => {
+        if (tookOverRef.current) return;
+        const d1 = footDelta();
+        if (d1 == null || Math.abs(d1) <= 1) return;
+        requestAnimationFrame(() => {
+          if (tookOverRef.current) return;
+          const d2 = footDelta();
+          if (d2 == null || Math.abs(d2) <= 1) return;
+          if (Math.abs(d2 - d1) > 1) return; // layout in motion — not a settle moment
+          scrollerRef.current?.scrollBy({ top: d2, behavior: "instant" });
+        });
       };
       // ONE smooth glide — never re-commanded mid-flight (overlapping smooth
       // scrolls are what made this stutter). For the press, wait a frame first so
@@ -2310,8 +2330,11 @@ function ScheduleFeedBase({
         // — that's the stutter): snap out any residual once the layout is still.
         // No-ops unless something shifted the rule, so normally invisible — and
         // skipped entirely if the reader has started scrolling (don't yank them).
-        setTimeout(() => { if (!tookOverRef.current) pinFoot("instant"); }, 560),
-        setTimeout(() => { if (!tookOverRef.current) pinFoot("instant"); }, 920),
+        setTimeout(settleFoot, 560),
+        setTimeout(settleFoot, 920),
+        // a pass skipped for a mid-flight layout retries here, well after the
+        // toolbars have settled
+        setTimeout(settleFoot, 1400),
       );
       return true;
     }
