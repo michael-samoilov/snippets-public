@@ -12,6 +12,12 @@ on:
         description: "ElevenLabs API key (leave empty to use the ELEVENLABS_API_KEY secret)"
         required: false
         type: string
+  # any touch to the harness re-runs it — the dispatch API needs app
+  # permissions the integration doesn't have, a push always works
+  push:
+    paths:
+      - "scripts/scribe-live-test.mjs"
+      - ".github/workflows/scribe-live-test.yml"
 
 jobs:
   live-transcribe:
@@ -29,5 +35,5 @@ jobs:
             "The quick brown fox jumped over the lazy dog on a bright July morning, and I finally wrote it down."
       - name: Stream it to Scribe v2 Realtime
         env:
-          ELEVENLABS_API_KEY: ${{ inputs.api_key != '' && inputs.api_key || secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.api_key != '') && inputs.api_key || secrets.ELEVENLABS_API_KEY }}
         run: node scripts/scribe-live-test.mjs /tmp/speech.wav fox morning
