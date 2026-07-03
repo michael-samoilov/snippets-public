@@ -290,6 +290,11 @@ function KbDebug() {
           a
             ? `LAST ${a.branch}@${a.t}: kb ${Math.round(a.kb)} tgt ${Math.round(a.tgt)} sealB ${Math.round(a.sealB)}\n  st ${Math.round(a.st0)}→${Math.round(a.st1)} max ${Math.round(a.max)} spcr ${Math.round(a.spcr)}${a.branch === "pin" && Math.abs(a.st0 + a.sealB - a.tgt - a.st1) > 2 ? " CLAMPED" : ""}`
             : "LAST -",
+          (() => {
+            type ZoneTapLog = { t: number; via: string; why: string };
+            const zt = (window as Window & { __zoneTap?: ZoneTapLog }).__zoneTap;
+            return zt ? `TAP ${zt.via}@${zt.t}: ${zt.why}` : "TAP -";
+          })(),
         ].join("\n"),
       );
     };
@@ -3489,6 +3494,60 @@ function TodayZoneFill({
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // The zone's tap-to-write (see the zone box below). Driven from pointerup
+  // with our own tap detection, NOT click: iOS's text-interaction gesture can
+  // swallow the click for a caret tap on a focused field — exactly the state
+  // that needs rescuing. click stays attached as the desktop/fallback path,
+  // deduped by time.
+  const zoneTapRef = useRef({ x: 0, y: 0, t: 0, id: -1, handledAt: 0 });
+  const engageZoneTap = (t: HTMLElement, via: string) => {
+    type ZoneTapLog = { t: number; via: string; why: string };
+    const w = window as Window & { __zoneTap?: ZoneTapLog };
+    const log = (why: string) =>
+      (w.__zoneTap = { t: Date.now() % 100000, via, why });
+    if (frozen) return log("frozen");
+    if (t.closest("button")) return log("button");
+    const area = areaRef.current;
+    if (!area) return log("no-area");
+    const onField = t.closest("textarea") === area;
+    const focused = document.activeElement === area;
+    const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+    // never cycle a FRESH focus: on a first engaging tap the focus lands at
+    // pointerdown and the keyboard is still rising at tap's end, so kb reads
+    // 0 — only a focus predating this gesture means the keyboard was truly
+    // dismissed underneath it (iOS's dismiss pill keeps focus, kills the
+    // keyboard, and then no tap can summon it back without a REAL focus)
+    const stale = performance.now() - lastFocusAt.current > 700;
+    const mustCycle = focused && coarse && stale && kbGeom().kb < 60;
+    if (onField && !mustCycle) return log("native");
+    if (mustCycle) {
+      // WebKit settles keyboard visibility once per turn: a same-task
+      // blur→focus nets to "nothing changed" and the keyboard stays down.
+      // Blur now; refocus in a NEW task (still inside the tap's transient
+      // activation, so the keyboard may rise). A words tap keeps the caret
+      // the tap placed; a paper tap resumes writing at the end.
+      area.blur();
+      window.setTimeout(() => {
+        area.focus();
+        const s = onField ? (area.selectionStart ?? area.value.length) : area.value.length;
+        const e2 = onField ? (area.selectionEnd ?? s) : s;
+        area.setSelectionRange(s, e2);
+      }, 60);
+      return log("cycle");
+    }
+    // synchronously (the proven keyboard-riser) AND once more a beat later:
+    // the browser's own blur-on-tap-outside lands LATER in this same gesture
+    // (mousedown follows pointerup) and would undo a focus set only here
+    const toEnd = () => {
+      area.focus();
+      const end = area.value.length;
+      area.setSelectionRange(end, end);
+    };
+    toEnd();
+    window.setTimeout(toEnd, 80);
+    return log("focus-end");
+  };
+
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
   const LEAD_MS = 380;
@@ -3600,31 +3659,27 @@ function TodayZoneFill({
           // The trap inside: iOS's dismiss pill hides the keyboard but KEEPS
           // the field focused (seen on-device: `focus TEXTAREA` with the
           // keyboard down). Then focus() is a no-op and even a caret tap on
-          // the words summons nothing — no focus event, no keyboard. So on a
-          // touch device with the keyboard down and focus held, the tap
-          // cycles blur→focus (inside its own user activation) to force a
-          // REAL focus, restoring the selection iOS just placed.
+          // the words summons nothing — no focus event, no keyboard. The
+          // engage handler (see engageZoneTap) forces a real focus with a
+          // blur → next-task refocus. Driven from POINTERUP with our own tap
+          // detection because iOS can swallow the click for caret taps.
+          onPointerDown={(e) => {
+            zoneTapRef.current = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, handledAt: zoneTapRef.current.handledAt };
+          }}
+          onPointerUp={(e) => {
+            const d = zoneTapRef.current;
+            if (e.pointerId !== d.id) return;
+            const now = performance.now();
+            if (now - d.t > 600) return; // a hold, not a tap
+            if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) return; // a drag/scroll
+            d.handledAt = now;
+            engageZoneTap(e.target as HTMLElement, "pointerup");
+          }}
           onClick={(e) => {
-            if (frozen) return;
-            const t = e.target as HTMLElement;
-            if (t.closest("button")) return;
-            const area = areaRef.current;
-            if (!area) return;
-            const onField = t.closest("textarea") === area;
-            const focused = document.activeElement === area;
-            const coarse = window.matchMedia?.("(pointer: coarse)").matches;
-            // …but never cycle a FRESH focus: on a first engaging tap the
-            // focus lands at pointerdown and the keyboard is still rising at
-            // click time, so kb reads 0 — only a focus old enough to predate
-            // this gesture means the keyboard was truly dismissed under it
-            const stale = performance.now() - lastFocusAt.current > 700;
-            const mustCycle = focused && coarse && stale && kbGeom().kb < 60;
-            if (onField && !mustCycle) return; // the field's own tap already works
-            const selS = onField ? (area.selectionStart ?? area.value.length) : area.value.length;
-            const selE = onField ? (area.selectionEnd ?? selS) : selS;
-            if (mustCycle) area.blur();
-            area.focus();
-            area.setSelectionRange(selS, selE);
+            // fallback (desktop, browsers without pointer events on taps);
+            // skipped when the pointerup path just ran
+            if (performance.now() - zoneTapRef.current.handledAt < 800) return;
+            engageZoneTap(e.target as HTMLElement, "click");
           }}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
