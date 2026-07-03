@@ -359,6 +359,18 @@ textarea {
   touch-action: auto;
 }
 
+/* While a field is being WRITTEN in, the rest of the page is not selectable.
+   iOS's spacebar trackpad (and its firm-press select mode) is not confined to
+   the field on the web: hover the cursor out of the box and it starts
+   selecting the app body itself — the whole book washes blue. With everything
+   outside the fields unselectable during writing, the cursor is quarantined
+   the way a native text view's is. Reading (nothing focused) keeps normal
+   selection everywhere. */
+body:has(textarea:focus, input:focus) *:not(textarea):not(input) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 ::selection {
   background: rgb(153 59 38 / 0.22);
 }
