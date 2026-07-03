@@ -213,8 +213,137 @@ export default function CalendarPage() {
 // skeleton stays put to be stared at.
 function CalendarGate() {
   const params = useSearchParams();
+  // ?kbdebug overlays live viewport numbers. Captured in the lazy initializer —
+  // during RENDER, before any effect: Calendar's mount effects (children run
+  // first) rewrite the URL, so by effect time the param is already gone.
+  const [kbdebug] = useState(
+    () => typeof window !== "undefined" && window.location.search.includes("kbdebug"),
+  );
   if (params.has("skeldebug")) return <SkeletonDebug />;
-  return <Calendar />;
+  return (
+    <>
+      <Calendar />
+      {kbdebug && <KbDebug />}
+    </>
+  );
+}
+
+// TODO(remove after the keyboard investigation): ?kbdebug — paints every live
+// viewport number the keyboard logic reads, plus marker lines at the computed
+// visible-bottom (red) and the seal's pin target (orange). A screenshot of a
+// device with the keyboard up tells us exactly what its viewport reports.
+function KbDebug() {
+  const [txt, setTxt] = useState("");
+  const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number; shift: number } | null>(null);
+  const [panelTop, setPanelTop] = useState(4);
+  const panelRef = useRef<HTMLPreElement>(null);
+  const baseVh = useRef(0);
+  useEffect(() => {
+    const update = () => {
+      const vv = window.visualViewport;
+      const doc = document.scrollingElement?.scrollTop ?? 0;
+      // layout-relative visual-viewport offset (see kbGeom: iOS's offsetTop is
+      // document-relative); keeps the panel inside the visible window
+      const layoutTop = vv ? vv.pageTop - doc : 0;
+      setPanelTop(Math.round(layoutTop + 4));
+      // The FIXED layer and the RECT frame disagree on this device under the
+      // keyboard scroll — measure the shift from the panel's own rect (its
+      // rect vs the fixed top it is CURRENTLY rendered at) so the ruler lines
+      // can be labeled in TRUE rect coordinates.
+      let shift = 0;
+      if (panelRef.current) {
+        const applied = parseFloat(panelRef.current.style.top || "4");
+        shift = Math.round(panelRef.current.getBoundingClientRect().top - applied);
+      }
+      const seal = [...document.querySelectorAll("button")].find((x) =>
+        /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
+      );
+      const sc = document.querySelector("[data-book-scroller]");
+      const sp = [...document.querySelectorAll("div[aria-hidden].w-px")].pop() as HTMLElement | undefined;
+      let vis = 0, tgt = 0, raw = 0, kb = 0, est = 0;
+      if (vv) {
+        baseVh.current = Math.max(baseVh.current, vv.height);
+        const measured = Math.max(
+          window.innerHeight - vv.height - layoutTop,
+          baseVh.current - vv.height,
+        );
+        raw = layoutTop + vv.height;
+        const pan = Math.max(vv.pageTop, doc);
+        est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
+        if (measured >= 60) { kb = measured; vis = raw; }
+        else if (pan > 40) { kb = est; vis = raw - est; }
+        else { kb = 0; vis = raw; }
+        tgt = vis - 72;
+      }
+      setMarks({ vis, tgt, raw, shift });
+      type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
+      const a = (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor;
+      setTxt(
+        [
+          `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
+          vv
+            ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
+            : "no visualViewport",
+          `docST ${Math.round(doc)}  winSY ${Math.round(window.scrollY)}  baseVh ${Math.round(baseVh.current)}`,
+          `kb ${Math.round(kb)}  est ${est}  vis ${Math.round(vis)}  tgt ${Math.round(tgt)}`,
+          `sealB ${seal ? Math.round(seal.getBoundingClientRect().bottom) : "-"}  scST ${sc ? Math.round(sc.scrollTop) : "-"}  spcr ${sp?.style.height || "0"}`,
+          `focus ${document.activeElement?.tagName ?? "-"}  shift ${shift}  fieldB ${(() => { const f = document.querySelector("[data-today-zone-box] textarea"); return f ? Math.round(f.getBoundingClientRect().bottom) : "-"; })()}`,
+          a
+            ? `LAST ${a.branch}@${a.t}: kb ${Math.round(a.kb)} tgt ${Math.round(a.tgt)} sealB ${Math.round(a.sealB)}\n  st ${Math.round(a.st0)}→${Math.round(a.st1)} max ${Math.round(a.max)} spcr ${Math.round(a.spcr)}${a.branch === "pin" && Math.abs(a.st0 + a.sealB - a.tgt - a.st1) > 2 ? " CLAMPED" : ""}`
+            : "LAST -",
+          (() => {
+            type ZoneTapLog = { t: number; via: string; why: string };
+            const zt = (window as Window & { __zoneTap?: ZoneTapLog }).__zoneTap;
+            return zt ? `TAP ${zt.via}@${zt.t}: ${zt.why}` : "TAP -";
+          })(),
+        ].join("\n"),
+      );
+    };
+    update();
+    const iv = setInterval(update, 300);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    window.addEventListener("scroll", update);
+    return () => {
+      clearInterval(iv);
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+      window.removeEventListener("scroll", update);
+    };
+  }, []);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[9999]">
+      <pre
+        ref={panelRef}
+        className="absolute left-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300"
+        style={{ top: panelTop }}
+      >
+        {txt}
+      </pre>
+      {marks && (
+        <>
+          <div className="absolute inset-x-0 border-t-2 border-red-500" style={{ top: marks.vis }}>
+            <span className="bg-red-500 px-1 font-mono text-[9px] text-white">vis {Math.round(marks.vis)}</span>
+          </div>
+          <div className="absolute inset-x-0 border-t-2 border-orange-400" style={{ top: marks.tgt }}>
+            <span className="bg-orange-400 px-1 font-mono text-[9px] text-black">tgt {Math.round(marks.tgt)}</span>
+          </div>
+          {/* the RULER: a line every 50px of the fixed layer, each labeled with
+              its TRUE rect-frame y (fixed y + measured shift). The label sitting
+              at the keyboard's top edge in a screenshot IS the correct
+              visible-bottom in the coordinates anchorTail scrolls in. */}
+          {Array.from({ length: 20 }, (_, k) => k * 50).map((y) => (
+            <div key={y} className="absolute inset-x-0 border-t border-fuchsia-500/70" style={{ top: y }}>
+              <span className="absolute right-0 bg-fuchsia-600 px-1 font-mono text-[9px] text-white">
+                r{y + marks.shift}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
 }
 
 type View = "year" | "month" | "schedule" | "entry";
@@ -2444,10 +2573,21 @@ function ScheduleFeedBase({
                     while its day's entries scroll past. Empty today drops the
                     padding too, so its section collapses to the bare rule and
                     the zone below fills the viewport right up to it. */}
-                <div className={cn("book-margin-date sticky top-0 self-start text-center", !hideToday && "pb-2.5 pt-2.5")}>
+                <div className={cn(
+                  "book-margin-date sticky top-0 self-start text-center",
+                  // today's section cedes its bottom padding to the zone below
+                  // (the zone owns the whole 26px gap — see TodayZoneFill), so
+                  // the full breath is visible when the book rests at its foot
+                  !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"),
+                )}>
                   {!hideToday && (() => {
                     const dateInner = (
-                      <>
+                      // py-[3.5px] sizes the block to exactly a single-line
+                      // card's height (42.5px: its 35.4px of text + 7.1px), so
+                      // the date reads centre-aligned beside a one-line entry —
+                      // and a single-line day has zero sticky travel, killing
+                      // the tiny header-crawl while scrolling past it
+                      <div className="py-[3.5px]">
                         <span
                           className={cn(
                             "voice-label block text-[0.62rem] leading-tight",
@@ -2465,7 +2605,7 @@ function ScheduleFeedBase({
                         >
                           {format(d, "d")}
                         </span>
-                      </>
+                      </div>
                     );
                     // today's date sticky-header populates as the first entry
                     // arrives — wipe it in from the left to lead the kept card,
@@ -2485,7 +2625,7 @@ function ScheduleFeedBase({
                     );
                   })()}
                 </div>
-                <div className={cn("min-w-0", !hideToday && "pb-2.5 pt-2.5")}>
+                <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
                   <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} still={!active} />
                   {showComposer && (
                     <BackfillCapture
@@ -2736,6 +2876,9 @@ function FlowBackfillCapture({
   const draftStore = useKeptDraft();
   // the thumb-down dip (the seal's `pressed` feedback before release)
   const [pressedDown, setPressedDown] = useState(false);
+  // the card's press-down dip (see .pressable-composer) — only for the press
+  // that BEGINS writing; once the caret is inside, taps just place the caret
+  const [dip, setDip] = useState(false);
   const isToday = day === dayKey();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -2807,17 +2950,33 @@ function FlowBackfillCapture({
           initial={seq.phase === "composing" ? { clipPath: "inset(0 100% 0 0)" } : false}
           animate={{ clipPath: "inset(0 0 0 0)" }}
           transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
-          className="group relative"
+          // pressable-composer: the same press-down dip as the entry cards
+          // beside it, only for the press that begins writing. The dip holds
+          // through a drag like a button's :active — pointercancel (fired the
+          // moment the browser takes the gesture for scrolling) is deliberately
+          // NOT a release; the touch stream keeps flowing through a scroll, so
+          // touchend marks the true lift. One-shot window listeners, since
+          // after dragging off the card the element never hears the release.
+          className="group pressable-composer relative"
+          data-dip={dip || undefined}
+          onPointerDown={() => {
+            if (document.activeElement === areaRef.current) return;
+            setDip(true);
+            const clear = () => setDip(false);
+            window.addEventListener("pointerup", clear, { once: true });
+            window.addEventListener("touchend", clear, { once: true });
+            window.addEventListener("touchcancel", clear, { once: true });
+          }}
         >
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule"
+            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised"
           />
           <span
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-opacity duration-150",
-              "border-rule-faint group-focus-within:border-rule",
+              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-[opacity,background-color] duration-150",
+              "border-rule-faint group-focus-within:border-rule group-hover:bg-paper-raised",
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />
@@ -3066,13 +3225,200 @@ function TodayZoneFill({
   // floating accessory band by construction.
   // (The generic keyboard-room hook ignores this field — see use-keyboard-room.)
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const revealTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const topSlackRef = useRef<HTMLDivElement>(null);
   const restSpacerRef = useRef<HTMLDivElement>(null);
+  // extra scrollable area while the keyboard is up (a sibling BELOW the zone,
+  // never scroller padding — padding shrinks the scroller's content box, which
+  // is what the zone's min-h-full resolves against). Without it the region the
+  // keyboard covers is unreachable: the book is already at max scroll, so the
+  // caret line can't be pulled up above the keyboard by hand. Sized on focus,
+  // cleared on blur.
+  const kbSpacerRef = useRef<HTMLDivElement>(null);
+  const lastFocusAt = useRef(0); // when the field last GAINED focus (see the zone tap)
+  const baseVh = useRef(0); // vv height with no keyboard (running max)
   const scrollerOf = () =>
     btnRef.current?.closest<HTMLElement>("[data-book-scroller]") ?? null;
+  // Keyboard geometry under THREE viewport models: (a) innerHeight stays full
+  // and vv shrinks, (b) both shrink (layout resize), (c) NEITHER shrinks — the
+  // device only PANS (vv.offsetTop) and the heights are useless. (c) is real
+  // (observed on iPhone Safari): there the pan itself is the signal — our
+  // composition rests at the book's foot, so a keyboard always forces a pan —
+  // and the keyboard's height is estimated at ~45% of the screen (worst case
+  // the seal sits a little higher than needed; the -72 band margin absorbs
+  // small under-estimates).
+  const kbGeom = () => {
+    const vv = window.visualViewport;
+    if (!vv) return { kb: 0, visBottom: window.innerHeight, visTop: 0 };
+    baseVh.current = Math.max(baseVh.current, vv.height);
+    // The visual viewport's offset in LAYOUT coordinates — the frame client
+    // rects live in. NOT vv.offsetTop: iOS reports that document-relative
+    // (identical to pageTop), so with the document scrolled it double-counts
+    // and a "visible bottom" computed from it lands under the keyboard
+    // (observed on-device: offsetTop 198 == pageTop 198 == scrollY 198, true
+    // layout offset 0). pageTop minus the document scroll IS the layout
+    // offset, by definition, on every engine.
+    const doc = document.scrollingElement?.scrollTop ?? window.scrollY ?? 0;
+    const layoutTop = vv.pageTop - doc;
+    const visBottom = layoutTop + vv.height;
+    const measured = Math.max(
+      window.innerHeight - vv.height - layoutTop,
+      baseVh.current - vv.height,
+    );
+    if (measured >= 60) return { kb: measured, visBottom, visTop: layoutTop };
+    // The pan comes in two disguises — a visual-viewport pan or iOS scrolling
+    // the document itself (overflow-hidden shell notwithstanding); pageTop
+    // covers both.
+    const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+    const pan = Math.max(vv.pageTop, doc);
+    if (coarse && pan > 40) {
+      const est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
+      return { kb: est, visBottom: visBottom - est, visTop: layoutTop };
+    }
+    return { kb: 0, visBottom, visTop: layoutTop };
+  };
+  // Where the CARET's line ends in the frame (client-coords bottom). Textareas
+  // expose no caret geometry, so mirror the text up to the caret into a hidden
+  // div with the same font, line grid, width and wrapping — its height IS the
+  // caret line's offset within the field.
+  const caretMirror = useRef<HTMLDivElement | null>(null);
+  const caretClientBottom = () => {
+    const area = areaRef.current;
+    if (!area || document.activeElement !== area) return null;
+    let m = caretMirror.current;
+    if (!m) {
+      m = document.createElement("div");
+      m.style.cssText =
+        "position:fixed;top:-9999px;left:0;visibility:hidden;pointer-events:none;white-space:pre-wrap;overflow-wrap:break-word;";
+      document.body.appendChild(m);
+      caretMirror.current = m;
+    }
+    const cs = getComputedStyle(area);
+    // longhands, not the `font` shorthand — Safari's computed shorthand is
+    // empty, and a default-font mirror wraps differently and measures wrong
+    m.style.fontFamily = cs.fontFamily;
+    m.style.fontSize = cs.fontSize;
+    m.style.fontWeight = cs.fontWeight;
+    m.style.fontStyle = cs.fontStyle;
+    m.style.lineHeight = cs.lineHeight;
+    m.style.letterSpacing = cs.letterSpacing;
+    m.style.width = `${area.clientWidth}px`;
+    const upToCaret = area.value.slice(0, area.selectionStart ?? area.value.length);
+    // a trailing newline (or nothing at all) renders zero-height — pad the
+    // caret's empty line so it still counts
+    m.textContent = upToCaret === "" || upToCaret.endsWith("\n") ? upToCaret + "​" : upToCaret;
+    return area.getBoundingClientRect().top + Math.max(m.offsetHeight, 20);
+  };
   const anchorTail = () => {
     const sc = scrollerOf();
-    if (sc) sc.scrollTop = sc.scrollHeight - sc.clientHeight;
+    const btn = btnRef.current;
+    if (!sc || !btn) return;
+    const { kb, visBottom, visTop } = kbGeom();
+    // breadcrumbs for ?kbdebug — the overlay paints the LAST pass, so a
+    // device screenshot shows which branch ran and whether the scroll clamped
+    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
+    const w = window as Window & { __kbAnchor?: KbAnchorLog };
+    const st0 = sc.scrollTop;
+    const max = sc.scrollHeight - sc.clientHeight;
+    const spcr = kbSpacerRef.current?.offsetHeight ?? 0;
+    if (kb < 60) {
+      // no keyboard: rest at the zone's foot — the spacer below (if any
+      // remains mid-collapse) is reachable room, not part of the stance
+      sc.scrollTop = sc.scrollHeight - sc.clientHeight - spcr;
+      walkRef.current.sanctioned = sc.scrollTop;
+      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: -1, sealB: -1, st0, st1: sc.scrollTop, max, spcr, branch: "foot" };
+      return;
+    }
+    // Keyboard up: pin against what's actually VISIBLE, not a layout
+    // position — iOS picks its pan from wherever the page sat at focus, so a
+    // fixed layout stance can land under the keyboard and every re-pin would
+    // hold it there. visBottom is read LIVE each pass. Only a hair of air is
+    // subtracted: ruler-calibrated on device, visualViewport.height already
+    // ends ABOVE the keyboard's floating accessory band (vis 337 vs the pills
+    // at r333 with the keyboard at r404), so a band allowance here would
+    // double-count and park the seal too high.
+    const target = visBottom - 16;
+    const sealB = btn.getBoundingClientRect().bottom;
+    // …but the pin serves the WRITER: if the caret sits on an early line of a
+    // long entry (re-focused by tapping its top), the seal stance would strand
+    // the caret above the fold. Predict where the caret line lands under the
+    // seal pin; if it would be out of view, centre the caret line in the
+    // visible window instead. Typing at the end keeps the seal stance — there
+    // the caret rides just above the seal, always in view.
+    const sealDelta = sealB - target;
+    const caretB = caretClientBottom();
+    // Trim the reach spacer to the stance: the seal pin is the DEEPEST scroll
+    // anyone needs, so size the spacer to put max-scroll a hair beyond it —
+    // seeded at the whole keyboard inset, it let the book scroll far into
+    // blank paper below the zone. Runs on every pass, so it re-grows when a
+    // clamped pin needs more room and re-trims as the words come and go.
+    const trimSpacer = () => {
+      const sp = kbSpacerRef.current;
+      if (!sp || sp.offsetHeight <= 0) return;
+      const stPin = sc.scrollTop + (btn.getBoundingClientRect().bottom - target);
+      const bare = sc.scrollHeight - sp.offsetHeight - sc.clientHeight;
+      const h = Math.max(0, Math.round(stPin + 24 - bare));
+      if (Math.abs(h - sp.offsetHeight) > 1) sp.style.height = `${h}px`;
+    };
+    if (caretB != null && caretB - sealDelta < visTop + 8) {
+      const mid = (visTop + visBottom) / 2 + 10;
+      sc.scrollTop += caretB - mid;
+      walkRef.current.sanctioned = sc.scrollTop;
+      trimSpacer();
+      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
+      return;
+    }
+    sc.scrollTop += sealDelta;
+    walkRef.current.sanctioned = sc.scrollTop;
+    trimSpacer();
+    w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
+  };
+  // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
+  // anchoring moment. A normal textbox scrolls only when the caret would
+  // leave view — and scrolling mid-gesture is what broke the native text
+  // interactions (multi-tap escalation counts taps on STATIONARY text; the
+  // trackpad fights any scroll under it). So caret moves get this instead of
+  // anchorTail: act only on a collapsed caret that strayed OUT of the visible
+  // window, and then only nudge it just inside the near edge.
+  const revealCaret = () => {
+    const sc = scrollerOf();
+    if (!sc) return;
+    const { kb, visBottom, visTop } = kbGeom();
+    if (kb < 60) return; // no keyboard, nothing to keep clear of
+    const area = areaRef.current;
+    if (!area || area.selectionStart !== area.selectionEnd) return; // selecting
+    const caretB = caretClientBottom();
+    if (caretB == null) return;
+    const lo = visTop + 8;
+    const hi = visBottom - 24;
+    if (caretB >= lo && caretB <= hi) return; // already in view: hands off
+    const tgt = caretB < lo ? visTop + 28 : hi;
+    const st0 = sc.scrollTop;
+    sc.scrollTop += caretB - tgt;
+    walkRef.current.sanctioned = sc.scrollTop; // this follow is ours
+    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
+    (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor = {
+      t: Date.now() % 100000, kb, vis: visBottom, tgt, sealB: caretB, st0,
+      st1: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight,
+      spcr: kbSpacerRef.current?.offsetHeight ?? 0, branch: "reveal",
+    };
+  };
+  const sizeKbSpacer = () => {
+    const sp = kbSpacerRef.current;
+    if (!sp) return;
+    // room below the zone so the visual pin can lift the tail clear of the
+    // keyboard; collapses on dismissal even while focused (the vv listeners
+    // re-run this — on pan-only devices dismissal shows up as the pan
+    // returning to zero). SEEDED at the full keyboard inset only so the
+    // first pin can reach; the pin pass immediately TRIMS it so the stance
+    // is the deepest scroll (see anchorTail) — left at a full keyboard of
+    // reach, the book scrolled far into blank paper below the zone.
+    const { kb } = kbGeom();
+    if (kb < 60) {
+      sp.style.height = "";
+      return;
+    }
+    if (!sp.style.height) sp.style.height = `${kb}px`;
   };
   // Centre the empty field: split the spare height evenly between the flexible
   // slack above it and the rigid spacer below it. Idempotent (the total is
@@ -3090,15 +3436,324 @@ function TodayZoneFill({
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
+  const vvListenerRef = useRef<(() => void) | null>(null);
+  const selChangeRef = useRef<(() => void) | null>(null);
+  const scScrollRef = useRef<(() => void) | null>(null);
+  const touchCancelRef = useRef<(() => void) | null>(null);
+  const touchUpRef = useRef<(() => void) | null>(null);
+  const touchActiveRef = useRef(false);
+  // A CARET WALK (iOS's spacebar trackpad, arrow keys): selectionchange events
+  // stream with NO touch on the page — the finger is on the keyboard. WebKit
+  // natively auto-scrolls to FOLLOW the walking caret (that's a normal textbox
+  // and must flow untouched), but it doesn't know the caret stops at the
+  // field's first line: push past the top and it keeps scrolling the BOOK into
+  // history. The tell: legitimate follow always keeps the caret in view.
+  // During a walk, a foreign scroll that leaves the caret OUT of the window —
+  // or keeps digging when the caret is already at position 0 — is the
+  // auto-scroller overshooting and is snapped back to the walk's leading edge.
+  // `sanctioned` is the scrollTop of our own last write (so our pin/reveal
+  // scrolls are never mistaken for foreign ones); `prevSt` gives each scroll
+  // event its direction. A real finger on the page dissolves the walk.
+  const walkRef = useRef({ until: 0, sanctioned: -1, prevSt: -1, prevSel: -1 });
+  // the walk SESSION: true from the first caret move of a walk until an event
+  // that proves the gesture ended (page touch, typing, blur, app switch,
+  // keyboard resize). Unlike walk.until it survives pauses — the trackpad
+  // finger can hover motionless for seconds and the anchor must stay silent.
+  const walkSessionRef = useRef(false);
+  const lastInputRef = useRef(0); // when the field last received a keystroke
+  const vvEndListenerRef = useRef<(() => void) | null>(null);
+  const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
-    anchorTail();
-    requestAnimationFrame(anchorTail);
+    anchorPass();
+    requestAnimationFrame(anchorPass);
     clearAnchorTimers();
-    anchorTimers.current = [80, 200, 360].map((ms) => setTimeout(anchorTail, ms));
+    // Re-pin across the keyboard's rise AND well past it: iOS runs its own
+    // caret-reveal scroll after the keyboard fully settles — later than the
+    // rise-end visualViewport resize — and whoever writes last wins. Every
+    // pass converges on the same visual target, so repeats are invisible;
+    // the long tail just makes sure ours is the final word.
+    anchorTimers.current = [80, 200, 360, 600, 900, 1300].map((ms) =>
+      setTimeout(anchorPass, ms),
+    );
+    // …but never against the reader: the moment a finger lands on the page,
+    // the remaining passes stand down (typing re-arms its own short re-pin)
+    if (!touchCancelRef.current) {
+      const standDown = () => { touchActiveRef.current = true; walkRef.current.until = 0; walkSessionRef.current = false; clearAnchorTimers(); };
+      const touchUp = () => { touchActiveRef.current = false; };
+      touchCancelRef.current = standDown;
+      touchUpRef.current = touchUp;
+      window.addEventListener("touchstart", standDown, { passive: true });
+      window.addEventListener("touchend", touchUp, { passive: true });
+      window.addEventListener("touchcancel", touchUp, { passive: true });
+      window.addEventListener("wheel", standDown, { passive: true });
+    }
+    // Track the viewport while focused — 'resize' where heights change, and
+    // 'scroll' for PAN-ONLY devices whose heights never move (there the pan is
+    // the only keyboard signal: rise, dismissal, and the re-pan when returning
+    // from an app switch all arrive here). Guarded so a pinch (scale > 1) or
+    // an active finger is never fought. Returning from the app switcher also
+    // lands via window focus / visibilitychange, where iOS may restore the
+    // scroll into the reach region with no viewport event at all.
+    if (!vvListenerRef.current && window.visualViewport) {
+      // Two classes of viewport event, split by what they mean for a caret
+      // walk. The trackpad is a SESSION: it survives pauses (the finger can
+      // hover motionless for seconds), so suppressing re-anchors only within
+      // 600ms of the last caret move wasn't enough — a pause let the walk
+      // lapse, the next little iOS pan fired a full anchor pass, and the
+      // book yanked to the seal stance mid-gesture. The session ends only on
+      // events that PROVE the gesture is over: a finger on the page, typing,
+      // blur, an app switch, or the keyboard actually changing size.
+      const onViewportEnd = () => {
+        // resize / window focus / visibilitychange: keyboard geometry moved
+        // or we're returning from elsewhere — the walk (if any) is over and
+        // the stance must re-assert (dismissal collapse, app-switch re-seat)
+        const vv = window.visualViewport;
+        if (vv && vv.scale > 1.01) return;
+        if (touchActiveRef.current) return;
+        walkSessionRef.current = false;
+        anchorPass();
+      };
+      const onViewportPan = () => {
+        // vv/document scroll: iOS pans — during a walk session the WALK owns
+        // the view and these must not re-anchor (that was the mid-glide
+        // back-and-forth); outside one, re-pin against the live pan
+        const vv = window.visualViewport;
+        if (vv && vv.scale > 1.01) return;
+        if (touchActiveRef.current) return;
+        if (walkSessionRef.current && kbGeom().kb >= 60) return;
+        anchorPass();
+      };
+      vvListenerRef.current = onViewportPan;
+      vvEndListenerRef.current = onViewportEnd;
+      window.visualViewport.addEventListener("resize", onViewportEnd);
+      window.visualViewport.addEventListener("scroll", onViewportPan);
+      // iOS's document-scroll flavour of the keyboard pan (window scroll
+      // events don't bubble from inner scrollers, so this hears ONLY the
+      // document — i.e. only iOS's own keyboard avoidance)
+      window.addEventListener("scroll", onViewportPan);
+      window.addEventListener("focus", onViewportEnd);
+      document.addEventListener("visibilitychange", onViewportEnd);
+    }
+    // Follow the CARET, not just the viewport: iOS places a tapped caret on
+    // its own schedule, and a tap that moves the caret in an ALREADY-focused
+    // field fires no focus and no input — this is the only event that hears
+    // it. The response is the gentle revealCaret (never the anchoring pass —
+    // scrolling on every caret move broke multi-tap selection and the
+    // spacebar trackpad), deferred and finger-guarded: mid-drag (loupe) the
+    // passes sit out; the last selectionchange of a drag lands its later
+    // passes after the lift.
+    if (!selChangeRef.current) {
+      const onSelChange = () => {
+        const area = areaRef.current;
+        if (document.activeElement !== area) return;
+        // a collapsed-caret move with no finger on the page = a caret walk;
+        // open (or extend) the walk window the scroll clamp acts within
+        if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
+          const now = performance.now();
+          const sc = scrollerOf();
+          if (sc && now > walkRef.current.until) walkRef.current.sanctioned = sc.scrollTop;
+          walkRef.current.until = now + 600;
+          // only a caret that moved WITHOUT typing opens a session — a
+          // keystroke's own selectionchange is the keys talking, not the
+          // trackpad, and typing must leave the pan re-anchors armed
+          if (now - lastInputRef.current > 300) walkSessionRef.current = true;
+          // DOWNWARD follow is ours alone, and it must be immediate: WebKit
+          // follows a walking caret upward natively but walks it down only to
+          // the last visible line and stops — its auto-scroll never engages
+          // downward in an inner scroller, and the late reveal can't help
+          // because a caret parked at the bottom edge is still "in view". As
+          // the caret enters the bottom band, step the book to open the next
+          // lines; each further line re-steps, so holding the cursor low
+          // scrolls the entry down. Typing never lands here — the pin keeps
+          // the caret a whole seal above the keyboard.
+          //
+          // STRICTLY for an ADVANCING caret: a direction-blind step trapped
+          // upward drags that started low — each upward move still inside the
+          // band stepped the book down, iOS re-snapped the caret to the later
+          // line under the (still low) cursor, and the drag was undone as
+          // fast as it was made. Selection decreasing = walking up: the view
+          // holds still and the caret climbs out freely.
+          if (sc) {
+            const sel = area.selectionStart ?? 0;
+            const advancing = sel > walkRef.current.prevSel;
+            walkRef.current.prevSel = sel;
+            const { kb, visBottom } = kbGeom();
+            if (kb >= 60 && advancing) {
+              const caretB = caretClientBottom();
+              if (caretB != null && caretB > visBottom - 44) {
+                sc.scrollTop += caretB - (visBottom - 84);
+                walkRef.current.sanctioned = sc.scrollTop;
+              }
+            }
+          }
+        }
+        // The reveal is a LATE rescue, never a live follower. WebKit follows
+        // a walking caret natively and smoothly; an immediate reveal raced it
+        // and double-scrolled — the view hopped in steps while the trackpad
+        // moved. Each selectionchange resets these timers, so mid-walk the
+        // reveal never fires at all: it runs only once the caret has settled,
+        // and only if WebKit left it stranded out of view. Its OWN timer pool:
+        // clearing the anchor timers here silently killed the focus
+        // choreography (a tap's caret placement fires selectionchange right
+        // after focus) — the pin never ran and the reach spacer never seeded.
+        revealTimers.current.forEach(clearTimeout);
+        revealTimers.current = [450, 900].map((ms) =>
+          setTimeout(() => { if (!touchActiveRef.current) revealCaret(); }, ms),
+        );
+      };
+      selChangeRef.current = onSelChange;
+      document.addEventListener("selectionchange", onSelChange);
+    }
+    // The walk's scroll clamp (see walkRef). Native follow flows through
+    // untouched — only overshoot is corrected, back to the walk's leading
+    // edge. Our own correction updates `sanctioned`, so its scroll event
+    // no-ops on arrival.
+    if (!scScrollRef.current) {
+      const sc = scrollerOf();
+      if (sc) {
+        const onScScroll = () => {
+          const walk = walkRef.current;
+          const st = sc.scrollTop;
+          const d = walk.prevSt < 0 ? 0 : st - walk.prevSt;
+          walk.prevSt = st;
+          if (touchActiveRef.current) return;
+          if (Math.abs(st - walk.sanctioned) < 2) return; // our own write settling
+          if (performance.now() > walk.until) return;
+          const { kb, visBottom, visTop } = kbGeom();
+          if (kb < 60) return;
+          const area = areaRef.current;
+          if (!area || area.selectionStart !== area.selectionEnd) return;
+          const caretB = caretClientBottom();
+          if (caretB == null) return;
+          const lo = visTop + 8;
+          const hi = visBottom - 24;
+          const atStart = (area.selectionStart ?? 0) === 0 && area.value.length > 0;
+          // legitimacy is judged against the FULL window (WebKit parks a
+          // walking caret right at the keyboard top, a hair below our hi —
+          // that must not read as "left behind"); hi stays the pull-back
+          // target so corrections land clear of the accessory pills
+          if (caretB >= lo && caretB <= visBottom) {
+            // in view = legitimate follow — EXCEPT digging into history with
+            // the caret already at the very start: nothing left to reveal,
+            // hold line 1 at the top edge
+            if (!(atStart && d < 0 && caretB > lo + 40)) return;
+            sc.scrollTop += caretB - (lo + 20);
+          } else {
+            // the caret was left behind: bring it back to the walk's leading
+            // edge (scrolling up leads with the top edge, down with the bottom)
+            sc.scrollTop += caretB - (d < 0 ? lo + 20 : hi - 20);
+          }
+          walk.sanctioned = sc.scrollTop;
+          walk.prevSt = sc.scrollTop;
+          walk.until = performance.now() + 600; // it's still pushing: hold the line
+        };
+        scScrollRef.current = onScScroll;
+        sc.addEventListener("scroll", onScScroll, { passive: true });
+      }
+    }
   };
-  const releaseTail = clearAnchorTimers;
-  useEffect(() => releaseTail, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const releaseTail = () => {
+    clearAnchorTimers();
+    revealTimers.current.forEach(clearTimeout);
+    revealTimers.current = [];
+    // the extra reach below the zone exists only while writing
+    if (kbSpacerRef.current) kbSpacerRef.current.style.height = "";
+    if (vvListenerRef.current && window.visualViewport) {
+      window.visualViewport.removeEventListener("scroll", vvListenerRef.current);
+      window.removeEventListener("scroll", vvListenerRef.current);
+      vvListenerRef.current = null;
+    }
+    if (vvEndListenerRef.current && window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", vvEndListenerRef.current);
+      window.removeEventListener("focus", vvEndListenerRef.current);
+      document.removeEventListener("visibilitychange", vvEndListenerRef.current);
+      vvEndListenerRef.current = null;
+    }
+    if (selChangeRef.current) {
+      document.removeEventListener("selectionchange", selChangeRef.current);
+      selChangeRef.current = null;
+    }
+    if (scScrollRef.current) {
+      scrollerOf()?.removeEventListener("scroll", scScrollRef.current);
+      scScrollRef.current = null;
+    }
+    walkRef.current.until = 0;
+    walkSessionRef.current = false;
+    if (touchCancelRef.current) {
+      window.removeEventListener("touchstart", touchCancelRef.current);
+      window.removeEventListener("wheel", touchCancelRef.current);
+      touchCancelRef.current = null;
+    }
+    if (touchUpRef.current) {
+      window.removeEventListener("touchend", touchUpRef.current);
+      window.removeEventListener("touchcancel", touchUpRef.current);
+      touchUpRef.current = null;
+    }
+    touchActiveRef.current = false;
+  };
+  useEffect(
+    () => () => {
+      releaseTail();
+      caretMirror.current?.remove();
+      caretMirror.current = null;
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // The zone's tap-to-write (see the zone box below). Driven from pointerup
+  // with our own tap detection, NOT click: iOS's text-interaction gesture can
+  // swallow the click for a caret tap on a focused field — exactly the state
+  // that needs rescuing. click stays attached as the desktop/fallback path,
+  // deduped by time.
+  const zoneTapRef = useRef({ x: 0, y: 0, t: 0, id: -1, handledAt: 0 });
+  const engageZoneTap = (t: HTMLElement, via: string) => {
+    type ZoneTapLog = { t: number; via: string; why: string };
+    const w = window as Window & { __zoneTap?: ZoneTapLog };
+    const log = (why: string) =>
+      (w.__zoneTap = { t: Date.now() % 100000, via, why });
+    if (frozen) return log("frozen");
+    if (t.closest("button")) return log("button");
+    const area = areaRef.current;
+    if (!area) return log("no-area");
+    const onField = t.closest("textarea") === area;
+    const focused = document.activeElement === area;
+    const coarse = window.matchMedia?.("(pointer: coarse)").matches;
+    // never cycle a FRESH focus: on a first engaging tap the focus lands at
+    // pointerdown and the keyboard is still rising at tap's end, so kb reads
+    // 0 — only a focus predating this gesture means the keyboard was truly
+    // dismissed underneath it (iOS's dismiss pill keeps focus, kills the
+    // keyboard, and then no tap can summon it back without a REAL focus)
+    const stale = performance.now() - lastFocusAt.current > 700;
+    const mustCycle = focused && coarse && stale && kbGeom().kb < 60;
+    if (onField && !mustCycle) return log("native");
+    if (mustCycle) {
+      // WebKit settles keyboard visibility once per turn: a same-task
+      // blur→focus nets to "nothing changed" and the keyboard stays down.
+      // Blur now; refocus in a NEW task (still inside the tap's transient
+      // activation, so the keyboard may rise). A words tap keeps the caret
+      // the tap placed; a paper tap resumes writing at the end.
+      area.blur();
+      window.setTimeout(() => {
+        area.focus();
+        const s = onField ? (area.selectionStart ?? area.value.length) : area.value.length;
+        const e2 = onField ? (area.selectionEnd ?? s) : s;
+        area.setSelectionRange(s, e2);
+      }, 60);
+      return log("cycle");
+    }
+    // synchronously (the proven keyboard-riser) AND once more a beat later:
+    // the browser's own blur-on-tap-outside lands LATER in this same gesture
+    // (mousedown follows pointerup) and would undo a focus set only here
+    const toEnd = () => {
+      area.focus();
+      const end = area.value.length;
+      area.setSelectionRange(end, end);
+    };
+    toEnd();
+    window.setTimeout(toEnd, 80);
+    return log("focus-end");
+  };
 
   // Voice: the seal is the microphone. Spoken words merge after whatever's
   // already written; the field grows and the tail re-pins in the same frame
@@ -3222,8 +3877,9 @@ function TodayZoneFill({
   const frame = "border border-wax/45";
 
   return (
-    // each generation is one element: the old zone slides off the right while a
-    // fresh one fades + floats in to take its place.
+    <>
+    {/* each generation is one element: the old zone slides off the right while a
+        fresh one fades + floats in to take its place. */}
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
@@ -3231,11 +3887,15 @@ function TodayZoneFill({
         // the gap from the rule to the zone's top edge equal to the "chin" — the
         // space below the scroller, from its bottom down to the sheet's bottom
         // (~26px). The 1px short is the rule's own hairline sitting in that gap.
-        // Otherwise no rule, so just a hair of breathing room above and the tuned
-        // sliver below (keeps the foot rule's border handoff crisp at rest).
+        // When today's CARDS sit above instead, the zone owns the WHOLE 26px
+        // itself (today's section cedes its bottom padding): the row is
+        // min-h-full INCLUDING this padding, so at the book's foot the entire
+        // breath sits inside the viewport between the top terminus and the
+        // zone's border — not partly spent on the card section above the fold.
+        // First-ever keeps just a hair (nothing above to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          !hasEntry && !firstEver ? "pt-[25px] mb-[3px]" : "pt-1 mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[26px] mb-[3px]" : "pt-[25px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
@@ -3264,9 +3924,42 @@ function TodayZoneFill({
             // so its outline always wraps the text — never a fixed-height panel
             // the text spills out the bottom of. The box's OWN rounded border is
             // the outline; the flat foot cap covers the straight region.
-            "relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl",
+            "relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl cursor-text",
             frame,
           )}
+          // The WHOLE paper takes the pen, not just the field: the textarea is
+          // only as tall as its words (60px at rest) while the zone around it
+          // is far taller, so a tap that misses the rules by a hair — above,
+          // below, in the margins — landed on nothing and the keyboard never
+          // rose. A click here (never fired for a scroll gesture, and carrying
+          // the user activation iOS needs to open the keyboard) hands the tap
+          // to the field, caret at the end — "continue writing".
+          //
+          // The trap inside: iOS's dismiss pill hides the keyboard but KEEPS
+          // the field focused (seen on-device: `focus TEXTAREA` with the
+          // keyboard down). Then focus() is a no-op and even a caret tap on
+          // the words summons nothing — no focus event, no keyboard. The
+          // engage handler (see engageZoneTap) forces a real focus with a
+          // blur → next-task refocus. Driven from POINTERUP with our own tap
+          // detection because iOS can swallow the click for caret taps.
+          onPointerDown={(e) => {
+            zoneTapRef.current = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, handledAt: zoneTapRef.current.handledAt };
+          }}
+          onPointerUp={(e) => {
+            const d = zoneTapRef.current;
+            if (e.pointerId !== d.id) return;
+            const now = performance.now();
+            if (now - d.t > 600) return; // a hold, not a tap
+            if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) return; // a drag/scroll
+            d.handledAt = now;
+            engageZoneTap(e.target as HTMLElement, "pointerup");
+          }}
+          onClick={(e) => {
+            // fallback (desktop, browsers without pointer events on taps);
+            // skipped when the pointerup path just ran
+            if (performance.now() - zoneTapRef.current.handledAt < 800) return;
+            engageZoneTap(e.target as HTMLElement, "click");
+          }}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
@@ -3304,11 +3997,28 @@ function TodayZoneFill({
               // this field anchors its own tail (see anchorTail); the generic
               // keyboard-room hook skips fields marked data-room-center
               data-room-center=""
-              // grow the field, then re-anchor ONCE, synchronously in this same
-              // turn — deferred passes each moved layout across several painted
-              // frames, which read as the viewport bouncing before settling
-              onChange={(e) => { setText(e.target.value); autosizeArea(e.target); anchorTail(); }}
-              onFocus={scheduleAnchor}
+              // grow the field, then re-anchor: once synchronously, and again
+              // just behind the browser's own caret-reveal scroll (rAF + a
+              // beat), which otherwise lands after us and drags the stance
+              // down. All passes converge on the same fixed visual target, so
+              // the repeats can't bounce — unlike the old layout-moving passes.
+              onChange={(e) => {
+                setText(e.target.value);
+                autosizeArea(e.target);
+                // typing ends any trackpad walk session (the finger is on the
+                // keys) and marks the moment, so this keystroke's own
+                // selectionchange doesn't reopen one
+                lastInputRef.current = performance.now();
+                walkSessionRef.current = false;
+                // full passes (spacer + pin), not bare anchorTail: growth can
+                // need MORE reach, and if a selectionchange wiped the focus
+                // choreography this is what seeds the spacer at all
+                anchorPass();
+                requestAnimationFrame(anchorPass);
+                clearAnchorTimers();
+                anchorTimers.current = [setTimeout(anchorPass, 120)];
+              }}
+              onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
               placeholder={
@@ -3470,5 +4180,11 @@ function TodayZoneFill({
         </div>
       </motion.div>
     </AnimatePresence>
+    {/* keyboard reach: extra scrollable room below the zone while writing, so
+        the thumb can pull the caret line up above the keyboard (see
+        sizeKbSpacer). A SIBLING of the min-h-full row on purpose — scroller
+        padding would shrink the content box the row's height resolves against. */}
+    <div ref={kbSpacerRef} aria-hidden className="w-px" />
+    </>
   );
 }
