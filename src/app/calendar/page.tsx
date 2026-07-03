@@ -3290,7 +3290,12 @@ function TodayZoneFill({
       caretMirror.current = m;
     }
     const cs = getComputedStyle(area);
-    m.style.font = cs.font;
+    // longhands, not the `font` shorthand — Safari's computed shorthand is
+    // empty, and a default-font mirror wraps differently and measures wrong
+    m.style.fontFamily = cs.fontFamily;
+    m.style.fontSize = cs.fontSize;
+    m.style.fontWeight = cs.fontWeight;
+    m.style.fontStyle = cs.fontStyle;
     m.style.lineHeight = cs.lineHeight;
     m.style.letterSpacing = cs.letterSpacing;
     m.style.width = `${area.clientWidth}px`;
@@ -3373,6 +3378,7 @@ function TodayZoneFill({
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
   const vvListenerRef = useRef<(() => void) | null>(null);
+  const selChangeRef = useRef<(() => void) | null>(null);
   const touchCancelRef = useRef<(() => void) | null>(null);
   const touchUpRef = useRef<(() => void) | null>(null);
   const touchActiveRef = useRef(false);
@@ -3426,6 +3432,24 @@ function TodayZoneFill({
       window.addEventListener("focus", onViewport);
       document.addEventListener("visibilitychange", onViewport);
     }
+    // Follow the CARET, not just the viewport: iOS places a tapped caret on
+    // its own schedule (often after the focus passes have all measured the
+    // stale end-of-text position), and a tap that moves the caret in an
+    // ALREADY-focused field fires no focus and no input — this is the only
+    // event that hears it. Passes are deferred and finger-guarded: mid-drag
+    // (magnifier) they pass silently; the last selectionchange of the drag
+    // lands its later passes after the lift.
+    if (!selChangeRef.current) {
+      const onSelChange = () => {
+        if (document.activeElement !== areaRef.current) return;
+        clearAnchorTimers();
+        anchorTimers.current = [0, 120, 300, 600].map((ms) =>
+          setTimeout(() => { if (!touchActiveRef.current) anchorPass(); }, ms),
+        );
+      };
+      selChangeRef.current = onSelChange;
+      document.addEventListener("selectionchange", onSelChange);
+    }
   };
   const releaseTail = () => {
     clearAnchorTimers();
@@ -3438,6 +3462,10 @@ function TodayZoneFill({
       window.removeEventListener("focus", vvListenerRef.current);
       document.removeEventListener("visibilitychange", vvListenerRef.current);
       vvListenerRef.current = null;
+    }
+    if (selChangeRef.current) {
+      document.removeEventListener("selectionchange", selChangeRef.current);
+      selChangeRef.current = null;
     }
     if (touchCancelRef.current) {
       window.removeEventListener("touchstart", touchCancelRef.current);
