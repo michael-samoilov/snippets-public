@@ -3327,7 +3327,7 @@ function TodayZoneFill({
       // no keyboard: rest at the zone's foot — the spacer below (if any
       // remains mid-collapse) is reachable room, not part of the stance
       sc.scrollTop = sc.scrollHeight - sc.clientHeight - spcr;
-      walkRef.current.floor = sc.scrollTop;
+      walkRef.current.sanctioned = sc.scrollTop;
       w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: -1, sealB: -1, st0, st1: sc.scrollTop, max, spcr, branch: "foot" };
       return;
     }
@@ -3352,12 +3352,12 @@ function TodayZoneFill({
     if (caretB != null && caretB - sealDelta < visTop + 8) {
       const mid = (visTop + visBottom) / 2 + 10;
       sc.scrollTop += caretB - mid;
-      walkRef.current.floor = sc.scrollTop;
+      walkRef.current.sanctioned = sc.scrollTop;
       w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
       return;
     }
     sc.scrollTop += sealDelta;
-    walkRef.current.floor = sc.scrollTop;
+    walkRef.current.sanctioned = sc.scrollTop;
     w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
@@ -3382,7 +3382,7 @@ function TodayZoneFill({
     const tgt = caretB < lo ? visTop + 28 : hi;
     const st0 = sc.scrollTop;
     sc.scrollTop += caretB - tgt;
-    walkRef.current.floor = sc.scrollTop; // this follow is the walk's new floor
+    walkRef.current.sanctioned = sc.scrollTop; // this follow is ours
     type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
     (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor = {
       t: Date.now() % 100000, kb, vis: visBottom, tgt, sealB: caretB, st0,
@@ -3423,14 +3423,18 @@ function TodayZoneFill({
   const touchUpRef = useRef<(() => void) | null>(null);
   const touchActiveRef = useRef(false);
   // A CARET WALK (iOS's spacebar trackpad, arrow keys): selectionchange events
-  // stream with NO touch on the page — the finger is on the keyboard. WebKit's
-  // selection auto-scroll doesn't know the caret stops at the field's first
-  // line: push the trackpad past the top and it keeps scrolling the BOOK, sailing
-  // past the entry into history. During a walk, `floor` is the lowest scrollTop
-  // our own follow logic sanctioned; any scroll under it is the auto-scroller
-  // overshooting and gets snapped back — the walk ends at the top of the words
-  // and STOPS. A real finger on the page (touchstart) dissolves the walk.
-  const walkRef = useRef({ until: 0, floor: -1 });
+  // stream with NO touch on the page — the finger is on the keyboard. WebKit
+  // natively auto-scrolls to FOLLOW the walking caret (that's a normal textbox
+  // and must flow untouched), but it doesn't know the caret stops at the
+  // field's first line: push past the top and it keeps scrolling the BOOK into
+  // history. The tell: legitimate follow always keeps the caret in view.
+  // During a walk, a foreign scroll that leaves the caret OUT of the window —
+  // or keeps digging when the caret is already at position 0 — is the
+  // auto-scroller overshooting and is snapped back to the walk's leading edge.
+  // `sanctioned` is the scrollTop of our own last write (so our pin/reveal
+  // scrolls are never mistaken for foreign ones); `prevSt` gives each scroll
+  // event its direction. A real finger on the page dissolves the walk.
+  const walkRef = useRef({ until: 0, sanctioned: -1, prevSt: -1 });
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
@@ -3498,7 +3502,7 @@ function TodayZoneFill({
         if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
           const now = performance.now();
           const sc = scrollerOf();
-          if (sc && now > walkRef.current.until) walkRef.current.floor = sc.scrollTop;
+          if (sc && now > walkRef.current.until) walkRef.current.sanctioned = sc.scrollTop;
           walkRef.current.until = now + 600;
         }
         clearAnchorTimers();
@@ -3509,21 +3513,44 @@ function TodayZoneFill({
       selChangeRef.current = onSelChange;
       document.addEventListener("selectionchange", onSelChange);
     }
-    // The walk's scroll clamp: snap any sub-floor scroll (WebKit's selection
-    // auto-scroll overshooting the field top) back to the sanctioned floor.
-    // Our own snap fires one more scroll event that no-ops at the floor.
+    // The walk's scroll clamp (see walkRef). Native follow flows through
+    // untouched — only overshoot is corrected, back to the walk's leading
+    // edge. Our own correction updates `sanctioned`, so its scroll event
+    // no-ops on arrival.
     if (!scScrollRef.current) {
       const sc = scrollerOf();
       if (sc) {
         const onScScroll = () => {
-          if (touchActiveRef.current) return;
           const walk = walkRef.current;
-          if (performance.now() > walk.until || walk.floor < 0) return;
-          if (sc.scrollTop < walk.floor - 1) {
-            if (kbGeom().kb < 60) return;
-            sc.scrollTop = walk.floor;
-            walk.until = performance.now() + 600; // it's still pushing: hold the line
+          const st = sc.scrollTop;
+          const d = walk.prevSt < 0 ? 0 : st - walk.prevSt;
+          walk.prevSt = st;
+          if (touchActiveRef.current) return;
+          if (Math.abs(st - walk.sanctioned) < 2) return; // our own write settling
+          if (performance.now() > walk.until) return;
+          const { kb, visBottom, visTop } = kbGeom();
+          if (kb < 60) return;
+          const area = areaRef.current;
+          if (!area || area.selectionStart !== area.selectionEnd) return;
+          const caretB = caretClientBottom();
+          if (caretB == null) return;
+          const lo = visTop + 8;
+          const hi = visBottom - 24;
+          const atStart = (area.selectionStart ?? 0) === 0 && area.value.length > 0;
+          if (caretB >= lo && caretB <= hi) {
+            // in view = legitimate follow — EXCEPT digging into history with
+            // the caret already at the very start: nothing left to reveal,
+            // hold line 1 at the top edge
+            if (!(atStart && d < 0 && caretB > lo + 40)) return;
+            sc.scrollTop += caretB - (lo + 20);
+          } else {
+            // the caret was left behind: bring it back to the walk's leading
+            // edge (scrolling up leads with the top edge, down with the bottom)
+            sc.scrollTop += caretB - (d < 0 ? lo + 20 : hi - 20);
           }
+          walk.sanctioned = sc.scrollTop;
+          walk.prevSt = sc.scrollTop;
+          walk.until = performance.now() + 600; // it's still pushing: hold the line
         };
         scScrollRef.current = onScScroll;
         sc.addEventListener("scroll", onScScroll, { passive: true });
