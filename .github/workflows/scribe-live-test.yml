@@ -1,0 +1,33 @@
+# Live-fire check of the Scribe v2 Realtime dialect against the real
+# ElevenLabs API (scripts/scribe-live-test.mjs). On-demand only — it
+# spends a few seconds of transcription credit per run. The key comes
+# from the ELEVENLABS_API_KEY repo secret, or a dispatch input as a
+# fallback (private repo; rotate the key if it was ever pasted around).
+name: scribe-live-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_key:
+        description: "ElevenLabs API key (leave empty to use the ELEVENLABS_API_KEY secret)"
+        required: false
+        type: string
+
+jobs:
+  live-transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Synthesize a spoken sample
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q espeak-ng
+          espeak-ng -w /tmp/speech.wav -s 145 \
+            "The quick brown fox jumped over the lazy dog on a bright July morning, and I finally wrote it down."
+      - name: Stream it to Scribe v2 Realtime
+        env:
+          ELEVENLABS_API_KEY: ${{ inputs.api_key != '' && inputs.api_key || secrets.ELEVENLABS_API_KEY }}
+        run: node scripts/scribe-live-test.mjs /tmp/speech.wav fox morning
