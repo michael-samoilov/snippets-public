@@ -3228,6 +3228,7 @@ function TodayZoneFill({
   // floating accessory band by construction.
   // (The generic keyboard-room hook ignores this field — see use-keyboard-room.)
   const anchorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const revealTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const topSlackRef = useRef<HTMLDivElement>(null);
   const restSpacerRef = useRef<HTMLDivElement>(null);
   // extra scrollable area while the keyboard is up (a sibling BELOW the zone,
@@ -3495,6 +3496,12 @@ function TodayZoneFill({
         const vv = window.visualViewport;
         if (vv && vv.scale > 1.01) return;
         if (touchActiveRef.current) return;
+        // during a caret walk the WALK owns the view: iOS pans the visual
+        // viewport in little steps while the trackpad finger rides the
+        // screen edge, and re-anchoring on each pan yanked the book toward
+        // the seal stance mid-walk — the back-and-forth jitter. Dismissal
+        // still passes (kb drops below 60): the spacer and foot must reset.
+        if (performance.now() < walkRef.current.until && kbGeom().kb >= 60) return;
         anchorPass();
       };
       vvListenerRef.current = onViewport;
@@ -3551,9 +3558,12 @@ function TodayZoneFill({
         // and double-scrolled — the view hopped in steps while the trackpad
         // moved. Each selectionchange resets these timers, so mid-walk the
         // reveal never fires at all: it runs only once the caret has settled,
-        // and only if WebKit left it stranded out of view.
-        clearAnchorTimers();
-        anchorTimers.current = [450, 900].map((ms) =>
+        // and only if WebKit left it stranded out of view. Its OWN timer pool:
+        // clearing the anchor timers here silently killed the focus
+        // choreography (a tap's caret placement fires selectionchange right
+        // after focus) — the pin never ran and the reach spacer never seeded.
+        revealTimers.current.forEach(clearTimeout);
+        revealTimers.current = [450, 900].map((ms) =>
           setTimeout(() => { if (!touchActiveRef.current) revealCaret(); }, ms),
         );
       };
@@ -3610,6 +3620,8 @@ function TodayZoneFill({
   };
   const releaseTail = () => {
     clearAnchorTimers();
+    revealTimers.current.forEach(clearTimeout);
+    revealTimers.current = [];
     // the extra reach below the zone exists only while writing
     if (kbSpacerRef.current) kbSpacerRef.current.style.height = "";
     if (vvListenerRef.current && window.visualViewport) {
@@ -3879,10 +3891,13 @@ function TodayZoneFill({
               onChange={(e) => {
                 setText(e.target.value);
                 autosizeArea(e.target);
-                anchorTail();
-                requestAnimationFrame(anchorTail);
+                // full passes (spacer + pin), not bare anchorTail: growth can
+                // need MORE reach, and if a selectionchange wiped the focus
+                // choreography this is what seeds the spacer at all
+                anchorPass();
+                requestAnimationFrame(anchorPass);
                 clearAnchorTimers();
-                anchorTimers.current = [setTimeout(anchorTail, 120)];
+                anchorTimers.current = [setTimeout(anchorPass, 120)];
               }}
               onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
