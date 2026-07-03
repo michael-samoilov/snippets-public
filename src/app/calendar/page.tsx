@@ -280,6 +280,9 @@ function KbDebug() {
       const a = (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor;
       setTxt(
         [
+          // bumped per deploy so an on-device report is unambiguous about
+          // which build produced it
+          "BUILD settle-3",
           `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
           vv
             ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
