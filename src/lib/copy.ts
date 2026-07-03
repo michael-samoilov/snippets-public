@@ -80,9 +80,9 @@ export const copy = {
       "Where were you today that you'd like to stand again?",
       "What went wrong today that might make a good story?",
     ],
-    /** placeholder while the web engine is listening but nothing's said yet */
+    /** placeholder while listening but nothing's said yet */
     listeningPlaceholder: "Listening…",
-    /** Aqua has the recording and is transcribing (inline, by the words) */
+    /** the transcriber has the recording and is setting the words */
     settingWords: "Setting your words…",
     /** the controls-row hint while transcribing */
     aMoment: "a moment…",
@@ -127,9 +127,9 @@ export const copy = {
           "This browser is refusing speech recognition. Chrome, Safari, or Edge offer it — writing works everywhere.",
       },
       transcribe: {
-        title: "Aqua couldn’t set the words.",
+        title: "The words couldn’t be set.",
         description:
-          "The recording was made but transcription failed. Try the seal again, or write it.",
+          "What you said was heard but transcription failed. Try the seal again, or write it.",
       },
       "too-long": {
         title: "That take ran long.",

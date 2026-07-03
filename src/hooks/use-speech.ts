@@ -53,6 +53,30 @@ function hasRecorder(): boolean {
   );
 }
 
+/** The scribe engine needs a live PCM tap, not just a recorder. */
+function canStream(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    typeof WebSocket !== "undefined" &&
+    typeof AudioWorkletNode !== "undefined" &&
+    (typeof AudioContext !== "undefined" ||
+      "webkitAudioContext" in window)
+  );
+}
+
+function getAudioContext(): AudioContext | null {
+  const Ctx =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  try {
+    return Ctx ? new Ctx() : null;
+  } catch {
+    return null;
+  }
+}
+
 function isIOS(): boolean {
   if (typeof navigator === "undefined") return false;
   return (
@@ -64,26 +88,31 @@ function isIOS(): boolean {
 
 /** Installed to the home screen on iOS — a context where the built-in
  *  speech service is often blocked even though the API object exists.
- *  (Aqua transcription is unaffected; it's plain audio + fetch.) */
+ *  (The server engines are unaffected; they're plain audio + network.) */
 export function isIOSStandalone(): boolean {
   return isIOS() && (navigator as { standalone?: boolean }).standalone === true;
 }
 
-/* ── Aqua availability: probed once per page load ──────────────────── */
+/* ── engine availability: each probed once per page load ───────────── */
 
-let aquaProbe: Promise<boolean> | null = null;
-function aquaAvailable(): Promise<boolean> {
+function probe(url: string): Promise<boolean> {
   if (typeof window === "undefined") return Promise.resolve(false);
-  if (!aquaProbe) {
-    aquaProbe = fetch("/api/transcribe", {
-      method: "GET",
-      signal: AbortSignal.timeout(4000),
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<{ available?: boolean }>) : { available: false }))
-      .then((d) => d.available === true)
-      .catch(() => false);
-  }
-  return aquaProbe;
+  return fetch(url, { method: "GET", signal: AbortSignal.timeout(4000) })
+    .then((r) => (r.ok ? (r.json() as Promise<{ available?: boolean }>) : { available: false }))
+    .then((d) => d.available === true)
+    .catch(() => false);
+}
+
+let scribeProbe: Promise<boolean> | null = null;
+function scribeAvailable(): Promise<boolean> {
+  if (!scribeProbe) scribeProbe = probe("/api/scribe-token");
+  return scribeProbe;
+}
+
+let batchProbe: Promise<boolean> | null = null;
+function batchAvailable(): Promise<boolean> {
+  if (!batchProbe) batchProbe = probe("/api/transcribe");
+  return batchProbe;
 }
 
 function pickMime(): string {
@@ -97,14 +126,79 @@ function pickMime(): string {
   return candidates.find((c) => MediaRecorder.isTypeSupported(c)) ?? "";
 }
 
+/* ── scribe PCM plumbing ────────────────────────────────────────────
+   An AudioWorklet taps the mic's Float32 frames; the main thread
+   downsamples each ~quarter-second block to 16 kHz Int16 and ships it
+   base64 over the socket. Block-independent linear resampling — the
+   boundary discontinuity is far below what speech models notice. */
+
+const SCRIBE_RATE = 16000;
+
+let pcmTapUrl: string | null = null;
+function getPcmTapUrl(): string {
+  if (!pcmTapUrl) {
+    pcmTapUrl = URL.createObjectURL(
+      new Blob(
+        [
+          `class PcmTap extends AudioWorkletProcessor {
+            process(inputs) {
+              const ch = inputs[0] && inputs[0][0];
+              if (ch) this.port.postMessage(ch.slice(0));
+              return true;
+            }
+          }
+          registerProcessor("pcm-tap", PcmTap);`,
+        ],
+        { type: "application/javascript" },
+      ),
+    );
+  }
+  return pcmTapUrl;
+}
+
+function downsampleTo16k(input: Float32Array, inRate: number): Int16Array {
+  if (inRate === SCRIBE_RATE) {
+    const out = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++)
+      out[i] = Math.max(-1, Math.min(1, input[i])) * 0x7fff;
+    return out;
+  }
+  const outLen = Math.floor((input.length * SCRIBE_RATE) / inRate);
+  const out = new Int16Array(outLen);
+  const ratio = inRate / SCRIBE_RATE;
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const s = input[i0] + (input[i1] - input[i0]) * (pos - i0);
+    out[i] = Math.max(-1, Math.min(1, s)) * 0x7fff;
+  }
+  return out;
+}
+
+function int16ToBase64(pcm: Int16Array): string {
+  const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  let bin = "";
+  const STRIDE = 0x8000;
+  for (let i = 0; i < bytes.length; i += STRIDE)
+    bin += String.fromCharCode(...bytes.subarray(i, i + STRIDE));
+  return btoa(bin);
+}
+
+/** Server messages we act on (ElevenLabs realtime STT dialect). */
+interface ScribeMessage {
+  message_type?: string;
+  transcript?: string;
+}
+
 /* ── public surface ────────────────────────────────────────────────── */
 
-export type SpeechEngineKind = "aqua" | "web";
+export type SpeechEngineKind = "scribe" | "batch" | "web";
 
 export type SpeechStatus =
   | "idle"
   | "listening"
-  /** recording finished; Aqua is setting the words (~half a second) */
+  /** recording finished; the transcriber is setting the words */
   | "transcribing"
   | "denied"
   | "error";
@@ -131,11 +225,11 @@ export interface UseSpeech {
   engine: SpeechEngineKind | null;
   status: SpeechStatus;
   failure: SpeechFailure | null;
-  /** finalized phrases (web engine) — ink that has dried */
+  /** finalized phrases (streaming engines) — ink that has dried */
   segments: SpeechSegment[];
-  /** the phrase still forming (web engine) — ink that hasn't */
+  /** the phrase still forming (streaming engines) — ink that hasn't */
   interim: string;
-  /** live input level 0..1 (aqua engine) for the waveform */
+  /** live input level 0..1 (server engines) for the waveform */
   getLevel: () => number;
   start: () => void;
   stop: () => void;
@@ -145,11 +239,12 @@ export interface UseSpeech {
 const MAX_RECORDING_MS = 5 * 60_000;
 
 /**
- * One hook, two engines. When the server has an Aqua Voice key, Avalon
- * transcribes recordings — the writer's preferred transcriber, and it
- * works in every browser that can record audio. Otherwise the browser's
- * own speech engine streams words live. Every failure surfaces with a
- * reason — voice must never die silently.
+ * One hook, three engines, best first. With an ElevenLabs key the
+ * browser streams PCM straight to Scribe v2 Realtime and the words
+ * arrive as they're spoken. With a Whisper-dialect key the recording
+ * uploads on stop and the words settle a beat later. Otherwise the
+ * browser's own speech engine streams words live. Every failure
+ * surfaces with a reason — voice must never die silently.
  */
 export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const [resolved, setResolved] = useState(false);
@@ -174,7 +269,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const rapidEndsRef = useRef(0);
   const gotResultRef = useRef(false);
 
-  /* aqua engine state */
+  /* mic plumbing shared by the server engines */
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -184,21 +279,40 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const levelDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* scribe engine state */
+  const wsRef = useRef<WebSocket | null>(null);
+  const flushRef = useRef<((commit: boolean) => void) | null>(null);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const aqua = (await aquaAvailable()) && hasRecorder();
+      const [scribe, batch] = await Promise.all([
+        scribeAvailable(),
+        batchAvailable(),
+      ]);
       if (!alive) return;
-      setEngine(aqua ? "aqua" : getRecognizer() ? "web" : null);
+      setEngine(
+        scribe && canStream()
+          ? "scribe"
+          : batch && hasRecorder()
+            ? "batch"
+            : getRecognizer()
+              ? "web"
+              : null,
+      );
       setResolved(true);
     })();
     return () => {
       alive = false;
       wantedRef.current = false;
       recRef.current?.abort();
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
       releaseRecording();
     };
-     
+
   }, []);
 
   const fail = useCallback((kind: SpeechFailure) => {
@@ -212,7 +326,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     if (text) onSettledRef.current?.(text);
   }, []);
 
-  /* ── aqua engine ──────────────────────────────────────────────── */
+  /* ── shared mic plumbing ──────────────────────────────────────── */
 
   function releaseRecording() {
     if (maxTimerRef.current) {
@@ -225,6 +339,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     audioCtxRef.current = null;
     analyserRef.current = null;
     recorderRef.current = null;
+    flushRef.current = null;
   }
 
   const getLevel = useCallback((): number => {
@@ -236,6 +351,257 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     for (let i = 0; i < data.length; i++) sum += data[i];
     return Math.min(1, sum / data.length / 120);
   }, []);
+
+  /** A small ear on the signal, for the waveform. No meter is no tragedy. */
+  const attachMeter = useCallback((ctx: AudioContext, source: MediaStreamAudioSourceNode) => {
+    try {
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      levelDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+    } catch {
+      // listening still works
+    }
+  }, []);
+
+  const mapMicError = useCallback(
+    (err: unknown) => {
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "SecurityError") fail("denied");
+      else if (name === "NotFoundError" || name === "OverconstrainedError")
+        fail("no-mic");
+      else fail("unknown");
+    },
+    [fail],
+  );
+
+  /* ── segments (streaming engines share these) ─────────────────── */
+
+  const pushSegment = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    segmentsRef.current.push(trimmed);
+    setSegments((prev) => [...prev, { id: nextIdRef.current++, text: trimmed }]);
+  }, []);
+
+  /* ── scribe engine (ElevenLabs realtime, streams words live) ──── */
+
+  const settleScribe = useCallback(() => {
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
+    // words the server never committed are still words — keep them
+    if (interimRef.current.trim()) pushSegment(interimRef.current);
+    interimRef.current = "";
+    setInterim("");
+    const ws = wsRef.current;
+    wsRef.current = null;
+    ws?.close();
+    releaseRecording();
+    setStatus((s) => (s === "listening" || s === "transcribing" ? "idle" : s));
+    const spoken = segmentsRef.current.join(" ").trim();
+    segmentsRef.current = [];
+    nextIdRef.current = 0;
+    setSegments([]);
+    if (spoken) {
+      navigator.vibrate?.(8);
+      deliver(spoken);
+    }
+  }, [pushSegment, deliver]);
+
+  const startScribe = useCallback(async () => {
+    // the context is created inside the tap's own gesture — created later
+    // (after the awaits) Safari would refuse to let it run
+    const ctx = getAudioContext();
+    if (!ctx) {
+      fail("unknown");
+      return;
+    }
+    const tokenPromise = fetch("/api/scribe-token", {
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (err) {
+      void ctx.close().catch(() => {});
+      mapMicError(err);
+      return;
+    }
+    const response = await tokenPromise;
+    if (!wantedRef.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      void ctx.close().catch(() => {});
+      return; // the writer changed their mind while we asked
+    }
+    if (!response || !response.ok) {
+      stream.getTracks().forEach((t) => t.stop());
+      void ctx.close().catch(() => {});
+      fail(response?.status === 503 ? "service" : "network");
+      return;
+    }
+    const grant = (await response.json().catch(() => null)) as {
+      token?: string;
+      model?: string;
+      ws?: string;
+    } | null;
+    if (!grant?.token || !grant.model || !grant.ws || !wantedRef.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      void ctx.close().catch(() => {});
+      if (wantedRef.current) fail("service");
+      return;
+    }
+
+    streamRef.current = stream;
+    audioCtxRef.current = ctx;
+    void ctx.resume().catch(() => {});
+
+    try {
+      await ctx.audioWorklet.addModule(getPcmTapUrl());
+    } catch {
+      releaseRecording();
+      fail("unknown");
+      return;
+    }
+    if (!wantedRef.current) {
+      releaseRecording();
+      return;
+    }
+
+    const params = new URLSearchParams({
+      model_id: grant.model,
+      token: grant.token,
+      audio_format: "pcm_16000",
+      commit_strategy: "manual",
+    });
+    const ws = new WebSocket(
+      `${grant.ws}/v1/speech-to-text/realtime?${params.toString()}`,
+    );
+    wsRef.current = ws;
+
+    const source = ctx.createMediaStreamSource(stream);
+    attachMeter(ctx, source);
+    const tap = new AudioWorkletNode(ctx, "pcm-tap", {
+      numberOfInputs: 1,
+      numberOfOutputs: 0,
+    });
+    source.connect(tap);
+
+    // ship ~a quarter second of speech per message
+    let buffered: Float32Array[] = [];
+    let bufferedLen = 0;
+    const flushAt = Math.round(ctx.sampleRate / 4);
+    const flush = (commit: boolean) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const all = new Float32Array(bufferedLen);
+      let offset = 0;
+      for (const c of buffered) {
+        all.set(c, offset);
+        offset += c.length;
+      }
+      buffered = [];
+      bufferedLen = 0;
+      ws.send(
+        JSON.stringify({
+          message_type: "input_audio_chunk",
+          audio_base_64: int16ToBase64(downsampleTo16k(all, ctx.sampleRate)),
+          commit,
+          sample_rate: SCRIBE_RATE,
+        }),
+      );
+    };
+    flushRef.current = flush;
+    tap.port.onmessage = (e) => {
+      const chunk = e.data as Float32Array;
+      buffered.push(chunk);
+      bufferedLen += chunk.length;
+      if (bufferedLen >= flushAt) flush(false);
+    };
+
+    ws.onmessage = (e) => {
+      let data: ScribeMessage;
+      try {
+        data = JSON.parse(e.data as string) as ScribeMessage;
+      } catch {
+        return;
+      }
+      switch (data.message_type) {
+        case "partial_transcript": {
+          const text = data.transcript ?? "";
+          interimRef.current = text;
+          setInterim(text);
+          break;
+        }
+        case "committed_transcript":
+          if (data.transcript?.trim()) pushSegment(data.transcript);
+          interimRef.current = "";
+          setInterim("");
+          // stopping — this commit is the flush we were waiting for
+          if (!wantedRef.current) settleScribe();
+          break;
+        case "session_time_limit_exceeded":
+          wantedRef.current = false;
+          settleScribe();
+          break;
+        case "insufficient_audio_activity":
+          // benign: an empty take was committed — settle whatever exists
+          if (!wantedRef.current) settleScribe();
+          break;
+        case "auth_error":
+        case "quota_exceeded":
+        case "unaccepted_terms":
+        case "rate_limited":
+        case "resource_exhausted":
+          fail("service");
+          settleScribe();
+          break;
+        case "transcriber_error":
+        case "error":
+          fail("transcribe");
+          settleScribe();
+          break;
+        // session_started, commit_throttled, input_error, queue_overflow,
+        // chunk_size_exceeded: nothing useful to do mid-take
+      }
+    };
+    ws.onclose = () => {
+      if (wsRef.current !== ws) return; // we closed it ourselves
+      // the service dropped: keep whatever was heard, and say why.
+      // (fail() runs first so settle's status reset leaves the error standing)
+      fail(wantedRef.current ? "network" : "transcribe");
+      settleScribe();
+    };
+
+    maxTimerRef.current = setTimeout(() => {
+      // hard cap: stop and settle what we have
+      if (!wantedRef.current) return;
+      wantedRef.current = false;
+      flush(true);
+      setStatus("transcribing");
+      settleTimerRef.current = setTimeout(settleScribe, 4000);
+    }, MAX_RECORDING_MS);
+  }, [attachMeter, fail, mapMicError, pushSegment, settleScribe]);
+
+  const stopScribe = useCallback(() => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      settleScribe();
+      return;
+    }
+    setStatus("transcribing");
+    flushRef.current?.(true); // remaining audio rides out with the commit
+    // the mic light goes off now; the socket only waits for words
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    settleTimerRef.current = setTimeout(settleScribe, 4000); // never hang
+  }, [settleScribe]);
+
+  /* ── batch engine (records, uploads on stop) ──────────────────── */
 
   const transcribe = useCallback(
     async (blob: Blob) => {
@@ -279,7 +645,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     [fail, deliver],
   );
 
-  const startAqua = useCallback(async () => {
+  const startBatch = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
@@ -290,24 +656,10 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       }
       streamRef.current = stream;
 
-      // a small ear on the signal, for the waveform
-      try {
-        const Ctx =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext })
-            .webkitAudioContext;
-        if (Ctx) {
-          const ctx = new Ctx();
-          const source = ctx.createMediaStreamSource(stream);
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 256;
-          source.connect(analyser);
-          audioCtxRef.current = ctx;
-          analyserRef.current = analyser;
-          levelDataRef.current = new Uint8Array(analyser.frequencyBinCount);
-        }
-      } catch {
-        // no meter is no tragedy
+      const ctx = getAudioContext();
+      if (ctx) {
+        audioCtxRef.current = ctx;
+        attachMeter(ctx, ctx.createMediaStreamSource(stream));
       }
 
       const mime = pickMime();
@@ -336,13 +688,9 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       }, MAX_RECORDING_MS);
     } catch (err) {
-      const name = err instanceof DOMException ? err.name : "";
-      if (name === "NotAllowedError" || name === "SecurityError") fail("denied");
-      else if (name === "NotFoundError" || name === "OverconstrainedError")
-        fail("no-mic");
-      else fail("unknown");
+      mapMicError(err);
     }
-  }, [fail, transcribe]);
+  }, [attachMeter, fail, mapMicError, transcribe]);
 
   const failureSnapshotRef = useRef<SpeechFailure | null>(null);
   useEffect(() => {
@@ -351,13 +699,6 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const failureSnapshot = () => failureSnapshotRef.current;
 
   /* ── web engine (browser's own, streams words live) ───────────── */
-
-  const pushSegment = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    segmentsRef.current.push(trimmed);
-    setSegments((prev) => [...prev, { id: nextIdRef.current++, text: trimmed }]);
-  }, []);
 
   const settleWeb = useCallback(() => {
     setStatus((s) => (s === "listening" ? "idle" : s));
@@ -470,8 +811,10 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     failureSnapshotRef.current = null;
     setStatus("listening");
     navigator.vibrate?.(40);
-    if (engine === "aqua") {
-      void startAqua();
+    if (engine === "scribe") {
+      void startScribe();
+    } else if (engine === "batch") {
+      void startBatch();
     } else {
       try {
         startWeb();
@@ -479,13 +822,17 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         fail("unknown");
       }
     }
-  }, [engine, startAqua, startWeb, fail]);
+  }, [engine, startScribe, startBatch, startWeb, fail]);
 
   const stop = useCallback(() => {
     if (!wantedRef.current) return;
     wantedRef.current = false;
     navigator.vibrate?.([25, 40, 25]);
-    if (engine === "aqua") {
+    if (engine === "scribe") {
+      stopScribe();
+      return;
+    }
+    if (engine === "batch") {
       const recorder = recorderRef.current;
       if (recorder && recorder.state === "recording") {
         recorder.stop(); // onstop → transcribe
@@ -501,7 +848,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     } catch {
       settleWeb();
     }
-  }, [engine, settleWeb]);
+  }, [engine, stopScribe, settleWeb]);
 
   const reset = useCallback(() => {
     setSegments([]);

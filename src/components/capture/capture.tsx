@@ -14,13 +14,7 @@ import {
 import { StampMark } from "@/components/stamp-mark";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { copy } from "@/lib/copy";
-import { cn } from "@/lib/utils";
-
-function joinText(a: string, b: string): string {
-  if (!a.trim()) return b;
-  if (!b.trim()) return a;
-  return `${a.replace(/\s+$/, "")} ${b}`;
-}
+import { cn, joinText } from "@/lib/utils";
 
 function autosize(el: HTMLTextAreaElement) {
   el.style.height = "auto";
@@ -55,11 +49,11 @@ export function Capture() {
 
   const listening = speech.status === "listening";
   const transcribing = speech.status === "transcribing";
-  // the web engine streams words live; aqua records, then sets them
+  // the streaming engines put words down live; batch records, then sets them
   const liveWords =
-    speech.engine === "web" &&
+    speech.engine !== "batch" &&
     (listening || speech.segments.length > 0 || speech.interim.length > 0);
-  const recordingQuietly = speech.engine === "aqua" && listening;
+  const recordingQuietly = speech.engine === "batch" && listening;
 
   // voice must never fail silently — every failure says what happened
   useEffect(() => {

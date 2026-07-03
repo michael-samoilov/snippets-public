@@ -3,27 +3,36 @@ import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 
 /**
- * Voice → text via Aqua Voice's Avalon model, the writer's preferred
- * transcriber. Avalon mirrors the OpenAI Whisper API (multipart `file`
- * + `model`, Bearer auth, `{ text }` back), so this is a thin, key-
- * guarding proxy. Without AQUA_API_KEY the client falls back to the
- * browser's own speech engine; typing always works.
+ * Voice → text through a thin, key-guarding proxy that speaks the
+ * OpenAI Whisper transcription dialect (multipart `file` + `model`,
+ * Bearer auth, `{ text }` back). The default upstream is Aqua Voice's
+ * Avalon, the writer's preferred transcriber — but any Whisper-
+ * compatible provider drops in via TRANSCRIBE_BASE_URL +
+ * TRANSCRIBE_MODEL + TRANSCRIBE_API_KEY alone (recipes in README.md).
+ * The AQUA_* names remain honored as aliases. Without a key the client
+ * falls back to the browser's own speech engine; typing always works.
  *
- * Base and model are configurable because both appear in the wild:
- * docs say api.aqua.sh/v1 + "avalon-1"; some integrations use
+ * Aqua's base and model are configurable because both appear in the
+ * wild: docs say api.aqua.sh/v1 + "avalon-1"; some integrations use
  * api.aquavoice.com/api/v1 + "avalon-v1-en".
  */
 
-const BASE = (process.env.AQUA_BASE_URL ?? "https://api.aqua.sh/v1").replace(/\/$/, "");
-const MODEL = process.env.AQUA_MODEL ?? "avalon-1";
+const BASE = (
+  process.env.TRANSCRIBE_BASE_URL ??
+  process.env.AQUA_BASE_URL ??
+  "https://api.aqua.sh/v1"
+).replace(/\/$/, "");
+const MODEL = process.env.TRANSCRIBE_MODEL ?? process.env.AQUA_MODEL ?? "avalon-1";
 const MAX_BYTES = 25 * 1024 * 1024;
 
+const apiKey = () => process.env.TRANSCRIBE_API_KEY ?? process.env.AQUA_API_KEY;
+
 export async function GET() {
-  return Response.json({ available: Boolean(process.env.AQUA_API_KEY) });
+  return Response.json({ available: Boolean(apiKey()) });
 }
 
 export async function POST(request: NextRequest) {
-  const key = process.env.AQUA_API_KEY;
+  const key = apiKey();
   if (!key) {
     return Response.json({ error: "transcription_unconfigured" }, { status: 503 });
   }

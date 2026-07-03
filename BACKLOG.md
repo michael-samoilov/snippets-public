@@ -12,10 +12,17 @@ scope. When an item ships, delete it here and amend `DESIGN.md` /
 > typing or talking it should shift to some kind of 'completion'
 > interaction instead of remaining a microphone icon."
 
-**To be designed together with the owner — do not ship unilaterally.**
-A working prototype was built and e2e-tested in-session (2026-06-11),
-then deliberately reverted so the interaction can be shaped
-collaboratively. What the prototype established (reuse freely):
+**Partially shipped (2026-07-02, owner-directed): minimal tap-toggle
+voice wiring in the today zone** — tap the mic to record, tap again to
+stop, the web engine's words land live on the rules, the transcript
+merges into the field, kept entries carry `source: "voice"`. What
+remains here is the full completion interaction below (the mode
+machine, push-to-talk, the third glyph) plus a mic for the backfill
+composer — **to be designed together with the owner, not shipped
+unilaterally.** A working prototype of that fuller interaction was
+built and e2e-tested in-session (2026-06-11), then deliberately
+reverted so the interaction can be shaped collaboratively. What the
+prototype established (reuse freely):
 
 - Mode machine derived, not stored: `busy` (transcribing) → `stop`
   (listening) → `arm` (idle + text present) → `mic` (idle + empty).
