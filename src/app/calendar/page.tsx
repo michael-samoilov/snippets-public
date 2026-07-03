@@ -3585,9 +3585,25 @@ function TodayZoneFill({
             // so its outline always wraps the text — never a fixed-height panel
             // the text spills out the bottom of. The box's OWN rounded border is
             // the outline; the flat foot cap covers the straight region.
-            "relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl",
+            "relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl cursor-text",
             frame,
           )}
+          // The WHOLE paper takes the pen, not just the field: the textarea is
+          // only as tall as its words (60px at rest) while the zone around it
+          // is far taller, so a tap that misses the rules by a hair — above,
+          // below, in the margins — landed on nothing and the keyboard never
+          // rose. A click here (never fired for a scroll gesture, and carrying
+          // the user activation iOS needs to open the keyboard) hands the tap
+          // to the field, caret at the end — "continue writing".
+          onClick={(e) => {
+            if (frozen) return;
+            if ((e.target as HTMLElement).closest("button, textarea")) return;
+            const area = areaRef.current;
+            if (!area) return;
+            area.focus();
+            const end = area.value.length;
+            area.setSelectionRange(end, end);
+          }}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
