@@ -283,6 +283,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const wsRef = useRef<WebSocket | null>(null);
   const flushRef = useRef<((commit: boolean) => void) | null>(null);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchdogRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -388,6 +389,8 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   /* ── scribe engine (ElevenLabs realtime, streams words live) ──── */
 
   const settleScribe = useCallback(() => {
+    watchdogRef.current?.();
+    watchdogRef.current = null;
     if (settleTimerRef.current) {
       clearTimeout(settleTimerRef.current);
       settleTimerRef.current = null;
@@ -412,13 +415,6 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   }, [pushSegment, deliver]);
 
   const startScribe = useCallback(async () => {
-    // the context is created inside the tap's own gesture — created later
-    // (after the awaits) Safari would refuse to let it run
-    const ctx = getAudioContext();
-    if (!ctx) {
-      fail("unknown");
-      return;
-    }
     const tokenPromise = fetch("/api/scribe-token", {
       method: "POST",
       signal: AbortSignal.timeout(10_000),
@@ -430,19 +426,16 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         audio: { echoCancellation: true, noiseSuppression: true },
       });
     } catch (err) {
-      void ctx.close().catch(() => {});
       mapMicError(err);
       return;
     }
     const response = await tokenPromise;
     if (!wantedRef.current) {
       stream.getTracks().forEach((t) => t.stop());
-      void ctx.close().catch(() => {});
       return; // the writer changed their mind while we asked
     }
     if (!response || !response.ok) {
       stream.getTracks().forEach((t) => t.stop());
-      void ctx.close().catch(() => {});
       fail(response?.status === 503 ? "service" : "network");
       return;
     }
@@ -453,14 +446,24 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     } | null;
     if (!grant?.token || !grant.model || !grant.ws || !wantedRef.current) {
       stream.getTracks().forEach((t) => t.stop());
-      void ctx.close().catch(() => {});
       if (wantedRef.current) fail("service");
       return;
     }
 
+    // The context is created AFTER the mic is live, on purpose: iOS
+    // switches the hardware audio route when capture starts, and a
+    // context created before the switch can sit suspended — or feed the
+    // worklet pure silence — with no error anywhere. An active capture
+    // session also exempts resume() from the autoplay gesture rules.
+    const ctx = getAudioContext();
+    if (!ctx) {
+      stream.getTracks().forEach((t) => t.stop());
+      fail("unknown");
+      return;
+    }
     streamRef.current = stream;
     audioCtxRef.current = ctx;
-    void ctx.resume().catch(() => {});
+    await ctx.resume().catch(() => {});
 
     try {
       await ctx.audioWorklet.addModule(getPcmTapUrl());
@@ -517,12 +520,33 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       );
     };
     flushRef.current = flush;
+    let framesSeen = false;
     tap.port.onmessage = (e) => {
+      framesSeen = true;
       const chunk = e.data as Float32Array;
       buffered.push(chunk);
       bufferedLen += chunk.length;
       if (bufferedLen >= flushAt) flush(false);
     };
+
+    // Silence watchdog. If the worklet has produced nothing, the context
+    // is stuck (iOS's route change can suspend it under our feet): first
+    // nudge it awake, and if it stays mute, say so — a take must never
+    // end as a quiet nothing when the microphone was on.
+    const nudge = setTimeout(() => {
+      if (!framesSeen) void ctx.resume().catch(() => {});
+    }, 1000);
+    const giveUp = setTimeout(() => {
+      if (framesSeen || !wantedRef.current) return;
+      wantedRef.current = false;
+      fail("unknown");
+      settleScribe();
+    }, 3000);
+    const stopWatchdog = () => {
+      clearTimeout(nudge);
+      clearTimeout(giveUp);
+    };
+    watchdogRef.current = stopWatchdog;
 
     ws.onmessage = (e) => {
       let data: ScribeMessage;
@@ -591,6 +615,12 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const stopScribe = useCallback(() => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // a socket that exists but never opened is a failure to report, not
+      // a quiet nothing. (No socket at all = the writer cancelled before
+      // the take was even granted — that one stays silent.)
+      if (ws && segmentsRef.current.length === 0 && !interimRef.current.trim()) {
+        fail("network");
+      }
       settleScribe();
       return;
     }
@@ -599,7 +629,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     // the mic light goes off now; the socket only waits for words
     streamRef.current?.getTracks().forEach((t) => t.stop());
     settleTimerRef.current = setTimeout(settleScribe, 4000); // never hang
-  }, [settleScribe]);
+  }, [settleScribe, fail]);
 
   /* ── batch engine (records, uploads on stop) ──────────────────── */
 
