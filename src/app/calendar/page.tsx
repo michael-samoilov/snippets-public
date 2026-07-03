@@ -3295,8 +3295,12 @@ function TodayZoneFill({
     // Keyboard up: pin against what's actually VISIBLE, not a layout
     // position — iOS picks its pan from wherever the page sat at focus, so a
     // fixed layout stance can land under the keyboard and every re-pin would
-    // hold it there. visBottom is read LIVE each pass.
-    const target = visBottom - 64 - 8; // the accessory band + a hair of air
+    // hold it there. visBottom is read LIVE each pass. Only a hair of air is
+    // subtracted: ruler-calibrated on device, visualViewport.height already
+    // ends ABOVE the keyboard's floating accessory band (vis 337 vs the pills
+    // at r333 with the keyboard at r404), so a band allowance here would
+    // double-count and park the seal too high.
+    const target = visBottom - 16;
     const sealB = btn.getBoundingClientRect().bottom;
     sc.scrollTop += sealB - target;
     w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
