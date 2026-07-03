@@ -3767,9 +3767,14 @@ function TodayZoneFill({
     requestAnimationFrame(() => {
       const el = areaRef.current;
       if (!el) return;
+      // settled words are typing as far as the anchor machinery cares:
+      // mark the input so the caret move can't open a phantom walk session,
+      // and run a full pass (spacer + pin) — growth can need more reach
+      lastInputRef.current = performance.now();
+      walkSessionRef.current = false;
       autosizeArea(el);
-      anchorTail();
-      el.focus();
+      anchorPass();
+      el.focus(); // onFocus runs the full re-pin choreography
       el.setSelectionRange(el.value.length, el.value.length);
     });
   });
@@ -3790,8 +3795,12 @@ function TodayZoneFill({
     if (!liveSpoken) return;
     const el = areaRef.current;
     if (!el) return;
+    // live words grow the field like keystrokes do — same bookkeeping:
+    // no phantom walk session from the value change, full anchor pass
+    lastInputRef.current = performance.now();
+    walkSessionRef.current = false;
     autosizeArea(el);
-    anchorTail();
+    anchorPass();
   }, [liveSpoken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // voice must never fail silently — every failure says what happened
