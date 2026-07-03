@@ -3457,7 +3457,7 @@ function TodayZoneFill({
   // `sanctioned` is the scrollTop of our own last write (so our pin/reveal
   // scrolls are never mistaken for foreign ones); `prevSt` gives each scroll
   // event its direction. A real finger on the page dissolves the walk.
-  const walkRef = useRef({ until: 0, sanctioned: -1, prevSt: -1 });
+  const walkRef = useRef({ until: 0, sanctioned: -1, prevSt: -1, prevSel: -1 });
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
     centerField(); // a viewport change while resting re-centres before writing
@@ -3542,9 +3542,19 @@ function TodayZoneFill({
           // lines; each further line re-steps, so holding the cursor low
           // scrolls the entry down. Typing never lands here — the pin keeps
           // the caret a whole seal above the keyboard.
+          //
+          // STRICTLY for an ADVANCING caret: a direction-blind step trapped
+          // upward drags that started low — each upward move still inside the
+          // band stepped the book down, iOS re-snapped the caret to the later
+          // line under the (still low) cursor, and the drag was undone as
+          // fast as it was made. Selection decreasing = walking up: the view
+          // holds still and the caret climbs out freely.
           if (sc) {
+            const sel = area.selectionStart ?? 0;
+            const advancing = sel > walkRef.current.prevSel;
+            walkRef.current.prevSel = sel;
             const { kb, visBottom } = kbGeom();
-            if (kb >= 60) {
+            if (kb >= 60 && advancing) {
               const caretB = caretClientBottom();
               if (caretB != null && caretB > visBottom - 44) {
                 sc.scrollTop += caretB - (visBottom - 84);
