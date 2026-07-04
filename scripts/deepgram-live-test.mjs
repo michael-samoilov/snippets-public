@@ -135,7 +135,13 @@ async function runSession(pcm, { chunkMs, language }) {
     const scheduleSettle = (wait) => { clearTimeout(settleTimer); settleTimer = setTimeout(() => { clearTimeout(guard); finish(true); }, wait); };
 
     ws.addEventListener("error", (e) => finish(false, `websocket error ${e.message ?? ""}`));
-    ws.addEventListener("close", (e) => { if (!done) finish(false, `closed early (code ${e.code})`); });
+    ws.addEventListener("close", (e) => {
+      if (done) return;
+      // Deepgram closes 1000/1001 (normal) after CloseStream once it has
+      // flushed the finals — that's success, not a dropped connection.
+      if (e.code === 1000 || e.code === 1001) { clearTimeout(guard); finish(true); }
+      else finish(false, `closed early (code ${e.code})`);
+    });
     ws.addEventListener("message", (e) => {
       let data;
       try { data = JSON.parse(typeof e.data === "string" ? e.data : e.data.toString()); } catch { return; }
