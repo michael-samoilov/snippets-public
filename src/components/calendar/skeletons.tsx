@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Calm placeholders for the calendar's altitudes — shown while a feed's chunk
  * is still loading or its geometry is being measured (a deep-link that lands in
@@ -6,16 +8,28 @@
  *
  * They pre-echo each view's real shape in its own material: the today zone's
  * framed composition, the month grid's ruled 7-wide cells, the year's paper
- * mini-tiles. Every count and offset is a fixed pattern (never random) so the
- * server and client paint the same skeleton. The bars and dots stand in the
- * faint rule colour — grain, not ink — and a warm sheen sweeps across them
- * (.skeleton-shimmer), collapsing to a static fill under reduced motion.
+ * mini-tiles. The bars and dots stand in the faint rule colour — grain, not
+ * ink — and a warm sheen sweeps across them (.skeleton-shimmer), collapsing to
+ * a static fill under reduced motion.
  *
- * The schedule/book ledger skeleton lives beside its feed (LedgerRows in
- * calendar/page.tsx), where it's shared with the SSR fallback.
+ * These render only on the client (the SSR shell is always the today zone; the
+ * month/year skeletons are a dynamic-import loading state), so the year mini
+ * may read the real calendar. The schedule/book ledger skeleton lives beside
+ * its feed (LedgerRows in calendar/page.tsx).
  */
 
+import { leadOffset } from "./shared";
+import { useSettings } from "@/lib/settings";
+
 const FAINT = { backgroundColor: "var(--rule-faint)" } as const;
+
+// The month shimmer sweeps left→right rather than lighting every cell at once:
+// each column's placeholders start a beat later than the one to their left, so
+// a single band appears to cross the page. Columns to the left are further into
+// the cycle (a more negative delay), so their sheen peaks first.
+const WAVE_STEP = 0.13; // seconds between columns
+const waveDelay = (col: number) =>
+  ({ animationDelay: `${(col - 6) * WAVE_STEP}s` }) as const;
 
 /* ── today: the zone the book opens onto — the most common landing ────
    Mirrors TodayZoneFill's composition: the wax-outlined frame, the date
@@ -79,7 +93,7 @@ function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
       <div className="relative" style={{ height: 28 }}>
         <span
           className="skeleton-shimmer absolute bottom-[3.25px] h-2.5 w-9 -translate-x-1/2 rounded-[2px]"
-          style={{ ...FAINT, left: `${((lead + 0.5) / 7) * 100}%` }}
+          style={{ ...FAINT, left: `${((lead + 0.5) / 7) * 100}%`, ...waveDelay(lead) }}
         />
       </div>
       <div className="grid grid-cols-7">
@@ -91,7 +105,11 @@ function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
             key={i}
             className="flex aspect-square flex-col items-center justify-center gap-1 border-t border-rule-faint"
           >
-            <span className="skeleton-shimmer h-2.5 w-3 rounded-[2px]" style={FAINT} />
+            {/* delayed by the cell's column, so the sheen crosses the page */}
+            <span
+              className="skeleton-shimmer h-2.5 w-3 rounded-[2px]"
+              style={{ ...FAINT, ...waveDelay((lead + i) % 7) }}
+            />
             {/* the dot strip is always reserved, as in the real cell */}
             <span className="h-[3.5px]" />
           </span>
@@ -113,17 +131,32 @@ export function MonthSkeleton() {
 
 /* ── year: a year label + a grid of paper mini-tiles ──────────────────── */
 
-const MONTH_MINIS = Array.from({ length: 12 });
-
-function MiniSkel({ month }: { month: number }) {
+// Each mini lays out the real month — leading blanks so the first lands on its
+// weekday, then a dot per day, then trailing blanks to a fixed 42 — for the
+// CURRENT year, so the constellations match what the glance will paint (a
+// 30-day month is shorter than a 31, February shorter still). A sparse,
+// deterministic scatter reads as a few kept days rather than an empty grid.
+function MiniSkel({
+  year,
+  month,
+  weekStart,
+}: {
+  year: number;
+  month: number;
+  weekStart: 0 | 1;
+}) {
+  const lead = leadOffset(new Date(year, month, 1), weekStart);
+  const days = new Date(year, month + 1, 0).getDate();
+  const trailing = 42 - lead - days;
   return (
     <div className="flex flex-col gap-1.5 rounded-[6px] border border-rule-faint bg-paper p-2.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
       <span className="skeleton-shimmer h-2.5 w-7 rounded-[2px]" style={FAINT} />
       <span className="grid grid-cols-7 gap-[3px]">
-        {Array.from({ length: 42 }).map((_, i) => {
-          // a sparse, deterministic scatter of "kept" days so the mini reads as
-          // a real month with a few entries, not an empty grid
-          const kept = (month * 13 + i * 7) % 11 === 0;
+        {Array.from({ length: lead }).map((_, i) => (
+          <span key={`b${i}`} className="size-[3px]" />
+        ))}
+        {Array.from({ length: days }).map((_, i) => {
+          const kept = (month * 7 + i * 3) % 9 === 0;
           return (
             <span
               key={i}
@@ -132,18 +165,23 @@ function MiniSkel({ month }: { month: number }) {
             />
           );
         })}
+        {Array.from({ length: trailing }).map((_, i) => (
+          <span key={`a${i}`} className="size-[3px]" />
+        ))}
       </span>
     </div>
   );
 }
 
 export function YearSkeleton() {
+  const { weekStart } = useSettings();
+  const year = new Date().getFullYear();
   return (
     <div className="h-full overflow-hidden" aria-hidden="true">
       <span className="skeleton-shimmer mb-1.5 block h-2.5 w-10 rounded-[2px]" style={FAINT} />
       <div className="grid grid-cols-2 gap-2.5 min-[380px]:grid-cols-3 sm:grid-cols-4">
-        {MONTH_MINIS.map((_, i) => (
-          <MiniSkel key={i} month={i} />
+        {Array.from({ length: 12 }).map((_, m) => (
+          <MiniSkel key={m} year={year} month={m} weekStart={weekStart} />
         ))}
       </div>
     </div>
