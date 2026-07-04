@@ -3953,7 +3953,7 @@ function TodayZoneFill({
         // above it to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : "pt-[19px] mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[24px] mb-[3px]" : "pt-[19px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
