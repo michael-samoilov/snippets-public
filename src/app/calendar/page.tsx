@@ -213,216 +213,8 @@ export default function CalendarPage() {
 // skeleton stays put to be stared at.
 function CalendarGate() {
   const params = useSearchParams();
-  // ?kbdebug overlays live viewport numbers. Captured in the lazy initializer —
-  // during RENDER, before any effect: Calendar's mount effects (children run
-  // first) rewrite the URL, so by effect time the param is already gone.
-  const [kbdebug] = useState(
-    () => typeof window !== "undefined" && window.location.search.includes("kbdebug"),
-  );
   if (params.has("skeldebug")) return <SkeletonDebug />;
-  return (
-    <>
-      <Calendar />
-      {kbdebug && <KbDebug />}
-    </>
-  );
-}
-
-// TODO(remove after the keyboard investigation): ?kbdebug — paints every live
-// viewport number the keyboard logic reads, plus marker lines at the computed
-// visible-bottom (red) and the seal's pin target (orange). A screenshot of a
-// device with the keyboard up tells us exactly what its viewport reports.
-function KbDebug() {
-  const [txt, setTxt] = useState("");
-  const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number; shift: number } | null>(null);
-  const [panelTop, setPanelTop] = useState(4);
-  const panelRef = useRef<HTMLPreElement>(null);
-  const baseVh = useRef(0);
-  // Debug-only forensics: every scroll EVENT on the book (a ring of t+st — a
-  // lone step vs an animated run distinguishes a browser adjustment from a
-  // smooth glide) and every PROGRAMMATIC scroll call (scrollBy/scrollTo/
-  // scrollTop-set intercepted at the prototype). A drift that shows events
-  // but no intercepted call is the browser's own doing — that fork is the
-  // whole question in the refresh-wobble hunt.
-  useEffect(() => {
-    const sc = document.querySelector("[data-book-scroller]");
-    if (!sc) return;
-    type Ev = { t: number; st: number };
-    type Call = { t: number; via: string; arg: string };
-    const w = window as Window & { __scrollEvents?: Ev[]; __scrollCalls?: Call[] };
-    const onScroll = () => {
-      w.__scrollEvents = [...(w.__scrollEvents ?? []).slice(-19), { t: Date.now() % 100000, st: Math.round((sc as HTMLElement).scrollTop * 10) / 10 }];
-    };
-    sc.addEventListener("scroll", onScroll, { passive: true });
-    const logCall = (via: string, arg: string) => {
-      w.__scrollCalls = [...(w.__scrollCalls ?? []).slice(-11), { t: Date.now() % 100000, via, arg }];
-    };
-    const proto = Element.prototype;
-    const origBy = proto.scrollBy;
-    const origTo = proto.scrollTo;
-    const stDesc = Object.getOwnPropertyDescriptor(proto, "scrollTop");
-    (proto as { scrollBy: typeof origBy }).scrollBy = function (this: Element, ...a: unknown[]) {
-      if (this === sc) logCall("by", JSON.stringify(a[0] ?? a));
-      return (origBy as (...x: unknown[]) => void).apply(this, a);
-    } as typeof origBy;
-    (proto as { scrollTo: typeof origTo }).scrollTo = function (this: Element, ...a: unknown[]) {
-      if (this === sc) logCall("to", JSON.stringify(a[0] ?? a));
-      return (origTo as (...x: unknown[]) => void).apply(this, a);
-    } as typeof origTo;
-    if (stDesc?.set && stDesc.get) {
-      Object.defineProperty(proto, "scrollTop", {
-        ...stDesc,
-        set(this: Element, v: number) {
-          if (this === sc) logCall("st=", String(Math.round(v)));
-          stDesc.set!.call(this, v);
-        },
-      });
-    }
-    return () => {
-      sc.removeEventListener("scroll", onScroll);
-      proto.scrollBy = origBy;
-      proto.scrollTo = origTo;
-      if (stDesc) Object.defineProperty(proto, "scrollTop", stDesc);
-    };
-  }, []);
-  useEffect(() => {
-    const update = () => {
-      const vv = window.visualViewport;
-      const doc = document.scrollingElement?.scrollTop ?? 0;
-      // layout-relative visual-viewport offset (see kbGeom: iOS's offsetTop is
-      // document-relative); keeps the panel inside the visible window
-      const layoutTop = vv ? vv.pageTop - doc : 0;
-      setPanelTop(Math.round(layoutTop + 4));
-      // The FIXED layer and the RECT frame disagree on this device under the
-      // keyboard scroll — measure the shift from the panel's own rect (its
-      // rect vs the fixed top it is CURRENTLY rendered at) so the ruler lines
-      // can be labeled in TRUE rect coordinates.
-      let shift = 0;
-      if (panelRef.current) {
-        const applied = parseFloat(panelRef.current.style.top || "4");
-        shift = Math.round(panelRef.current.getBoundingClientRect().top - applied);
-      }
-      const seal = [...document.querySelectorAll("button")].find((x) =>
-        /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
-      );
-      const sc = document.querySelector("[data-book-scroller]");
-      const sp = [...document.querySelectorAll("div[aria-hidden].w-px")].pop() as HTMLElement | undefined;
-      let vis = 0, tgt = 0, raw = 0, kb = 0, est = 0;
-      if (vv) {
-        baseVh.current = Math.max(baseVh.current, vv.height);
-        const measured = Math.max(
-          window.innerHeight - vv.height - layoutTop,
-          baseVh.current - vv.height,
-        );
-        raw = layoutTop + vv.height;
-        const pan = Math.max(vv.pageTop, doc);
-        est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
-        if (measured >= 60) { kb = measured; vis = raw; }
-        else if (pan > 40) { kb = est; vis = raw - est; }
-        else { kb = 0; vis = raw; }
-        tgt = vis - 72;
-      }
-      setMarks({ vis, tgt, raw, shift });
-      type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
-      const a = (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor;
-      setTxt(
-        [
-          // bumped per deploy so an on-device report is unambiguous about
-          // which build produced it
-          "BUILD settle-6",
-          `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
-          vv
-            ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
-            : "no visualViewport",
-          `docST ${Math.round(doc)}  winSY ${Math.round(window.scrollY)}  baseVh ${Math.round(baseVh.current)}`,
-          `kb ${Math.round(kb)}  est ${est}  vis ${Math.round(vis)}  tgt ${Math.round(tgt)}`,
-          `sealB ${seal ? Math.round(seal.getBoundingClientRect().bottom) : "-"}  scST ${sc ? Math.round(sc.scrollTop) : "-"}  spcr ${sp?.style.height || "0"}`,
-          `focus ${document.activeElement?.tagName ?? "-"}  shift ${shift}  fieldB ${(() => { const f = document.querySelector("[data-today-zone-box] textarea"); return f ? Math.round(f.getBoundingClientRect().bottom) : "-"; })()}`,
-          a
-            ? `LAST ${a.branch}@${a.t}: kb ${Math.round(a.kb)} tgt ${Math.round(a.tgt)} sealB ${Math.round(a.sealB)}\n  st ${Math.round(a.st0)}→${Math.round(a.st1)} max ${Math.round(a.max)} spcr ${Math.round(a.spcr)}${a.branch === "pin" && Math.abs(a.st0 + a.sealB - a.tgt - a.st1) > 2 ? " CLAMPED" : ""}`
-            : "LAST -",
-          (() => {
-            type ZoneTapLog = { t: number; via: string; why: string };
-            const zt = (window as Window & { __zoneTap?: ZoneTapLog }).__zoneTap;
-            return zt ? `TAP ${zt.via}@${zt.t}: ${zt.why}` : "TAP -";
-          })(),
-          // live rule-delta + the last landing-system scroll writes: the
-          // refresh-wobble oscillator will name itself here
-          (() => {
-            const s = sc as HTMLElement | null;
-            if (!s) return "RULE -";
-            const p2 = (n: number) => String(n).padStart(2, "0");
-            const now = new Date();
-            const tk = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}`;
-            const secEl = s.querySelector(`section[data-day="${tk}"]`);
-            const rd = secEl
-              ? Math.round((secEl.getBoundingClientRect().top - s.getBoundingClientRect().top) * 10) / 10
-              : null;
-            return `RULE ${rd ?? "-"}  max-st ${Math.round(s.scrollHeight - s.clientHeight - s.scrollTop)}`;
-          })(),
-          (() => {
-            type SetLog = { t: number; src: string; d: number; st0: number; st1: number };
-            const log = (window as Window & { __settleLog?: SetLog[] }).__settleLog ?? [];
-            return log.slice(-3).map((e) => `SET ${e.src}@${e.t} d${e.d} ${e.st0}→${e.st1}`).join("\n") || "SET -";
-          })(),
-          (() => {
-            type Call = { t: number; via: string; arg: string };
-            const calls = (window as Window & { __scrollCalls?: Call[] }).__scrollCalls ?? [];
-            return calls.slice(-3).map((c) => `CALL ${c.via}@${c.t} ${c.arg}`).join("\n") || "CALL -";
-          })(),
-          (() => {
-            type Ev = { t: number; st: number };
-            const evs = (window as Window & { __scrollEvents?: Ev[] }).__scrollEvents ?? [];
-            return "EV " + (evs.slice(-7).map((e) => `${e.t % 10000}:${e.st}`).join(" ") || "-");
-          })(),
-        ].join("\n"),
-      );
-    };
-    update();
-    const iv = setInterval(update, 300);
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", update);
-    vv?.addEventListener("scroll", update);
-    window.addEventListener("scroll", update);
-    return () => {
-      clearInterval(iv);
-      vv?.removeEventListener("resize", update);
-      vv?.removeEventListener("scroll", update);
-      window.removeEventListener("scroll", update);
-    };
-  }, []);
-  return (
-    <div className="pointer-events-none fixed inset-0 z-[9999]">
-      <pre
-        ref={panelRef}
-        className="absolute left-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300"
-        style={{ top: panelTop }}
-      >
-        {txt}
-      </pre>
-      {marks && (
-        <>
-          <div className="absolute inset-x-0 border-t-2 border-red-500" style={{ top: marks.vis }}>
-            <span className="bg-red-500 px-1 font-mono text-[9px] text-white">vis {Math.round(marks.vis)}</span>
-          </div>
-          <div className="absolute inset-x-0 border-t-2 border-orange-400" style={{ top: marks.tgt }}>
-            <span className="bg-orange-400 px-1 font-mono text-[9px] text-black">tgt {Math.round(marks.tgt)}</span>
-          </div>
-          {/* the RULER: a line every 50px of the fixed layer, each labeled with
-              its TRUE rect-frame y (fixed y + measured shift). The label sitting
-              at the keyboard's top edge in a screenshot IS the correct
-              visible-bottom in the coordinates anchorTail scrolls in. */}
-          {Array.from({ length: 20 }, (_, k) => k * 50).map((y) => (
-            <div key={y} className="absolute inset-x-0 border-t border-fuchsia-500/70" style={{ top: y }}>
-              <span className="absolute right-0 bg-fuchsia-600 px-1 font-mono text-[9px] text-white">
-                r{y + marks.shift}
-              </span>
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  );
+  return <Calendar />;
 }
 
 type View = "year" | "month" | "schedule" | "entry";
@@ -2380,28 +2172,15 @@ function ScheduleFeedBase({
           return sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
         return s.scrollHeight - s.clientHeight - s.scrollTop;
       };
-      // ?kbdebug breadcrumb: every landing-system scroll write, with source
-      // and measurement, so an on-device recording can NAME the oscillator
-      type SetLog = { t: number; src: string; d: number; st0: number; st1: number };
-      const logSet = (src: string, d: number, st0: number, st1: number) => {
-        const w = window as Window & { __settleLog?: SetLog[] };
-        w.__settleLog = [...(w.__settleLog ?? []).slice(-11), { t: Date.now() % 100000, src, d: Math.round(d * 10) / 10, st0: Math.round(st0), st1: Math.round(st1) }];
-      };
-      // ABSOLUTE writes only, never scrollBy: the on-device settle log showed
-      // every relative write overshooting by its own delta one beat later —
-      // iOS's async scrolling applying the scrollBy AGAIN after the JS-visible
-      // update (settle d-4 landed at target then drifted -4 more; the landing
-      // pin ended hard at max). An absolute target is idempotent under that
-      // double-application.
-      const pinFoot = (behavior: ScrollBehavior, src = "pin") => {
+      // ABSOLUTE writes only, never scrollBy: iOS's async scrolling applies a
+      // relative scrollBy a second time after the JS-visible update, so every
+      // relative write overshot by its own delta a beat later (the refresh
+      // wobble). An absolute target is idempotent under that double-application.
+      const pinFoot = (behavior: ScrollBehavior) => {
         const s = scrollerRef.current;
         if (!s) return;
         const d = footDelta();
-        if (d != null && Math.abs(d) > 1) {
-          const st0 = s.scrollTop;
-          s.scrollTo({ top: st0 + d, behavior });
-          logSet(src, d, st0, s.scrollTop);
-        }
+        if (d != null && Math.abs(d) > 1) s.scrollTo({ top: s.scrollTop + d, behavior });
       };
       // a micro-correction may only fire against a STILL layout: the same
       // delta observed on two consecutive frames. iOS settles its toolbars
@@ -2420,9 +2199,7 @@ function ScheduleFeedBase({
           if (Math.abs(d2 - d1) > 1) return; // layout in motion — not a settle moment
           const s2 = scrollerRef.current;
           if (!s2) return;
-          const st0 = s2.scrollTop;
-          s2.scrollTo({ top: st0 + d2, behavior: "instant" }); // absolute (see pinFoot)
-          logSet("settle", d2, st0, s2.scrollTop);
+          s2.scrollTo({ top: s2.scrollTop + d2, behavior: "instant" }); // absolute (see pinFoot)
         });
       };
       // ONE smooth glide — never re-commanded mid-flight (overlapping smooth
@@ -2452,8 +2229,8 @@ function ScheduleFeedBase({
       // enrichment chips, font swaps each nudge the heights above the foot —
       // and iOS has no scroll anchoring to absorb that, so the page visibly
       // shifts and a timer-based correction lands up to half a second LATER:
-      // that lag is the refresh wobble (?kbdebug showed the flip with LAST -,
-      // i.e. no anchor writes at all — pure layout breath + late settles).
+      // that lag is the refresh wobble (on-device tracing showed the flips
+      // with NO anchor writes at all — pure layout breath + late settles).
       // A ResizeObserver fires post-layout, PRE-PAINT: re-seating the foot in
       // its callback corrects in the same frame as the disturbance, which is
       // invisible. Lives only through the settle window; a reader's takeover
@@ -2462,7 +2239,7 @@ function ScheduleFeedBase({
       const reseat = () => {
         if (tookOverRef.current) return;
         if (document.activeElement?.tagName === "TEXTAREA") return; // keyboard pin owns it
-        pinFoot("instant", "breath");
+        pinFoot("instant");
       };
       const ro = new ResizeObserver(reseat);
       const sEl = scrollerRef.current;
@@ -3167,7 +2944,14 @@ function FlowBackfillCapture({
               }
             }}
             className={cn(
-              "voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+              // CONTAINED at the card's own six-line rhythm (the preview's
+              // clamp): past that the words scroll INSIDE the box. This is
+              // what keeps caret walks (the spacebar trackpad) in the card —
+              // WebKit auto-scrolls the nearest scrollable, and with the
+              // textarea scrollable that's the textarea, not the whole book
+              // sailing off into other days. overscroll-contain stops the
+              // internal scroll from chaining out at its edges.
+              "voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -3484,19 +3268,12 @@ function TodayZoneFill({
     const btn = btnRef.current;
     if (!sc || !btn) return;
     const { kb, visBottom, visTop } = kbGeom();
-    // breadcrumbs for ?kbdebug — the overlay paints the LAST pass, so a
-    // device screenshot shows which branch ran and whether the scroll clamped
-    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
-    const w = window as Window & { __kbAnchor?: KbAnchorLog };
-    const st0 = sc.scrollTop;
-    const max = sc.scrollHeight - sc.clientHeight;
     const spcr = kbSpacerRef.current?.offsetHeight ?? 0;
     if (kb < 60) {
       // no keyboard: rest at the zone's foot — the spacer below (if any
       // remains mid-collapse) is reachable room, not part of the stance
       sc.scrollTop = sc.scrollHeight - sc.clientHeight - spcr;
       walkRef.current.sanctioned = sc.scrollTop;
-      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: -1, sealB: -1, st0, st1: sc.scrollTop, max, spcr, branch: "foot" };
       return;
     }
     // Keyboard up: pin against what's actually VISIBLE, not a layout
@@ -3535,13 +3312,11 @@ function TodayZoneFill({
       sc.scrollTop += caretB - mid;
       walkRef.current.sanctioned = sc.scrollTop;
       trimSpacer();
-      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
       return;
     }
     sc.scrollTop += sealDelta;
     walkRef.current.sanctioned = sc.scrollTop;
     trimSpacer();
-    w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
   // anchoring moment. A normal textbox scrolls only when the caret would
@@ -3563,15 +3338,8 @@ function TodayZoneFill({
     const hi = visBottom - 24;
     if (caretB >= lo && caretB <= hi) return; // already in view: hands off
     const tgt = caretB < lo ? visTop + 28 : hi;
-    const st0 = sc.scrollTop;
     sc.scrollTop += caretB - tgt;
     walkRef.current.sanctioned = sc.scrollTop; // this follow is ours
-    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
-    (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor = {
-      t: Date.now() % 100000, kb, vis: visBottom, tgt, sealB: caretB, st0,
-      st1: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight,
-      spcr: kbSpacerRef.current?.offsetHeight ?? 0, branch: "reveal",
-    };
   };
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
@@ -3877,15 +3645,11 @@ function TodayZoneFill({
   // that needs rescuing. click stays attached as the desktop/fallback path,
   // deduped by time.
   const zoneTapRef = useRef({ x: 0, y: 0, t: 0, id: -1, handledAt: 0 });
-  const engageZoneTap = (t: HTMLElement, via: string) => {
-    type ZoneTapLog = { t: number; via: string; why: string };
-    const w = window as Window & { __zoneTap?: ZoneTapLog };
-    const log = (why: string) =>
-      (w.__zoneTap = { t: Date.now() % 100000, via, why });
-    if (frozen) return log("frozen");
-    if (t.closest("button")) return log("button");
+  const engageZoneTap = (t: HTMLElement) => {
+    if (frozen) return;
+    if (t.closest("button")) return;
     const area = areaRef.current;
-    if (!area) return log("no-area");
+    if (!area) return;
     const onField = t.closest("textarea") === area;
     const focused = document.activeElement === area;
     const coarse = window.matchMedia?.("(pointer: coarse)").matches;
@@ -3896,7 +3660,7 @@ function TodayZoneFill({
     // keyboard, and then no tap can summon it back without a REAL focus)
     const stale = performance.now() - lastFocusAt.current > 700;
     const mustCycle = focused && coarse && stale && kbGeom().kb < 60;
-    if (onField && !mustCycle) return log("native");
+    if (onField && !mustCycle) return; // the field's own tap already works
     if (mustCycle) {
       // WebKit settles keyboard visibility once per turn: a same-task
       // blur→focus nets to "nothing changed" and the keyboard stays down.
@@ -3910,7 +3674,7 @@ function TodayZoneFill({
         const e2 = onField ? (area.selectionEnd ?? s) : s;
         area.setSelectionRange(s, e2);
       }, 60);
-      return log("cycle");
+      return;
     }
     // synchronously (the proven keyboard-riser) AND once more a beat later:
     // the browser's own blur-on-tap-outside lands LATER in this same gesture
@@ -3922,7 +3686,6 @@ function TodayZoneFill({
     };
     toEnd();
     window.setTimeout(toEnd, 80);
-    return log("focus-end");
   };
 
   // Voice: the seal is the microphone. Spoken words merge after whatever's
@@ -4131,13 +3894,13 @@ function TodayZoneFill({
             if (now - d.t > 600) return; // a hold, not a tap
             if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) return; // a drag/scroll
             d.handledAt = now;
-            engageZoneTap(e.target as HTMLElement, "pointerup");
+            engageZoneTap(e.target as HTMLElement);
           }}
           onClick={(e) => {
             // fallback (desktop, browsers without pointer events on taps);
             // skipped when the pointerup path just ran
             if (performance.now() - zoneTapRef.current.handledAt < 800) return;
-            engageZoneTap(e.target as HTMLElement, "click");
+            engageZoneTap(e.target as HTMLElement);
           }}
         >
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
