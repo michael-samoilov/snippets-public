@@ -10,7 +10,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // remaining height and pages scroll inside it, never the page. (An
     // indefinite min-h chain on desktop let h-full children collapse —
     // the calendar's stage shrank to its 1px border.)
-    <div className="mx-auto flex h-dvh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
+    // svh, not dvh: the book never scrolls the PAGE (overscroll-behavior:none;
+    // the feeds scroll inside), so the browser chrome never retracts and svh ==
+    // the live viewport. Crucially svh is a STATIC small-viewport value, so it
+    // can't over-report on iOS's first paint the way dvh does (dvh there can
+    // measure the address-bar-RETRACTED height, then never re-lay-out when the
+    // bar settles — which left the full-viewport today zone taller than the
+    // screen until a refresh).
+    <div className="mx-auto flex h-svh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
       {/* desk chrome — the book is the only page now, so there's no nav: just
           the wordmark and the account mark on the desk's top edge */}
       <header className="flex shrink-0 items-center justify-between px-2 pb-2 pt-2 sm:px-1 sm:pb-3 sm:pt-4">
