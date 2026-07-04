@@ -1,0 +1,11 @@
+export { ShaderMount, isPaperShaderElement } from "./shader-mount";
+export { emptyPixel } from "./empty-pixel";
+export { defaultObjectSizing, defaultPatternSizing, ShaderFitOptions } from "./shader-sizing";
+export { getShaderColorFromString } from "./get-shader-color-from-string";
+export { getShaderNoiseTexture } from "./get-shader-noise-texture";
+export { paperTextureFragmentShader } from "./shaders/paper-texture";
+export type { ShaderSizingParams, ShaderSizingUniforms } from "./shader-sizing";
+export type { ShaderPreset, ShaderFit } from "./types";
+export type { PaperShaderElement, ShaderMotionParams } from "./shader-mount";
+export type { PaperTextureParams, PaperTextureUniforms } from "./shaders/paper-texture";
+export type { ImageShaderPreset } from "./types";

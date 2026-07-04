@@ -13,6 +13,13 @@
    Theme: localStorage.setItem('theme','dark') + reload, as everywhere. */
 
 import { useEffect, useRef, useState } from "react";
+import {
+  ShaderBox,
+  AURORA_FRAG,
+  NEURO_FRAG,
+  BOREALIS_DEFAULTS,
+  type BorealisOpts,
+} from "./shader-box";
 
 /* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
    Paper mixes from --wax (pigment into paper); Lamplight from --wax-bright
@@ -41,7 +48,7 @@ interface Layer {
   style: React.CSSProperties;
 }
 
-type FamilyKey = "inhale" | "aurora" | "curtains";
+type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis";
 
 interface Variant {
   key: string;
@@ -54,6 +61,8 @@ interface Variant {
   layers?: Layer[];
   /** mask on the container, confining light to the edges */
   mask?: string;
+  /** a rendered layer (shader canvas) inside the wash container */
+  node?: React.ReactNode;
   /** which desk bench this card's recipe loads onto, and the resolved dials */
   family?: FamilyKey;
   opts?: Record<string, number>;
@@ -290,6 +299,67 @@ const FAMILIES: Family[] = [
   },
 ];
 
+/* ---- round three: can anything actually dance? ------------------------ */
+
+const borealisUniforms = (o: BorealisOpts) => ({
+  u_intensity: o.intensity,
+  u_rays: o.rays,
+  u_sway: o.sway,
+  u_pace: o.pace,
+  u_flicker: o.flicker,
+  u_reach: o.reach,
+});
+
+const RAYS_TOP_MASK = "linear-gradient(to bottom, black 3%, transparent 46%)";
+const RAYS_BOTTOM_MASK = "linear-gradient(to top, black 3%, transparent 40%)";
+
+const ROUND_THREE: Variant[] = [
+  {
+    key: "borealis",
+    label: "borealis (webgl)",
+    note: "noise-warped curtains with shimmer — tap to put it on the desk",
+    family: "borealis",
+    opts: { ...BOREALIS_DEFAULTS },
+    node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(BOREALIS_DEFAULTS)} />,
+  },
+  {
+    key: "neuro",
+    label: "neuro (webgl · vendored)",
+    note: "paper shaders' neuro-noise in wash ink (apache-2.0)",
+    mask: edgeMask(46),
+    node: <ShaderBox frag={NEURO_FRAG} uniforms={{ u_intensity: 0.8, u_scale: 1 }} />,
+  },
+  {
+    key: "css-rays",
+    label: "rays (gradients only)",
+    note: "two repeating gradients drifting under a fade — no canvas",
+    layers: [
+      {
+        className: "wash-rays-a",
+        style: {
+          position: "absolute",
+          inset: "-24px",
+          filter: "blur(7px)",
+          background: `repeating-linear-gradient(87deg, transparent 0px, transparent 9px, ${WASH(26)} 13px, transparent 21px)`,
+          WebkitMaskImage: RAYS_TOP_MASK,
+          maskImage: RAYS_TOP_MASK,
+        },
+      },
+      {
+        className: "wash-rays-b",
+        style: {
+          position: "absolute",
+          inset: "-24px",
+          filter: "blur(11px)",
+          background: `repeating-linear-gradient(94deg, transparent 0px, transparent 14px, ${WASH(20)} 19px, transparent 30px)`,
+          WebkitMaskImage: RAYS_BOTTOM_MASK,
+          maskImage: RAYS_BOTTOM_MASK,
+        },
+      },
+    ],
+  },
+];
+
 function MockZone({
   v,
   on,
@@ -327,6 +397,7 @@ function MockZone({
           {v.layers?.map((l, i) => (
             <div key={i} className={l.className} style={l.style} />
           ))}
+          {v.node}
         </div>
         <div className="flex h-full flex-col items-center gap-4 px-4 py-6 text-center">
           <div className="mt-10 leading-none">
@@ -447,13 +518,16 @@ export default function WaxWashLab() {
   const [inh, setInh] = useState(INHALE_DEFAULTS);
   const [aur, setAur] = useState(AURORA_DEFAULTS);
   const [cur, setCur] = useState(CURTAINS_DEFAULTS);
+  const [bor, setBor] = useState(BOREALIS_DEFAULTS);
   const deskRef = useRef<HTMLElement>(null);
 
   /* tapping a sweep card sends its recipe to the matching bench */
   const pick = (v: Variant) => {
+    if (!v.family) return;
     if (v.family === "inhale") setInh({ ...INHALE_DEFAULTS, ...(v.opts as Partial<InhaleOpts>) });
     if (v.family === "aurora") setAur({ ...AURORA_DEFAULTS, ...(v.opts as Partial<AuroraOpts>) });
     if (v.family === "curtains") setCur({ ...CURTAINS_DEFAULTS, ...(v.opts as Partial<CurtainsOpts>) });
+    if (v.family === "borealis") setBor({ ...BOREALIS_DEFAULTS, ...(v.opts as Partial<BorealisOpts>) });
     deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -475,6 +549,12 @@ export default function WaxWashLab() {
     `mult ${cur.mult.toFixed(2)} · ${cur.durA.toFixed(1)}s/${cur.durB.toFixed(1)}s · drift ${cur.drift.toFixed(1)}% · spread ${cur.spread.toFixed(2)} · inner ${cur.inner.toFixed(0)}%`,
     cur,
   );
+  const borZone: Variant = {
+    key: "desk-borealis",
+    label: "borealis",
+    note: `int ${bor.intensity.toFixed(2)} · rays ${bor.rays.toFixed(1)} · sway ${bor.sway.toFixed(2)} · pace ${bor.pace.toFixed(2)} · flicker ${bor.flicker.toFixed(2)} · reach ${bor.reach.toFixed(2)}`,
+    node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(bor)} />,
+  };
 
   return (
     <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-4 sm:p-8" data-wash-lab>
@@ -521,9 +601,31 @@ export default function WaxWashLab() {
         .wash-ripple { animation: wash-ripple 2.6s var(--ease-out) infinite; }
         .wash-ripple-late { animation-delay: 1.3s; }
 
+        /* rays: near-vertical stripes counter-drifting; the uneven opacity
+           stops are the flicker — CSS has no noise, only irregularity */
+        @keyframes wash-rays-a {
+          0%, 100% { transform: translateX(-2.5%); opacity: 0.9; }
+          13% { opacity: 0.55; }
+          31% { opacity: 0.95; }
+          50% { transform: translateX(2.5%); opacity: 0.65; }
+          72% { opacity: 1; }
+          88% { opacity: 0.6; }
+        }
+        .wash-rays-a { animation: wash-rays-a 11s var(--ease-in-out) infinite; }
+        @keyframes wash-rays-b {
+          0%, 100% { transform: translateX(2%); opacity: 0.8; }
+          19% { opacity: 0.5; }
+          42% { opacity: 0.9; }
+          50% { transform: translateX(-2%); opacity: 0.6; }
+          67% { opacity: 0.95; }
+          84% { opacity: 0.55; }
+        }
+        .wash-rays-b { animation: wash-rays-b 17s var(--ease-in-out) infinite; }
+
         @media (prefers-reduced-motion: reduce) {
           .wash-breathe, .wash-inhale, .wash-spin,
-          .wash-curtain-a, .wash-curtain-b, .wash-ripple {
+          .wash-curtain-a, .wash-curtain-b, .wash-ripple,
+          .wash-rays-a, .wash-rays-b {
             animation: none;
           }
           .wash-ripple { opacity: 0; }
@@ -574,6 +676,15 @@ export default function WaxWashLab() {
             <Dial label="spread" value={cur.spread} min={0.6} max={1.6} step={0.05} onChange={(v) => setCur({ ...cur, spread: v })} />
             <Dial label="inner" value={cur.inner} min={25} max={70} step={1} fmt={int} onChange={(v) => setCur({ ...cur, inner: v })} />
           </Bench>
+          <Bench v={borZone} on={on} onReset={() => setBor(BOREALIS_DEFAULTS)}>
+            <Dial label="pigment" value={bor.intensity} min={0.1} max={1.2} step={0.05} onChange={(v) => setBor({ ...bor, intensity: v })} />
+            <Dial label="rays" value={bor.rays} min={2} max={12} step={0.5} fmt={(v) => v.toFixed(1)} onChange={(v) => setBor({ ...bor, rays: v })} />
+            <Dial label="sway" value={bor.sway} min={0} max={0.8} step={0.02} onChange={(v) => setBor({ ...bor, sway: v })} />
+            <Dial label="pace" value={bor.pace} min={0.1} max={2} step={0.05} onChange={(v) => setBor({ ...bor, pace: v })} />
+            <Dial label="flicker" value={bor.flicker} min={0} max={0.8} step={0.05} onChange={(v) => setBor({ ...bor, flicker: v })} />
+            <Dial label="reach" value={bor.reach} min={0.15} max={1} step={0.05} onChange={(v) => setBor({ ...bor, reach: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">webgl — noise curtains, hand-rolled; the one dial set that truly dances</p>
+          </Bench>
         </div>
       </section>
       <section className="mb-12">
@@ -598,6 +709,17 @@ export default function WaxWashLab() {
           </div>
         </section>
       ))}
+      <section className="mb-12">
+        <h2 className="voice-label text-[0.78rem] text-ink-soft">round three — dancing light</h2>
+        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
+          what gradients can't do: borealis and neuro are real noise on webgl; rays is the best gradients-only impression
+        </p>
+        <div className="flex flex-wrap gap-8">
+          {ROUND_THREE.map((v) => (
+            <MockZone key={v.key} v={v} on={on} onPick={pick} />
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

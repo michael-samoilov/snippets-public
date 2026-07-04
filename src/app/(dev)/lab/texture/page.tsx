@@ -16,7 +16,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
 const PaperTexture = dynamic(
-  () => import("@paper-design/shaders-react").then((m) => m.PaperTexture),
+  () => import("@/vendor/paper-shaders/react/shaders/paper-texture").then((m) => m.PaperTexture),
   { ssr: false },
 );
 
