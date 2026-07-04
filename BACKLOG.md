@@ -6,21 +6,20 @@ whether to do them, only how. Check this file before proposing new
 scope. When an item ships, delete it here and amend `DESIGN.md` /
 `.claude/skills/snippets-craft/` if it changes a rule.
 
-## 0. Voice latency: verify the two cuts live, then ship
+## 0. Voice: retire the diagnostics once trust is earned
 
-Two latency changes are BUILT and mock-verified on the voice branch but
-held from production pending live measurement (owner-directed):
-pre-minted single-use tokens (tap opens the socket instantly) and 100ms
-audio chunks (down from 250ms). The live harness
-(`scripts/scribe-live-test.mjs` + the `scribe-live-test` workflow) is
-instrumented to print the latency table — token mint · connect ·
-speech→first-partial · commit→settled — at both chunk sizes in one run.
-**Blocked only on the `ELEVENLABS_API_KEY` repo secret** (GitHub →
-Settings → Secrets and variables → Actions); the Vercel env var is a
-different store. Once the secret exists: touch the harness to trigger a
-run, read the numbers, ship. Then consider the third cut (owner hasn't
-decided): `commit_strategy=vad` — the server finalizes each phrase at
-natural speech pauses so the stop only settles the last few words.
+The live pipeline is PROVEN (2026-07-04): the CI harness transcribed
+the spoken fixture word-perfect at both chunk sizes. Measured — mint
+134–287ms (now off the tap path via pre-minted tokens) · connect
+~100ms · commit→settled ~80ms (already near-instant, so
+`commit_strategy=vad` is NOT worth pursuing) · speech→first-partial
+~2s at either chunk size (model-side session warm-up, not our
+buffering — if that lag ever matters, it's an ElevenLabs conversation,
+not a client tune). Remaining chores, whenever convenient:
+- gate or remove `GET /api/scribe-selftest` (spends credit; it was the
+  no-secret verification path and is now redundant with CI)
+- decide /lab/wax-wash's fate after the wash iterations conclude
+  (owner: lab-in-prod is fine short-term)
 
 ## 1. The seal becomes the completion affordance
 
