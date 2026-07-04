@@ -722,6 +722,8 @@ const ICON_SETS: Record<string, Record<string, IconFn>> = {
 };
 const EXTRA_ICONS: Record<string, IconFn> = {
   spark: (gx) => { gx.fill(new Path2D("M10 2 L11.6 8.4 L18 10 L11.6 11.6 L10 18 L8.4 11.6 L2 10 L8.4 8.4 Z")); },
+  // the take's stop mark: a firm rounded square (recording's universal "end")
+  stop: (gx) => { gx.beginPath(); gx.roundRect(5.4, 5.4, 9.2, 9.2, 1.9); gx.fill(); },
   // the app (set a) calendar + date dots: 2 rows × 3, top-left absent (5 dots).
   caldots: (gx) => {
     gx.lineWidth = 1.7;

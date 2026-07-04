@@ -3882,8 +3882,12 @@ function TodayZoneFill({
     });
   };
 
-  // the zone's hairline blue outline (wax = recording)
-  const frame = "border border-wax/45";
+  // the zone's hairline blue outline (wax = recording) — it deepens while
+  // the microphone is on, anchoring the wash to the frame it seeps from
+  const frame = cn(
+    "border transition-[border-color] duration-[240ms] ease-[var(--ease-out)]",
+    listening ? "border-wax/70" : "border-wax/45",
+  );
 
   return (
     <>
@@ -3970,6 +3974,21 @@ function TodayZoneFill({
             engageZoneTap(e.target as HTMLElement, "click");
           }}
         >
+          {/* the wax wash — recording's colour seeping inward from the frame */}
+          <AnimatePresence>
+            {listening && (
+              <motion.div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-[inherit]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+              >
+                <div className="wax-wash absolute inset-0 rounded-[inherit]" />
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
               seats it 107px under the zone's top. That's 11px more than the
@@ -4145,6 +4164,15 @@ function TodayZoneFill({
             className="relative mb-[58px] grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
+            {/* while listening the same seal swells and wears the stop square —
+                a morph in place (the carousel slide below stays reserved for
+                the mic↔quill tool swap). The glyph re-bakes instantly: state
+                flips are frequent, they don't get an animation. */}
+            <motion.div
+              className="absolute inset-0"
+              animate={{ scale: listening ? 1.14 : 1 }}
+              transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            >
             <AnimatePresence initial={false}>
               <motion.span
                 key={quill ? "quill" : "mic"}
@@ -4157,8 +4185,8 @@ function TodayZoneFill({
                 <CanvasSeal
                   playKey={playKey}
                   size={128}
-                  glyph={quill ? "e:quill" : "c:mic"}
-                  iconScale={quill ? 0.36 : 0.46}
+                  glyph={listening ? "stop" : quill ? "e:quill" : "c:mic"}
+                  iconScale={listening ? 0.3 : quill ? 0.36 : 0.46}
                   mode="tap"
                   controlRef={sealCtl}
                   pressed={holdDown}
@@ -4176,6 +4204,7 @@ function TodayZoneFill({
                 />
               </motion.span>
             </AnimatePresence>
+            </motion.div>
           </button>
           {/* placeholders aren't announced — voice the take's state aloud */}
           <span className="sr-only" role="status">
