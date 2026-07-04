@@ -3695,6 +3695,12 @@ function TodayZoneFill({
   // Unmounting mid-take (changing altitude, opening an entry) aborts the
   // recorder and drops the audio — accepted for now.
   const voiceUsed = useRef(false);
+  // true from the moment a take begins through its settling and the entry it
+  // leaves behind — so the seal, when the take stops, morphs the stop square
+  // straight into the quill (never flashing the mic on the way) and stays in
+  // one carousel lane the whole time. Reset when the composer returns to blank
+  // rest (kept, cleared, or an empty take), which brings the mic back.
+  const [afterVoice, setAfterVoice] = useState(false);
   const speech = useSpeech((spoken) => {
     voiceUsed.current = true;
     setText((prev) => joinText(prev, spoken));
@@ -3759,6 +3765,19 @@ function TodayZoneFill({
   // which glyph the seal wears + presses: the mic holds through a whole take
   // (listening and settling), then cross-slides to the quill with the words
   const quill = (hasText || frozen) && !listening && !transcribing;
+  // a voice take fell back to blank rest (kept, cleared, or nothing said):
+  // drop the voice lane so the mic returns. Adjusted during render (React's
+  // sanctioned escape hatch, no effect) — and the has-text handoff is React-
+  // batched with the status flip, so this never trips mid-settle.
+  if (afterVoice && !listening && !transcribing && !hasText) setAfterVoice(false);
+  // the seal's face and carousel lane. During and after a voice take the seal
+  // stays in the mic lane wearing stop→quill (an in-place morph); typing
+  // cross-slides mic→quill in its own lane. `voiceFace` shows the quill the
+  // instant a take stops, so the mic never flashes while the words settle.
+  const voiceFace = afterVoice && !listening;
+  const sealGlyph = listening ? "stop" : quill || voiceFace ? "e:quill" : "c:mic";
+  const sealLane = quill && !afterVoice ? "quill" : "mic";
+  const sealIconScale = listening ? 0.44 : quill || voiceFace ? 0.36 : 0.46;
 
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
@@ -3776,8 +3795,10 @@ function TodayZoneFill({
     if (!hasText) {
       // mic: begin the entry by speaking — or, where voice isn't offered
       // (or the probe hasn't resolved yet), by writing
-      if (speech.resolved && speech.supported) speech.start();
-      else areaRef.current?.focus();
+      if (speech.resolved && speech.supported) {
+        setAfterVoice(true); // this seal stays in the voice lane until blank rest
+        speech.start();
+      } else areaRef.current?.focus();
       return;
     }
     if (phase !== "idle") return; // a keep is already running (idempotent)
@@ -4108,10 +4129,11 @@ function TodayZoneFill({
             className="relative mb-[58px] grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
-            {/* while listening the same seal swells and wears the stop square —
-                a morph in place (the carousel slide below stays reserved for
-                the mic↔quill tool swap). The glyph re-bakes instantly: state
-                flips are frequent, they don't get an animation. */}
+            {/* the seal swells and wears the stop square while listening, then
+                morphs the stop straight into the quill when the take ends —
+                both in place, one lane (see sealLane). The carousel slide is
+                reserved for the mic↔quill typing swap. The glyph re-bakes
+                instantly: state flips are frequent, they don't get animated. */}
             <motion.div
               className="absolute inset-0"
               animate={{ scale: listening ? 1.14 : 1 }}
@@ -4119,7 +4141,7 @@ function TodayZoneFill({
             >
             <AnimatePresence initial={false}>
               <motion.span
-                key={quill ? "quill" : "mic"}
+                key={sealLane}
                 className="absolute inset-0 grid place-items-center"
                 initial={{ x: "70%", opacity: 0 }}
                 animate={{ x: "0%", opacity: 1 }}
@@ -4129,10 +4151,10 @@ function TodayZoneFill({
                 <CanvasSeal
                   playKey={playKey}
                   size={128}
-                  glyph={listening ? "stop" : quill ? "e:quill" : "c:mic"}
+                  glyph={sealGlyph}
                   // the stop reads bigger than the mic on purpose: with the
                   // 1.14 swell it lands ~0.50 of the seal — an unmissable exit
-                  iconScale={listening ? 0.44 : quill ? 0.36 : 0.46}
+                  iconScale={sealIconScale}
                   mode="tap"
                   controlRef={sealCtl}
                   pressed={holdDown}
