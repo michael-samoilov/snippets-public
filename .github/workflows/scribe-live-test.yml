@@ -1,17 +1,12 @@
 # Live-fire check of the Scribe v2 Realtime dialect against the real
-# ElevenLabs API (scripts/scribe-live-test.mjs). On-demand only — it
-# spends a few seconds of transcription credit per run. The key comes
-# from the ELEVENLABS_API_KEY repo secret, or a dispatch input as a
-# fallback (private repo; rotate the key if it was ever pasted around).
+# ElevenLabs API (scripts/scribe-live-test.mjs). It spends a few
+# seconds of transcription credit per run, so it only runs on demand
+# or when the harness itself changes. The key comes from the
+# ELEVENLABS_API_KEY repo secret — write-only, masked in logs.
 name: scribe-live-test
 
 on:
   workflow_dispatch:
-    inputs:
-      api_key:
-        description: "ElevenLabs API key (leave empty to use the ELEVENLABS_API_KEY secret)"
-        required: false
-        type: string
   # any touch to the harness re-runs it — the dispatch API needs app
   # permissions the integration doesn't have, a push always works
   push:
@@ -35,5 +30,5 @@ jobs:
             "The quick brown fox jumped over the lazy dog on a bright July morning, and I finally wrote it down."
       - name: Stream it to Scribe v2 Realtime
         env:
-          ELEVENLABS_API_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.api_key != '') && inputs.api_key || secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: node scripts/scribe-live-test.mjs /tmp/speech.wav fox morning
