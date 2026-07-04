@@ -62,10 +62,15 @@ void main() {
 export function ShaderBox({
   frag,
   uniforms,
+  resolutionScale = 1,
 }: {
   frag: string;
   /** floats and vec3s, read live every frame — dials update without a remount */
   uniforms: Record<string, UniformValue>;
+  /** backing-store scale under the CSS-pixel cap. Soft/noisy output survives
+      well below 1 — the shader draws fewer pixels and the canvas bilinear-
+      upscales them (a free extra blur). Default 1 (lab fidelity). */
+  resolutionScale?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const uniformsRef = useRef(uniforms);
@@ -94,7 +99,7 @@ export function ShaderBox({
     gl.linkProgram(prog);
     gl.useProgram(prog);
 
-    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    const dpr = Math.max(0.5, Math.min(1.5, window.devicePixelRatio || 1) * resolutionScale);
     const fit = () => {
       const w = Math.round(cv.clientWidth * dpr);
       const h = Math.round(cv.clientHeight * dpr);
@@ -139,7 +144,7 @@ export function ShaderBox({
       cancelAnimationFrame(raf);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [frag]);
+  }, [frag, resolutionScale]);
 
   return (
     <canvas
@@ -293,12 +298,12 @@ export function WashPulsingBorder({ o }: { o: PulseOpts }) {
           smoke={o.smoke}
           smokeSize={o.smokeSize}
           speed={o.pace}
-          // the mount defaults to 2× device pixels (retina) — far more than a
-          // soft, translucent border needs. Cap it near 1× so the phone isn't
-          // shading a full-retina buffer of this heavy per-pixel shader every
-          // frame; the blur hides the lower resolution.
+          // the mount renders at max(dpr, minPixelRatio) — i.e. full retina on
+          // a phone — and only the pixel ceiling actually reins it in. This
+          // border is soft (softness 1 + bloom), so cap it low: ~230k px is
+          // about 1.3× CSS pixels on the today zone, and the softness hides it.
           minPixelRatio={1}
-          maxPixelCount={720 * 1280}
+          maxPixelCount={230_000}
           style={{ width: "100%", height: "100%" }}
         />
       )}
@@ -407,7 +412,11 @@ export const RecordingWash = memo(function RecordingWash({
   }
   return (
     <div className="wax-wash-scene pointer-events-none absolute inset-0 rounded-[inherit]">
-      {/* aurora: the conic turning behind the frame */}
+      {/* aurora: the conic turning behind the frame. It's a heavy blur, so
+          render the conic at half size with half the blur radius and let a
+          static 2× upscale finish it — the Gaussian runs on a quarter of the
+          pixels. This matters most on WebKit/iOS, which re-rasterizes a
+          blurred element on every rotation frame instead of caching it. */}
       <div
         aria-hidden
         className="absolute inset-0 overflow-hidden rounded-[inherit]"
@@ -418,28 +427,31 @@ export const RecordingWash = memo(function RecordingWash({
         }}
       >
         <div
-          className="wax-wash-spin absolute"
-          style={{
-            left: "-50%",
-            top: "50%",
-            width: "200%",
-            aspectRatio: "1",
-            marginTop: "-100%",
-            filter: `blur(${APP_AURORA.blur}px)`,
-            animationDuration: `${APP_AURORA.dur}s`,
-            background: conic(APP_AURORA.mult),
-          }}
-        />
+          className="absolute left-1/2 top-1/2"
+          style={{ width: "100%", aspectRatio: "1", transform: "translate(-50%, -50%) scale(2)" }}
+        >
+          <div
+            className="wax-wash-spin absolute inset-0"
+            style={{
+              filter: `blur(${APP_AURORA.blur / 2}px)`,
+              animationDuration: `${APP_AURORA.dur}s`,
+              background: conic(APP_AURORA.mult),
+              willChange: "transform",
+            }}
+          />
+        </div>
       </div>
-      {/* borealis: noise curtains hanging inward from the border */}
+      {/* borealis: noise curtains hanging inward from the border. Low-frequency
+          by nature — render below CSS resolution and upscale. */}
       <div
         aria-hidden
         className="absolute inset-0 overflow-hidden rounded-[inherit]"
         style={{ opacity: APP_MIX.borealis }}
       >
-        <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms} />
+        <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms} resolutionScale={0.7} />
       </div>
-      {/* pulsing border: smoke pooling along the frame */}
+      {/* pulsing border: smoke pooling along the frame. Soft enough (softness 1,
+          bloom) to render at ~1.3× CSS pixels — the mount's default is retina. */}
       <div
         aria-hidden
         className="absolute inset-0 overflow-hidden rounded-[inherit]"
