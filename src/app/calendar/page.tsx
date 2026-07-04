@@ -58,7 +58,7 @@ import type {
   MonthFeedHandle,
   YearFeedHandle,
 } from "@/components/calendar/shared";
-import { MonthSkeleton, YearSkeleton } from "@/components/calendar/skeletons";
+import { MonthSkeleton, YearSkeleton, TodaySkeleton } from "@/components/calendar/skeletons";
 
 const EntryView = dynamic(
   () => import("@/components/calendar/entry-view").then((m) => m.EntryView),
@@ -153,35 +153,39 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
 // — so the wait pre-echoes the book's shape instead of a bare ruled grid. The
 // tile counts are a fixed pattern (never random): SSR and client must paint the
 // identical skeleton, and a steady rhythm reads calmer than noise.
+// lines-per-tile, per day. About half the tiles run the full six — the real
+// card's line-clamp, so a max-height tile — and the rest are shorter, so the
+// stack reads as a real week of entries rather than a uniform block.
 const LEDGER_SHAPE: number[][] = [
-  [3, 2],
-  [1],
-  [2],
-  [4],
-  [2, 1],
-  [1],
+  [6, 2],
+  [6],
   [3],
-  [2],
+  [6, 1],
+  [4],
+  [2, 6],
+  [6],
+  [1],
 ];
 
 // one blank entry tile: the book-card recipe (bg-paper, hairline, inset top
-// highlight) with faint rule-coloured bars where the prose would sit; the last
-// line is short, as a paragraph's is
+// highlight) with faint bars where the prose would sit. Each bar rides a line
+// box of the real prose rhythm (0.9rem × 1.42 ≈ 20px), so a six-line tile
+// stands exactly as tall as a full six-line card; the last line is short, as a
+// paragraph's is. The bars shimmer while the book settles in.
 function LedgerCard({ lines }: { lines: number }) {
   return (
-    <div className="rounded-[6px] border border-rule-faint bg-paper p-2.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
-      <div className="flex flex-col gap-[7px]">
-        {Array.from({ length: lines }).map((_, i) => (
-          <div
-            key={i}
-            className="h-[7px] rounded-[2px]"
+    <div className="rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[0.9rem] leading-[1.42] shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} className="flex h-[1.42em] items-center">
+          <span
+            className="skeleton-shimmer h-[7px] rounded-[2px]"
             style={{
-              background: "var(--rule-faint)",
+              backgroundColor: "var(--rule-faint)",
               width: i === lines - 1 ? "58%" : "100%",
             }}
           />
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -198,12 +202,12 @@ function LedgerRows() {
           {/* the margin date: a small weekday bar over a taller day-number bar */}
           <div className="flex flex-col items-center gap-1.5 pt-[3.5px]">
             <div
-              className="h-1.5 w-5 rounded-[2px] opacity-70"
-              style={{ background: "var(--rule-faint)" }}
+              className="skeleton-shimmer h-1.5 w-5 rounded-[2px] opacity-70"
+              style={{ backgroundColor: "var(--rule-faint)" }}
             />
             <div
-              className="h-3 w-4 rounded-[2px]"
-              style={{ background: "var(--rule-faint)" }}
+              className="skeleton-shimmer h-3 w-4 rounded-[2px]"
+              style={{ backgroundColor: "var(--rule-faint)" }}
             />
           </div>
           {/* the day's entry tiles — same gap as the real ScheduleCards list */}
@@ -218,23 +222,22 @@ function LedgerRows() {
   );
 }
 
+type SkeletonView = "today" | "schedule" | "month" | "year";
+
 // A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
 // the frame shows the instant the HTML lands instead of a blank sheet. The
-// static shell defaults to the book (the app's home); a deep-link into the year
+// static shell defaults to the today zone — the book's home, and the view the
+// app opens onto far more often than any other. A deep-link into the year
 // glance or month grid picks up its own skeleton once the feed mounts (the
-// dynamic-import loading state above), and ?skeldebug can hold any of the three.
-function CalendarSkeleton({
-  view = "schedule",
-}: {
-  view?: "schedule" | "month" | "year";
-}) {
+// dynamic-import loading state above), and ?skeldebug can hold any of them.
+function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
   return (
     <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
       <div className="sticky top-0 z-30">
         <div className="flex items-center justify-between">
           <div
-            className="my-1 h-8 w-36 rounded-[5px] opacity-60"
-            style={{ background: "var(--rule-faint)" }}
+            className="skeleton-shimmer my-1 h-8 w-36 rounded-[5px] opacity-60"
+            style={{ backgroundColor: "var(--rule-faint)" }}
           />
           <div className="size-9" />
         </div>
@@ -244,8 +247,10 @@ function CalendarSkeleton({
           <YearSkeleton />
         ) : view === "month" ? (
           <MonthSkeleton />
-        ) : (
+        ) : view === "schedule" ? (
           <LedgerRows />
+        ) : (
+          <TodaySkeleton />
         )}
       </div>
     </div>
@@ -254,12 +259,13 @@ function CalendarSkeleton({
 
 // Dev-only: ?skeldebug holds a pageload skeleton on screen so its look can be
 // inspected and tuned (it normally flashes by in the Suspense gap). Add a value
-// to choose the view — ?skeldebug=year / month / schedule (default). The real
-// skeleton verbatim, plus a quiet pill — same recipe as the perf A/B pill — so
-// it's clear you're parked in the held view, not stuck loading.
+// to choose the view — ?skeldebug=today (default) / schedule / month / year.
+// The real skeleton verbatim, plus a quiet pill — same recipe as the perf A/B
+// pill — so it's clear you're parked in the held view, not stuck loading.
 function SkeletonDebug() {
   const held = useSearchParams().get("skeldebug");
-  const view = held === "year" || held === "month" ? held : "schedule";
+  const view: SkeletonView =
+    held === "year" || held === "month" || held === "schedule" ? held : "today";
   return (
     <>
       <CalendarSkeleton view={view} />
@@ -2719,10 +2725,11 @@ function ScheduleFeedBase({
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {/* until the live query returns, `body` is undefined — keep the ruled
-            paper showing (same rows as the SSR skeleton) so the wait reads as a
-            continuous "settling in", never a blank gap that then pops */}
-        {body ?? <LedgerRows />}
+        {/* until the live query returns, `body` is undefined — hold the today
+            zone (the same skeleton the SSR shell shows, and the view the book
+            almost always opens onto) so the wait reads as a continuous
+            "settling in", never a blank gap that then pops */}
+        {body ?? <TodaySkeleton />}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
