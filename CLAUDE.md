@@ -31,15 +31,22 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (`deletedAt`) with 30-day purge; `favorite` is `0|1` because IndexedDB
   can't index booleans. Live UI via `dexie-react-hooks` in
   `src/hooks/use-snippets.ts`.
-- **Speech:** `src/hooks/use-speech.ts` is one hook with three engines,
-  best first, wired to the today zone's wax seal in
-  `src/app/calendar/page.tsx`. Primary: **scribe** — ElevenLabs Scribe
-  v2 Realtime (`ELEVENLABS_API_KEY`, optional `SCRIBE_MODEL`/
-  `ELEVENLABS_BASE_URL`): the server mints single-use tokens at
-  `src/app/api/scribe-token/route.ts`, the browser streams 16kHz PCM
-  (AudioWorklet tap + downsample) over a WebSocket straight to
-  ElevenLabs, and partial/committed transcripts land live in the
-  hook's `interim`/`segments`. Secondary: **batch** — a Whisper-dialect
+- **Speech:** `src/hooks/use-speech.ts` is one hook, wired to the today
+  zone's wax seal in `src/app/calendar/page.tsx`. **Streaming providers**
+  are pluggable `StreamAdapter`s (shared mic/worklet/downsample/settle
+  code; each adapter supplies only socket/send/parse/finalize/doneOnClose).
+  Two ship: **deepgram** — Nova-3 (`DEEPGRAM_API_KEY`, `DEEPGRAM_MODEL`/
+  `DEEPGRAM_LANGUAGE`; token at `src/app/api/deepgram-token/route.ts`
+  mints a short-lived JWT, browser connects with a `["bearer", jwt]`
+  subprotocol and streams raw binary PCM; ~2x lower latency, `language=multi`
+  code-switching) — and **scribe** — ElevenLabs Scribe v2 Realtime
+  (`ELEVENLABS_API_KEY`, `SCRIBE_MODEL`/`ELEVENLABS_BASE_URL`; token in
+  the WS query, base64-JSON audio). Order/default set by
+  `NEXT_PUBLIC_SPEECH_PROVIDERS` (default `deepgram,scribe`) — first
+  available wins, the rest are automatic backups; the token is pre-minted
+  (warm grant) so the tap opens the socket instantly. Partial/final
+  transcripts land in the hook's `interim`/`segments`. Fallback: **batch**
+  — a Whisper-dialect
   proxy at `src/app/api/transcribe/route.ts` (`TRANSCRIBE_API_KEY`,
   optional `TRANSCRIBE_BASE_URL`/`TRANSCRIBE_MODEL`; `AQUA_*` honored
   as aliases; default Aqua's Avalon — swap recipes in README.md) —
