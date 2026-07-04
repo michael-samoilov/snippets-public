@@ -4,6 +4,7 @@ import { SheetScroll } from "@/components/shell/sheet-scroll";
 import { CommandMenu } from "@/components/command-menu";
 import { Wordmark } from "@/components/shell/wordmark";
 import { VhDebug } from "@/components/dev/vh-debug";
+import { ViewportReflowKick } from "@/components/shell/viewport-kick";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -19,6 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // bar settles — which left the full-viewport today zone taller than the
     // screen until a refresh).
     <div className="mx-auto flex h-svh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
+      <ViewportReflowKick />
       <VhDebug />
       {/* desk chrome — the book is the only page now, so there's no nav: just
           the wordmark and the account mark on the desk's top edge */}
