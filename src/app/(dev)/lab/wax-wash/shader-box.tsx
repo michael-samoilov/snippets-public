@@ -9,7 +9,8 @@
    (https://github.com/paper-design/shaders, Apache-2.0), vendored per
    house style rather than installed, and re-tinted to the wash ink. */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PulsingBorder } from "@/vendor/paper-shaders/react/shaders/pulsing-border";
 
 export type UniformValue = number | [number, number, number];
 
@@ -45,7 +46,9 @@ export function ShaderBox({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const uniformsRef = useRef(uniforms);
-  uniformsRef.current = uniforms;
+  useEffect(() => {
+    uniformsRef.current = uniforms;
+  });
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -215,6 +218,61 @@ export const BOREALIS_DEFAULTS = {
   reach: 0.45,
 };
 export type BorealisOpts = typeof BOREALIS_DEFAULTS;
+
+/* ---- pulsing border: vendored from Paper Shaders -----------------------
+   Their PulsingBorder component (the "border gradient"), seeded from its
+   own northern-lights preset but re-inked in wash monochrome. The vendored
+   react mount handles its own sizing/resize. */
+
+export const PULSE_DEFAULTS = {
+  thickness: 1,
+  softness: 1,
+  glow: 0.1, // their `intensity`
+  bloom: 0.2,
+  spots: 4,
+  spotSize: 0.25,
+  pulse: 0,
+  smoke: 0.32,
+  smokeSize: 0.5,
+  pace: 0.18, // their `speed`
+};
+export type PulseOpts = typeof PULSE_DEFAULTS;
+
+export function WashPulsingBorder({ o }: { o: PulseOpts }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [colors, setColors] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!hostRef.current) return;
+    const [r, g, b] = resolveWashColor(hostRef.current);
+    const hex = (v: number) => Math.round(v * 255).toString(16).padStart(2, "0");
+    const base = `#${hex(r)}${hex(g)}${hex(b)}`;
+    /* monochrome wax at three strengths — hue variety is the aurora's,
+       not ours; the wash stays one ink */
+    setColors([base, `${base}cc`, `${base}77`]);
+  }, []);
+  return (
+    <div ref={hostRef} aria-hidden className="pointer-events-none absolute inset-0">
+      {colors && (
+        <PulsingBorder
+          colors={colors}
+          colorBack="#00000000"
+          roundness={0.07}
+          thickness={o.thickness}
+          softness={o.softness}
+          intensity={o.glow}
+          bloom={o.bloom}
+          spots={o.spots}
+          spotSize={o.spotSize}
+          pulse={o.pulse}
+          smoke={o.smoke}
+          smokeSize={o.smokeSize}
+          speed={o.pace}
+          style={{ width: "100%", height: "100%" }}
+        />
+      )}
+    </div>
+  );
+}
 
 /* ---- neuro: vendored from Paper Shaders -------------------------------
    Adapted from paper-design/shaders `neuro-noise` (Apache-2.0):

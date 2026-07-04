@@ -6,3 +6,4 @@ export { defaultObjectSizing, defaultPatternSizing, ShaderFitOptions } from "./s
 export { getShaderColorFromString } from "./get-shader-color-from-string.js";
 export { getShaderNoiseTexture } from "./get-shader-noise-texture.js";
 export { paperTextureFragmentShader } from "./shaders/paper-texture.js";
+export { pulsingBorderFragmentShader, PulsingBorderAspectRatios } from "./shaders/pulsing-border.js";

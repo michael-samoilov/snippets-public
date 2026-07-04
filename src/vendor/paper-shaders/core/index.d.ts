@@ -9,3 +9,5 @@ export type { ShaderPreset, ShaderFit } from "./types";
 export type { PaperShaderElement, ShaderMotionParams } from "./shader-mount";
 export type { PaperTextureParams, PaperTextureUniforms } from "./shaders/paper-texture";
 export type { ImageShaderPreset } from "./types";
+export { pulsingBorderFragmentShader, PulsingBorderAspectRatios } from "./shaders/pulsing-border";
+export type { PulsingBorderParams, PulsingBorderUniforms, PulsingBorderAspectRatio } from "./shaders/pulsing-border";

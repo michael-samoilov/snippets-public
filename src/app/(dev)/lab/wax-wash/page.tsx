@@ -18,7 +18,10 @@ import {
   AURORA_FRAG,
   NEURO_FRAG,
   BOREALIS_DEFAULTS,
+  WashPulsingBorder,
+  PULSE_DEFAULTS,
   type BorealisOpts,
+  type PulseOpts,
 } from "./shader-box";
 
 /* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
@@ -48,7 +51,7 @@ interface Layer {
   style: React.CSSProperties;
 }
 
-type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis";
+type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis" | "pulse";
 
 interface Variant {
   key: string;
@@ -245,64 +248,10 @@ const ROUND_ONE: Variant[] = [
   },
 ];
 
-/* ---- round two: the finalists, swept ----------------------------------- */
-
-interface Family {
-  title: string;
-  note: string;
-  variants: Variant[];
-}
-
-const FAMILIES: Family[] = [
-  {
-    title: "inhale",
-    note: "the seep's reach swells and settles, like a chest",
-    variants: [
-      inhale("inhale-base", "base", "as round one left it"),
-      inhale("inhale-whisper", "whisper", "less pigment in the water", { mult: 0.6 }),
-      inhale("inhale-deep", "deep", "more pigment, dimmer trough", { mult: 1.5, dim: 0.55 }),
-      inhale("inhale-quick", "quick", "a runner's breath", { dur: 2 }),
-      inhale("inhale-slow", "slow", "sleeping breath", { dur: 5.4 }),
-      inhale("inhale-shallow", "shallow", "the seep stays by the frame", {
-        reach: 0.66,
-        scale: 1.03,
-      }),
-      inhale("inhale-far", "far", "reaches toward the words", { reach: 1.6, scale: 1.08 }),
-    ],
-  },
-  {
-    title: "aurora",
-    note: "wax hues turning very slowly behind the frame",
-    variants: [
-      aurora("aurora-base", "base", "as round one left it"),
-      aurora("aurora-faint", "faint", "less pigment in the turn", { mult: 0.6 }),
-      aurora("aurora-vivid", "vivid", "more pigment in the turn", { mult: 1.5 }),
-      aurora("aurora-brisk", "brisk", "a noticeable turn", { dur: 13 }),
-      aurora("aurora-glacial", "glacial", "almost too slow to catch", { dur: 48 }),
-      aurora("aurora-rim", "rim", "confined to the very edge", { inner: 66 }),
-      aurora("aurora-flood", "flood", "glow reaches toward the middle", { inner: 34, blur: 34 }),
-    ],
-  },
-  {
-    title: "curtains",
-    note: "two counter-drifting glows, northern-lights slow",
-    variants: [
-      curtains("curtains-base", "base", "as round one left it"),
-      curtains("curtains-whisper", "whisper", "less pigment in the folds", { mult: 0.6 }),
-      curtains("curtains-vivid", "vivid", "more pigment in the folds", { mult: 1.5 }),
-      curtains("curtains-quick", "quick", "a draught through the room", { durA: 8, durB: 11 }),
-      curtains("curtains-slow", "slow", "barely disturbed air", { durA: 26, durB: 35 }),
-      curtains("curtains-still", "still", "narrow travel, tall folds", { drift: 3 }),
-      curtains("curtains-sweeping", "sweeping", "wide travel, broad folds", {
-        drift: 14,
-        spread: 1.25,
-      }),
-      curtains("curtains-flood", "flood", "folds allowed past the frame", { inner: 36 }),
-    ],
-  },
-];
-
-/* ---- round three: can anything actually dance? ------------------------ */
+/* ---- round three: can anything actually dance? ------------------------
+   (the round-two parameter sweeps were retired once the desk's dials
+   covered the same space continuously — subtle variants are turned,
+   not listed) */
 
 const borealisUniforms = (o: BorealisOpts) => ({
   u_intensity: o.intensity,
@@ -325,6 +274,14 @@ const ROUND_THREE: Variant[] = [
     family: "borealis",
     opts: { ...BOREALIS_DEFAULTS },
     node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(BOREALIS_DEFAULTS)} />,
+  },
+  {
+    key: "pulse",
+    label: "pulsing border (vendored)",
+    note: "paper shaders' border, northern-lights recipe in wash ink — tap for the desk",
+    family: "pulse",
+    opts: { ...PULSE_DEFAULTS },
+    node: <WashPulsingBorder o={PULSE_DEFAULTS} />,
   },
   {
     key: "neuro",
@@ -529,6 +486,7 @@ export default function WaxWashLab() {
   const [aur, setAur] = useState(AURORA_DEFAULTS);
   const [cur, setCur] = useState(CURTAINS_DEFAULTS);
   const [bor, setBor] = useState(BOREALIS_DEFAULTS);
+  const [pul, setPul] = useState(PULSE_DEFAULTS);
   /* the borealis bench can stretch its zone, proving the effect refits */
   const [zone, setZone] = useState({ w: 300, h: 430 });
   const deskRef = useRef<HTMLElement>(null);
@@ -540,6 +498,7 @@ export default function WaxWashLab() {
     if (v.family === "aurora") setAur({ ...AURORA_DEFAULTS, ...(v.opts as Partial<AuroraOpts>) });
     if (v.family === "curtains") setCur({ ...CURTAINS_DEFAULTS, ...(v.opts as Partial<CurtainsOpts>) });
     if (v.family === "borealis") setBor({ ...BOREALIS_DEFAULTS, ...(v.opts as Partial<BorealisOpts>) });
+    if (v.family === "pulse") setPul({ ...PULSE_DEFAULTS, ...(v.opts as Partial<PulseOpts>) });
     deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -566,6 +525,12 @@ export default function WaxWashLab() {
     label: "borealis",
     note: `int ${bor.intensity.toFixed(2)} · rays ${bor.rays.toFixed(1)} · sway ${bor.sway.toFixed(2)} · pace ${bor.pace.toFixed(2)} · flicker ${bor.flicker.toFixed(2)} · reach ${bor.reach.toFixed(2)}`,
     node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(bor)} />,
+  };
+  const pulZone: Variant = {
+    key: "desk-pulse",
+    label: "pulsing border",
+    note: `thick ${pul.thickness.toFixed(2)} · soft ${pul.softness.toFixed(2)} · glow ${pul.glow.toFixed(2)} · bloom ${pul.bloom.toFixed(2)} · spots ${pul.spots.toFixed(0)}×${pul.spotSize.toFixed(2)} · pulse ${pul.pulse.toFixed(2)} · smoke ${pul.smoke.toFixed(2)}/${pul.smokeSize.toFixed(2)} · pace ${pul.pace.toFixed(2)}`,
+    node: <WashPulsingBorder o={pul} />,
   };
 
   return (
@@ -699,12 +664,25 @@ export default function WaxWashLab() {
             <Dial label="zone h" value={zone.h} min={280} max={600} step={4} fmt={int} onChange={(v) => setZone({ ...zone, h: v })} />
             <p className="voice-data text-[0.6rem] lowercase text-ink-faint">webgl, radial — curtains hang inward from the whole border; stretch the zone to watch it refit</p>
           </Bench>
+          <Bench v={pulZone} on={on} onReset={() => setPul(PULSE_DEFAULTS)}>
+            <Dial label="thickness" value={pul.thickness} min={0.05} max={1} step={0.05} onChange={(v) => setPul({ ...pul, thickness: v })} />
+            <Dial label="softness" value={pul.softness} min={0} max={1} step={0.05} onChange={(v) => setPul({ ...pul, softness: v })} />
+            <Dial label="glow" value={pul.glow} min={0} max={0.6} step={0.02} onChange={(v) => setPul({ ...pul, glow: v })} />
+            <Dial label="bloom" value={pul.bloom} min={0} max={1} step={0.05} onChange={(v) => setPul({ ...pul, bloom: v })} />
+            <Dial label="spots" value={pul.spots} min={1} max={7} step={1} fmt={int} onChange={(v) => setPul({ ...pul, spots: v })} />
+            <Dial label="spot size" value={pul.spotSize} min={0.1} max={1} step={0.05} onChange={(v) => setPul({ ...pul, spotSize: v })} />
+            <Dial label="pulse" value={pul.pulse} min={0} max={1} step={0.05} onChange={(v) => setPul({ ...pul, pulse: v })} />
+            <Dial label="smoke" value={pul.smoke} min={0} max={1} step={0.02} onChange={(v) => setPul({ ...pul, smoke: v })} />
+            <Dial label="smoke size" value={pul.smokeSize} min={0} max={1} step={0.05} onChange={(v) => setPul({ ...pul, smokeSize: v })} />
+            <Dial label="pace" value={pul.pace} min={0.02} max={1} step={0.02} onChange={(v) => setPul({ ...pul, pace: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">paper shaders’ border gradient, vendored — their northern-lights recipe in wash ink</p>
+          </Bench>
         </div>
       </section>
       <section className="mb-12">
         <h2 className="voice-label text-[0.78rem] text-ink-soft">round one</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
-          the field before the sweep — finalists repeated below as “base”
+          the first field, kept for reference — the finalists live on the desk above
         </p>
         <div className="flex flex-wrap gap-8">
           {ROUND_ONE.map((v) => (
@@ -712,21 +690,10 @@ export default function WaxWashLab() {
           ))}
         </div>
       </section>
-      {FAMILIES.map((f) => (
-        <section key={f.title} className="mb-12">
-          <h2 className="voice-label text-[0.78rem] text-ink-soft">{f.title}</h2>
-          <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">{f.note}</p>
-          <div className="flex flex-wrap gap-8">
-            {f.variants.map((v) => (
-              <MockZone key={v.key} v={v} on={on} onPick={pick} />
-            ))}
-          </div>
-        </section>
-      ))}
       <section className="mb-12">
         <h2 className="voice-label text-[0.78rem] text-ink-soft">round three — dancing light</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
-          what gradients can't do: borealis and neuro are real noise on webgl; rays is the best gradients-only impression
+          what gradients can’t do: borealis and pulsing border are real noise on webgl; rays is the best gradients-only impression
         </p>
         <div className="flex flex-wrap gap-8">
           {ROUND_THREE.map((v) => (
