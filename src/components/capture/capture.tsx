@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { addSnippet } from "@/lib/db";
@@ -46,10 +46,18 @@ export function Capture() {
       if (el) {
         el.focus();
         el.setSelectionRange(el.value.length, el.value.length);
-        autosize(el);
       }
     });
   });
+
+  // grow to fit whatever the field shows, from any source (typing or a batch
+  // transcript set all at once) — a layout effect runs after React commits
+  // the value, so scrollHeight is current and a rAF can't measure it stale.
+  // Contained by useContainedField above: it grows to the cap, then scrolls.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (el) autosize(el);
+  }, [text]);
 
   const listening = speech.status === "listening";
   const transcribing = speech.status === "transcribing";

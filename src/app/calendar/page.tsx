@@ -3704,16 +3704,14 @@ function TodayZoneFill({
   const speech = useSpeech((spoken) => {
     voiceUsed.current = true;
     setText((prev) => joinText(prev, spoken));
+    // growth + anchoring happen in the shownText layout effect below (after
+    // React commits the new value — a rAF here raced the commit and, for the
+    // batch engine's single all-at-once set, measured the STALE 3-line height
+    // and left the field a 3-line scroll window). Here we only take focus so
+    // the caret sits at the end and the keyboard can be summoned to keep on.
     requestAnimationFrame(() => {
       const el = areaRef.current;
       if (!el) return;
-      // settled words are typing as far as the anchor machinery cares:
-      // mark the input so the caret move can't open a phantom walk session,
-      // and run a full pass (spacer + pin) — growth can need more reach
-      lastInputRef.current = performance.now();
-      walkSessionRef.current = false;
-      autosizeArea(el);
-      anchorPass();
       el.focus(); // onFocus runs the full re-pin choreography
       el.setSelectionRange(el.value.length, el.value.length);
     });
@@ -3731,17 +3729,26 @@ function TodayZoneFill({
           .join(" ")
       : "";
   const shownText = liveSpoken ? joinText(text, liveSpoken) : text;
+  // The field GROWS to fit whatever it shows — the one place that is true for
+  // EVERY source of words (typing, streaming voice, a batch transcript set
+  // all at once). A layout effect keyed on the displayed value runs after
+  // React commits it and before paint, so scrollHeight is always current: no
+  // engine and no timing can leave the words in a fixed 3-line scroll window.
+  // Voice also re-anchors (its growth can outrun the keyboard stance); typing
+  // already anchored in onChange, so this stays out of its way.
+  const wasVoicing = useRef(false);
   useLayoutEffect(() => {
-    if (!liveSpoken) return;
     const el = areaRef.current;
     if (!el) return;
-    // live words grow the field like keystrokes do — same bookkeeping:
-    // no phantom walk session from the value change, full anchor pass
-    lastInputRef.current = performance.now();
-    walkSessionRef.current = false;
     autosizeArea(el);
-    anchorPass();
-  }, [liveSpoken]); // eslint-disable-line react-hooks/exhaustive-deps
+    const voicing = !!liveSpoken || transcribing;
+    if (voicing || wasVoicing.current) {
+      lastInputRef.current = performance.now();
+      walkSessionRef.current = false;
+      anchorPass();
+    }
+    wasVoicing.current = voicing;
+  }, [shownText, liveSpoken, transcribing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // voice must never fail silently — every failure says what happened
   useEffect(() => {
