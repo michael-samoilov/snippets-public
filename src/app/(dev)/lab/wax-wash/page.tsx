@@ -13,6 +13,7 @@
    Theme: localStorage.setItem('theme','dark') + reload, as everywhere. */
 
 import { useEffect, useRef, useState } from "react";
+import { useTheme } from "next-themes";
 import {
   ShaderBox,
   AURORA_FRAG,
@@ -321,6 +322,71 @@ const ROUND_THREE: Variant[] = [
   },
 ];
 
+/* one treatment's wash container — clipped to the frame, masked to its
+   edges; `opacity` lets the combo zone weigh treatments against each other */
+function WashLayer({ v, on, opacity = 1 }: { v: Variant; on: boolean; opacity?: number }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit] transition-opacity duration-[240ms] ease-[var(--ease-out)]"
+      style={{
+        opacity: on ? opacity : 0,
+        ...(v.mask
+          ? { maskImage: v.mask, WebkitMaskImage: v.mask }
+          : null),
+      }}
+    >
+      {v.wash && (
+        <div
+          className={`absolute inset-0 ${v.washClass ?? ""}`}
+          style={v.wash}
+        />
+      )}
+      {v.layers?.map((l, i) => (
+        <div key={i} className={l.className} style={l.style} />
+      ))}
+      {v.node}
+    </div>
+  );
+}
+
+/* the mock zone's furniture: date, ruled lines, stand-in dome */
+function ZoneContent({ on }: { on: boolean }) {
+  return (
+    <div className="flex h-full flex-col items-center gap-4 px-4 py-6 text-center">
+      <div className="mt-10 leading-none">
+        <p className="voice-label text-[0.72rem] text-ink-faint">Friday</p>
+        <h2 className="voice-display mt-1 text-[1.6rem] leading-none text-ink">July 3</h2>
+      </div>
+      <div className="flex-1" />
+      <div
+        className="w-[calc(100%-28px)]"
+        style={{
+          height: 60,
+          backgroundImage:
+            "repeating-linear-gradient(to bottom, transparent 0, transparent 19px, var(--rule-faint) 19px, var(--rule-faint) 20px)",
+        }}
+      />
+      <div className="flex-1" />
+      {/* stand-in dome */}
+      <div
+        className="mb-6 size-[88px] rounded-full"
+        style={{
+          transform: on ? "scale(1.14)" : "scale(1)",
+          transition: "transform 240ms var(--ease-out)",
+          background:
+            "radial-gradient(circle at 32% 28%, var(--wax-bright) 0%, var(--wax) 48%, var(--wax-deep) 100%)",
+          boxShadow:
+            "inset 0 1.5px 2px rgb(255 255 255/0.3), inset 0 -3px 5px rgb(0 0 0/0.3), 0 5px 12px -2px var(--wax-shadow)",
+        }}
+      />
+    </div>
+  );
+}
+
+const CARD_FRAME =
+  "relative h-[430px] w-[300px] rounded-2xl border border-wax/45 transition-[width,height] duration-[240ms] ease-[var(--ease-out)]";
+
 function MockZone({
   v,
   on,
@@ -337,65 +403,46 @@ function MockZone({
   return (
     <figure className="m-0">
       <div
-        className={`relative h-[430px] w-[300px] rounded-2xl border border-wax/45 transition-[width,height] duration-[240ms] ease-[var(--ease-out)] ${onPick ? "cursor-pointer" : ""}`}
+        className={`${CARD_FRAME} ${onPick ? "cursor-pointer" : ""}`}
         style={size ? { width: size.w, height: size.h } : undefined}
         onClick={onPick ? () => onPick(v) : undefined}
         title={onPick ? "load onto the desk" : undefined}
       >
-        {/* the wash container — clipped to the frame, masked to its edges */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit] transition-opacity duration-[240ms] ease-[var(--ease-out)]"
-          style={{
-            opacity: on ? 1 : 0,
-            ...(v.mask
-              ? { maskImage: v.mask, WebkitMaskImage: v.mask }
-              : null),
-          }}
-        >
-          {v.wash && (
-            <div
-              className={`absolute inset-0 ${v.washClass ?? ""}`}
-              style={v.wash}
-            />
-          )}
-          {v.layers?.map((l, i) => (
-            <div key={i} className={l.className} style={l.style} />
-          ))}
-          {v.node}
-        </div>
-        <div className="flex h-full flex-col items-center gap-4 px-4 py-6 text-center">
-          <div className="mt-10 leading-none">
-            <p className="voice-label text-[0.72rem] text-ink-faint">Friday</p>
-            <h2 className="voice-display mt-1 text-[1.6rem] leading-none text-ink">July 3</h2>
-          </div>
-          <div className="flex-1" />
-          <div
-            className="w-[calc(100%-28px)]"
-            style={{
-              height: 60,
-              backgroundImage:
-                "repeating-linear-gradient(to bottom, transparent 0, transparent 19px, var(--rule-faint) 19px, var(--rule-faint) 20px)",
-            }}
-          />
-          <div className="flex-1" />
-          {/* stand-in dome */}
-          <div
-            className="mb-6 size-[88px] rounded-full"
-            style={{
-              transform: on ? "scale(1.14)" : "scale(1)",
-              transition: "transform 240ms var(--ease-out)",
-              background:
-                "radial-gradient(circle at 32% 28%, var(--wax-bright) 0%, var(--wax) 48%, var(--wax-deep) 100%)",
-              boxShadow:
-                "inset 0 1.5px 2px rgb(255 255 255/0.3), inset 0 -3px 5px rgb(0 0 0/0.3), 0 5px 12px -2px var(--wax-shadow)",
-            }}
-          />
-        </div>
+        <WashLayer v={v} on={on} />
+        <ZoneContent on={on} />
       </div>
       <figcaption className="voice-label mt-2 text-center text-[0.72rem] text-ink-soft">
         {v.label}
         <span className="voice-data block text-[0.62rem] lowercase text-ink-faint">{v.note}</span>
+      </figcaption>
+    </figure>
+  );
+}
+
+/* the combo zone: every bench's current treatment stacked in one frame,
+   each at its own weight */
+function ComboZone({
+  layers,
+  on,
+  size,
+  note,
+}: {
+  layers: { v: Variant; opacity: number }[];
+  on: boolean;
+  size?: { w: number; h: number };
+  note: string;
+}) {
+  return (
+    <figure className="m-0">
+      <div className={CARD_FRAME} style={size ? { width: size.w, height: size.h } : undefined}>
+        {layers.map((l) => (
+          <WashLayer key={l.v.key} v={l.v} on={on} opacity={l.opacity} />
+        ))}
+        <ZoneContent on={on} />
+      </div>
+      <figcaption className="voice-label mt-2 text-center text-[0.72rem] text-ink-soft">
+        combo
+        <span className="voice-data block text-[0.62rem] lowercase text-ink-faint">{note}</span>
       </figcaption>
     </figure>
   );
@@ -487,9 +534,24 @@ export default function WaxWashLab() {
   const [cur, setCur] = useState(CURTAINS_DEFAULTS);
   const [bor, setBor] = useState(BOREALIS_DEFAULTS);
   const [pul, setPul] = useState(PULSE_DEFAULTS);
-  /* the borealis bench can stretch its zone, proving the effect refits */
+  /* the combo can stretch its zone, proving every effect refits */
   const [zone, setZone] = useState({ w: 300, h: 430 });
+  /* per-treatment weights for the combo zone */
+  const [mix, setMix] = useState({
+    shipped: 0,
+    inhale: 0,
+    aurora: 0,
+    curtains: 0,
+    borealis: 1,
+    pulse: 1,
+  });
   const deskRef = useRef<HTMLElement>(null);
+
+  /* lamplight/paper without a trip to settings; the key on the page body
+     remounts the shader canvases so they re-read the wash ink */
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   /* tapping a sweep card sends its recipe to the matching bench */
   const pick = (v: Variant) => {
@@ -620,6 +682,48 @@ export default function WaxWashLab() {
           {auto ? "auto: on" : "auto: off"}
         </button>
       </header>
+      {/* keyed by theme: a flip remounts the shader canvases so they
+          re-resolve the wash ink; css washes recolor on their own */}
+      <div key={mounted ? (resolvedTheme ?? "light") : "boot"}>
+      <section className="mb-12">
+        <h2 className="voice-label text-[0.78rem] text-ink-soft">the combo</h2>
+        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
+          the benches layered in one frame — each dial is a treatment’s weight; shape the treatments themselves on the desk below
+        </p>
+        <div className="flex flex-wrap items-start gap-5">
+          <ComboZone
+            on={on}
+            size={zone}
+            note={
+              Object.entries(mix)
+                .filter(([, o]) => o > 0)
+                .map(([k, o]) => `${k} ${o.toFixed(2)}`)
+                .join(" · ") || "all weights at zero"
+            }
+            layers={[
+              { v: ROUND_ONE[0], opacity: mix.shipped },
+              { v: inhZone, opacity: mix.inhale },
+              { v: aurZone, opacity: mix.aurora },
+              { v: curZone, opacity: mix.curtains },
+              { v: pulZone, opacity: mix.pulse },
+              { v: borZone, opacity: mix.borealis },
+            ]}
+          />
+          <div className="flex w-[300px] flex-col gap-2.5 sm:mt-9 sm:w-60">
+            <Dial label="shipped" value={mix.shipped} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, shipped: v })} />
+            <Dial label="inhale" value={mix.inhale} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, inhale: v })} />
+            <Dial label="aurora" value={mix.aurora} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, aurora: v })} />
+            <Dial label="curtains" value={mix.curtains} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, curtains: v })} />
+            <Dial label="borealis" value={mix.borealis} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, borealis: v })} />
+            <Dial label="border" value={mix.pulse} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, pulse: v })} />
+            <Dial label="zone w" value={zone.w} min={220} max={380} step={4} fmt={int} onChange={(v) => setZone({ ...zone, w: v })} />
+            <Dial label="zone h" value={zone.h} min={280} max={600} step={4} fmt={int} onChange={(v) => setZone({ ...zone, h: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">
+              a layer’s look inherits its bench — retune below and the combo follows
+            </p>
+          </div>
+        </div>
+      </section>
       <section ref={deskRef} className="mb-12 scroll-mt-8">
         <h2 className="voice-label text-[0.78rem] text-ink-soft">the desk</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
@@ -649,16 +753,14 @@ export default function WaxWashLab() {
             <Dial label="spread" value={cur.spread} min={0.6} max={1.6} step={0.05} onChange={(v) => setCur({ ...cur, spread: v })} />
             <Dial label="inner" value={cur.inner} min={25} max={70} step={1} fmt={int} onChange={(v) => setCur({ ...cur, inner: v })} />
           </Bench>
-          <Bench v={borZone} on={on} size={zone} onReset={() => { setBor(BOREALIS_DEFAULTS); setZone({ w: 300, h: 430 }); }}>
+          <Bench v={borZone} on={on} onReset={() => setBor(BOREALIS_DEFAULTS)}>
             <Dial label="pigment" value={bor.intensity} min={0.1} max={1.2} step={0.05} onChange={(v) => setBor({ ...bor, intensity: v })} />
             <Dial label="rays" value={bor.rays} min={2} max={12} step={0.5} fmt={(v) => v.toFixed(1)} onChange={(v) => setBor({ ...bor, rays: v })} />
             <Dial label="sway" value={bor.sway} min={0} max={0.8} step={0.02} onChange={(v) => setBor({ ...bor, sway: v })} />
             <Dial label="pace" value={bor.pace} min={0.1} max={2} step={0.05} onChange={(v) => setBor({ ...bor, pace: v })} />
             <Dial label="flicker" value={bor.flicker} min={0} max={0.8} step={0.05} onChange={(v) => setBor({ ...bor, flicker: v })} />
             <Dial label="reach" value={bor.reach} min={0.15} max={1} step={0.05} onChange={(v) => setBor({ ...bor, reach: v })} />
-            <Dial label="zone w" value={zone.w} min={220} max={380} step={4} fmt={int} onChange={(v) => setZone({ ...zone, w: v })} />
-            <Dial label="zone h" value={zone.h} min={280} max={600} step={4} fmt={int} onChange={(v) => setZone({ ...zone, h: v })} />
-            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">webgl, radial — curtains hang inward from the whole border; stretch the zone to watch it refit</p>
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">webgl, radial — curtains hang inward from the whole border; stretch the combo zone to watch it refit</p>
           </Bench>
           <Bench v={pulZone} on={on} onReset={() => setPul(PULSE_DEFAULTS)}>
             <Dial label="thickness" value={pul.thickness} min={0.05} max={1} step={0.05} onChange={(v) => setPul({ ...pul, thickness: v })} />
@@ -697,6 +799,15 @@ export default function WaxWashLab() {
           ))}
         </div>
       </section>
+      </div>
+      {/* paper ↔ lamplight without leaving the lab */}
+      <button
+        type="button"
+        onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+        className="voice-label pressable float fixed bottom-5 right-5 z-10 rounded-full px-4 py-2 text-[0.72rem] text-ink-soft"
+      >
+        {mounted ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
+      </button>
     </main>
   );
 }

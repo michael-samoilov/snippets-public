@@ -223,17 +223,18 @@ export type BorealisOpts = typeof BOREALIS_DEFAULTS;
    own northern-lights preset but re-inked in wash monochrome. The vendored
    react mount handles its own sizing/resize. */
 
+/* owner-tuned defaults, settled on the desk */
 export const PULSE_DEFAULTS = {
-  thickness: 1,
+  thickness: 0.4,
   softness: 1,
-  glow: 0.1, // their `intensity`
-  bloom: 0.2,
-  spots: 4,
-  spotSize: 0.25,
-  pulse: 0,
-  smoke: 0.32,
+  glow: 0.14, // their `intensity`
+  bloom: 0.1,
+  spots: 6,
+  spotSize: 0.3,
+  pulse: 0.2,
+  smoke: 0,
   smokeSize: 0.5,
-  pace: 0.18, // their `speed`
+  pace: 0.3, // their `speed`
 };
 export type PulseOpts = typeof PULSE_DEFAULTS;
 
