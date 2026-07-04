@@ -1811,7 +1811,7 @@ function Calendar() {
           along to sit beneath the month header */}
       <div
         className={cn(
-          "mt-3 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          "mt-5 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
           view === "month" && !searchActive
             ? "grid-rows-[1fr]"
             : "grid-rows-[0fr]",

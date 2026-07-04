@@ -57,8 +57,10 @@ MEASURE = r"""() => {
   const month = q('.sheet button.voice-display.pressable[aria-label]'); // the "July 2026" title
   const search= q('.sheet button[aria-expanded]');                 // the search glass
   const yest  = q(`[data-day="${dk(y)}"]`);                        // yesterday's row (above the zone)
+  const term  = q('.sheet .grid.border-b.border-rule-faint')       // the header's bottom terminus rule
+             || q('.sheet .border-b.border-rule-faint');
 
-  const sh=r(sheet), ca=r(card), mo=r(month), se=r(search), ye=r(yest);
+  const sh=r(sheet), ca=r(card), mo=r(month), se=r(search), ye=r(yest), te=r(term);
   if (!sh || !ca) return { error: "sheet or today-zone card not found", found: {sheet:!!sheet, card:!!card} };
   const headTop = (mo && se) ? Math.min(mo.top, se.top) : (mo ? mo.top : (se ? se.top : null));
   return {
@@ -67,6 +69,7 @@ MEASURE = r"""() => {
     RED1_header_top:      headTop != null ? +(headTop - sh.top).toFixed(1) : null,
     RED2_zone_top:        ye ? +(ca.top - ye.bottom).toFixed(1) : null,
     RED3_zone_bottom:     +(sh.bottom - ca.bottom).toFixed(1),
+    RED4_search_below:    (se && te) ? +(te.top - se.bottom).toFixed(1) : null,
   };
 }"""
 
@@ -91,7 +94,7 @@ def main() -> int:
         return 2
 
     green = gaps["GREEN_gutter_right"]
-    reds = ("RED1_header_top", "RED2_zone_top", "RED3_zone_bottom")
+    reds = ("RED1_header_top", "RED2_zone_top", "RED3_zone_bottom", "RED4_search_below")
     print(f"\n  target (green gutter) = {green}px")
     ok = True
     for k in ("GREEN_gutter_left", *reds):
