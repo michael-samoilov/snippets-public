@@ -21,6 +21,7 @@ import { dayKey } from "@/lib/dates";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { useScrollEdges, ScrollTerminus } from "@/components/ui/scroll-terminus";
+import { YearSkeleton } from "./skeletons";
 import {
   indexAt,
   leadOffset,
@@ -339,6 +340,9 @@ function YearFeedBase({
       >
         Jan
       </span>
+      {/* the measurement gap: hold the mini-tile skeleton until the grid
+          geometry is measured, so a year deep-link never flashes blank */}
+      {!geom && <YearSkeleton />}
       {geom && (
         // same layout-synchronous floor as the month feed
         <div
