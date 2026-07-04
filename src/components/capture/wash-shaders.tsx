@@ -219,8 +219,10 @@ void main() {
   float wisp = fbm(rot(sdir, -0.05 * t) * u_rays * 2.1 + vec2(4.7 - 0.4 * t, 0.26 * t));
   wisp = 0.55 * pow(smoothstep(0.48, 0.95, wisp), 2.0);
 
-  /* bright lip just inside the border, feathering toward the words */
-  float prof = smoothstep(0.0, 0.045, depth) * (1.0 - smoothstep(0.05, u_reach, depth));
+  /* full pigment against the border itself, feathering toward the words
+     (an earlier draft ramped in over the first 4.5% of depth — it read
+     as a hairline gap between the ink and the frame) */
+  float prof = 1.0 - smoothstep(0.03, u_reach, depth);
   /* shimmer travelling around the curtain */
   float flick = 1.0 - u_flicker
               * (0.5 + 0.5 * sin(6.2832 * vnoise(dir * 2.0 + vec2(t * 1.9, 0.0))));

@@ -30,6 +30,7 @@ interface SpeechRecognitionLike {
   start(): void;
   stop(): void;
   abort(): void;
+  onstart: (() => void) | null;
   onresult: ((e: SREvent) => void) | null;
   onerror: ((e: SRErrorEvent) => void) | null;
   onend: (() => void) | null;
@@ -280,6 +281,9 @@ export interface UseSpeech {
   supported: boolean;
   engine: SpeechEngineKind | null;
   status: SpeechStatus;
+  /** true once audio is actually flowing — i.e. the mic permission is
+      granted and capture has begun; the wash waits for this */
+  live: boolean;
   failure: SpeechFailure | null;
   /** finalized phrases (streaming engines) — ink that has dried */
   segments: SpeechSegment[];
@@ -306,6 +310,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const [resolved, setResolved] = useState(false);
   const [engine, setEngine] = useState<SpeechEngineKind | null>(null);
   const [status, setStatus] = useState<SpeechStatus>("idle");
+  const [live, setLive] = useState(false);
   const [failure, setFailure] = useState<SpeechFailure | null>(null);
   const [segments, setSegments] = useState<SpeechSegment[]>([]);
   const [interim, setInterim] = useState("");
@@ -492,6 +497,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       mapMicError(err);
       return;
     }
+    setLive(true);
     let grant: { token: string; model: string; ws: string } | null = warm;
     if (!grant) {
       const response = await tokenPromise!;
@@ -756,6 +762,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         return; // the writer changed their mind while we asked
       }
       streamRef.current = stream;
+      setLive(true);
 
       const ctx = getAudioContext();
       if (ctx) {
@@ -824,6 +831,8 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     rec.continuous = !isIOS();
     rec.interimResults = true;
     rec.maxAlternatives = 1;
+
+    rec.onstart = () => setLive(true);
 
     rec.onresult = (e) => {
       gotResultRef.current = true;
@@ -910,6 +919,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     gotResultRef.current = false;
     setFailure(null);
     failureSnapshotRef.current = null;
+    setLive(false);
     setStatus("listening");
     navigator.vibrate?.(40);
     if (engine === "scribe") {
@@ -964,6 +974,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     supported: engine !== null,
     engine,
     status,
+    live: live && status === "listening",
     failure,
     segments,
     interim,

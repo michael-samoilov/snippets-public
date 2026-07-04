@@ -3908,9 +3908,11 @@ function TodayZoneFill({
             engageZoneTap(e.target as HTMLElement);
           }}
         >
-          {/* the wax wash — recording's colour seeping inward from the frame */}
+          {/* the wax wash — recording's colour seeping inward from the frame;
+              waits for speech.live so it never paints before the writer has
+              approved the microphone */}
           <AnimatePresence>
-            {listening && (
+            {listening && speech.live && (
               <motion.div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
@@ -4073,9 +4075,17 @@ function TodayZoneFill({
               // released on the button: act (submit keeps, or starts/stops a
               // voice take). Released off: cancel — ease the seal back, no
               // submit. The press is handed to holdDown only when a keep
-              // actually began; every mic action eases the dome back up.
+              // actually began. A mic toggle releases two frames later: the
+              // glyph re-bakes (mic ⇄ stop) while the seal is still at the
+              // pressed pose, so the rise comes up already wearing the new
+              // face and grows into it — one continuous path, no mid-air swap.
               if (inside) submit();
-              if (!inside || !keeping.current) sealCtl.current?.press(false);
+              if (!inside) {
+                sealCtl.current?.press(false);
+              } else if (!keeping.current) {
+                const ctl = sealCtl.current;
+                requestAnimationFrame(() => requestAnimationFrame(() => ctl?.press(false)));
+              }
             }}
             onPointerCancel={() => {
               if (keeping.current) return;
@@ -4120,7 +4130,9 @@ function TodayZoneFill({
                   playKey={playKey}
                   size={128}
                   glyph={listening ? "stop" : quill ? "e:quill" : "c:mic"}
-                  iconScale={listening ? 0.3 : quill ? 0.36 : 0.46}
+                  // the stop reads bigger than the mic on purpose: with the
+                  // 1.14 swell it lands ~0.50 of the seal — an unmissable exit
+                  iconScale={listening ? 0.44 : quill ? 0.36 : 0.46}
                   mode="tap"
                   controlRef={sealCtl}
                   pressed={holdDown}
