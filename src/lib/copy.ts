@@ -101,7 +101,14 @@ export const copy = {
     },
     /**
      * Voice never fails silently — every failure says what happened. Keyed by
-     * SpeechFailure. `service` differs for an installed iOS PWA vs elsewhere.
+     * SpeechFailure. A `service` failure means two different things depending
+     * on the engine, so the toast resolves it against `speech.engine`:
+     *   - the browser's own dictation (web engine) refused → `service.*`,
+     *     the ONE case where the browser is genuinely at fault. On iOS every
+     *     browser is WebKit, so we never tell an iOS user to switch browsers.
+     *   - a network transcriber (Deepgram/Scribe/batch) refused, e.g. a bad
+     *     key, quota, or an unconfigured server → `serviceRemote`, which is
+     *     on our side, not the browser's.
      */
     voiceFailures: {
       denied: {
@@ -112,19 +119,30 @@ export const copy = {
       "no-mic": {
         title: "No microphone found.",
         description:
-          "Plug one in or check your input settings — writing works meanwhile.",
+          "Plug one in or check your input settings - writing works meanwhile.",
       },
       network: {
         title: "The speech service couldn’t be reached.",
         description:
-          "This browser transcribes over the network. Check the connection, or write it instead.",
+          "Voice transcribes over the network. Check the connection and try the seal again, or write it instead.",
       },
+      // the browser's built-in speech recognition (web engine) refused —
+      // the only failure where the browser itself is the problem
       service: {
-        title: "Voice isn’t available here.",
+        title: "This browser won’t start dictation.",
         descriptionInstalledIOS:
-          "iOS doesn’t allow voice inside installed web apps yet. Open Snippets in Safari itself for voice — writing works everywhere.",
+          "iOS blocks voice inside installed web apps. Open Snippets in Safari itself for voice - writing works everywhere.",
+        descriptionIOSBrowser:
+          "iOS only does voice through Safari’s built-in dictation, and it isn’t responding right now. Writing works everywhere.",
         descriptionOtherwise:
-          "This browser is refusing speech recognition. Chrome, Safari, or Edge offer it — writing works everywhere.",
+          "This browser wouldn’t start speech recognition. Writing works everywhere - Safari, Chrome, or Edge on desktop handle voice best.",
+      },
+      // a network transcriber refused (bad key, quota, server unconfigured) —
+      // our side, never the browser's
+      serviceRemote: {
+        title: "Voice is offline right now.",
+        description:
+          "The transcription service isn’t responding - that’s on our side, not yours. Write it and it saves just the same.",
       },
       transcribe: {
         title: "The words couldn’t be set.",
@@ -134,11 +152,11 @@ export const copy = {
       "too-long": {
         title: "That take ran long.",
         description:
-          "Recordings stop at five minutes — what was said is being set now. Split longer thoughts and keep both halves.",
+          "Recordings stop at five minutes - what was said is being set now. Split longer thoughts and keep both halves.",
       },
       unknown: {
         title: "Voice capture hit a snag.",
-        description: "Try the seal again, or write it — nothing was lost.",
+        description: "Try the seal again, or write it - nothing was lost.",
       },
     },
   },
