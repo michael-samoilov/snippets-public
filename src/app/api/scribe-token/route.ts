@@ -47,9 +47,11 @@ export async function POST() {
     }
     return Response.json({
       token: data.token,
+      scheme: "query", // Scribe carries the token as a ?token= query param
       model: MODEL,
       // the socket lives wherever the REST base does (wss mirrors https)
       ws: BASE.replace(/^http/, "ws"),
+      expiresIn: 15 * 60, // single-use, 15-minute token
     });
   } catch {
     return Response.json({ error: "token_failed" }, { status: 502 });

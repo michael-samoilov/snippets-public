@@ -1,0 +1,34 @@
+# Live-fire latency test of Deepgram Nova-3 streaming
+# (scripts/deepgram-live-test.mjs) — the head-to-head against ElevenLabs
+# Scribe on the same audio. Spends a few seconds of Deepgram credit per
+# run; on demand or when the harness changes. Key from the
+# DEEPGRAM_API_KEY repo secret — write-only, masked in logs.
+name: deepgram-live-test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/deepgram-live-test.mjs"
+      - ".github/workflows/deepgram-live-test.yml"
+
+jobs:
+  live-transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Synthesize a spoken sample
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q espeak-ng
+          # same English sample as the Scribe harness, so the latency
+          # numbers are directly comparable
+          espeak-ng -w /tmp/speech.wav -s 150 -g 6 \
+            "The quick brown fox jumped over the lazy dog. On a bright July morning, I walked down to the harbor. The water was calm and gray. And I finally wrote it all down."
+      - name: Stream it to Deepgram Nova-3
+        env:
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+        run: node scripts/deepgram-live-test.mjs /tmp/speech.wav fox morning harbor

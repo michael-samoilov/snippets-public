@@ -4028,6 +4028,7 @@ function TodayZoneFill({
           <AnimatePresence>
             {listening && (
               <motion.div
+                key="wash-fill"
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
                 initial={{ opacity: 0 }}
