@@ -104,6 +104,28 @@ function probe(url: string): Promise<boolean> {
     .catch(() => false);
 }
 
+/* ── opt-in voice diagnostics ────────────────────────────────────────
+   A silent provider fallback is the failure mode to fear: voice "works"
+   but never via the engine you think. Turn on a running commentary of
+   which provider granted, whether a fallback fired, and what the socket
+   heard — with `localStorage['snippets:voice-debug'] = '1'` (or a
+   `?voicedebug` query param), so it can be flipped on the live
+   deployment, not just in dev. Off by default; zero cost when off. */
+function voiceDebugOn(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage?.getItem("snippets:voice-debug") === "1" ||
+      new URLSearchParams(window.location.search).has("voicedebug")
+    );
+  } catch {
+    return false;
+  }
+}
+function vlog(...args: unknown[]): void {
+  if (voiceDebugOn()) console.info("%c[voice]", "color:#2f6df6;font-weight:600", ...args);
+}
+
 /* streaming-provider availability, probed once each per page load */
 const probes = new Map<string, Promise<boolean>>();
 function providerAvailable(tokenPath: string): Promise<boolean> {
@@ -527,6 +549,12 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
           : getRecognizer()
             ? "web"
             : null;
+      vlog(
+        "engine:",
+        chosen,
+        "· streaming providers available:",
+        available.length ? available.map((a) => a.name).join(", ") : "none",
+      );
       setEngine(chosen);
       setResolved(true);
       if (picked) refillGrant(picked.tokenPath); // the first take starts warm
@@ -637,6 +665,10 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     segmentsRef.current = [];
     nextIdRef.current = 0;
     setSegments([]);
+    vlog(
+      `${adapterRef.current?.name ?? "stream"}: settled`,
+      spoken ? `"${spoken}"` : "(nothing heard)",
+    );
     if (spoken) {
       navigator.vibrate?.(8);
       deliver(spoken);
@@ -652,9 +684,23 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       const adapter = adapters[i];
       // only the default is ever kept warm; consuming it also warms the next
       const warm = i === 0 ? takeGrant(adapter.tokenPath) : null;
-      if (warm) return { adapter, grant: warm };
+      if (warm) {
+        vlog(`grant: ${adapter.name} (warm token)`);
+        return { adapter, grant: warm };
+      }
       const minted = await mintGrant(adapter.tokenPath);
-      if (minted) return { adapter, grant: minted };
+      if (minted) {
+        vlog(
+          i === 0
+            ? `grant: ${adapter.name} (cold mint)`
+            : `grant: FELL BACK to ${adapter.name} after ${adapters[0].name} refused a token`,
+        );
+        return { adapter, grant: minted };
+      }
+      vlog(
+        `grant: ${adapter.name} refused a token — ` +
+          (i + 1 < adapters.length ? `trying ${adapters[i + 1].name}` : "no providers left"),
+      );
       if (!wantedRef.current) return null; // writer cancelled mid-acquire
     }
     return null;
@@ -697,6 +743,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       const { adapter, grant } = acquired;
       adapterRef.current = adapter; // stop()/onclose read the live adapter
       setEngine(adapter.name); // keep the reported engine honest after a fallback
+      vlog(`serving via ${adapter.name}`);
 
       // The context is created AFTER the mic is live, on purpose: iOS
       // switches the hardware audio route when capture starts, and a
@@ -727,6 +774,8 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
 
       const ws = adapter.socket(grant);
       wsRef.current = ws;
+      const openedAt = Date.now();
+      ws.onopen = () => vlog(`${adapter.name}: socket open`);
 
       const source = ctx.createMediaStreamSource(stream);
       attachMeter(ctx, source);
@@ -781,14 +830,22 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         clearTimeout(giveUp);
       };
 
+      let heardFirst = false;
+      const noteFirst = (text: string) => {
+        if (heardFirst || !text) return;
+        heardFirst = true;
+        vlog(`${adapter.name}: first words after ${Date.now() - openedAt}ms — "${text}"`);
+      };
       ws.onmessage = (e) => {
         const ev = adapter.parse(e.data as string);
         switch (ev.kind) {
           case "partial":
+            noteFirst(ev.text);
             interimRef.current = ev.text;
             setInterim(ev.text);
             break;
           case "final":
+            noteFirst(ev.text);
             if (ev.text) pushSegment(ev.text);
             interimRef.current = "";
             setInterim("");
