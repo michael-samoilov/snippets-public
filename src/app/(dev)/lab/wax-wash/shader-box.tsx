@@ -69,9 +69,15 @@ export function ShaderBox({
     gl.useProgram(prog);
 
     const dpr = Math.min(1.5, window.devicePixelRatio || 1);
-    cv.width = Math.round(cv.clientWidth * dpr);
-    cv.height = Math.round(cv.clientHeight * dpr);
-    gl.viewport(0, 0, cv.width, cv.height);
+    const fit = () => {
+      const w = Math.round(cv.clientWidth * dpr);
+      const h = Math.round(cv.clientHeight * dpr);
+      if (w === cv.width && h === cv.height) return;
+      cv.width = Math.max(1, w);
+      cv.height = Math.max(1, h);
+      gl.viewport(0, 0, cv.width, cv.height);
+    };
+    fit();
 
     const color = resolveWashColor(cv);
     const locs = new Map<string, WebGLUniformLocation | null>();
@@ -86,6 +92,7 @@ export function ShaderBox({
     const draw = (now: number) => {
       gl.uniform1f(loc("u_time"), (now - t0) / 1000);
       gl.uniform2f(loc("u_resolution"), cv.width, cv.height);
+      gl.uniform1f(loc("u_dpr"), dpr);
       gl.uniform3f(loc("u_color"), color[0], color[1], color[2]);
       for (const [name, v] of Object.entries(uniformsRef.current)) {
         if (typeof v === "number") gl.uniform1f(loc(name), v);
@@ -96,7 +103,16 @@ export function ShaderBox({
     };
     raf = requestAnimationFrame(draw);
 
+    /* the zone resizes with its day — refit and (under reduced motion,
+       where no loop runs) repaint the single frame */
+    const ro = new ResizeObserver(() => {
+      fit();
+      if (reduced) draw(performance.now());
+    });
+    ro.observe(cv);
+
     return () => {
+      ro.disconnect();
       cancelAnimationFrame(raf);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
@@ -111,20 +127,26 @@ export function ShaderBox({
   );
 }
 
-/* ---- borealis: curtains of light, hand-rolled ------------------------- */
+/* ---- borealis: curtains of light, hand-rolled, radial ------------------
+   The curtain hangs inward from the whole border. Depth comes from a
+   rounded-rect signed-distance field, so it hugs the frame at ANY size
+   or aspect and follows live resizes; the ray coordinate is a unit
+   vector sampled on a closed circle of noise, so there is no seam. */
 
 export const AURORA_FRAG = `#version 300 es
 precision mediump float;
 
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform float u_dpr;
 uniform vec3 u_color;
 uniform float u_intensity; // overall pigment
-uniform float u_rays;      // ray density across the width
+uniform float u_rays;      // ray density around the ring
 uniform float u_sway;      // how far the curtains bend
 uniform float u_pace;      // time scale
 uniform float u_flicker;   // shimmer depth
-uniform float u_reach;     // how far into the card the curtains hang
+uniform float u_reach;     // how far toward the middle the curtains hang
+uniform float u_corner;    // frame corner radius, css px
 
 out vec4 fragColor;
 
@@ -144,34 +166,44 @@ float fbm(vec2 p) {
   for (int i = 0; i < 4; i++) { v += a * vnoise(p); p *= 2.07; a *= 0.5; }
   return v;
 }
-
-/* one curtain hanging from an edge; y runs 0→1 from that edge inward */
-float curtain(float x0, float y, float t, float phase) {
-  /* the bend grows with distance from the edge, like fabric */
-  float sway = (fbm(vec2(x0 * 1.7 + t * 0.35, phase + t * 0.11)) - 0.5)
-             * u_sway * (0.3 + 2.2 * y);
-  float x = x0 + sway;
-  /* the rays themselves: bright verticals sliding through noise */
-  float ray = fbm(vec2(x * u_rays + t * 0.8, phase + t * 0.22));
-  ray = pow(smoothstep(0.34, 0.92, ray), 1.5);
-  /* a finer counter-moving wisp layer */
-  float wisp = fbm(vec2(x * u_rays * 2.1 - t * 0.55, phase + 4.7 + t * 0.3));
-  wisp = 0.55 * pow(smoothstep(0.48, 0.95, wisp), 2.0);
-  /* bright lip just inside the edge, feathering toward the words */
-  float prof = smoothstep(0.0, 0.045, y) * (1.0 - smoothstep(0.05, u_reach, y));
-  /* shimmer travelling along the curtain */
-  float flick = 1.0 - u_flicker
-              * (0.5 + 0.5 * sin(6.2832 * vnoise(vec2(t * 1.9 + x * 2.0, phase))));
-  return (ray + wisp) * prof * flick;
+vec2 rot(vec2 v, float th) {
+  return mat2(cos(th), sin(th), -sin(th), cos(th)) * v;
+}
+float sdRoundBox(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + r;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 }
 
 void main() {
-  vec2 uv = gl_FragCoord.xy / u_resolution;
+  vec2 p = gl_FragCoord.xy - 0.5 * u_resolution;
+  vec2 b = 0.5 * u_resolution;
+  /* how deep this pixel sits, as a fraction of the frame's half-size */
+  float depth = -sdRoundBox(p, b, u_corner * u_dpr) / min(b.x, b.y);
+  if (depth <= 0.0) { fragColor = vec4(0.0); return; }
+
   float t = u_time * u_pace;
-  float a = curtain(uv.x, 1.0 - uv.y, t, 0.0);      // hanging from the top
-  a += 0.6 * curtain(uv.x, uv.y, t * 0.9, 17.0);    // rising at the foot, fainter
-  a = clamp(a * u_intensity, 0.0, 1.0);
-  fragColor = vec4(u_color * a, a);                  // premultiplied
+  vec2 dir = normalize(p + 1e-4);
+
+  /* the bend grows with depth, like hanging fabric */
+  float swayN = fbm(rot(dir, 0.4) * 1.7 + vec2(t * 0.35, -t * 0.11)) - 0.5;
+  vec2 sdir = rot(dir, swayN * u_sway * (0.3 + 2.2 * depth));
+
+  /* rays around the ring, slowly processing */
+  vec2 rp = rot(sdir, 0.07 * t);
+  float ray = fbm(rp * u_rays + vec2(0.31 * t, -0.23 * t));
+  ray = pow(smoothstep(0.34, 0.92, ray), 1.5);
+  /* a finer counter-turning wisp layer */
+  float wisp = fbm(rot(sdir, -0.05 * t) * u_rays * 2.1 + vec2(4.7 - 0.4 * t, 0.26 * t));
+  wisp = 0.55 * pow(smoothstep(0.48, 0.95, wisp), 2.0);
+
+  /* bright lip just inside the border, feathering toward the words */
+  float prof = smoothstep(0.0, 0.045, depth) * (1.0 - smoothstep(0.05, u_reach, depth));
+  /* shimmer travelling around the curtain */
+  float flick = 1.0 - u_flicker
+              * (0.5 + 0.5 * sin(6.2832 * vnoise(dir * 2.0 + vec2(t * 1.9, 0.0))));
+
+  float a = clamp((ray + wisp) * prof * flick * u_intensity, 0.0, 1.0);
+  fragColor = vec4(u_color * a, a); // premultiplied
 }`;
 
 export const BOREALIS_DEFAULTS = {

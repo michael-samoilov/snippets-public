@@ -120,13 +120,16 @@ function aurora(
     mask: edgeMask(inner),
     layers: [
       {
+        /* a 200%-of-width square centred on the zone: still covers a
+           portrait frame up to √3× as tall as it is wide */
         className: "wash-spin",
         style: {
           position: "absolute",
-          left: "-35%",
-          top: "-35%",
-          width: "170%",
+          left: "-50%",
+          top: "50%",
+          width: "200%",
           aspectRatio: "1",
+          marginTop: "-100%",
           filter: `blur(${blur}px)`,
           animationDuration: `${dur}s`,
           background: conic(mult),
@@ -308,6 +311,7 @@ const borealisUniforms = (o: BorealisOpts) => ({
   u_pace: o.pace,
   u_flicker: o.flicker,
   u_reach: o.reach,
+  u_corner: 16, // rounded-2xl, matching the zone frame
 });
 
 const RAYS_TOP_MASK = "linear-gradient(to bottom, black 3%, transparent 46%)";
@@ -316,8 +320,8 @@ const RAYS_BOTTOM_MASK = "linear-gradient(to top, black 3%, transparent 40%)";
 const ROUND_THREE: Variant[] = [
   {
     key: "borealis",
-    label: "borealis (webgl)",
-    note: "noise-warped curtains with shimmer — tap to put it on the desk",
+    label: "borealis (webgl · radial)",
+    note: "curtains hanging inward from the whole border — tap to put it on the desk",
     family: "borealis",
     opts: { ...BOREALIS_DEFAULTS },
     node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(BOREALIS_DEFAULTS)} />,
@@ -364,16 +368,20 @@ function MockZone({
   v,
   on,
   onPick,
+  size,
 }: {
   v: Variant;
   on: boolean;
   /** when set, tapping the card loads its recipe onto the desk */
   onPick?: (v: Variant) => void;
+  /** the real zone is never one fixed size — benches can stretch it */
+  size?: { w: number; h: number };
 }) {
   return (
     <figure className="m-0">
       <div
-        className={`relative h-[430px] w-[300px] rounded-2xl border border-wax/45 ${onPick ? "cursor-pointer" : ""}`}
+        className={`relative h-[430px] w-[300px] rounded-2xl border border-wax/45 transition-[width,height] duration-[240ms] ease-[var(--ease-out)] ${onPick ? "cursor-pointer" : ""}`}
+        style={size ? { width: size.w, height: size.h } : undefined}
         onClick={onPick ? () => onPick(v) : undefined}
         title={onPick ? "load onto the desk" : undefined}
       >
@@ -477,16 +485,18 @@ function Bench({
   v,
   on,
   onReset,
+  size,
   children,
 }: {
   v: Variant;
   on: boolean;
   onReset: () => void;
+  size?: { w: number; h: number };
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-start gap-5">
-      <MockZone v={v} on={on} />
+      <MockZone v={v} on={on} size={size} />
       {/* beside the zone on desktop; wraps beneath it on a phone */}
       <div className="flex w-[300px] flex-col gap-2.5 sm:mt-9 sm:w-60">
         {children}
@@ -519,6 +529,8 @@ export default function WaxWashLab() {
   const [aur, setAur] = useState(AURORA_DEFAULTS);
   const [cur, setCur] = useState(CURTAINS_DEFAULTS);
   const [bor, setBor] = useState(BOREALIS_DEFAULTS);
+  /* the borealis bench can stretch its zone, proving the effect refits */
+  const [zone, setZone] = useState({ w: 300, h: 430 });
   const deskRef = useRef<HTMLElement>(null);
 
   /* tapping a sweep card sends its recipe to the matching bench */
@@ -676,14 +688,16 @@ export default function WaxWashLab() {
             <Dial label="spread" value={cur.spread} min={0.6} max={1.6} step={0.05} onChange={(v) => setCur({ ...cur, spread: v })} />
             <Dial label="inner" value={cur.inner} min={25} max={70} step={1} fmt={int} onChange={(v) => setCur({ ...cur, inner: v })} />
           </Bench>
-          <Bench v={borZone} on={on} onReset={() => setBor(BOREALIS_DEFAULTS)}>
+          <Bench v={borZone} on={on} size={zone} onReset={() => { setBor(BOREALIS_DEFAULTS); setZone({ w: 300, h: 430 }); }}>
             <Dial label="pigment" value={bor.intensity} min={0.1} max={1.2} step={0.05} onChange={(v) => setBor({ ...bor, intensity: v })} />
             <Dial label="rays" value={bor.rays} min={2} max={12} step={0.5} fmt={(v) => v.toFixed(1)} onChange={(v) => setBor({ ...bor, rays: v })} />
             <Dial label="sway" value={bor.sway} min={0} max={0.8} step={0.02} onChange={(v) => setBor({ ...bor, sway: v })} />
             <Dial label="pace" value={bor.pace} min={0.1} max={2} step={0.05} onChange={(v) => setBor({ ...bor, pace: v })} />
             <Dial label="flicker" value={bor.flicker} min={0} max={0.8} step={0.05} onChange={(v) => setBor({ ...bor, flicker: v })} />
             <Dial label="reach" value={bor.reach} min={0.15} max={1} step={0.05} onChange={(v) => setBor({ ...bor, reach: v })} />
-            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">webgl — noise curtains, hand-rolled; the one dial set that truly dances</p>
+            <Dial label="zone w" value={zone.w} min={220} max={380} step={4} fmt={int} onChange={(v) => setZone({ ...zone, w: v })} />
+            <Dial label="zone h" value={zone.h} min={280} max={600} step={4} fmt={int} onChange={(v) => setZone({ ...zone, h: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">webgl, radial — curtains hang inward from the whole border; stretch the zone to watch it refit</p>
           </Bench>
         </div>
       </section>
