@@ -697,36 +697,50 @@ mark.snippet-mark {
   animation: caret-blink 1.1s step-end infinite;
 }
 
-/* The recording wash: wax seeping inward from the today zone's frame
-   while the microphone is on. Paper reads it as pigment into the sheet
-   (mixed from --wax, held back a little); Lamplight as light out of the
-   dark (mixed from --wax-bright, full strength). oklab keeps the blue
-   alive at low alpha where srgb would gray it out. It breathes on the
-   seal's own cadence; reduced motion holds it still. */
-.wax-wash {
+/* The recording wash, in two phases (see TodayZoneFill). Paper reads it
+   as pigment into the sheet (mixed from --wax, held back a little);
+   Lamplight as light out of the dark (mixed from --wax-bright, full
+   strength). oklab keeps the blue alive at low alpha where srgb would
+   gray it out.
+
+   FILL — wax seeping inward from the frame. Steady (no pulse): it eases
+   in slowly over the ~2s warmup, so its arrival IS the "warming up" cue.
+   The fade is driven by the motion wrapper; this just sets the ink. */
+.wax-wash-fill {
   --wash-src: var(--wax);
-  --wash-hi: 0.7;
-  --wash-lo: 0.44;
+  opacity: 0.7;
   background:
     linear-gradient(to bottom, color-mix(in oklab, var(--wash-src) 26%, transparent), transparent 18%),
     linear-gradient(to top, color-mix(in oklab, var(--wash-src) 26%, transparent), transparent 18%),
     linear-gradient(to right, color-mix(in oklab, var(--wash-src) 18%, transparent), transparent 22%),
     linear-gradient(to left, color-mix(in oklab, var(--wash-src) 18%, transparent), transparent 22%);
-  animation: wax-wash-breathe 3.2s var(--ease-in-out) infinite;
 }
-.dark .wax-wash {
+.dark .wax-wash-fill {
   --wash-src: var(--wax-bright);
-  --wash-hi: 1;
-  --wash-lo: 0.62;
+  opacity: 1;
 }
-@keyframes wax-wash-breathe {
-  0%, 100% { opacity: var(--wash-hi); }
-  50% { opacity: var(--wash-lo); }
+
+/* PULSE — a wax glow hugging the border, breathing on the seal's cadence.
+   It joins only once the caption is live, and IS the "words are flowing"
+   tell. An inner glow (not a hard second line) so it reads as the frame
+   itself coming alive alongside the border's brightening. */
+.wax-wash-pulse {
+  --wash-src: var(--wax);
+  border-radius: inherit;
+  box-shadow: inset 0 0 15px 2px color-mix(in oklab, var(--wash-src) 30%, transparent);
+  animation: wax-wash-pulse 1.8s var(--ease-in-out) infinite;
+}
+.dark .wax-wash-pulse {
+  --wash-src: var(--wax-bright);
+}
+@keyframes wax-wash-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .wax-wash {
+  .wax-wash-pulse {
     animation: none;
-    opacity: var(--wash-hi);
+    opacity: 0.8;
   }
 }
 

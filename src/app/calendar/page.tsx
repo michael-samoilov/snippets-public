@@ -3791,6 +3791,15 @@ function TodayZoneFill({
           .join(" ")
       : "";
   const shownText = liveSpoken ? joinText(text, liveSpoken) : text;
+  // Two phases of the recording wash. The streaming engines spend ~2s
+  // warming up (auto language-detect, model spin-up) before the first
+  // word lands; the batch engine records with no partials at all. So
+  // `captionLive` means "words are actually flowing now": true once any
+  // spoken text arrives, or immediately for batch (its recording IS the
+  // live moment). The wash FILL eases in on `listening` and covers the
+  // warmup; the pulsing BORDER only joins once captionLive.
+  const captionLive =
+    listening && (speech.engine === "batch" || liveSpoken.length > 0);
   useLayoutEffect(() => {
     if (!liveSpoken) return;
     const el = areaRef.current;
@@ -3882,11 +3891,12 @@ function TodayZoneFill({
     });
   };
 
-  // the zone's hairline blue outline (wax = recording) — it deepens while
-  // the microphone is on, anchoring the wash to the frame it seeps from
+  // the zone's hairline blue outline (wax = recording) — it brightens once
+  // the caption is live (not merely while warming up), so the frame joins
+  // the pulsing border as the "words are flowing now" signal
   const frame = cn(
     "border transition-[border-color] duration-[240ms] ease-[var(--ease-out)]",
-    listening ? "border-wax/70" : "border-wax/45",
+    captionLive ? "border-wax/70" : "border-wax/45",
   );
 
   return (
@@ -3974,18 +3984,38 @@ function TodayZoneFill({
             engageZoneTap(e.target as HTMLElement, "click");
           }}
         >
-          {/* the wax wash — recording's colour seeping inward from the frame */}
+          {/* The wax wash in two phases. The FILL seeps inward from the frame
+              on `listening`, easing in SLOWLY (~1.6s) so the ~2s warmup before
+              the first word reads as "warming up" rather than dead air. The
+              pulsing BORDER joins QUICKLY (~0.24s) only once captionLive — the
+              moment words actually start flowing. Both exit fast. */}
           <AnimatePresence>
             {listening && (
               <motion.div
+                key="wash-fill"
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                exit={{ opacity: 0, transition: { duration: 0.3, ease: "easeOut" } }}
+                transition={{ duration: 1.6, ease: "easeOut" }}
+              >
+                <div className="wax-wash-fill absolute inset-0 rounded-[inherit]" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {captionLive && (
+              <motion.div
+                key="wash-pulse"
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-[inherit]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.2, ease: "easeOut" } }}
                 transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
               >
-                <div className="wax-wash absolute inset-0 rounded-[inherit]" />
+                <div className="wax-wash-pulse absolute inset-0 rounded-[inherit]" />
               </motion.div>
             )}
           </AnimatePresence>
