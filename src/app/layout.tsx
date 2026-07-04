@@ -37,6 +37,20 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
 };
 
+// Pin --app-h to the live viewport height BEFORE the first paint. iOS Safari
+// mis-resolves the CSS small/dynamic-viewport units (svh/dvh) on a cold load's
+// first paint — it can hand back the address-bar-RETRACTED (large) height while
+// the bar is actually shown, so the shell (and the full-height today zone it
+// contains) renders taller than the screen and the wax seal clips off the
+// bottom until a manual refresh. window.innerHeight is a live measurement, not a
+// predicted unit, so it reports the real visible height; the shell reads
+// var(--app-h). Runs synchronously during HTML parsing, before the shell paints,
+// so there's no flash and no resize snap. Skip keyboard-driven shrinks (a
+// focused field) so a standalone PWA's keyboard can't collapse the whole shell —
+// the keyboard-room hook lifts the focused field instead, and Safari leaves
+// innerHeight untouched by the keyboard regardless.
+const APP_HEIGHT_SCRIPT = `(function(){var d=document.documentElement;function apply(){var a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))return;d.style.setProperty("--app-h",window.innerHeight+"px")}function update(){apply();requestAnimationFrame(apply)}update();addEventListener("resize",update);addEventListener("orientationchange",update);addEventListener("pageshow",update)})()`;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -63,6 +77,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full">
+        <script dangerouslySetInnerHTML={{ __html: APP_HEIGHT_SCRIPT }} />
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

@@ -28,6 +28,16 @@ html {
 }
 
 :root {
+  /* The one-screen height the desk/sheet is pinned to. iOS Safari mis-resolves
+     the CSS viewport units (svh/dvh) on a cold load's first paint — it can hand
+     back the address-bar-RETRACTED (large) height while the bar is actually
+     shown, leaving the full-height today zone taller than the screen (its wax
+     seal clips off the bottom) until a manual refresh. So a pre-paint inline
+     script (see the root layout) overrides this with the live window.innerHeight,
+     a real measurement rather than a predicted unit. This 100svh is only the
+     fallback for the pre-script frame / no-JS. */
+  --app-h: 100svh;
+
   /* the date header is the largest size that still keeps the longest
      full date ("Wednesday, September 22, 2020") on one line — it scales
      with the viewport on phones and caps on wider screens */

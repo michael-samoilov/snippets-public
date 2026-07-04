@@ -3,8 +3,6 @@ import { Sheet } from "@/components/shell/sheet";
 import { SheetScroll } from "@/components/shell/sheet-scroll";
 import { CommandMenu } from "@/components/command-menu";
 import { Wordmark } from "@/components/shell/wordmark";
-import { VhDebug } from "@/components/dev/vh-debug";
-import { ViewportReflowKick } from "@/components/shell/viewport-kick";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -12,16 +10,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // remaining height and pages scroll inside it, never the page. (An
     // indefinite min-h chain on desktop let h-full children collapse —
     // the calendar's stage shrank to its 1px border.)
-    // svh, not dvh: the book never scrolls the PAGE (overscroll-behavior:none;
-    // the feeds scroll inside), so the browser chrome never retracts and svh ==
-    // the live viewport. Crucially svh is a STATIC small-viewport value, so it
-    // can't over-report on iOS's first paint the way dvh does (dvh there can
-    // measure the address-bar-RETRACTED height, then never re-lay-out when the
-    // bar settles — which left the full-viewport today zone taller than the
-    // screen until a refresh).
-    <div className="mx-auto flex h-svh w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
-      <ViewportReflowKick />
-      <VhDebug />
+    // Height is var(--app-h), pinned pre-paint to the live window.innerHeight by
+    // the root layout's inline script — NOT a CSS viewport unit. iOS Safari
+    // mis-resolves svh/dvh on a cold load's first paint (it can measure the
+    // address-bar-RETRACTED height while the bar is shown, then never re-lay-out),
+    // which left the full-viewport today zone taller than the screen — its wax
+    // seal clipped off the bottom — until a refresh. A live measurement can't
+    // over-report that way; --app-h falls back to 100svh only for the no-JS frame.
+    <div className="mx-auto flex h-[var(--app-h)] w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
       {/* desk chrome — the book is the only page now, so there's no nav: just
           the wordmark and the account mark on the desk's top edge */}
       <header className="flex shrink-0 items-center justify-between px-2 pb-2 pt-2 sm:px-1 sm:pb-3 sm:pt-4">
