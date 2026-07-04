@@ -26,6 +26,7 @@ import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react
 import { toast } from "sonner";
 import { ulid } from "ulidx";
 import { WaxStamp as CanvasSeal, type SealControl } from "@/components/capture/wax-stamp";
+import { RecordingWash } from "@/components/capture/wash-shaders";
 import { KEEP_BEATS, useKeepSequence } from "@/components/schedule/keep-sequence";
 import { useKeptDraft } from "@/lib/kept-draft";
 import {
@@ -3918,7 +3919,7 @@ function TodayZoneFill({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
               >
-                <div className="wax-wash absolute inset-0 rounded-[inherit]" />
+                <RecordingWash corner={ZONE_CORNER} />
               </motion.div>
             )}
           </AnimatePresence>

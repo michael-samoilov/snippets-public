@@ -21,14 +21,12 @@ import {
   BOREALIS_DEFAULTS,
   WashPulsingBorder,
   PULSE_DEFAULTS,
+  WASH,
+  edgeMask,
+  conic,
   type BorealisOpts,
   type PulseOpts,
-} from "./shader-box";
-
-/* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
-   Paper mixes from --wax (pigment into paper); Lamplight from --wax-bright
-   (light out of the dark) — see the <style> block for the .dark override. */
-const WASH = (pct: number) => `color-mix(in oklab, var(--wash-src) ${pct * 2}%, transparent)`;
+} from "@/components/capture/wash-shaders";
 
 /* the shipped four-edge seep, with dials: `mult` scales the pigment,
    `reach` scales how far the seep travels from the frame */
@@ -41,11 +39,6 @@ const fourEdge = (mult = 1, reach = 1) =>
   ].join(", ");
 
 const FOUR_EDGE = fourEdge();
-
-/* keeps light near the frame, clears the writing in the middle;
-   `inner` is where the clear middle ends — lower reaches further in */
-const edgeMask = (inner = 52) =>
-  `radial-gradient(85% 85% at 50% 50%, transparent ${inner}%, black 95%)`;
 
 interface Layer {
   className?: string;
@@ -101,9 +94,6 @@ function inhale(
 }
 
 /* ---- aurora: wax hues turning very slowly behind the frame ------------ */
-
-const conic = (m: number) =>
-  `conic-gradient(from 0deg, ${WASH(19 * m)}, ${WASH(7 * m)}, ${WASH(24 * m)}, ${WASH(9 * m)}, ${WASH(17 * m)}, ${WASH(6 * m)}, ${WASH(19 * m)})`;
 
 const AURORA_DEFAULTS = { mult: 1, dur: 26, blur: 26, inner: 52 };
 type AuroraOpts = typeof AURORA_DEFAULTS;
@@ -548,10 +538,9 @@ export default function WaxWashLab() {
   const deskRef = useRef<HTMLElement>(null);
 
   /* lamplight/paper without a trip to settings; the key on the page body
-     remounts the shader canvases so they re-read the wash ink */
+     remounts the shader canvases so they re-read the wash ink.
+     resolvedTheme is undefined until hydration — no mounted flag needed. */
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   /* tapping a sweep card sends its recipe to the matching bench */
   const pick = (v: Variant) => {
@@ -684,7 +673,7 @@ export default function WaxWashLab() {
       </header>
       {/* keyed by theme: a flip remounts the shader canvases so they
           re-resolve the wash ink; css washes recolor on their own */}
-      <div key={mounted ? (resolvedTheme ?? "light") : "boot"}>
+      <div key={resolvedTheme ?? "boot"}>
       <section className="mb-12">
         <h2 className="voice-label text-[0.78rem] text-ink-soft">the combo</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
@@ -806,7 +795,7 @@ export default function WaxWashLab() {
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="voice-label pressable float fixed bottom-5 right-5 z-10 rounded-full px-4 py-2 text-[0.72rem] text-ink-soft"
       >
-        {mounted ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
+        {resolvedTheme ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
       </button>
     </main>
   );

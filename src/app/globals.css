@@ -723,6 +723,23 @@ mark.snippet-mark {
   0%, 100% { opacity: var(--wash-hi); }
   50% { opacity: var(--wash-lo); }
 }
+
+/* The animated recording wash (RecordingWash): three layers of the same
+   ink — a turning conic, the borealis curtains, the pulsing border.
+   The scene provides the ink; the spin drives the conic. Reduced motion
+   never reaches these (RecordingWash swaps to .wax-wash first). */
+.wax-wash-scene {
+  --wash-src: var(--wax);
+}
+.dark .wax-wash-scene {
+  --wash-src: var(--wax-bright);
+}
+@keyframes wax-wash-spin {
+  to { transform: rotate(360deg); }
+}
+.wax-wash-spin {
+  animation: wax-wash-spin 26s linear infinite;
+}
 @media (prefers-reduced-motion: reduce) {
   .wax-wash {
     animation: none;

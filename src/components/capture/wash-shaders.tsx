@@ -1,10 +1,12 @@
 "use client";
 
-/* WebGL candidates for the recording wash — lab-only for now.
-   ShaderBox is a deliberately tiny mount (fullscreen triangle, uniform
-   dials read per-frame). The lab ignores the OS reduce-motion setting
-   on purpose — motion is the thing being judged here; any production
-   wash must still honor it.
+/* The recording wash's moving parts — shared by the app (RecordingWash,
+   at the bottom) and the /lab/wax-wash desk.
+   ShaderBox is a deliberately tiny WebGL mount (fullscreen triangle,
+   uniform dials read per-frame). It does NOT honor reduced motion by
+   itself: the lab wants motion always (motion is the thing being
+   judged), and RecordingWash swaps to the static wash before any
+   canvas mounts.
    AURORA_FRAG is ours: domain-warped value noise shaped into hanging
    curtains with sway and shimmer — the thing flat gradients can't do.
    NEURO_FRAG is adapted from Paper Shaders' neuro-noise
@@ -13,6 +15,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PulsingBorder } from "@/vendor/paper-shaders/react/shaders/pulsing-border";
+
+/* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
+   Reads --wash-src, provided by .wax-wash-scene in the app and
+   [data-wash-lab] in the lab. */
+export const WASH = (pct: number) =>
+  `color-mix(in oklab, var(--wash-src) ${pct * 2}%, transparent)`;
+
+/* keeps light near the frame, clears the writing in the middle; `inner`
+   is where the clear middle ends — lower reaches further in. Sized by
+   closest-side and fully opaque by 88% so the ink actually reaches the
+   frame (the old 85%-ellipse metric faded back out before the edge
+   midpoints, leaving a faint unpainted rim); the ×0.85 keeps existing
+   `inner` values looking the same as before the fix. */
+export const edgeMask = (inner = 52) =>
+  `radial-gradient(closest-side at 50% 50%, transparent ${inner * 0.85}%, black 88%)`;
+
+/* the aurora's turning conic, in wash ink; `m` scales the pigment */
+export const conic = (m: number) =>
+  `conic-gradient(from 0deg, ${WASH(19 * m)}, ${WASH(7 * m)}, ${WASH(24 * m)}, ${WASH(9 * m)}, ${WASH(17 * m)}, ${WASH(6 * m)}, ${WASH(19 * m)})`;
 
 export type UniformValue = number | [number, number, number];
 
@@ -322,3 +343,92 @@ void main() {
   float a = clamp(noise * u_intensity, 0.0, 1.0);
   fragColor = vec4(u_color * a, a);
 }`;
+
+/* ---- the app's recording wash ------------------------------------------
+   The owner-chosen blend, settled on the lab's combo zone:
+   aurora 0.20 · borealis 0.30 · pulse 0.45. Each layer's recipe below
+   mirrors a lab bench — retune there, then carry the numbers here.
+   Honors reduced motion by falling back to the static .wax-wash. */
+
+const APP_AURORA = { mult: 1.4, dur: 26, blur: 32, inner: 53 };
+const APP_BOREALIS = {
+  u_intensity: 1.0,
+  u_rays: 2.0,
+  u_sway: 0.5,
+  u_pace: 0.6,
+  u_flicker: 0.55,
+  u_reach: 0.6,
+};
+const APP_PULSE: PulseOpts = {
+  thickness: 0.8,
+  softness: 1,
+  glow: 0.14,
+  bloom: 0.25,
+  spots: 6,
+  spotSize: 0.3,
+  pulse: 0.2,
+  smoke: 0.12,
+  smokeSize: 0.5,
+  pace: 0.3,
+};
+const APP_MIX = { aurora: 0.2, borealis: 0.3, pulse: 0.45 };
+
+export function RecordingWash({ corner = 16 }: { corner?: number }) {
+  /* live, not just initial — the wash may outlast a settings change */
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  if (reduced) {
+    return <div className="wax-wash absolute inset-0 rounded-[inherit]" />;
+  }
+  return (
+    <div className="wax-wash-scene pointer-events-none absolute inset-0 rounded-[inherit]">
+      {/* aurora: the conic turning behind the frame */}
+      <div
+        aria-hidden
+        className="absolute inset-0 overflow-hidden rounded-[inherit]"
+        style={{
+          opacity: APP_MIX.aurora,
+          maskImage: edgeMask(APP_AURORA.inner),
+          WebkitMaskImage: edgeMask(APP_AURORA.inner),
+        }}
+      >
+        <div
+          className="wax-wash-spin absolute"
+          style={{
+            left: "-50%",
+            top: "50%",
+            width: "200%",
+            aspectRatio: "1",
+            marginTop: "-100%",
+            filter: `blur(${APP_AURORA.blur}px)`,
+            animationDuration: `${APP_AURORA.dur}s`,
+            background: conic(APP_AURORA.mult),
+          }}
+        />
+      </div>
+      {/* borealis: noise curtains hanging inward from the border */}
+      <div
+        aria-hidden
+        className="absolute inset-0 overflow-hidden rounded-[inherit]"
+        style={{ opacity: APP_MIX.borealis }}
+      >
+        <ShaderBox frag={AURORA_FRAG} uniforms={{ ...APP_BOREALIS, u_corner: corner }} />
+      </div>
+      {/* pulsing border: smoke pooling along the frame */}
+      <div
+        aria-hidden
+        className="absolute inset-0 overflow-hidden rounded-[inherit]"
+        style={{ opacity: APP_MIX.pulse }}
+      >
+        <WashPulsingBorder o={APP_PULSE} />
+      </div>
+    </div>
+  );
+}
