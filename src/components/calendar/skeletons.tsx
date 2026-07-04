@@ -23,13 +23,14 @@ import { useSettings } from "@/lib/settings";
 
 const FAINT = { backgroundColor: "var(--rule-faint)" } as const;
 
-// The month shimmer sweeps left→right rather than lighting every cell at once:
-// each column's placeholders start a beat later than the one to their left, so
-// a single band appears to cross the page. Columns to the left are further into
-// the cycle (a more negative delay), so their sheen peaks first.
-const WAVE_STEP = 0.13; // seconds between columns
+// The month shimmer sweeps left→right rather than lighting every cell at once.
+// The seven columns are spread evenly across ONE shimmer cycle — column 0 runs
+// furthest ahead (the most negative delay), column 6 at zero — so a single band
+// crosses the whole grid and repeats on the very same beat as a lone element's
+// shimmer, no longer.
+const SHIMMER_S = 1.6; // must match .skeleton-shimmer's duration in globals.css
 const waveDelay = (col: number) =>
-  ({ animationDelay: `${(col - 6) * WAVE_STEP}s` }) as const;
+  ({ animationDelay: `${((col - 6) / 7) * SHIMMER_S}s` }) as const;
 
 /* ── today: the zone the book opens onto — the most common landing ────
    Mirrors TodayZoneFill's composition: the wax-outlined frame, the date
@@ -134,8 +135,8 @@ export function MonthSkeleton() {
 // Each mini lays out the real month — leading blanks so the first lands on its
 // weekday, then a dot per day, then trailing blanks to a fixed 42 — for the
 // CURRENT year, so the constellations match what the glance will paint (a
-// 30-day month is shorter than a 31, February shorter still). A sparse,
-// deterministic scatter reads as a few kept days rather than an empty grid.
+// 30-day month is shorter than a 31, February shorter still). Every dot reads
+// the same: this is a placeholder, so none stands in for a kept day.
 function MiniSkel({
   year,
   month,
@@ -155,16 +156,9 @@ function MiniSkel({
         {Array.from({ length: lead }).map((_, i) => (
           <span key={`b${i}`} className="size-[3px]" />
         ))}
-        {Array.from({ length: days }).map((_, i) => {
-          const kept = (month * 7 + i * 3) % 9 === 0;
-          return (
-            <span
-              key={i}
-              className="skeleton-shimmer size-[3px] rounded-full"
-              style={{ backgroundColor: kept ? "var(--ink-faint)" : "var(--rule-faint)" }}
-            />
-          );
-        })}
+        {Array.from({ length: days }).map((_, i) => (
+          <span key={i} className="skeleton-shimmer size-[3px] rounded-full" style={FAINT} />
+        ))}
         {Array.from({ length: trailing }).map((_, i) => (
           <span key={`a${i}`} className="size-[3px]" />
         ))}
