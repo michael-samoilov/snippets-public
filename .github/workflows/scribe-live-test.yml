@@ -26,9 +26,12 @@ jobs:
       - name: Synthesize a spoken sample
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q espeak-ng
-          espeak-ng -w /tmp/speech.wav -s 145 \
-            "The quick brown fox jumped over the lazy dog on a bright July morning, and I finally wrote it down."
+          # multi-sentence with real pauses (periods + word gap), so the
+          # streaming cadence — and VAD's phrase commits — have something
+          # to work with, the way natural dictation does
+          espeak-ng -w /tmp/speech.wav -s 150 -g 6 \
+            "The quick brown fox jumped over the lazy dog. On a bright July morning, I walked down to the harbor. The water was calm and gray. And I finally wrote it all down."
       - name: Stream it to Scribe v2 Realtime
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-        run: node scripts/scribe-live-test.mjs /tmp/speech.wav fox morning
+        run: node scripts/scribe-live-test.mjs /tmp/speech.wav fox morning harbor

@@ -28,7 +28,6 @@ const KEY = process.env.ELEVENLABS_API_KEY;
 const BASE = (process.env.ELEVENLABS_BASE_URL ?? "https://api.elevenlabs.io").replace(/\/$/, "");
 const MODEL = process.env.SCRIBE_MODEL ?? "scribe_v2_realtime";
 const RATE = 16000;
-const CHUNK_SIZES_MS = [250, 100, 50]; // old size, shipped size, and smaller still
 const expected = expectedWords.length ? expectedWords : ["fox", "morning"];
 
 if (!KEY) die("ELEVENLABS_API_KEY is not set");
@@ -84,9 +83,10 @@ function downsampleTo16k(input, inRate) {
   return out;
 }
 
-/* ── one full session at a given chunk size ─────────────────────── */
-async function runSession(pcm, chunkMs) {
-  const label = `[${chunkMs}ms chunks]`;
+/* ── one full session (chunk size × commit strategy) ────────────── */
+async function runSession(pcm, { chunkMs, commit }) {
+  const audioMs = (pcm.length / RATE) * 1000;
+  const label = `[${commit}·${chunkMs}ms]`;
   const timings = {};
   let t = performance.now();
 
@@ -104,54 +104,63 @@ async function runSession(pcm, chunkMs) {
     model_id: MODEL,
     token,
     audio_format: "pcm_16000",
-    commit_strategy: "manual",
-    include_timestamps: "true", // word-level times, to score per-word lag
+    commit_strategy: commit,
   });
   t = performance.now();
   const ws = new WebSocket(`${BASE.replace(/^http/, "ws")}/v1/speech-to-text/realtime?${params}`);
 
   return new Promise((resolve) => {
-    const transcripts = [];
-    let done = false;
+    const committedParts = []; // finalized text, in order
+    const timeline = []; // {ms, words, kind} every time the shown text grows
+    const wordSeenMs = []; // ms a word at global index first appeared on "screen"
+    let committedWordCount = 0; // words locked in by commits so far
     let firstChunkAt = 0;
-    let committedAt = 0;
-    // wordSeenMs[i] = wall-clock ms (since first chunk) a word first
-    // appeared at position i in a partial. wordStamps = the committed
-    // words with their spoken start times, for the lag subtraction.
-    const wordSeenMs = [];
-    let wordStamps = [];
+    let audioDoneAt = 0;
+    let done = false;
+    let settleTimer = null;
+
+    // "shown text" = everything committed so far + the live partial. Mark the
+    // first-seen time of every newly-revealed word position, from partials AND
+    // progressive (VAD) commits alike — that's what the eye actually sees.
+    const reveal = (kind, extraPartialWords) => {
+      const now = performance.now() - firstChunkAt;
+      const shown = committedWordCount + extraPartialWords;
+      for (let i = wordSeenMs.length; i < shown; i++) wordSeenMs[i] = now;
+      timeline.push({ ms: Math.round(now), words: shown, kind });
+    };
+
     const finish = (ok, why) => {
       if (done) return;
       done = true;
+      clearTimeout(settleTimer);
       try { ws.close(); } catch {}
       if (!ok) die(`${label} ${why}`);
-      resolve({ transcript: transcripts.join(" "), timings, wordSeenMs, wordStamps });
+      resolve({ label, commit, chunkMs, transcript: committedParts.join(" ").trim(), timings, timeline, wordSeenMs, audioMs });
     };
     const guard = setTimeout(() => finish(false, "timed out after 90s"), 90_000);
+    // finish once commits go quiet (VAD emits several; manual just one)
+    const scheduleSettle = (ms) => { clearTimeout(settleTimer); settleTimer = setTimeout(() => { clearTimeout(guard); finish(true); }, ms); };
 
     ws.addEventListener("error", () => finish(false, "websocket error"));
     ws.addEventListener("close", (e) => { if (!done) finish(false, `websocket closed early (code ${e.code})`); });
     ws.addEventListener("message", (e) => {
       const data = JSON.parse(e.data);
-      const text = data.text ?? data.transcript ?? "";
+      const text = (data.text ?? data.transcript ?? "").trim();
       if (data.message_type === "partial_transcript") {
-        const now = performance.now() - firstChunkAt;
-        if (!timings.firstPartial && firstChunkAt) timings.firstPartial = now;
-        // record the arrival of each newly-revealed word position (partials
-        // only grow in the steady state; a shrink just doesn't backfill)
-        const n = text.trim() ? text.trim().split(/\s+/).length : 0;
-        for (let i = wordSeenMs.length; i < n; i++) wordSeenMs[i] = now;
+        if (!timings.firstPartial && firstChunkAt) timings.firstPartial = performance.now() - firstChunkAt;
+        reveal("partial", text ? text.split(/\s+/).length : 0);
         return;
       }
-      console.log(`${label} ← ${data.message_type}${text ? `: ${JSON.stringify(text)}` : ""}${data.error ? ` error=${data.error}` : ""}`);
       if (data.message_type === "committed_transcript" || data.message_type === "committed_transcript_with_timestamps") {
-        if (text.trim()) transcripts.push(text);
-        if (Array.isArray(data.words)) wordStamps = data.words;
-        if (committedAt) {
-          timings.settle = performance.now() - committedAt;
-          clearTimeout(guard);
-          finish(true);
+        if (text) {
+          committedParts.push(text);
+          committedWordCount += text.split(/\s+/).length;
+          if (!timings.firstCommit && firstChunkAt) timings.firstCommit = performance.now() - firstChunkAt;
+          if (audioDoneAt && !timings.settle) timings.settle = performance.now() - audioDoneAt;
+          reveal("commit", 0);
         }
+        scheduleSettle(1200); // wait a touch for further VAD commits
+        return;
       }
       if (/error|exceeded|throttled|overflow|exhausted|unaccepted|limited/.test(data.message_type ?? "") &&
           data.message_type !== "session_time_limit_exceeded") {
@@ -171,36 +180,50 @@ async function runSession(pcm, chunkMs) {
           commit: false,
           sample_rate: RATE,
         }));
-        // real-time pacing — honest lag numbers need honestly-timed input
-        await new Promise((r) => setTimeout(r, chunkMs));
+        await new Promise((r) => setTimeout(r, chunkMs)); // real-time pacing
       }
-      committedAt = performance.now();
+      audioDoneAt = performance.now();
+      // flush the tail either way (VAD finalizes any uncommitted remainder too)
       ws.send(JSON.stringify({ message_type: "input_audio_chunk", audio_base_64: "", commit: true, sample_rate: RATE }));
+      scheduleSettle(4000);
     });
   });
 }
 
-/* per-word lag = when the word first showed − when it was spoken.
-   Real-time paced input means wall-clock ms ≈ audio position ms, so
-   subtracting the word's spoken start time yields the lag the writer
-   feels for that word. Returns a summary over all matched words. */
-function perWordLag(wordSeenMs, wordStamps) {
-  const startMs = (w) =>
-    ((w.start ?? w.start_time ?? w.startTime ?? w.time ?? 0) *
-      // stamps may already be ms; assume seconds if small
-      (typeof w.start === "number" && w.start < 1000 ? 1000 : 1));
+/* Estimated per-word lag without server timestamps: real-time paced input
+   means a word spoken at audio-second s left the mic at wall-clock ≈ s. We
+   don't know each word's exact spoken time, so approximate it by spreading
+   the words evenly across the audio duration — good enough to COMPARE two
+   strategies on the same audio. lag(i) = seen(i) − evenly-spaced spoken(i). */
+function estimatedLag(wordSeenMs, audioMs) {
+  const w = wordSeenMs.length;
+  if (!w) return null;
   const lags = [];
-  const n = Math.min(wordSeenMs.length, wordStamps.length);
-  for (let i = 0; i < n; i++) {
-    const spoken = startMs(wordStamps[i]);
-    const seen = wordSeenMs[i];
-    if (Number.isFinite(spoken) && Number.isFinite(seen)) lags.push(seen - spoken);
+  for (let i = 0; i < w; i++) {
+    const spoken = ((i + 0.5) / w) * audioMs;
+    lags.push(wordSeenMs[i] - spoken);
   }
-  if (!lags.length) return null;
   const sorted = [...lags].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const avg = lags.reduce((s, x) => s + x, 0) / lags.length;
-  return { count: lags.length, median, avg, min: sorted[0], max: sorted[sorted.length - 1] };
+  return {
+    count: w,
+    median: sorted[Math.floor(w / 2)],
+    avg: lags.reduce((s, x) => s + x, 0) / w,
+    min: sorted[0],
+    max: sorted[w - 1],
+  };
+}
+
+/* a compact glance at how the text built up over the take */
+function sparkline(timeline, audioMs) {
+  // one bucket per ~half-second of audio; show the word count shown by then
+  const buckets = Math.max(1, Math.ceil(audioMs / 500));
+  const at = new Array(buckets).fill(0);
+  for (const e of timeline) {
+    const b = Math.min(buckets - 1, Math.floor(e.ms / 500));
+    at[b] = Math.max(at[b], e.words);
+  }
+  for (let i = 1; i < buckets; i++) at[i] = Math.max(at[i], at[i - 1]);
+  return at.join(" ");
 }
 
 /* ── main ───────────────────────────────────────────────────────── */
@@ -208,41 +231,47 @@ const { mono, rate } = parseWav(readFileSync(wavPath));
 const pcm = downsampleTo16k(mono, rate);
 console.log(`audio: ${wavPath} @${rate}Hz → ${(pcm.length / RATE).toFixed(1)}s @16k\n`);
 
+// The question is no longer chunk size (proven flat) — it's how fast
+// ElevenLabs emits PARTIALS mid-stream, i.e. the model's own live-caption
+// latency. Fixed 100ms chunks; manual vs vad only to show commit strategy
+// doesn't change the mid-sentence cadence.
+const RUNS = [
+  { chunkMs: 100, commit: "manual" },
+  { chunkMs: 100, commit: "vad" },
+];
+
 const results = [];
-for (const chunkMs of CHUNK_SIZES_MS) {
-  const r = await runSession(pcm, chunkMs);
-  results.push({ chunkMs, ...r });
-  console.log(`[${chunkMs}ms chunks] transcript: ${JSON.stringify(r.transcript)}\n`);
+for (const cfg of RUNS) {
+  const r = await runSession(pcm, cfg);
+  results.push(r);
+  console.log(`${r.label} transcript: ${JSON.stringify(r.transcript)}`);
+  console.log(`${r.label} build-up (words shown per ½s of audio): ${sparkline(r.timeline, r.audioMs)}\n`);
 }
 
 console.log("── setup latency ───────────────────────────────");
 for (const r of results) {
   const tt = r.timings;
-  console.log(
-    `${String(r.chunkMs).padStart(4)}ms chunks · mint ${ms(tt.mint)} · connect ${ms(tt.connect)}` +
-    ` · commit→settled ${ms(tt.settle)}`,
-  );
+  console.log(`${r.label.padEnd(16)} · mint ${ms(tt.mint)} · connect ${ms(tt.connect)} · tail-settle ${ms(tt.settle ?? NaN)}`);
 }
 
-console.log("\n── steady-state per-word lag (the felt delay) ──");
-console.log("   (words behind your voice; excludes browser render + your own network)");
+console.log("\n── live-caption latency (the felt delay) ───────");
+console.log("   first-word = speech→first text on screen; per-word lag estimated");
+console.log("   by even word spacing (comparable across runs on the same audio).");
 for (const r of results) {
-  const lag = perWordLag(r.wordSeenMs, r.wordStamps);
-  if (!lag) {
-    console.log(`${String(r.chunkMs).padStart(4)}ms chunks · no word timestamps returned`);
-    continue;
-  }
+  const lag = estimatedLag(r.wordSeenMs, r.audioMs);
+  const first = r.timings.firstPartial ?? r.timings.firstCommit;
+  if (!lag) { console.log(`${r.label.padEnd(16)} · no words seen`); continue; }
   console.log(
-    `${String(r.chunkMs).padStart(4)}ms chunks · median ${ms(lag.median)} · avg ${ms(lag.avg)}` +
-    ` · min ${ms(lag.min)} · max ${ms(lag.max)} · first-word ${ms(r.timings.firstPartial ?? NaN)} · n=${lag.count}`,
+    `${r.label.padEnd(16)} · first-word ${ms(first ?? NaN)} · median-lag ${ms(lag.median)}` +
+    ` · avg ${ms(lag.avg)} · max ${ms(lag.max)} · updates=${r.timeline.length}`,
   );
 }
 
 for (const r of results) {
   const lower = r.transcript.toLowerCase();
   const missing = expected.filter((w) => !lower.includes(w.toLowerCase()));
-  if (!r.transcript.trim()) die(`[${r.chunkMs}ms chunks] empty transcript`);
-  if (missing.length) die(`[${r.chunkMs}ms chunks] transcript missing: ${missing.join(", ")}`);
+  if (!r.transcript.trim()) die(`${r.label} empty transcript`);
+  if (missing.length) die(`${r.label} transcript missing: ${missing.join(", ")}`);
 }
 console.log(`\nPASS: all ${results.length} sessions transcribed ${expected.join(", ")}`);
 process.exit(0);
