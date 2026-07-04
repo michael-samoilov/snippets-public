@@ -883,6 +883,44 @@ mark.snippet-mark {
   }
 }
 
+/* A sweep with a rest, for a whole region that shimmers as one. The band
+   crosses each element early in the cycle, then the position holds off-screen
+   for the rest — a pause before the next pass. Paired with a per-column delay
+   (see the month skeleton), the columns cross in turn so a single band travels
+   left→right across the grid and then everything rests together. The header
+   above the grid wears the same class at zero delay, so it leads with the left
+   column; every element shares the one cycle and the one pause. */
+@keyframes skeleton-wave {
+  0% {
+    background-position: 150% 0;
+  }
+  28% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: -150% 0;
+  }
+}
+.skeleton-shimmer-wave {
+  background-image: linear-gradient(
+    90deg,
+    transparent 20%,
+    var(--skeleton-sheen) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  /* `both`: a column delayed into the wave holds the off-screen first frame
+     (no band) until its turn, rather than flashing a stray band at rest */
+  animation: skeleton-wave 2s cubic-bezier(0.4, 0, 0.6, 1) infinite both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer-wave {
+    animation: none;
+    background-image: none;
+  }
+}
+
 /* ── quiet links ───────────────────────────────────────────── */
 
 .link-quiet {

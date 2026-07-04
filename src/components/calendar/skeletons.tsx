@@ -23,14 +23,13 @@ import { useSettings } from "@/lib/settings";
 
 const FAINT = { backgroundColor: "var(--rule-faint)" } as const;
 
-// The month shimmer sweeps left→right rather than lighting every cell at once.
-// The seven columns are spread evenly across ONE shimmer cycle — column 0 runs
-// furthest ahead (the most negative delay), column 6 at zero — so a single band
-// crosses the whole grid and repeats on the very same beat as a lone element's
-// shimmer, no longer.
-const SHIMMER_S = 1.6; // must match .skeleton-shimmer's duration in globals.css
+// The month grid shimmers as one wave: each column starts the shared sweep a
+// beat after the one on its left (0.12s apart, 0→0.72s across the seven), so a
+// single band travels left→right and then all rest together through the pause
+// the keyframe holds. The header above the grid runs the same class at zero
+// delay, leading with column 0.
 const waveDelay = (col: number) =>
-  ({ animationDelay: `${((col - 6) / 7) * SHIMMER_S}s` }) as const;
+  ({ animationDelay: `${col * 0.12}s` }) as const;
 
 /* ── today: the zone the book opens onto — the most common landing ────
    Mirrors TodayZoneFill's composition: the wax-outlined frame, the date
@@ -90,10 +89,12 @@ const MONTH_BLOCKS = [
 function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
   return (
     <div className="mb-1">
-      {/* the hand-over row: the month's name standing over its first day */}
+      {/* the hand-over row: the month's name standing over its first day. It
+          rides the same page-wide sweep as the dates below, so the label and
+          its column light together. */}
       <div className="relative" style={{ height: 28 }}>
         <span
-          className="skeleton-shimmer absolute bottom-[3.25px] h-2.5 w-9 -translate-x-1/2 rounded-[2px]"
+          className="skeleton-shimmer-wave absolute bottom-[3.25px] h-2.5 w-9 -translate-x-1/2 rounded-[2px]"
           style={{ ...FAINT, left: `${((lead + 0.5) / 7) * 100}%`, ...waveDelay(lead) }}
         />
       </div>
@@ -106,9 +107,9 @@ function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
             key={i}
             className="flex aspect-square flex-col items-center justify-center gap-1 border-t border-rule-faint"
           >
-            {/* delayed by the cell's column, so the sheen crosses the page */}
+            {/* each column joins the wave a beat after the one on its left */}
             <span
-              className="skeleton-shimmer h-2.5 w-3 rounded-[2px]"
+              className="skeleton-shimmer-wave h-2.5 w-3 rounded-[2px]"
               style={{ ...FAINT, ...waveDelay((lead + i) % 7) }}
             />
             {/* the dot strip is always reserved, as in the real cell */}
@@ -156,8 +157,11 @@ function MiniSkel({
         {Array.from({ length: lead }).map((_, i) => (
           <span key={`b${i}`} className="size-[3px]" />
         ))}
+        {/* the dots stay static: a year holds ~360 of them, and animating every
+            one is the one place the skeleton could tax the load it's masking —
+            the shimmer on the month labels carries the life */}
         {Array.from({ length: days }).map((_, i) => (
-          <span key={i} className="skeleton-shimmer size-[3px] rounded-full" style={FAINT} />
+          <span key={i} className="size-[3px] rounded-full" style={FAINT} />
         ))}
         {Array.from({ length: trailing }).map((_, i) => (
           <span key={`a${i}`} className="size-[3px]" />
@@ -177,6 +181,44 @@ export function YearSkeleton() {
         {Array.from({ length: 12 }).map((_, m) => (
           <MiniSkel key={m} year={year} month={m} weekStart={weekStart} />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── entry: the card a schedule tile opens into ───────────────────────
+   The same paper card as the tile it grew from — rounded, hairline, a lit top
+   edge — filled with the words' own rhythm (0.9rem × 1.42, a paragraph break or
+   two, a short last line) and, at the foot, the lone resting place of the ember
+   trash. */
+// widths as a fraction of the line; 0 is a blank line (a paragraph gap)
+const ENTRY_LINES = [1, 1, 1, 0.82, 0, 1, 1, 1, 1, 0.55, 0, 1, 1, 0.68];
+
+export function EntrySkeleton() {
+  return (
+    <div className="h-full pt-2" aria-hidden="true">
+      <div className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]">
+        {/* the card's lit top edge, as on the real card */}
+        <div className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] shadow-[inset_0_1px_0_var(--press-highlight)]" />
+        {/* the words */}
+        <div className="min-h-0 px-4 pt-3 text-[0.9rem] leading-[1.42]">
+          {ENTRY_LINES.map((w, i) =>
+            w === 0 ? (
+              <div key={i} className="h-[1.42em]" />
+            ) : (
+              <div key={i} className="flex h-[1.42em] items-center">
+                <span
+                  className="skeleton-shimmer h-[7px] rounded-[2px]"
+                  style={{ ...FAINT, width: `${w * 100}%` }}
+                />
+              </div>
+            ),
+          )}
+        </div>
+        {/* the foot: the ember trash's resting place, across the card */}
+        <div className="flex items-center justify-end px-3 pb-3 pt-2.5">
+          <span className="skeleton-shimmer size-[34px] rounded-full" style={FAINT} />
+        </div>
       </div>
     </div>
   );

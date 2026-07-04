@@ -58,11 +58,18 @@ import type {
   MonthFeedHandle,
   YearFeedHandle,
 } from "@/components/calendar/shared";
-import { MonthSkeleton, YearSkeleton, TodaySkeleton } from "@/components/calendar/skeletons";
+import {
+  MonthSkeleton,
+  YearSkeleton,
+  TodaySkeleton,
+  EntrySkeleton,
+} from "@/components/calendar/skeletons";
 
 const EntryView = dynamic(
   () => import("@/components/calendar/entry-view").then((m) => m.EntryView),
-  { ssr: false, loading: () => null },
+  // a deep-link or cold first open shows the card's skeleton while the chunk
+  // loads, rather than a blank layer
+  { ssr: false, loading: () => <EntrySkeleton /> },
 );
 const MarkedPreview = dynamic(
   () => import("@/components/calendar/entry-view").then((m) => m.MarkedPreview),
@@ -222,7 +229,7 @@ function LedgerRows() {
   );
 }
 
-type SkeletonView = "today" | "schedule" | "month" | "year";
+type SkeletonView = "today" | "schedule" | "month" | "year" | "entry";
 
 // A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
 // the frame shows the instant the HTML lands instead of a blank sheet. The
@@ -236,7 +243,12 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
       <div className="sticky top-0 z-30">
         <div className="flex items-center justify-between">
           <div
-            className="skeleton-shimmer my-1 h-8 w-36 rounded-[5px] opacity-60"
+            // the month grid shimmers as one left→right wave; its title joins
+            // that same sweep at zero delay, leading with the first column
+            className={cn(
+              view === "month" ? "skeleton-shimmer-wave" : "skeleton-shimmer",
+              "my-1 h-8 w-36 rounded-[5px] opacity-60",
+            )}
             style={{ backgroundColor: "var(--rule-faint)" }}
           />
           <div className="size-9" />
@@ -249,6 +261,8 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
           <MonthSkeleton />
         ) : view === "schedule" ? (
           <LedgerRows />
+        ) : view === "entry" ? (
+          <EntrySkeleton />
         ) : (
           <TodaySkeleton />
         )}
@@ -259,13 +273,15 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
 
 // Dev-only: ?skeldebug holds a pageload skeleton on screen so its look can be
 // inspected and tuned (it normally flashes by in the Suspense gap). Add a value
-// to choose the view — ?skeldebug=today (default) / schedule / month / year.
-// The real skeleton verbatim, plus a quiet pill — same recipe as the perf A/B
-// pill — so it's clear you're parked in the held view, not stuck loading.
+// to choose the view — ?skeldebug=today (default) / schedule / month / year /
+// entry. The real skeleton verbatim, plus a quiet pill — same recipe as the
+// perf A/B pill — so it's clear you're parked in the held view, not stuck loading.
 function SkeletonDebug() {
   const held = useSearchParams().get("skeldebug");
   const view: SkeletonView =
-    held === "year" || held === "month" || held === "schedule" ? held : "today";
+    held === "year" || held === "month" || held === "schedule" || held === "entry"
+      ? held
+      : "today";
   return (
     <>
       <CalendarSkeleton view={view} />
