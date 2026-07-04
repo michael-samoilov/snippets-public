@@ -19,7 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* the sheet of paper */}
-      <Sheet className="flex min-h-0 flex-1 flex-col px-5 pb-2 pt-6 sm:px-10 sm:pb-3 sm:pt-9">
+      <Sheet className="flex min-h-0 flex-1 flex-col px-5 pb-2 pt-5 sm:px-10 sm:pb-3 sm:pt-9">
         {/* overflow-x hidden, explicitly: setting only overflow-y makes
             the other axis auto per spec, and iOS pans it sideways on a
             diagonal swipe — the page then sits "clipped" at scrollLeft>0
@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             to the content box, so bottom padding would leave a strip of
             scrollport below the terminus where content shows past it —
             a margin ends the scroller exactly at the line instead. */}
-        <SheetScroll className="-mx-2 mb-4 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 sm:mb-6 [scrollbar-width:none]">
+        <SheetScroll className="-mx-2 mb-2.5 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 sm:mb-6 [scrollbar-width:none]">
           {children}
         </SheetScroll>
       </Sheet>

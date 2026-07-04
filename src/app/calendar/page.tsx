@@ -3867,19 +3867,13 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
-        // when a rule sits above the zone (today empty, prior days present), set
-        // the gap from the rule to the zone's top edge equal to the "chin" — the
-        // space below the scroller, from its bottom down to the sheet's bottom
-        // (~26px). The 1px short is the rule's own hairline sitting in that gap.
-        // When today's CARDS sit above instead, the zone owns the WHOLE 26px
-        // itself (today's section cedes its bottom padding): the row is
-        // min-h-full INCLUDING this padding, so at the book's foot the entire
-        // breath sits inside the viewport between the top terminus and the
-        // zone's border — not partly spent on the card section above the fold.
-        // First-ever keeps just a hair (nothing above to breathe from).
+        // the zone sits in the book's standard frame: its top gap matches the
+        // side gutter (px-5) and the chin below it, so the content reads with one
+        // even ~20px margin on every side. first-ever keeps just a hair (nothing
+        // above it to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[26px] mb-[3px]" : "pt-[25px] mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : "pt-[19px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
