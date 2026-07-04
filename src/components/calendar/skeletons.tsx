@@ -23,13 +23,13 @@ import { useSettings } from "@/lib/settings";
 
 const FAINT = { backgroundColor: "var(--rule-faint)" } as const;
 
-// The month grid shimmers as one wave: each column starts the shared sweep a
-// beat after the one on its left (0.12s apart, 0→0.72s across the seven), so a
-// single band travels left→right and then all rest together through the pause
-// the keyframe holds. The header above the grid runs the same class at zero
-// delay, leading with column 0.
-const waveDelay = (col: number) =>
-  ({ animationDelay: `${col * 0.12}s` }) as const;
+// The date columns fire the fast .skeleton-shimmer-datewave in turn, 0.2s apart
+// (0→1.2s across the seven). Column 6's 0.4s sweep then lands at 1.6s, exactly
+// when the non-date sweep ends — so the whole left→right wave spans one non-date
+// shimmer. The non-date placeholders (header, month labels) run the slow
+// full-length .skeleton-shimmer-wave at zero delay.
+const dateWaveDelay = (col: number) =>
+  ({ animationDelay: `${col * 0.2}s` }) as const;
 
 /* ── today: the zone the book opens onto — the most common landing ────
    Mirrors TodayZoneFill's composition: the wax-outlined frame, the date
@@ -95,7 +95,7 @@ function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
       <div className="relative" style={{ height: 28 }}>
         <span
           className="skeleton-shimmer-wave absolute bottom-[3.25px] h-2.5 w-9 -translate-x-1/2 rounded-[2px]"
-          style={{ ...FAINT, left: `${((lead + 0.5) / 7) * 100}%`, ...waveDelay(lead) }}
+          style={{ ...FAINT, left: `${((lead + 0.5) / 7) * 100}%` }}
         />
       </div>
       <div className="grid grid-cols-7">
@@ -107,10 +107,10 @@ function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
             key={i}
             className="flex aspect-square flex-col items-center justify-center gap-1 border-t border-rule-faint"
           >
-            {/* each column joins the wave a beat after the one on its left */}
+            {/* each column fires the fast sweep a beat after the one on its left */}
             <span
-              className="skeleton-shimmer-wave h-2.5 w-3 rounded-[2px]"
-              style={{ ...FAINT, ...waveDelay((lead + i) % 7) }}
+              className="skeleton-shimmer-datewave h-2.5 w-3 rounded-[2px]"
+              style={{ ...FAINT, ...dateWaveDelay((lead + i) % 7) }}
             />
             {/* the dot strip is always reserved, as in the real cell */}
             <span className="h-[3.5px]" />

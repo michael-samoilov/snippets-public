@@ -883,25 +883,41 @@ mark.snippet-mark {
   }
 }
 
-/* A sweep with a rest, for a whole region that shimmers as one. The band
-   crosses each element early in the cycle, then the position holds off-screen
-   for the rest — a pause before the next pass. Paired with a per-column delay
-   (see the month skeleton), the columns cross in turn so a single band travels
-   left→right across the grid and then everything rests together. The header
-   above the grid wears the same class at zero delay, so it leads with the left
-   column; every element shares the one cycle and the one pause. */
+/* The month grid shimmers as one coordinated pass, then rests. A 2.4s cycle:
+   a 1.6s sweep (the same band velocity as the base .skeleton-shimmer's 1.6s —
+   150%→-150% over 1.6s) followed by a 0.8s pause the whole grid shares.
+
+   The NON-DATE placeholders (the header, the month labels) run this full sweep
+   — one slow band over the whole 1.6s. The DATE columns each run a FASTER
+   sweep (the same 300% of travel in 0.4s) and start 0.2s after the column to
+   their left (see the month skeleton's per-column delay): column 0 begins with
+   the non-date sweep, column 6 (delay 1.2s) finishes its 0.4s sweep at 1.6s —
+   exactly when the non-date sweep ends. So the collective left→right wave spans
+   one non-date shimmer, no more, and then everything holds dim together. */
 @keyframes skeleton-wave {
   0% {
     background-position: 150% 0;
   }
-  28% {
+  66.67% {
     background-position: -150% 0;
   }
   100% {
     background-position: -150% 0;
   }
 }
-.skeleton-shimmer-wave {
+@keyframes skeleton-datewave {
+  0% {
+    background-position: 150% 0;
+  }
+  16.67% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: -150% 0;
+  }
+}
+.skeleton-shimmer-wave,
+.skeleton-shimmer-datewave {
   background-image: linear-gradient(
     90deg,
     transparent 20%,
@@ -912,10 +928,20 @@ mark.snippet-mark {
   background-repeat: no-repeat;
   /* `both`: a column delayed into the wave holds the off-screen first frame
      (no band) until its turn, rather than flashing a stray band at rest */
-  animation: skeleton-wave 2s cubic-bezier(0.4, 0, 0.6, 1) infinite both;
+  animation-duration: 2.4s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+.skeleton-shimmer-wave {
+  animation-name: skeleton-wave;
+}
+.skeleton-shimmer-datewave {
+  animation-name: skeleton-datewave;
 }
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-shimmer-wave {
+  .skeleton-shimmer-wave,
+  .skeleton-shimmer-datewave {
     animation: none;
     background-image: none;
   }
