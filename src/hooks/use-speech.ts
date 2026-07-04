@@ -78,7 +78,7 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-function isIOS(): boolean {
+export function isIOS(): boolean {
   if (typeof navigator === "undefined") return false;
   return (
     /iP(hone|ad|od)/.test(navigator.userAgent) ||
