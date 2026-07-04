@@ -37,15 +37,17 @@ const SHIPPED = {
   light: { colorBack: "#f7f1e3", colorFront: "#ddd0b2" },
   dark: { colorBack: "#1d1812", colorFront: "#322a1d" },
   params: {
-    contrast: 0.16,
-    roughness: 0.18,
-    fiber: 0.55,
-    fiberSize: 0.1,
-    crumples: 0.1,
+    contrast: 0.67,
+    roughness: 0.2,
+    fiber: 0.5,
+    fiberSize: 0.07,
+    crumples: 0,
+    // kept non-zero even at crumples 0: it's a shader denominator, so 0 would
+    // divide by zero. Moot to the look while crumples is off.
     crumpleSize: 0.3,
     folds: 0,
     foldCount: 1,
-    drops: 0.06,
+    drops: 0,
     fade: 0,
     seed: 7,
     scale: 1,
