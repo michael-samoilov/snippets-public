@@ -43,7 +43,7 @@ import {
 } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
-import { isIOSStandalone, useSpeech } from "@/hooks/use-speech";
+import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
@@ -3855,19 +3855,33 @@ function TodayZoneFill({
     wasVoicing.current = voicing;
   }, [shownText, liveSpoken, transcribing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // voice must never fail silently — every failure says what happened
+  // voice must never fail silently — every failure says what happened, and
+  // the words must match reality: a "service" failure blames the browser
+  // only when it's the browser's own engine that refused; a network
+  // transcriber refusing (bad key, quota, unconfigured) is on our side.
   useEffect(() => {
     if (!speech.failure) return;
     const f = copy.capture.voiceFailures;
-    const m: { title: string; description: string } =
-      speech.failure === "service"
-        ? {
-            title: f.service.title,
-            description: isIOSStandalone()
-              ? f.service.descriptionInstalledIOS
+    let m: { title: string; description: string };
+    if (speech.failure === "service") {
+      if (speech.engine === "web") {
+        // the browser's built-in dictation refused — the one real browser
+        // fault. On iOS all browsers are WebKit, so never suggest switching.
+        m = {
+          title: f.service.title,
+          description: isIOSStandalone()
+            ? f.service.descriptionInstalledIOS
+            : isIOS()
+              ? f.service.descriptionIOSBrowser
               : f.service.descriptionOtherwise,
-          }
-        : f[speech.failure];
+        };
+      } else {
+        // Deepgram/Scribe/batch refused — not the browser
+        m = f.serviceRemote;
+      }
+    } else {
+      m = f[speech.failure];
+    }
     toast(m.title, { description: m.description });
   }, [speech.failure]);
 
