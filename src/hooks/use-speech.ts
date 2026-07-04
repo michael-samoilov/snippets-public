@@ -405,11 +405,9 @@ const STREAM_ADAPTERS: Record<string, StreamAdapter> = {
 
 /** Provider preference: first available wins as the default, the rest
  *  are automatic backups. Reorder with NEXT_PUBLIC_SPEECH_PROVIDERS
- *  (e.g. "deepgram,scribe") and redeploy — no code change. Default is
- *  scribe-first (ElevenLabs) while its accuracy is being benchmarked
- *  against Deepgram. */
+ *  (e.g. "scribe,deepgram") and redeploy — no code change. */
 const PROVIDER_ORDER = (
-  process.env.NEXT_PUBLIC_SPEECH_PROVIDERS ?? "scribe,deepgram"
+  process.env.NEXT_PUBLIC_SPEECH_PROVIDERS ?? "deepgram,scribe"
 )
   .split(",")
   .map((s) => s.trim())
