@@ -414,9 +414,10 @@ function Bench({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-5">
+    <div className="flex flex-wrap items-start gap-5">
       <MockZone v={v} on={on} />
-      <div className="mt-9 flex w-60 flex-col gap-2.5">
+      {/* beside the zone on desktop; wraps beneath it on a phone */}
+      <div className="flex w-[300px] flex-col gap-2.5 sm:mt-9 sm:w-60">
         {children}
         <button
           type="button"
@@ -476,7 +477,7 @@ export default function WaxWashLab() {
   );
 
   return (
-    <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-8" data-wash-lab>
+    <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-4 sm:p-8" data-wash-lab>
       <style>{`
         [data-wash-lab] { --wash-src: var(--wax); }
         .dark [data-wash-lab] { --wash-src: var(--wax-bright); }
