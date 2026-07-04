@@ -23,13 +23,14 @@ import { useSettings } from "@/lib/settings";
 
 const FAINT = { backgroundColor: "var(--rule-faint)" } as const;
 
-// The date columns fire the fast .skeleton-shimmer-datewave in turn, 0.2s apart
-// (0→1.2s across the seven). Column 6's 0.4s sweep then lands at 1.6s, exactly
-// when the non-date sweep ends — so the whole left→right wave spans one non-date
-// shimmer. The non-date placeholders (header, month labels) run the slow
-// full-length .skeleton-shimmer-wave at zero delay.
+// The date columns fire the fast .skeleton-shimmer-datewave in turn, one buffer
+// B = 0.08s apart (0→0.48s across the seven columns). Column 6's 0.16s sweep
+// then lands at 0.64s, exactly when the non-date sweep (L = 0.64s) ends — so the
+// whole left→right wave spans one non-date flash, no more. The non-date
+// placeholders (header, month labels) run .skeleton-shimmer-wave at zero delay.
+// (See the timing derivation in globals.css: 6·B + L/4 = L.)
 const dateWaveDelay = (col: number) =>
-  ({ animationDelay: `${col * 0.2}s` }) as const;
+  ({ animationDelay: `${col * 0.08}s` }) as const;
 
 /* ── today: the zone the book opens onto — the most common landing ────
    Mirrors TodayZoneFill's composition: the wax-outlined frame, the date
