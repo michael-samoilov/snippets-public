@@ -13,7 +13,7 @@
    (https://github.com/paper-design/shaders, Apache-2.0), vendored per
    house style rather than installed, and re-tinted to the wash ink. */
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { PulsingBorder } from "@/vendor/paper-shaders/react/shaders/pulsing-border";
 
 /* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
@@ -293,6 +293,12 @@ export function WashPulsingBorder({ o }: { o: PulseOpts }) {
           smoke={o.smoke}
           smokeSize={o.smokeSize}
           speed={o.pace}
+          // the mount defaults to 2× device pixels (retina) — far more than a
+          // soft, translucent border needs. Cap it near 1× so the phone isn't
+          // shading a full-retina buffer of this heavy per-pixel shader every
+          // frame; the blur hides the lower resolution.
+          minPixelRatio={1}
+          maxPixelCount={720 * 1280}
           style={{ width: "100%", height: "100%" }}
         />
       )}
@@ -375,7 +381,14 @@ const APP_PULSE: PulseOpts = {
 };
 const APP_MIX = { aurora: 0.2, borealis: 0.3, pulse: 0.45 };
 
-export function RecordingWash({ corner = 16 }: { corner?: number }) {
+/* memo: the composer re-renders on every streamed word while a take runs;
+   the wash depends on none of that, so keep its two canvases off React's
+   critical path (the RAF loops keep drawing regardless). */
+export const RecordingWash = memo(function RecordingWash({
+  corner = 16,
+}: {
+  corner?: number;
+}) {
   /* live, not just initial — the wash may outlast a settings change */
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -385,6 +398,9 @@ export function RecordingWash({ corner = 16 }: { corner?: number }) {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
+
+  // stable across re-renders so ShaderBox never re-reads a fresh object
+  const borealisUniforms = useMemo(() => ({ ...APP_BOREALIS, u_corner: corner }), [corner]);
 
   if (reduced) {
     return <div className="wax-wash absolute inset-0 rounded-[inherit]" />;
@@ -421,7 +437,7 @@ export function RecordingWash({ corner = 16 }: { corner?: number }) {
         className="absolute inset-0 overflow-hidden rounded-[inherit]"
         style={{ opacity: APP_MIX.borealis }}
       >
-        <ShaderBox frag={AURORA_FRAG} uniforms={{ ...APP_BOREALIS, u_corner: corner }} />
+        <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms} />
       </div>
       {/* pulsing border: smoke pooling along the frame */}
       <div
@@ -433,4 +449,4 @@ export function RecordingWash({ corner = 16 }: { corner?: number }) {
       </div>
     </div>
   );
-}
+});

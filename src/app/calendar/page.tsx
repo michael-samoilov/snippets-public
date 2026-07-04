@@ -3929,18 +3929,23 @@ function TodayZoneFill({
             engageZoneTap(e.target as HTMLElement);
           }}
         >
-          {/* the wax wash — recording's colour seeping inward from the frame;
-              waits for speech.live so it never paints before the writer has
-              approved the microphone */}
+          {/* the wax wash — recording's colour seeping inward from the frame.
+              Mounted for the whole take so the shaders warm up while the mic
+              is being armed, but held at opacity 0 (invisible — never paints
+              before the writer approves the microphone) until speech.live, so
+              the reveal is a true fade of already-painted layers, not a pop.
+              Fades back out on stop. */}
           <AnimatePresence>
-            {listening && speech.live && (
+            {listening && (
               <motion.div
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                animate={{ opacity: speech.live ? 1 : 0 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                // a gentle ease-in-out, not the snappy UI ease — the light
+                // should seep in and ebb out, not flick
+                transition={{ duration: 0.42, ease: [0.42, 0, 0.58, 1] }}
               >
                 <RecordingWash corner={ZONE_CORNER} />
               </motion.div>
