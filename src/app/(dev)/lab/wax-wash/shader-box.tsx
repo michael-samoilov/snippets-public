@@ -211,7 +211,7 @@ void main() {
 
 export const BOREALIS_DEFAULTS = {
   intensity: 0.55,
-  rays: 5,
+  rays: 3, // owner-tuned: 2–4 reads as broad slow curtains, not spokes
   sway: 0.28,
   pace: 0.6,
   flicker: 0.35,

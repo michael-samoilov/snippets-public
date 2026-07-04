@@ -58,8 +58,29 @@ async function processUniforms(uniformsProp) {
       });
       imageLoadPromises.push(imagePromise);
     } else if (value instanceof HTMLImageElement) {
-      setMinImageSize(value);
-      processedUniforms[key] = value;
+      // Local patch: Safari decodes data-URI images asynchronously, so a
+      // pre-made Image (e.g. the built-in noise texture) may not be
+      // complete yet — and the vanilla mount throws on incomplete images,
+      // leaving the shader permanently blank. Wait for it like URL images.
+      if (value.complete && value.naturalWidth > 0) {
+        setMinImageSize(value);
+        processedUniforms[key] = value;
+      } else {
+        imageLoadPromises.push(
+          new Promise((resolve) => {
+            const done = () => {
+              setMinImageSize(value);
+              processedUniforms[key] = value;
+              resolve();
+            };
+            value.addEventListener("load", done, { once: true });
+            value.addEventListener("error", () => {
+              console.error(`Could not load image for uniform "${key}".`);
+              resolve();
+            }, { once: true });
+          })
+        );
+      }
     } else {
       processedUniforms[key] = value;
     }
