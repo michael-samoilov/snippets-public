@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { addSnippet } from "@/lib/db";
@@ -15,6 +15,7 @@ import { StampMark } from "@/components/stamp-mark";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { copy } from "@/lib/copy";
 import { cn, joinText } from "@/lib/utils";
+import { useContainedField } from "@/hooks/use-contained-field";
 
 function autosize(el: HTMLTextAreaElement) {
   el.style.height = "auto";
@@ -32,6 +33,9 @@ export function Capture() {
   const [stampCount, setStampCount] = useState(0);
   const [stampVisible, setStampVisible] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // contained like every writing box in the app: capped to the visible area
+  // above the keyboard (less the keep seal below), scrolling its own words
+  useContainedField(textareaRef, true, 96);
   const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prompt = promptForDate(new Date());
 
@@ -42,10 +46,18 @@ export function Capture() {
       if (el) {
         el.focus();
         el.setSelectionRange(el.value.length, el.value.length);
-        autosize(el);
       }
     });
   });
+
+  // grow to fit whatever the field shows, from any source (typing or a batch
+  // transcript set all at once) — a layout effect runs after React commits
+  // the value, so scrollHeight is current and a rAF can't measure it stale.
+  // Contained by useContainedField above: it grows to the cap, then scrolls.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (el) autosize(el);
+  }, [text]);
 
   const listening = speech.status === "listening";
   const transcribing = speech.status === "transcribing";
@@ -171,7 +183,7 @@ export function Capture() {
               void keep();
             }
           }}
-          className="voice-prose min-h-[5.75rem] w-full resize-none overflow-hidden bg-transparent pt-1 text-[1.125rem] outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
+          className="voice-prose min-h-[5.75rem] w-full resize-none overflow-y-auto overscroll-contain bg-transparent pt-1 text-[1.125rem] outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
         />
       )}
 

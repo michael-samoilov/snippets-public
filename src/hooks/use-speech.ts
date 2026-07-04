@@ -30,6 +30,7 @@ interface SpeechRecognitionLike {
   start(): void;
   stop(): void;
   abort(): void;
+  onstart: (() => void) | null;
   onresult: ((e: SREvent) => void) | null;
   onerror: ((e: SRErrorEvent) => void) | null;
   onend: (() => void) | null;
@@ -424,6 +425,9 @@ export interface UseSpeech {
   engine: SpeechEngineKind | null;
   status: SpeechStatus;
   failure: SpeechFailure | null;
+  /** true once the mic is actually capturing — the recording wash reveals
+   *  on this, so nothing paints before the writer approves the microphone */
+  live: boolean;
   /** finalized phrases (streaming engines) — ink that has dried */
   segments: SpeechSegment[];
   /** the phrase still forming (streaming engines) — ink that hasn't */
@@ -452,6 +456,10 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   const [failure, setFailure] = useState<SpeechFailure | null>(null);
   const [segments, setSegments] = useState<SpeechSegment[]>([]);
   const [interim, setInterim] = useState("");
+  // true once the mic is actually capturing (getUserMedia resolved, or the
+  // web recognizer started) — the recording wash reveals on this, so it
+  // never paints before the writer approves the microphone
+  const [live, setLive] = useState(false);
 
   const wantedRef = useRef(false);
   const onSettledRef = useRef(onSettled);
@@ -528,6 +536,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
 
   const fail = useCallback((kind: SpeechFailure) => {
     wantedRef.current = false;
+    setLive(false);
     setFailure(kind);
     setStatus(kind === "denied" ? "denied" : "error");
   }, []);
@@ -599,6 +608,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   /* ── streaming engines (scribe, deepgram) — words arrive live ─── */
 
   const settleStream = useCallback(() => {
+    setLive(false);
     watchdogRef.current?.();
     watchdogRef.current = null;
     if (settleTimerRef.current) {
@@ -646,6 +656,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         mapMicError(err);
         return;
       }
+      setLive(true); // mic is capturing — the recording wash may reveal
       let grant: Grant | null = warm;
       if (!grant) {
         const response = await tokenPromise!;
@@ -881,6 +892,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         stream.getTracks().forEach((t) => t.stop());
         return; // the writer changed their mind while we asked
       }
+      setLive(true); // recording — the wash may reveal
       streamRef.current = stream;
 
       const ctx = getAudioContext();
@@ -928,6 +940,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   /* ── web engine (browser's own, streams words live) ───────────── */
 
   const settleWeb = useCallback(() => {
+    setLive(false);
     setStatus((s) => (s === "listening" ? "idle" : s));
     const spoken = segmentsRef.current.join(" ").trim();
     if (spoken) {
@@ -950,6 +963,8 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     rec.continuous = !isIOS();
     rec.interimResults = true;
     rec.maxAlternatives = 1;
+
+    rec.onstart = () => setLive(true); // recognition running — the wash reveals
 
     rec.onresult = (e) => {
       gotResultRef.current = true;
@@ -1036,6 +1051,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     gotResultRef.current = false;
     setFailure(null);
     failureSnapshotRef.current = null;
+    setLive(false); // stays dark until the mic actually starts capturing
     setStatus("listening");
     navigator.vibrate?.(40);
     if (adapterRef.current && (engine === "scribe" || engine === "deepgram")) {
@@ -1091,6 +1107,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     engine,
     status,
     failure,
+    live,
     segments,
     interim,
     getLevel,

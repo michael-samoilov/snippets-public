@@ -67,6 +67,13 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (the registry domain is blocked in some sandboxes; they're ours now
   and intentionally restyled — overlay tint, input focus, etc.). Edit
   them directly; don't re-fetch over local changes.
+- **Shaders:** `src/vendor/paper-shaders/` is the vendored PaperTexture
+  chain from paper-design/shaders (Apache-2.0, LICENSE alongside) — no
+  npm dependency, same rule as the shadcn sources. Used only by the
+  `/lab/texture` bake route; the app ships baked bitmaps from
+  `public/textures`. The wax-wash lab's aurora/neuro candidates sit on
+  a small hand-rolled WebGL mount in
+  `src/app/(dev)/lab/wax-wash/shader-box.tsx`.
 - **PWA:** `src/app/manifest.ts`, hand-rolled `public/sw.js`
   (registered in `src/components/providers.tsx`, production only).
   Bump `VERSION` in `sw.js` when changing caching behavior.

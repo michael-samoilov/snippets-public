@@ -26,6 +26,7 @@ import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react
 import { toast } from "sonner";
 import { ulid } from "ulidx";
 import { WaxStamp as CanvasSeal, type SealControl } from "@/components/capture/wax-stamp";
+import { RecordingWash } from "@/components/capture/wash-shaders";
 import { KEEP_BEATS, useKeepSequence } from "@/components/schedule/keep-sequence";
 import { useKeptDraft } from "@/lib/kept-draft";
 import {
@@ -57,6 +58,7 @@ import type {
   MonthFeedHandle,
   YearFeedHandle,
 } from "@/components/calendar/shared";
+import { MonthSkeleton, YearSkeleton } from "@/components/calendar/skeletons";
 
 const EntryView = dynamic(
   () => import("@/components/calendar/entry-view").then((m) => m.EntryView),
@@ -68,11 +70,13 @@ const MarkedPreview = dynamic(
 );
 const MonthFeed = dynamic(
   () => import("@/components/calendar/month-feed").then((m) => m.MonthFeed),
-  { ssr: false, loading: () => null },
+  // a deep-link that lands in the month grid shows its ruled skeleton while the
+  // chunk loads, not a blank layer (the layer's invisible during a warm-in)
+  { ssr: false, loading: () => <MonthSkeleton /> },
 );
 const YearFeed = dynamic(
   () => import("@/components/calendar/year-feed").then((m) => m.YearFeed),
-  { ssr: false, loading: () => null },
+  { ssr: false, loading: () => <YearSkeleton /> },
 );
 
 /* ── feed geometry: decades of time, computed, never reflowed ──────
@@ -139,21 +143,75 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
   return g;
 }
 
-// The book's faint ruled rows — shown while the real entries are still loading
-// so the ledger reads as "settling in" rather than blank. Shared by the SSR
-// Suspense fallback AND the in-feed loading state, so the paper stays put
-// continuously (no skeleton→blank→book flash) right up until the book lands.
+// The book's faint days — shown while the real entries are still loading so the
+// ledger reads as "settling in" rather than blank. Shared by the SSR Suspense
+// fallback AND the in-feed loading state, so the paper stays put continuously
+// (no skeleton→blank→book flash) right up until the book lands.
+//
+// Each day stands in a margin date and a stack of blank entry tiles — the same
+// paper-and-hairline material the real cards wear (ScheduleCards), just wordless
+// — so the wait pre-echoes the book's shape instead of a bare ruled grid. The
+// tile counts are a fixed pattern (never random): SSR and client must paint the
+// identical skeleton, and a steady rhythm reads calmer than noise.
+const LEDGER_SHAPE: number[][] = [
+  [3, 2],
+  [1],
+  [2],
+  [4],
+  [2, 1],
+  [1],
+  [3],
+  [2],
+];
+
+// one blank entry tile: the book-card recipe (bg-paper, hairline, inset top
+// highlight) with faint rule-coloured bars where the prose would sit; the last
+// line is short, as a paragraph's is
+function LedgerCard({ lines }: { lines: number }) {
+  return (
+    <div className="rounded-[6px] border border-rule-faint bg-paper p-2.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
+      <div className="flex flex-col gap-[7px]">
+        {Array.from({ length: lines }).map((_, i) => (
+          <div
+            key={i}
+            className="h-[7px] rounded-[2px]"
+            style={{
+              background: "var(--rule-faint)",
+              width: i === lines - 1 ? "58%" : "100%",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LedgerRows() {
   return (
     <>
-      {Array.from({ length: 8 }).map((_, i) => (
+      {LEDGER_SHAPE.map((tiles, i) => (
         <div
           key={i}
           aria-hidden="true"
           className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
         >
-          <div />
-          <div className="h-14" />
+          {/* the margin date: a small weekday bar over a taller day-number bar */}
+          <div className="flex flex-col items-center gap-1.5 pt-[3.5px]">
+            <div
+              className="h-1.5 w-5 rounded-[2px] opacity-70"
+              style={{ background: "var(--rule-faint)" }}
+            />
+            <div
+              className="h-3 w-4 rounded-[2px]"
+              style={{ background: "var(--rule-faint)" }}
+            />
+          </div>
+          {/* the day's entry tiles — same gap as the real ScheduleCards list */}
+          <div className="flex flex-col gap-1">
+            {tiles.map((lines, j) => (
+              <LedgerCard key={j} lines={lines} />
+            ))}
+          </div>
         </div>
       ))}
     </>
@@ -161,8 +219,15 @@ function LedgerRows() {
 }
 
 // A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
-// the ledger frame shows the instant the HTML lands instead of a blank sheet.
-function CalendarSkeleton() {
+// the frame shows the instant the HTML lands instead of a blank sheet. The
+// static shell defaults to the book (the app's home); a deep-link into the year
+// glance or month grid picks up its own skeleton once the feed mounts (the
+// dynamic-import loading state above), and ?skeldebug can hold any of the three.
+function CalendarSkeleton({
+  view = "schedule",
+}: {
+  view?: "schedule" | "month" | "year";
+}) {
   return (
     <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
       <div className="sticky top-0 z-30">
@@ -175,23 +240,32 @@ function CalendarSkeleton() {
         </div>
       </div>
       <div className="relative -mt-px min-h-0 flex-1 overflow-hidden">
-        <LedgerRows />
+        {view === "year" ? (
+          <YearSkeleton />
+        ) : view === "month" ? (
+          <MonthSkeleton />
+        ) : (
+          <LedgerRows />
+        )}
       </div>
     </div>
   );
 }
 
-// Dev-only: ?skeldebug holds the pageload skeleton on screen so its look can be
-// inspected and tuned (it normally flashes by in the Suspense gap). The real
+// Dev-only: ?skeldebug holds a pageload skeleton on screen so its look can be
+// inspected and tuned (it normally flashes by in the Suspense gap). Add a value
+// to choose the view — ?skeldebug=year / month / schedule (default). The real
 // skeleton verbatim, plus a quiet pill — same recipe as the perf A/B pill — so
 // it's clear you're parked in the held view, not stuck loading.
 function SkeletonDebug() {
+  const held = useSearchParams().get("skeldebug");
+  const view = held === "year" || held === "month" ? held : "schedule";
   return (
     <>
-      <CalendarSkeleton />
+      <CalendarSkeleton view={view} />
       <div className="float fixed bottom-3 left-3 z-50 rounded-full px-2.5 py-1">
         <span className="voice-label text-[0.72rem] text-ink-soft">
-          skeleton — held
+          {view} skeleton — held
         </span>
       </div>
     </>
@@ -213,137 +287,8 @@ export default function CalendarPage() {
 // skeleton stays put to be stared at.
 function CalendarGate() {
   const params = useSearchParams();
-  // ?kbdebug overlays live viewport numbers. Captured in the lazy initializer —
-  // during RENDER, before any effect: Calendar's mount effects (children run
-  // first) rewrite the URL, so by effect time the param is already gone.
-  const [kbdebug] = useState(
-    () => typeof window !== "undefined" && window.location.search.includes("kbdebug"),
-  );
   if (params.has("skeldebug")) return <SkeletonDebug />;
-  return (
-    <>
-      <Calendar />
-      {kbdebug && <KbDebug />}
-    </>
-  );
-}
-
-// TODO(remove after the keyboard investigation): ?kbdebug — paints every live
-// viewport number the keyboard logic reads, plus marker lines at the computed
-// visible-bottom (red) and the seal's pin target (orange). A screenshot of a
-// device with the keyboard up tells us exactly what its viewport reports.
-function KbDebug() {
-  const [txt, setTxt] = useState("");
-  const [marks, setMarks] = useState<{ vis: number; tgt: number; raw: number; shift: number } | null>(null);
-  const [panelTop, setPanelTop] = useState(4);
-  const panelRef = useRef<HTMLPreElement>(null);
-  const baseVh = useRef(0);
-  useEffect(() => {
-    const update = () => {
-      const vv = window.visualViewport;
-      const doc = document.scrollingElement?.scrollTop ?? 0;
-      // layout-relative visual-viewport offset (see kbGeom: iOS's offsetTop is
-      // document-relative); keeps the panel inside the visible window
-      const layoutTop = vv ? vv.pageTop - doc : 0;
-      setPanelTop(Math.round(layoutTop + 4));
-      // The FIXED layer and the RECT frame disagree on this device under the
-      // keyboard scroll — measure the shift from the panel's own rect (its
-      // rect vs the fixed top it is CURRENTLY rendered at) so the ruler lines
-      // can be labeled in TRUE rect coordinates.
-      let shift = 0;
-      if (panelRef.current) {
-        const applied = parseFloat(panelRef.current.style.top || "4");
-        shift = Math.round(panelRef.current.getBoundingClientRect().top - applied);
-      }
-      const seal = [...document.querySelectorAll("button")].find((x) =>
-        /keep|seal|speak/i.test(x.getAttribute("aria-label") ?? ""),
-      );
-      const sc = document.querySelector("[data-book-scroller]");
-      const sp = [...document.querySelectorAll("div[aria-hidden].w-px")].pop() as HTMLElement | undefined;
-      let vis = 0, tgt = 0, raw = 0, kb = 0, est = 0;
-      if (vv) {
-        baseVh.current = Math.max(baseVh.current, vv.height);
-        const measured = Math.max(
-          window.innerHeight - vv.height - layoutTop,
-          baseVh.current - vv.height,
-        );
-        raw = layoutTop + vv.height;
-        const pan = Math.max(vv.pageTop, doc);
-        est = Math.round(Math.max(window.innerHeight, baseVh.current) * 0.45);
-        if (measured >= 60) { kb = measured; vis = raw; }
-        else if (pan > 40) { kb = est; vis = raw - est; }
-        else { kb = 0; vis = raw; }
-        tgt = vis - 72;
-      }
-      setMarks({ vis, tgt, raw, shift });
-      type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
-      const a = (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor;
-      setTxt(
-        [
-          `inH ${window.innerHeight}  outH ${window.outerHeight}  scrH ${screen.height}`,
-          vv
-            ? `vvH ${Math.round(vv.height)}  vvOT ${Math.round(vv.offsetTop)}  vvPT ${Math.round(vv.pageTop)}  sc ${vv.scale.toFixed(2)}`
-            : "no visualViewport",
-          `docST ${Math.round(doc)}  winSY ${Math.round(window.scrollY)}  baseVh ${Math.round(baseVh.current)}`,
-          `kb ${Math.round(kb)}  est ${est}  vis ${Math.round(vis)}  tgt ${Math.round(tgt)}`,
-          `sealB ${seal ? Math.round(seal.getBoundingClientRect().bottom) : "-"}  scST ${sc ? Math.round(sc.scrollTop) : "-"}  spcr ${sp?.style.height || "0"}`,
-          `focus ${document.activeElement?.tagName ?? "-"}  shift ${shift}  fieldB ${(() => { const f = document.querySelector("[data-today-zone-box] textarea"); return f ? Math.round(f.getBoundingClientRect().bottom) : "-"; })()}`,
-          a
-            ? `LAST ${a.branch}@${a.t}: kb ${Math.round(a.kb)} tgt ${Math.round(a.tgt)} sealB ${Math.round(a.sealB)}\n  st ${Math.round(a.st0)}→${Math.round(a.st1)} max ${Math.round(a.max)} spcr ${Math.round(a.spcr)}${a.branch === "pin" && Math.abs(a.st0 + a.sealB - a.tgt - a.st1) > 2 ? " CLAMPED" : ""}`
-            : "LAST -",
-          (() => {
-            type ZoneTapLog = { t: number; via: string; why: string };
-            const zt = (window as Window & { __zoneTap?: ZoneTapLog }).__zoneTap;
-            return zt ? `TAP ${zt.via}@${zt.t}: ${zt.why}` : "TAP -";
-          })(),
-        ].join("\n"),
-      );
-    };
-    update();
-    const iv = setInterval(update, 300);
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", update);
-    vv?.addEventListener("scroll", update);
-    window.addEventListener("scroll", update);
-    return () => {
-      clearInterval(iv);
-      vv?.removeEventListener("resize", update);
-      vv?.removeEventListener("scroll", update);
-      window.removeEventListener("scroll", update);
-    };
-  }, []);
-  return (
-    <div className="pointer-events-none fixed inset-0 z-[9999]">
-      <pre
-        ref={panelRef}
-        className="absolute left-1 whitespace-pre rounded bg-black/80 p-1.5 font-mono text-[10px] leading-[1.35] text-lime-300"
-        style={{ top: panelTop }}
-      >
-        {txt}
-      </pre>
-      {marks && (
-        <>
-          <div className="absolute inset-x-0 border-t-2 border-red-500" style={{ top: marks.vis }}>
-            <span className="bg-red-500 px-1 font-mono text-[9px] text-white">vis {Math.round(marks.vis)}</span>
-          </div>
-          <div className="absolute inset-x-0 border-t-2 border-orange-400" style={{ top: marks.tgt }}>
-            <span className="bg-orange-400 px-1 font-mono text-[9px] text-black">tgt {Math.round(marks.tgt)}</span>
-          </div>
-          {/* the RULER: a line every 50px of the fixed layer, each labeled with
-              its TRUE rect-frame y (fixed y + measured shift). The label sitting
-              at the keyboard's top edge in a screenshot IS the correct
-              visible-bottom in the coordinates anchorTail scrolls in. */}
-          {Array.from({ length: 20 }, (_, k) => k * 50).map((y) => (
-            <div key={y} className="absolute inset-x-0 border-t border-fuchsia-500/70" style={{ top: y }}>
-              <span className="absolute right-0 bg-fuchsia-600 px-1 font-mono text-[9px] text-white">
-                r{y + marks.shift}
-              </span>
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  );
+  return <Calendar />;
 }
 
 type View = "year" | "month" | "schedule" | "entry";
@@ -1866,7 +1811,7 @@ function Calendar() {
           along to sit beneath the month header */}
       <div
         className={cn(
-          "mt-3 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          "mt-5 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
           view === "month" && !searchActive
             ? "grid-rows-[1fr]"
             : "grid-rows-[0fr]",
@@ -2182,6 +2127,8 @@ function ScheduleFeedBase({
   // a land-on-today scroll re-asserts the bottom a couple times while the zone's
   // flex height settles after a fresh mount; these are its (cancellable) timers
   const todaySettleRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // holds the foot against post-landing layout breath (see scrollToRow)
+  const todayRORef = useRef<{ disconnect: () => void } | null>(null);
   // the reader has grabbed the scroll themselves — a still-pending land-on-today
   // re-pin (settle timers, or the full-book mount) must then stand down so it
   // can't yank them back to the foot after they've started scrolling
@@ -2260,6 +2207,8 @@ function ScheduleFeedBase({
     // the reader next grabs it
     todaySettleRef.current.forEach(clearTimeout);
     todaySettleRef.current = [];
+    todayRORef.current?.disconnect();
+    todayRORef.current = null;
     tookOverRef.current = false;
     if (day !== todayKey) landingTodayRef.current = false;
     // "today" lives at the very foot (its fill zone fills the tail) — land on
@@ -2282,17 +2231,50 @@ function ScheduleFeedBase({
       // min-h-full wrapper) fills exactly the viewport below the rule, so
       // rule-at-top IS the resting foot. A today WITH entries seats no empty zone,
       // so it lands at the literal foot.
+      const footDelta = () => {
+        const s = scrollerRef.current;
+        if (!s) return null;
+        const sec = rowRefs.current.get(todayKey);
+        // a re-render (live data arriving, rows remounting) unmaps the
+        // section ref for a beat. The literal-foot fallback sits 6px off the
+        // rule-pin stance, so a pass landing in that window wrote the OTHER
+        // stance and the page flip-flopped as it set — skip instead; the
+        // next pass reads the settled truth. Literal foot is only ever the
+        // right answer for a today that truly has entries.
+        if (!sec) return null;
+        if (!sec.querySelector("[data-entry]"))
+          return sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
+        return s.scrollHeight - s.clientHeight - s.scrollTop;
+      };
+      // ABSOLUTE writes only, never scrollBy: iOS's async scrolling applies a
+      // relative scrollBy a second time after the JS-visible update, so every
+      // relative write overshot by its own delta a beat later (the refresh
+      // wobble). An absolute target is idempotent under that double-application.
       const pinFoot = (behavior: ScrollBehavior) => {
         const s = scrollerRef.current;
         if (!s) return;
-        const sec = rowRefs.current.get(todayKey);
-        if (sec && !sec.querySelector("[data-entry]")) {
-          const delta =
-            sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
-          if (Math.abs(delta) > 1) s.scrollBy({ top: delta, behavior });
-        } else if (Math.abs(s.scrollTop - (s.scrollHeight - s.clientHeight)) > 1) {
-          s.scrollTo({ top: s.scrollHeight, behavior });
-        }
+        const d = footDelta();
+        if (d != null && Math.abs(d) > 1) s.scrollTo({ top: s.scrollTop + d, behavior });
+      };
+      // a micro-correction may only fire against a STILL layout: the same
+      // delta observed on two consecutive frames. iOS settles its toolbars
+      // ~1.5s after a load, and a correction measured mid-transient wrote a
+      // 6px "fix" onto an already-correct page — which the next pass then
+      // pulled back: a visible wobble as the page set. Mid-flight reads skip;
+      // the next scheduled pass retries against the settled truth.
+      const settleFoot = () => {
+        if (tookOverRef.current) return;
+        const d1 = footDelta();
+        if (d1 == null || Math.abs(d1) <= 1) return;
+        requestAnimationFrame(() => {
+          if (tookOverRef.current) return;
+          const d2 = footDelta();
+          if (d2 == null || Math.abs(d2) <= 1) return;
+          if (Math.abs(d2 - d1) > 1) return; // layout in motion — not a settle moment
+          const s2 = scrollerRef.current;
+          if (!s2) return;
+          s2.scrollTo({ top: s2.scrollTop + d2, behavior: "instant" }); // absolute (see pinFoot)
+        });
       };
       // ONE smooth glide — never re-commanded mid-flight (overlapping smooth
       // scrolls are what made this stutter). For the press, wait a frame first so
@@ -2311,8 +2293,47 @@ function ScheduleFeedBase({
         // — that's the stutter): snap out any residual once the layout is still.
         // No-ops unless something shifted the rule, so normally invisible — and
         // skipped entirely if the reader has started scrolling (don't yank them).
-        setTimeout(() => { if (!tookOverRef.current) pinFoot("instant"); }, 560),
-        setTimeout(() => { if (!tookOverRef.current) pinFoot("instant"); }, 920),
+        setTimeout(settleFoot, 560),
+        setTimeout(settleFoot, 920),
+        // a pass skipped for a mid-flight layout retries here, well after the
+        // toolbars have settled
+        setTimeout(settleFoot, 1400),
+      );
+      // The content keeps BREATHING after the landing — live rows arriving,
+      // enrichment chips, font swaps each nudge the heights above the foot —
+      // and iOS has no scroll anchoring to absorb that, so the page visibly
+      // shifts and a timer-based correction lands up to half a second LATER:
+      // that lag is the refresh wobble (on-device tracing showed the flips
+      // with NO anchor writes at all — pure layout breath + late settles).
+      // A ResizeObserver fires post-layout, PRE-PAINT: re-seating the foot in
+      // its callback corrects in the same frame as the disturbance, which is
+      // invisible. Lives only through the settle window; a reader's takeover
+      // or a focused field (the keyboard pin owns the scroll then) stands it
+      // down.
+      const reseat = () => {
+        if (tookOverRef.current) return;
+        if (document.activeElement?.tagName === "TEXTAREA") return; // keyboard pin owns it
+        pinFoot("instant");
+      };
+      const ro = new ResizeObserver(reseat);
+      const sEl = scrollerRef.current;
+      const observeKids = () => {
+        ro.disconnect();
+        if (sEl) [...sEl.children].forEach((c) => ro.observe(c));
+      };
+      observeKids();
+      // a re-render can REPLACE children outright (escaping the RO's
+      // subscriptions): the MutationObserver both re-seats on DOM churn and
+      // re-points the RO at the current children. Both fire before paint.
+      const mo = new MutationObserver(() => { reseat(); observeKids(); });
+      if (sEl) mo.observe(sEl, { childList: true, subtree: true, characterData: true });
+      const holder = { disconnect: () => { ro.disconnect(); mo.disconnect(); } };
+      todayRORef.current = holder;
+      todaySettleRef.current.push(
+        setTimeout(() => {
+          holder.disconnect();
+          if (todayRORef.current === holder) todayRORef.current = null;
+        }, 5000),
       );
       return true;
     }
@@ -2997,7 +3018,14 @@ function FlowBackfillCapture({
               }
             }}
             className={cn(
-              "voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+              // CONTAINED at the card's own six-line rhythm (the preview's
+              // clamp): past that the words scroll INSIDE the box. This is
+              // what keeps caret walks (the spacebar trackpad) in the card —
+              // WebKit auto-scrolls the nearest scrollable, and with the
+              // textarea scrollable that's the textarea, not the whole book
+              // sailing off into other days. overscroll-contain stops the
+              // internal scroll from chaining out at its edges.
+              "voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -3314,19 +3342,12 @@ function TodayZoneFill({
     const btn = btnRef.current;
     if (!sc || !btn) return;
     const { kb, visBottom, visTop } = kbGeom();
-    // breadcrumbs for ?kbdebug — the overlay paints the LAST pass, so a
-    // device screenshot shows which branch ran and whether the scroll clamped
-    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
-    const w = window as Window & { __kbAnchor?: KbAnchorLog };
-    const st0 = sc.scrollTop;
-    const max = sc.scrollHeight - sc.clientHeight;
     const spcr = kbSpacerRef.current?.offsetHeight ?? 0;
     if (kb < 60) {
       // no keyboard: rest at the zone's foot — the spacer below (if any
       // remains mid-collapse) is reachable room, not part of the stance
       sc.scrollTop = sc.scrollHeight - sc.clientHeight - spcr;
       walkRef.current.sanctioned = sc.scrollTop;
-      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: -1, sealB: -1, st0, st1: sc.scrollTop, max, spcr, branch: "foot" };
       return;
     }
     // Keyboard up: pin against what's actually VISIBLE, not a layout
@@ -3365,13 +3386,11 @@ function TodayZoneFill({
       sc.scrollTop += caretB - mid;
       walkRef.current.sanctioned = sc.scrollTop;
       trimSpacer();
-      w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: mid, sealB: caretB, st0, st1: sc.scrollTop, max, spcr, branch: "caret" };
       return;
     }
     sc.scrollTop += sealDelta;
     walkRef.current.sanctioned = sc.scrollTop;
     trimSpacer();
-    w.__kbAnchor = { t: Date.now() % 100000, kb, vis: visBottom, tgt: target, sealB, st0, st1: sc.scrollTop, max, spcr, branch: "pin" };
   };
   // A caret MOVE (a tap, the loupe, iOS's spacebar trackpad) is NOT an
   // anchoring moment. A normal textbox scrolls only when the caret would
@@ -3393,15 +3412,8 @@ function TodayZoneFill({
     const hi = visBottom - 24;
     if (caretB >= lo && caretB <= hi) return; // already in view: hands off
     const tgt = caretB < lo ? visTop + 28 : hi;
-    const st0 = sc.scrollTop;
     sc.scrollTop += caretB - tgt;
     walkRef.current.sanctioned = sc.scrollTop; // this follow is ours
-    type KbAnchorLog = { t: number; kb: number; vis: number; tgt: number; sealB: number; st0: number; st1: number; max: number; spcr: number; branch: string };
-    (window as Window & { __kbAnchor?: KbAnchorLog }).__kbAnchor = {
-      t: Date.now() % 100000, kb, vis: visBottom, tgt, sealB: caretB, st0,
-      st1: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight,
-      spcr: kbSpacerRef.current?.offsetHeight ?? 0, branch: "reveal",
-    };
   };
   const sizeKbSpacer = () => {
     const sp = kbSpacerRef.current;
@@ -3547,6 +3559,15 @@ function TodayZoneFill({
       const onSelChange = () => {
         const area = areaRef.current;
         if (document.activeElement !== area) return;
+        // The initial focus places the caret, firing selectionchange — but
+        // that is NOT a trackpad walk. iOS then runs its own caret-reveal
+        // scroll, re-firing selectionchange after each move; letting the walk
+        // follower / late reveal engage in that window made them fight the
+        // focus choreography's seal pin, and iOS's re-fires turned the fight
+        // into a self-driving upward drift (~50px a beat). The pin already
+        // seats the caret on focus (its caret branch), so the walk machinery
+        // simply stands down until the focus has settled.
+        if (performance.now() - lastFocusAt.current < 900) return;
         // a collapsed-caret move with no finger on the page = a caret walk;
         // open (or extend) the walk window the scroll clamp acts within
         if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
@@ -3707,15 +3728,11 @@ function TodayZoneFill({
   // that needs rescuing. click stays attached as the desktop/fallback path,
   // deduped by time.
   const zoneTapRef = useRef({ x: 0, y: 0, t: 0, id: -1, handledAt: 0 });
-  const engageZoneTap = (t: HTMLElement, via: string) => {
-    type ZoneTapLog = { t: number; via: string; why: string };
-    const w = window as Window & { __zoneTap?: ZoneTapLog };
-    const log = (why: string) =>
-      (w.__zoneTap = { t: Date.now() % 100000, via, why });
-    if (frozen) return log("frozen");
-    if (t.closest("button")) return log("button");
+  const engageZoneTap = (t: HTMLElement) => {
+    if (frozen) return;
+    if (t.closest("button")) return;
     const area = areaRef.current;
-    if (!area) return log("no-area");
+    if (!area) return;
     const onField = t.closest("textarea") === area;
     const focused = document.activeElement === area;
     const coarse = window.matchMedia?.("(pointer: coarse)").matches;
@@ -3726,7 +3743,7 @@ function TodayZoneFill({
     // keyboard, and then no tap can summon it back without a REAL focus)
     const stale = performance.now() - lastFocusAt.current > 700;
     const mustCycle = focused && coarse && stale && kbGeom().kb < 60;
-    if (onField && !mustCycle) return log("native");
+    if (onField && !mustCycle) return; // the field's own tap already works
     if (mustCycle) {
       // WebKit settles keyboard visibility once per turn: a same-task
       // blur→focus nets to "nothing changed" and the keyboard stays down.
@@ -3740,7 +3757,7 @@ function TodayZoneFill({
         const e2 = onField ? (area.selectionEnd ?? s) : s;
         area.setSelectionRange(s, e2);
       }, 60);
-      return log("cycle");
+      return;
     }
     // synchronously (the proven keyboard-riser) AND once more a beat later:
     // the browser's own blur-on-tap-outside lands LATER in this same gesture
@@ -3752,7 +3769,6 @@ function TodayZoneFill({
     };
     toEnd();
     window.setTimeout(toEnd, 80);
-    return log("focus-end");
   };
 
   // Voice: the seal is the microphone. Spoken words merge after whatever's
@@ -3761,19 +3777,23 @@ function TodayZoneFill({
   // Unmounting mid-take (changing altitude, opening an entry) aborts the
   // recorder and drops the audio — accepted for now.
   const voiceUsed = useRef(false);
+  // true from the moment a take begins through its settling and the entry it
+  // leaves behind — so the seal, when the take stops, morphs the stop square
+  // straight into the quill (never flashing the mic on the way) and stays in
+  // one carousel lane the whole time. Reset when the composer returns to blank
+  // rest (kept, cleared, or an empty take), which brings the mic back.
+  const [afterVoice, setAfterVoice] = useState(false);
   const speech = useSpeech((spoken) => {
     voiceUsed.current = true;
     setText((prev) => joinText(prev, spoken));
+    // growth + anchoring happen in the shownText layout effect below (after
+    // React commits the new value — a rAF here raced the commit and, for the
+    // batch engine's single all-at-once set, measured the STALE 3-line height
+    // and left the field a 3-line scroll window). Here we only take focus so
+    // the caret sits at the end and the keyboard can be summoned to keep on.
     requestAnimationFrame(() => {
       const el = areaRef.current;
       if (!el) return;
-      // settled words are typing as far as the anchor machinery cares:
-      // mark the input so the caret move can't open a phantom walk session,
-      // and run a full pass (spacer + pin) — growth can need more reach
-      lastInputRef.current = performance.now();
-      walkSessionRef.current = false;
-      autosizeArea(el);
-      anchorPass();
       el.focus(); // onFocus runs the full re-pin choreography
       el.setSelectionRange(el.value.length, el.value.length);
     });
@@ -3791,26 +3811,26 @@ function TodayZoneFill({
           .join(" ")
       : "";
   const shownText = liveSpoken ? joinText(text, liveSpoken) : text;
-  // Two phases of the recording wash. The streaming engines spend ~2s
-  // warming up (auto language-detect, model spin-up) before the first
-  // word lands; the batch engine records with no partials at all. So
-  // `captionLive` means "words are actually flowing now": true once any
-  // spoken text arrives, or immediately for batch (its recording IS the
-  // live moment). The wash FILL eases in on `listening` and covers the
-  // warmup; the pulsing BORDER only joins once captionLive.
-  const captionLive =
-    listening && (speech.engine === "batch" || liveSpoken.length > 0);
+  // The field GROWS to fit whatever it shows — the one place that is true for
+  // EVERY source of words (typing, streaming voice, a batch transcript set
+  // all at once). A layout effect keyed on the displayed value runs after
+  // React commits it and before paint, so scrollHeight is always current: no
+  // engine and no timing can leave the words in a fixed 3-line scroll window.
+  // Voice also re-anchors (its growth can outrun the keyboard stance); typing
+  // already anchored in onChange, so this stays out of its way.
+  const wasVoicing = useRef(false);
   useLayoutEffect(() => {
-    if (!liveSpoken) return;
     const el = areaRef.current;
     if (!el) return;
-    // live words grow the field like keystrokes do — same bookkeeping:
-    // no phantom walk session from the value change, full anchor pass
-    lastInputRef.current = performance.now();
-    walkSessionRef.current = false;
     autosizeArea(el);
-    anchorPass();
-  }, [liveSpoken]); // eslint-disable-line react-hooks/exhaustive-deps
+    const voicing = !!liveSpoken || transcribing;
+    if (voicing || wasVoicing.current) {
+      lastInputRef.current = performance.now();
+      walkSessionRef.current = false;
+      anchorPass();
+    }
+    wasVoicing.current = voicing;
+  }, [shownText, liveSpoken, transcribing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // voice must never fail silently — every failure says what happened
   useEffect(() => {
@@ -3834,6 +3854,19 @@ function TodayZoneFill({
   // which glyph the seal wears + presses: the mic holds through a whole take
   // (listening and settling), then cross-slides to the quill with the words
   const quill = (hasText || frozen) && !listening && !transcribing;
+  // a voice take fell back to blank rest (kept, cleared, or nothing said):
+  // drop the voice lane so the mic returns. Adjusted during render (React's
+  // sanctioned escape hatch, no effect) — and the has-text handoff is React-
+  // batched with the status flip, so this never trips mid-settle.
+  if (afterVoice && !listening && !transcribing && !hasText) setAfterVoice(false);
+  // the seal's face and carousel lane. During and after a voice take the seal
+  // stays in the mic lane wearing stop→quill (an in-place morph); typing
+  // cross-slides mic→quill in its own lane. `voiceFace` shows the quill the
+  // instant a take stops, so the mic never flashes while the words settle.
+  const voiceFace = afterVoice && !listening;
+  const sealGlyph = listening ? "stop" : quill || voiceFace ? "e:quill" : "c:mic";
+  const sealLane = quill && !afterVoice ? "quill" : "mic";
+  const sealIconScale = listening ? 0.44 : quill || voiceFace ? 0.36 : 0.46;
 
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
@@ -3851,8 +3884,10 @@ function TodayZoneFill({
     if (!hasText) {
       // mic: begin the entry by speaking — or, where voice isn't offered
       // (or the probe hasn't resolved yet), by writing
-      if (speech.resolved && speech.supported) speech.start();
-      else areaRef.current?.focus();
+      if (speech.resolved && speech.supported) {
+        setAfterVoice(true); // this seal stays in the voice lane until blank rest
+        speech.start();
+      } else areaRef.current?.focus();
       return;
     }
     if (phase !== "idle") return; // a keep is already running (idempotent)
@@ -3891,12 +3926,11 @@ function TodayZoneFill({
     });
   };
 
-  // the zone's hairline blue outline (wax = recording) — it brightens once
-  // the caption is live (not merely while warming up), so the frame joins
-  // the pulsing border as the "words are flowing now" signal
+  // the zone's hairline blue outline (wax = recording) — it deepens while
+  // the microphone is on, anchoring the wash to the frame it seeps from
   const frame = cn(
     "border transition-[border-color] duration-[240ms] ease-[var(--ease-out)]",
-    captionLive ? "border-wax/70" : "border-wax/45",
+    listening ? "border-wax/70" : "border-wax/45",
   );
 
   return (
@@ -3906,19 +3940,13 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
-        // when a rule sits above the zone (today empty, prior days present), set
-        // the gap from the rule to the zone's top edge equal to the "chin" — the
-        // space below the scroller, from its bottom down to the sheet's bottom
-        // (~26px). The 1px short is the rule's own hairline sitting in that gap.
-        // When today's CARDS sit above instead, the zone owns the WHOLE 26px
-        // itself (today's section cedes its bottom padding): the row is
-        // min-h-full INCLUDING this padding, so at the book's foot the entire
-        // breath sits inside the viewport between the top terminus and the
-        // zone's border — not partly spent on the card section above the fold.
-        // First-ever keeps just a hair (nothing above to breathe from).
+        // the zone sits in the book's standard frame: its top gap matches the
+        // side gutter (px-5) and the chin below it, so the content reads with one
+        // even ~20px margin on every side. first-ever keeps just a hair (nothing
+        // above it to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[26px] mb-[3px]" : "pt-[25px] mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : "pt-[19px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
@@ -3975,20 +4003,21 @@ function TodayZoneFill({
             if (now - d.t > 600) return; // a hold, not a tap
             if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) return; // a drag/scroll
             d.handledAt = now;
-            engageZoneTap(e.target as HTMLElement, "pointerup");
+            engageZoneTap(e.target as HTMLElement);
           }}
           onClick={(e) => {
             // fallback (desktop, browsers without pointer events on taps);
             // skipped when the pointerup path just ran
             if (performance.now() - zoneTapRef.current.handledAt < 800) return;
-            engageZoneTap(e.target as HTMLElement, "click");
+            engageZoneTap(e.target as HTMLElement);
           }}
         >
-          {/* The wax wash in two phases. The FILL seeps inward from the frame
-              on `listening`, easing in SLOWLY (~1.6s) so the ~2s warmup before
-              the first word reads as "warming up" rather than dead air. The
-              pulsing BORDER joins QUICKLY (~0.24s) only once captionLive — the
-              moment words actually start flowing. Both exit fast. */}
+          {/* the wax wash — recording's colour seeping inward from the frame.
+              Mounted for the whole take so the shaders warm up while the mic
+              is being armed, but held at opacity 0 (invisible — never paints
+              before the writer approves the microphone) until speech.live, so
+              the reveal is a true fade of already-painted layers, not a pop.
+              Fades back out on stop. */}
           <AnimatePresence>
             {listening && (
               <motion.div
@@ -3996,26 +4025,13 @@ function TodayZoneFill({
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.3, ease: "easeOut" } }}
-                transition={{ duration: 1.6, ease: "easeOut" }}
+                animate={{ opacity: speech.live ? 1 : 0 }}
+                exit={{ opacity: 0 }}
+                // a gentle ease-in-out, not the snappy UI ease — the light
+                // should seep in and ebb out, not flick
+                transition={{ duration: 0.42, ease: [0.42, 0, 0.58, 1] }}
               >
-                <div className="wax-wash-fill absolute inset-0 rounded-[inherit]" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <AnimatePresence>
-            {captionLive && (
-              <motion.div
-                key="wash-pulse"
-                aria-hidden
-                className="pointer-events-none absolute inset-0 rounded-[inherit]"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.2, ease: "easeOut" } }}
-                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
-              >
-                <div className="wax-wash-pulse absolute inset-0 rounded-[inherit]" />
+                <RecordingWash corner={ZONE_CORNER} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -4169,9 +4185,17 @@ function TodayZoneFill({
               // released on the button: act (submit keeps, or starts/stops a
               // voice take). Released off: cancel — ease the seal back, no
               // submit. The press is handed to holdDown only when a keep
-              // actually began; every mic action eases the dome back up.
+              // actually began. A mic toggle releases two frames later: the
+              // glyph re-bakes (mic ⇄ stop) while the seal is still at the
+              // pressed pose, so the rise comes up already wearing the new
+              // face and grows into it — one continuous path, no mid-air swap.
               if (inside) submit();
-              if (!inside || !keeping.current) sealCtl.current?.press(false);
+              if (!inside) {
+                sealCtl.current?.press(false);
+              } else if (!keeping.current) {
+                const ctl = sealCtl.current;
+                requestAnimationFrame(() => requestAnimationFrame(() => ctl?.press(false)));
+              }
             }}
             onPointerCancel={() => {
               if (keeping.current) return;
@@ -4194,10 +4218,11 @@ function TodayZoneFill({
             className="relative mb-[58px] grid place-items-center rounded-full"
             style={{ width: 128, height: 128 }}
           >
-            {/* while listening the same seal swells and wears the stop square —
-                a morph in place (the carousel slide below stays reserved for
-                the mic↔quill tool swap). The glyph re-bakes instantly: state
-                flips are frequent, they don't get an animation. */}
+            {/* the seal swells and wears the stop square while listening, then
+                morphs the stop straight into the quill when the take ends —
+                both in place, one lane (see sealLane). The carousel slide is
+                reserved for the mic↔quill typing swap. The glyph re-bakes
+                instantly: state flips are frequent, they don't get animated. */}
             <motion.div
               className="absolute inset-0"
               animate={{ scale: listening ? 1.14 : 1 }}
@@ -4205,7 +4230,7 @@ function TodayZoneFill({
             >
             <AnimatePresence initial={false}>
               <motion.span
-                key={quill ? "quill" : "mic"}
+                key={sealLane}
                 className="absolute inset-0 grid place-items-center"
                 initial={{ x: "70%", opacity: 0 }}
                 animate={{ x: "0%", opacity: 1 }}
@@ -4215,8 +4240,10 @@ function TodayZoneFill({
                 <CanvasSeal
                   playKey={playKey}
                   size={128}
-                  glyph={listening ? "stop" : quill ? "e:quill" : "c:mic"}
-                  iconScale={listening ? 0.3 : quill ? 0.36 : 0.46}
+                  glyph={sealGlyph}
+                  // the stop reads bigger than the mic on purpose: with the
+                  // 1.14 swell it lands ~0.50 of the seal — an unmissable exit
+                  iconScale={sealIconScale}
                   mode="tap"
                   controlRef={sealCtl}
                   pressed={holdDown}
