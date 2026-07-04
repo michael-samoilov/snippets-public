@@ -3486,6 +3486,15 @@ function TodayZoneFill({
       const onSelChange = () => {
         const area = areaRef.current;
         if (document.activeElement !== area) return;
+        // The initial focus places the caret, firing selectionchange — but
+        // that is NOT a trackpad walk. iOS then runs its own caret-reveal
+        // scroll, re-firing selectionchange after each move; letting the walk
+        // follower / late reveal engage in that window made them fight the
+        // focus choreography's seal pin, and iOS's re-fires turned the fight
+        // into a self-driving upward drift (~50px a beat). The pin already
+        // seats the caret on focus (its caret branch), so the walk machinery
+        // simply stands down until the focus has settled.
+        if (performance.now() - lastFocusAt.current < 900) return;
         // a collapsed-caret move with no finger on the page = a caret walk;
         // open (or extend) the walk window the scroll clamp acts within
         if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
