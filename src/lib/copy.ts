@@ -119,7 +119,7 @@ export const copy = {
       "no-mic": {
         title: "No microphone found.",
         description:
-          "Plug one in or check your input settings - writing works meanwhile.",
+          "Plug one in or check your input settings — writing works meanwhile.",
       },
       network: {
         title: "The speech service couldn’t be reached.",
@@ -131,18 +131,18 @@ export const copy = {
       service: {
         title: "This browser won’t start dictation.",
         descriptionInstalledIOS:
-          "iOS blocks voice inside installed web apps. Open Snippets in Safari itself for voice - writing works everywhere.",
+          "iOS blocks voice inside installed web apps. Open Snippets in Safari itself for voice — writing works everywhere.",
         descriptionIOSBrowser:
           "iOS only does voice through Safari’s built-in dictation, and it isn’t responding right now. Writing works everywhere.",
         descriptionOtherwise:
-          "This browser wouldn’t start speech recognition. Writing works everywhere - Safari, Chrome, or Edge on desktop handle voice best.",
+          "This browser wouldn’t start speech recognition. Writing works everywhere — Safari, Chrome, or Edge on desktop handle voice best.",
       },
       // a network transcriber refused (bad key, quota, server unconfigured) —
       // our side, never the browser's
       serviceRemote: {
         title: "Voice is offline right now.",
         description:
-          "The transcription service isn’t responding - that’s on our side, not yours. Write it and it saves just the same.",
+          "The transcription service isn’t responding — that’s on our side, not yours. Write it and it saves just the same.",
       },
       transcribe: {
         title: "The words couldn’t be set.",
@@ -152,11 +152,11 @@ export const copy = {
       "too-long": {
         title: "That take ran long.",
         description:
-          "Recordings stop at five minutes - what was said is being set now. Split longer thoughts and keep both halves.",
+          "Recordings stop at five minutes. What was said is being set now. Split longer thoughts and keep both halves.",
       },
       unknown: {
         title: "Voice capture hit a snag.",
-        description: "Try the seal again, or write it - nothing was lost.",
+        description: "Try the seal again, or write it — nothing was lost.",
       },
     },
   },
@@ -300,7 +300,7 @@ export const copy = {
       // a paragraph with the book title in italics — rendered in three parts
       lead: "Snippets is a pocket commonplace book, made in the spirit of Matthew Dicks’ ",
       workTitle: "Homework for Life",
-      rest: ": at the end of each day, keep the most storyworthy thing that happened. Jokes, quotes, and stray phrases are welcome too — good lines shouldn’t go to waste.",
+      rest: ": at the end of each day, keep the most storyworthy thing that happened. Jokes, quotes, and stray phrases are welcome too. Good lines shouldn’t go to waste.",
     },
     erase: {
       title: "Let everything go?",
@@ -323,7 +323,7 @@ export const copy = {
     notExportFile: "Not a Snippets export file.",
     noEntriesInFile: "No entries found in that file.",
     /** the inline composer's catch-all when a keep fails */
-    keepFailed: "That didn’t take — try again.",
+    keepFailed: "That didn’t take. Try again.",
   },
 } as const;
 
