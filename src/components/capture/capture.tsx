@@ -15,6 +15,7 @@ import { StampMark } from "@/components/stamp-mark";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { copy } from "@/lib/copy";
 import { cn, joinText } from "@/lib/utils";
+import { useContainedField } from "@/hooks/use-contained-field";
 
 function autosize(el: HTMLTextAreaElement) {
   el.style.height = "auto";
@@ -32,6 +33,9 @@ export function Capture() {
   const [stampCount, setStampCount] = useState(0);
   const [stampVisible, setStampVisible] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // contained like every writing box in the app: capped to the visible area
+  // above the keyboard (less the keep seal below), scrolling its own words
+  useContainedField(textareaRef, true, 96);
   const stampTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prompt = promptForDate(new Date());
 
@@ -171,7 +175,7 @@ export function Capture() {
               void keep();
             }
           }}
-          className="voice-prose min-h-[5.75rem] w-full resize-none overflow-hidden bg-transparent pt-1 text-[1.125rem] outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
+          className="voice-prose min-h-[5.75rem] w-full resize-none overflow-y-auto overscroll-contain bg-transparent pt-1 text-[1.125rem] outline-none placeholder:italic placeholder:text-ink-faint focus:placeholder:text-ink-faint/60"
         />
       )}
 

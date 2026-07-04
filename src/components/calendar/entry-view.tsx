@@ -3,7 +3,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
-import { useKeyboardRoom } from "@/hooks/use-keyboard-room";
+import { useContainedField } from "@/hooks/use-contained-field";
 import { updateSnippet } from "@/lib/db";
 import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
@@ -74,9 +74,12 @@ function EntryBody({
   const [draft, setDraft] = useState(snippet.text);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // while rewriting, keep the field and the entry's last lines clear of the
-  // keyboard and its floating pills
-  useKeyboardRoom(contentRef, editing);
+  // while rewriting, the field is CONTAINED to the visible area above the
+  // keyboard: it autosizes up to that cap and scrolls its own words past it,
+  // so the caret (and its spacebar-trackpad walks) stay inside the box and
+  // the card never moves. This replaced the generic keyboard-room padding,
+  // which reserved a whole keyboard of blank reach below the card.
+  useContainedField(areaRef, editing);
   // a long entry that overflows the card reads at the schedule-preview size
   // (smaller) rather than full prose. We can't trust the live scroll edges
   // for this: as the card opens it FLIPs from a small tile up to the full
@@ -130,6 +133,9 @@ function EntryBody({
   const startEdit = () => {
     if (editing) return;
     setDraft(snippet.text);
+    // the contained field replaces the prose from the card's TOP — bring the
+    // card's own scroll home so the box isn't half above the fold
+    contentRef.current?.scrollTo({ top: 0 });
     // focus synchronously, inside the tap — iOS won't raise the
     // keyboard for a focus that arrives by timer
     const el = areaRef.current;
@@ -225,8 +231,10 @@ function EntryBody({
             // block (not the textarea's default inline-block) so it
             // sits in no baseline line-box — its height then matches the
             // prose it replaces exactly, and edit-toggling never resizes
-            // the card around the text
-            "voice-prose block resize-none overflow-hidden whitespace-pre-wrap bg-transparent outline-none [overflow-wrap:anywhere]",
+            // the card around the text. Internal scrolling past the
+            // contained cap (see useContainedField): the box follows its
+            // own caret; overscroll-contain keeps that from chaining out.
+            "voice-prose block resize-none overflow-y-auto overscroll-contain whitespace-pre-wrap bg-transparent outline-none [overflow-wrap:anywhere]",
             compact ? "text-[0.9rem] leading-[1.42]" : "leading-[1.5]",
             // hidden: inset-x-4 (not left-4 + w-full) so its box can't
             // poke past the right padding and force a sideways scroll
