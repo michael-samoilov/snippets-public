@@ -109,6 +109,58 @@ function scribeAvailable(): Promise<boolean> {
   return scribeProbe;
 }
 
+/* ── the warm grant ─────────────────────────────────────────────────
+   Scribe tokens are single-use and live 15 minutes, so one is minted
+   ahead of time — on page load, and again after each take — and the
+   tap opens the socket immediately instead of waiting out a serverless
+   round-trip. A stale or missing grant falls back to minting inline. */
+
+interface ScribeGrant {
+  token: string;
+  model: string;
+  ws: string;
+  at: number;
+}
+const GRANT_FRESH_MS = 10 * 60_000; // well inside the token's 15 minutes
+
+let grantBox: ScribeGrant | null = null;
+let grantInflight: Promise<void> | null = null;
+
+function mintGrant(): Promise<ScribeGrant | null> {
+  return fetch("/api/scribe-token", {
+    method: "POST",
+    signal: AbortSignal.timeout(10_000),
+  })
+    .then(async (r) => {
+      if (!r.ok) return null;
+      const g = (await r.json()) as { token?: string; model?: string; ws?: string };
+      return g.token && g.model && g.ws
+        ? { token: g.token, model: g.model, ws: g.ws, at: Date.now() }
+        : null;
+    })
+    .catch(() => null);
+}
+
+function refillGrant(): void {
+  if (grantInflight || typeof window === "undefined") return;
+  grantInflight = mintGrant()
+    .then((g) => {
+      if (g) grantBox = g;
+    })
+    .finally(() => {
+      grantInflight = null;
+    });
+}
+
+/** Take the warm grant if it's fresh (consuming it), and start warming
+ *  the next one either way. Null means mint inline. */
+function takeGrant(): ScribeGrant | null {
+  const g = grantBox;
+  grantBox = null;
+  refillGrant();
+  return g && Date.now() - g.at < GRANT_FRESH_MS ? g : null;
+}
+
 let batchProbe: Promise<boolean> | null = null;
 function batchAvailable(): Promise<boolean> {
   if (!batchProbe) batchProbe = probe("/api/transcribe");
@@ -297,16 +349,17 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         batchAvailable(),
       ]);
       if (!alive) return;
-      setEngine(
+      const chosen =
         scribe && canStream()
           ? "scribe"
           : batch && hasRecorder()
             ? "batch"
             : getRecognizer()
               ? "web"
-              : null,
-      );
+              : null;
+      setEngine(chosen);
       setResolved(true);
+      if (chosen === "scribe") refillGrant(); // the first take starts warm
     })();
     return () => {
       alive = false;
@@ -419,10 +472,16 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   }, [pushSegment, deliver]);
 
   const startScribe = useCallback(async () => {
-    const tokenPromise = fetch("/api/scribe-token", {
-      method: "POST",
-      signal: AbortSignal.timeout(10_000),
-    }).catch(() => null);
+    // warm path: a pre-minted grant skips the token round-trip entirely;
+    // cold path (first seconds of a page, or a stale grant) mints inline,
+    // overlapped with the mic permission ask
+    const warm = takeGrant();
+    const tokenPromise = warm
+      ? null
+      : fetch("/api/scribe-token", {
+          method: "POST",
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => null);
 
     let stream: MediaStream;
     try {
@@ -433,22 +492,26 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
       mapMicError(err);
       return;
     }
-    const response = await tokenPromise;
-    if (!wantedRef.current) {
-      stream.getTracks().forEach((t) => t.stop());
-      return; // the writer changed their mind while we asked
+    let grant: { token: string; model: string; ws: string } | null = warm;
+    if (!grant) {
+      const response = await tokenPromise!;
+      if (!wantedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return; // the writer changed their mind while we asked
+      }
+      if (!response || !response.ok) {
+        stream.getTracks().forEach((t) => t.stop());
+        fail(response?.status === 503 ? "service" : "network");
+        return;
+      }
+      const minted = (await response.json().catch(() => null)) as {
+        token?: string;
+        model?: string;
+        ws?: string;
+      } | null;
+      if (minted?.token && minted.model && minted.ws) grant = { token: minted.token, model: minted.model, ws: minted.ws };
     }
-    if (!response || !response.ok) {
-      stream.getTracks().forEach((t) => t.stop());
-      fail(response?.status === 503 ? "service" : "network");
-      return;
-    }
-    const grant = (await response.json().catch(() => null)) as {
-      token?: string;
-      model?: string;
-      ws?: string;
-    } | null;
-    if (!grant?.token || !grant.model || !grant.ws || !wantedRef.current) {
+    if (!grant || !wantedRef.current) {
       stream.getTracks().forEach((t) => t.stop());
       if (wantedRef.current) fail("service");
       return;
@@ -500,10 +563,11 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     });
     source.connect(tap);
 
-    // ship ~a quarter second of speech per message
+    // ship ~a tenth of a second of speech per message — every word waits
+    // out one buffer before it can appear, so the buffer stays small
     let buffered: Float32Array[] = [];
     let bufferedLen = 0;
-    const flushAt = Math.round(ctx.sampleRate / 4);
+    const flushAt = Math.round(ctx.sampleRate / 10);
     const flush = (commit: boolean) => {
       if (ws.readyState !== WebSocket.OPEN) return;
       const all = new Float32Array(bufferedLen);

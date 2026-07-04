@@ -6,6 +6,22 @@ whether to do them, only how. Check this file before proposing new
 scope. When an item ships, delete it here and amend `DESIGN.md` /
 `.claude/skills/snippets-craft/` if it changes a rule.
 
+## 0. Voice latency: verify the two cuts live, then ship
+
+Two latency changes are BUILT and mock-verified on the voice branch but
+held from production pending live measurement (owner-directed):
+pre-minted single-use tokens (tap opens the socket instantly) and 100ms
+audio chunks (down from 250ms). The live harness
+(`scripts/scribe-live-test.mjs` + the `scribe-live-test` workflow) is
+instrumented to print the latency table — token mint · connect ·
+speech→first-partial · commit→settled — at both chunk sizes in one run.
+**Blocked only on the `ELEVENLABS_API_KEY` repo secret** (GitHub →
+Settings → Secrets and variables → Actions); the Vercel env var is a
+different store. Once the secret exists: touch the harness to trigger a
+run, read the numbers, ship. Then consider the third cut (owner hasn't
+decided): `commit_strategy=vad` — the server finalizes each phrase at
+natural speech pauses so the stop only settles the last few words.
+
 ## 1. The seal becomes the completion affordance
 
 > "Wax seal should show microphone by default, but if the user starts
