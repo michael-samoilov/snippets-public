@@ -2,7 +2,9 @@
 # (scripts/deepgram-live-test.mjs) — the head-to-head against ElevenLabs
 # Scribe on the same audio. Spends a few seconds of Deepgram credit per
 # run; on demand or when the harness changes. Key from the
-# DEEPGRAM_API_KEY repo secret — write-only, masked in logs.
+# DEEPGRAM_API_KEY repo secret — write-only, masked in logs. The key must
+# have Member+ scope so it can mint the browser's short-lived JWT
+# (/v1/auth/grant); the bearer session in the harness proves that path.
 name: deepgram-live-test
 
 on:

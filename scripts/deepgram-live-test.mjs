@@ -8,10 +8,21 @@
  *
  * Protocol (verified against @deepgram/sdk, not memory):
  *   wss://api.deepgram.com/v1/listen?<params>
- *   auth  — WebSocket subprotocols ["token", <API_KEY>]
  *   audio — raw binary linear16 PCM frames (NOT base64 JSON)
  *   result— { type:"Results", is_final, channel.alternatives[0].transcript }
  *   close — send { "type":"CloseStream" } to flush finals, then it closes
+ *
+ * Two auth paths are exercised, and the distinction matters:
+ *   - ["bearer", <JWT>]  — the BROWSER's path. /api/deepgram-token mints a
+ *                          short-lived JWT via POST /v1/auth/grant and the
+ *                          client streams under the "bearer" subprotocol.
+ *                          This is what the app actually does.
+ *   - ["token", <KEY>]   — the raw API key direct. A reference path; a
+ *                          server-side key never reaches the browser.
+ * Testing the bearer path is the whole point here: if the raw key works
+ * but the grant→bearer path doesn't, the app silently falls back to Scribe
+ * and "Deepgram works" is a lie. The bearer session runs first and its
+ * failure fails the whole run.
  *
  *   DEEPGRAM_API_KEY=… node scripts/deepgram-live-test.mjs <speech.wav> [expected…]
  *
@@ -24,6 +35,7 @@ import { readFileSync } from "node:fs";
 const [, , wavPath, ...expectedWords] = process.argv;
 const KEY = process.env.DEEPGRAM_API_KEY;
 const BASE = (process.env.DEEPGRAM_BASE_URL ?? "wss://api.deepgram.com").replace(/\/$/, "");
+const REST = (process.env.DEEPGRAM_REST_URL ?? "https://api.deepgram.com").replace(/\/$/, "");
 const MODEL = process.env.DEEPGRAM_MODEL ?? "nova-3";
 const RATE = 16000;
 const expected = expectedWords.length ? expectedWords : ["fox", "morning"];
@@ -33,6 +45,21 @@ if (!wavPath) die("usage: node scripts/deepgram-live-test.mjs <speech.wav> [expe
 
 function die(msg) { console.error(`FAIL: ${msg}`); process.exit(1); }
 const ms = (t) => `${Math.round(t)}ms`;
+
+/* ── mint a short-lived JWT — exactly what /api/deepgram-token does ── */
+async function mintBearerToken() {
+  const t = performance.now();
+  const res = await fetch(`${REST}/v1/auth/grant`, {
+    method: "POST",
+    headers: { Authorization: `Token ${KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ ttl_seconds: 300 }),
+  }).catch((e) => die(`grant request failed: ${e.message ?? e}`));
+  if (!res.ok) die(`grant failed: HTTP ${res.status} — ${(await res.text()).slice(0, 200)}`);
+  const { access_token } = await res.json();
+  if (!access_token) die("grant returned no access_token");
+  console.log(`grant: minted a bearer JWT in ${ms(performance.now() - t)} (the browser's path)\n`);
+  return access_token;
+}
 
 /* ── WAV → Float32 mono (same as the scribe harness) ─────────────── */
 function parseWav(buf) {
@@ -89,10 +116,10 @@ function sparkline(timeline, audioMs) {
   return at.join(" ");
 }
 
-/* ── one streaming session at a given language setting ──────────── */
-async function runSession(pcm, { chunkMs, language }) {
+/* ── one streaming session at a given language + auth setting ────── */
+async function runSession(pcm, { chunkMs, language, auth, tag }) {
   const audioMs = (pcm.length / RATE) * 1000;
-  const label = `[nova-3·${language}·${chunkMs}ms]`;
+  const label = `[nova-3·${language}·${tag}]`;
   const timings = {};
   const params = new URLSearchParams({
     model: MODEL,
@@ -104,8 +131,9 @@ async function runSession(pcm, { chunkMs, language }) {
     smart_format: "true",
   });
   const t = performance.now();
-  // auth rides the WebSocket subprotocols: ["token", <API_KEY>]
-  const ws = new WebSocket(`${BASE}/v1/listen?${params}`, ["token", KEY]);
+  // auth rides the WebSocket subprotocols — ["bearer", <JWT>] (the app's
+  // path) or ["token", <API_KEY>] (raw key reference)
+  const ws = new WebSocket(`${BASE}/v1/listen?${params}`, auth);
 
   return new Promise((resolve) => {
     const finals = [];
@@ -186,9 +214,14 @@ const { mono, rate } = parseWav(readFileSync(wavPath));
 const pcm = downsampleTo16k(mono, rate);
 console.log(`audio: ${wavPath} @${rate}Hz → ${(pcm.length / RATE).toFixed(1)}s @16k\n`);
 
+// the app's real path first — a JWT grant carried on the bearer
+// subprotocol — so a green run proves the browser's exact auth, not just
+// that the raw key can transcribe
+const jwt = await mintBearerToken();
 const RUNS = [
-  { chunkMs: 100, language: "multi" }, // the setting we'd ship (code-switching)
-  { chunkMs: 100, language: "en" },    // reference: does multi cost latency?
+  { chunkMs: 100, language: "multi", auth: ["bearer", jwt], tag: "bearer-jwt" }, // the app path
+  { chunkMs: 100, language: "multi", auth: ["token", KEY], tag: "raw-key" },     // reference
+  { chunkMs: 100, language: "en", auth: ["token", KEY], tag: "raw-key" },        // does multi cost latency?
 ];
 
 const results = [];

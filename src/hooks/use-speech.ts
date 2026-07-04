@@ -104,6 +104,28 @@ function probe(url: string): Promise<boolean> {
     .catch(() => false);
 }
 
+/* ── opt-in voice diagnostics ────────────────────────────────────────
+   A silent provider fallback is the failure mode to fear: voice "works"
+   but never via the engine you think. Turn on a running commentary of
+   which provider granted, whether a fallback fired, and what the socket
+   heard — with `localStorage['snippets:voice-debug'] = '1'` (or a
+   `?voicedebug` query param), so it can be flipped on the live
+   deployment, not just in dev. Off by default; zero cost when off. */
+function voiceDebugOn(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage?.getItem("snippets:voice-debug") === "1" ||
+      new URLSearchParams(window.location.search).has("voicedebug")
+    );
+  } catch {
+    return false;
+  }
+}
+function vlog(...args: unknown[]): void {
+  if (voiceDebugOn()) console.info("%c[voice]", "color:#2f6df6;font-weight:600", ...args);
+}
+
 /* streaming-provider availability, probed once each per page load */
 const probes = new Map<string, Promise<boolean>>();
 function providerAvailable(tokenPath: string): Promise<boolean> {
@@ -488,6 +510,9 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
 
   /* streaming engine state */
   const adapterRef = useRef<StreamAdapter | null>(null);
+  // every configured streaming provider, in preference order — the first
+  // is the default, the rest are runtime backups a failed grant falls to
+  const availableStreamsRef = useRef<StreamAdapter[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const flushRef = useRef<(() => void) | null>(null); // flush buffered audio
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -496,20 +521,26 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      // pick the first available streaming provider in the configured
-      // order; fall back to the batch proxy, then the browser's engine
-      let picked: StreamAdapter | null = null;
+      // collect every configured streaming provider in preference order:
+      // the first is the default, the rest are runtime backups the tap
+      // falls to if the default won't grant a token. Fall back to the
+      // batch proxy, then the browser's own engine, if none are configured.
+      const available: StreamAdapter[] = [];
       if (canStream()) {
-        for (const name of PROVIDER_ORDER) {
-          const a = STREAM_ADAPTERS[name];
-          if (await providerAvailable(a.tokenPath)) {
-            picked = a;
-            break;
-          }
-        }
+        const checks = await Promise.all(
+          PROVIDER_ORDER.map((name) =>
+            providerAvailable(STREAM_ADAPTERS[name].tokenPath).then(
+              (ok) => [name, ok] as const,
+            ),
+          ),
+        );
+        for (const [name, ok] of checks)
+          if (ok) available.push(STREAM_ADAPTERS[name]);
       }
-      const batch = picked ? false : await batchAvailable();
+      const batch = available.length ? false : await batchAvailable();
       if (!alive) return;
+      availableStreamsRef.current = available;
+      const picked = available[0] ?? null;
       adapterRef.current = picked;
       const chosen: SpeechEngineKind | null = picked
         ? picked.name
@@ -518,6 +549,12 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
           : getRecognizer()
             ? "web"
             : null;
+      vlog(
+        "engine:",
+        chosen,
+        "· streaming providers available:",
+        available.length ? available.map((a) => a.name).join(", ") : "none",
+      );
       setEngine(chosen);
       setResolved(true);
       if (picked) refillGrant(picked.tokenPath); // the first take starts warm
@@ -628,25 +665,49 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     segmentsRef.current = [];
     nextIdRef.current = 0;
     setSegments([]);
+    vlog(
+      `${adapterRef.current?.name ?? "stream"}: settled`,
+      spoken ? `"${spoken}"` : "(nothing heard)",
+    );
     if (spoken) {
       navigator.vibrate?.(8);
       deliver(spoken);
     }
   }, [pushSegment, deliver]);
 
-  const startStream = useCallback(
-    async (adapter: StreamAdapter) => {
-      // warm path: a pre-minted grant skips the token round-trip entirely;
-      // cold path (first seconds of a page, or a stale grant) mints inline,
-      // overlapped with the mic permission ask
-      const warm = takeGrant(adapter.tokenPath);
-      const tokenPromise = warm
-        ? null
-        : fetch(adapter.tokenPath, {
-            method: "POST",
-            signal: AbortSignal.timeout(10_000),
-          }).catch(() => null);
+  /** Try each available streaming provider in order until one grants a
+   *  token. The default may answer warm (pre-minted on load / after the
+   *  last take); backups mint inline. Null means none would grant one. */
+  async function acquireGrant(): Promise<{ adapter: StreamAdapter; grant: Grant } | null> {
+    const adapters = availableStreamsRef.current;
+    for (let i = 0; i < adapters.length; i++) {
+      const adapter = adapters[i];
+      // only the default is ever kept warm; consuming it also warms the next
+      const warm = i === 0 ? takeGrant(adapter.tokenPath) : null;
+      if (warm) {
+        vlog(`grant: ${adapter.name} (warm token)`);
+        return { adapter, grant: warm };
+      }
+      const minted = await mintGrant(adapter.tokenPath);
+      if (minted) {
+        vlog(
+          i === 0
+            ? `grant: ${adapter.name} (cold mint)`
+            : `grant: FELL BACK to ${adapter.name} after ${adapters[0].name} refused a token`,
+        );
+        return { adapter, grant: minted };
+      }
+      vlog(
+        `grant: ${adapter.name} refused a token — ` +
+          (i + 1 < adapters.length ? `trying ${adapters[i + 1].name}` : "no providers left"),
+      );
+      if (!wantedRef.current) return null; // writer cancelled mid-acquire
+    }
+    return null;
+  }
 
+  const startStream = useCallback(
+    async () => {
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -656,27 +717,33 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         mapMicError(err);
         return;
       }
-      setLive(true); // mic is capturing — the recording wash may reveal
-      let grant: Grant | null = warm;
-      if (!grant) {
-        const response = await tokenPromise!;
-        if (!wantedRef.current) {
-          stream.getTracks().forEach((t) => t.stop());
-          return; // the writer changed their mind while we asked
-        }
-        if (!response || !response.ok) {
-          stream.getTracks().forEach((t) => t.stop());
-          fail(response?.status === 503 ? "service" : "network");
-          return;
-        }
-        const minted = (await response.json().catch(() => null)) as Grant | null;
-        if (minted?.token && minted.model && minted.ws) grant = minted;
-      }
-      if (!grant || !wantedRef.current) {
+      if (!wantedRef.current) {
         stream.getTracks().forEach((t) => t.stop());
-        if (wantedRef.current) fail("service");
+        return; // the writer changed their mind while we asked
+      }
+      setLive(true); // mic is capturing — the recording wash may reveal
+
+      // Acquire a grant, trying each configured provider in preference
+      // order. The default may answer from a warm, pre-minted token; a
+      // backup mints inline. A provider whose token fails at tap time —
+      // bad key, quota, region — falls through to the next, so a
+      // configured backup actually takes over instead of the take dying.
+      const acquired = await acquireGrant();
+      if (!wantedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
         return;
       }
+      if (!acquired) {
+        // no streaming provider would grant a token — the speech service
+        // couldn't be reached, not "this browser refuses recognition"
+        stream.getTracks().forEach((t) => t.stop());
+        fail("network");
+        return;
+      }
+      const { adapter, grant } = acquired;
+      adapterRef.current = adapter; // stop()/onclose read the live adapter
+      setEngine(adapter.name); // keep the reported engine honest after a fallback
+      vlog(`serving via ${adapter.name}`);
 
       // The context is created AFTER the mic is live, on purpose: iOS
       // switches the hardware audio route when capture starts, and a
@@ -707,6 +774,8 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
 
       const ws = adapter.socket(grant);
       wsRef.current = ws;
+      const openedAt = Date.now();
+      ws.onopen = () => vlog(`${adapter.name}: socket open`);
 
       const source = ctx.createMediaStreamSource(stream);
       attachMeter(ctx, source);
@@ -761,14 +830,22 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         clearTimeout(giveUp);
       };
 
+      let heardFirst = false;
+      const noteFirst = (text: string) => {
+        if (heardFirst || !text) return;
+        heardFirst = true;
+        vlog(`${adapter.name}: first words after ${Date.now() - openedAt}ms — "${text}"`);
+      };
       ws.onmessage = (e) => {
         const ev = adapter.parse(e.data as string);
         switch (ev.kind) {
           case "partial":
+            noteFirst(ev.text);
             interimRef.current = ev.text;
             setInterim(ev.text);
             break;
           case "final":
+            noteFirst(ev.text);
             if (ev.text) pushSegment(ev.text);
             interimRef.current = "";
             setInterim("");
@@ -1054,8 +1131,8 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     setLive(false); // stays dark until the mic actually starts capturing
     setStatus("listening");
     navigator.vibrate?.(40);
-    if (adapterRef.current && (engine === "scribe" || engine === "deepgram")) {
-      void startStream(adapterRef.current);
+    if (engine === "scribe" || engine === "deepgram") {
+      void startStream();
     } else if (engine === "batch") {
       void startBatch();
     } else {
