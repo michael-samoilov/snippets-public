@@ -83,10 +83,10 @@ function downsampleTo16k(input, inRate) {
   return out;
 }
 
-/* ── one full session (chunk size × commit strategy) ────────────── */
-async function runSession(pcm, { chunkMs, commit }) {
+/* ── one full session (chunk size × commit strategy × language) ─── */
+async function runSession(pcm, { chunkMs, commit, lang }) {
   const audioMs = (pcm.length / RATE) * 1000;
-  const label = `[${commit}·${chunkMs}ms]`;
+  const label = `[${commit}·${chunkMs}ms${lang ? `·lang=${lang}` : "·auto"}]`;
   const timings = {};
   let t = performance.now();
 
@@ -106,6 +106,9 @@ async function runSession(pcm, { chunkMs, commit }) {
     audio_format: "pcm_16000",
     commit_strategy: commit,
   });
+  // the latency hypothesis: naming the language skips the auto-detect
+  // warmup that seems to eat the first ~2 seconds before the first word
+  if (lang) params.append("language_code", lang);
   t = performance.now();
   const ws = new WebSocket(`${BASE.replace(/^http/, "ws")}/v1/speech-to-text/realtime?${params}`);
 
@@ -236,8 +239,8 @@ console.log(`audio: ${wavPath} @${rate}Hz → ${(pcm.length / RATE).toFixed(1)}s
 // latency. Fixed 100ms chunks; manual vs vad only to show commit strategy
 // doesn't change the mid-sentence cadence.
 const RUNS = [
-  { chunkMs: 100, commit: "manual" },
-  { chunkMs: 100, commit: "vad" },
+  { chunkMs: 100, commit: "manual" }, // baseline: language auto-detected
+  { chunkMs: 100, commit: "manual", lang: "en" }, // the knob: language named
 ];
 
 const results = [];
