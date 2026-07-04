@@ -3839,6 +3839,17 @@ function TodayZoneFill({
     wasVoicing.current = voicing;
   }, [shownText, liveSpoken, transcribing]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Safety net for the seal's press pose. The press rotates the seal
+  // imperatively (pushdown ramp), and the pointer-up release is a double-rAF
+  // that, on tap-to-start, races the glyph re-bake speech.start() triggers
+  // (mic→stop). When that release is lost, the stop square stays frozen at
+  // the ~30° press angle for the whole take. A running take means the finger
+  // is up, so the seal must never hold the press then — release it. (A keep
+  // sets holdDown and is guarded out, so its lift-off choreography is intact.)
+  useEffect(() => {
+    if ((listening || transcribing) && !holdDown) sealCtl.current?.press(false);
+  }, [listening, transcribing, holdDown]);
+
   // voice must never fail silently — every failure says what happened, and
   // the words must match reality: a "service" failure blames the browser
   // only when it's the browser's own engine that refused; a network
