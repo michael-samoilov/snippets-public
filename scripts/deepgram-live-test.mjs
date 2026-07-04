@@ -145,9 +145,14 @@ async function runSession(pcm, { chunkMs, language }) {
       if (text && !timings.firstWord && firstChunkAt) timings.firstWord = performance.now() - firstChunkAt;
       if (data.is_final) {
         if (text) { finals.push(text); committedWordCount += nWords; }
-        if (audioDoneAt && !timings.settle) timings.settle = performance.now() - audioDoneAt;
         reveal(0);
-        scheduleSettle(1200); // wait for more finals after CloseStream
+        // Only settle AFTER all audio is sent. During streaming, a
+        // sentence-final pause emits is_final too — settling on that would
+        // close the socket mid-take (the first-sentence-only cutoff bug).
+        if (audioDoneAt) {
+          if (!timings.settle) timings.settle = performance.now() - audioDoneAt;
+          scheduleSettle(1200);
+        }
       } else {
         reveal(nWords); // interim: current segment's live words
       }
