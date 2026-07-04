@@ -599,14 +599,9 @@ export default function WaxWashLab() {
         }
         .wash-rays-b { animation: wash-rays-b 17s var(--ease-in-out) infinite; }
 
-        @media (prefers-reduced-motion: reduce) {
-          .wash-breathe, .wash-inhale, .wash-spin,
-          .wash-curtain-a, .wash-curtain-b, .wash-ripple,
-          .wash-rays-a, .wash-rays-b {
-            animation: none;
-          }
-          .wash-ripple { opacity: 0; }
-        }
+        /* No reduced-motion collapse here, deliberately: this lab exists
+           to judge motion, so it must show motion even when the OS asks
+           for less. The production wash honors reduced motion. */
       `}</style>
       <header className="mb-6 flex items-center gap-4">
         <h1 className="voice-display text-[1.4rem] text-ink">wax wash</h1>
@@ -640,7 +635,8 @@ export default function WaxWashLab() {
           </Bench>
           <Bench v={aurZone} on={on} onReset={() => setAur(AURORA_DEFAULTS)}>
             <Dial label="pigment" value={aur.mult} min={0.2} max={2} step={0.05} onChange={(v) => setAur({ ...aur, mult: v })} />
-            <Dial label="turn" value={aur.dur} min={6} max={60} step={1} fmt={s} onChange={(v) => setAur({ ...aur, dur: v })} />
+            {/* rotation is always on; this only sets how long one turn takes */}
+            <Dial label="speed" value={aur.dur} min={6} max={60} step={1} fmt={(v) => `${v.toFixed(0)}s/turn`} onChange={(v) => setAur({ ...aur, dur: v })} />
             <Dial label="blur" value={aur.blur} min={8} max={48} step={2} fmt={int} onChange={(v) => setAur({ ...aur, blur: v })} />
             <Dial label="inner" value={aur.inner} min={25} max={70} step={1} fmt={int} onChange={(v) => setAur({ ...aur, inner: v })} />
             <p className="voice-data text-[0.6rem] lowercase text-ink-faint">inner: where the clear middle ends — lower reaches further in</p>

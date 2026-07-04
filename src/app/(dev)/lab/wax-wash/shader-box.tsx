@@ -2,7 +2,9 @@
 
 /* WebGL candidates for the recording wash — lab-only for now.
    ShaderBox is a deliberately tiny mount (fullscreen triangle, uniform
-   dials read per-frame, single static frame under reduced motion).
+   dials read per-frame). The lab ignores the OS reduce-motion setting
+   on purpose — motion is the thing being judged here; any production
+   wash must still honor it.
    AURORA_FRAG is ours: domain-warped value noise shaped into hanging
    curtains with sway and shimmer — the thing flat gradients can't do.
    NEURO_FRAG is adapted from Paper Shaders' neuro-noise
@@ -89,7 +91,8 @@ export function ShaderBox({
       return locs.get(name)!;
     };
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    /* the lab exists to judge motion, so it animates even under the
+       OS reduce-motion setting — production washes must NOT copy this */
     let raf = 0;
     const t0 = performance.now();
     const draw = (now: number) => {
@@ -102,16 +105,12 @@ export function ShaderBox({
         else gl.uniform3f(loc(name), v[0], v[1], v[2]);
       }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (!reduced) raf = requestAnimationFrame(draw);
+      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
 
-    /* the zone resizes with its day — refit and (under reduced motion,
-       where no loop runs) repaint the single frame */
-    const ro = new ResizeObserver(() => {
-      fit();
-      if (reduced) draw(performance.now());
-    });
+    /* the zone resizes with its day — refit the buffer */
+    const ro = new ResizeObserver(fit);
     ro.observe(cv);
 
     return () => {
@@ -256,7 +255,10 @@ export function WashPulsingBorder({ o }: { o: PulseOpts }) {
         <PulsingBorder
           colors={colors}
           colorBack="#00000000"
-          roundness={0.07}
+          /* the component's own default is scale 0.6 (a floating inner
+             box) — scale 1 pins the border to the canvas edges */
+          scale={1}
+          roundness={0.1}
           thickness={o.thickness}
           softness={o.softness}
           intensity={o.glow}
