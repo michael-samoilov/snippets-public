@@ -59,7 +59,40 @@ export function useKeyboardRoom(
     // never engaged.
     let baseVh = vv.height;
 
+    // While a managed field is being written in AND the editing state is at
+    // rest, the book is FROZEN. These fields are contained cards — their own
+    // box scrolls the words internally — so no outer scroll is ever
+    // legitimate unless a real mover speaks: a finger, a wheel, a keystroke
+    // (whose reflow may need the room correction), or the keyboard resizing.
+    // Everything else — above all WebKit's selection auto-scroll chasing the
+    // spacebar-trackpad's virtual cursor beyond the box, which flings the
+    // whole schedule — is pathology and is simply held still. Each legitimate
+    // mover thaws and re-arms a beat later (past iOS's own late caret-reveal
+    // scrolls). Walk detection by caret movement is NOT enough here: an
+    // EMPTY composer emits no selectionchange at all while the cursor roams.
+    // Coarse pointers only — a desktop scrollbar drag must never be fought.
+    const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+    let frozenSt: number | null = null;
+    let touchDown = false;
+    let armT: ReturnType<typeof setTimeout> | undefined;
+    const thaw = () => { frozenSt = null; };
+    const rearm = () => {
+      thaw();
+      clearTimeout(armT);
+      if (!coarse) return;
+      armT = setTimeout(() => {
+        if (field && document.activeElement === field && !touchDown) frozenSt = el.scrollTop;
+      }, 900);
+    };
+    const onTouchStart = () => { touchDown = true; thaw(); clearTimeout(armT); };
+    const onTouchEnd = () => { touchDown = false; rearm(); };
+    const onElScroll = () => {
+      if (frozenSt == null || touchDown) return;
+      if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
+    };
+
     const correct = () => {
+      if (frozenSt != null) return; // a walk owns the view; the box reveals its own caret
       if (!field) {
         clearPad();
         return;
@@ -123,7 +156,10 @@ export function useKeyboardRoom(
     // reflow, so its immediate pass reads the old height — but run()'s deferred
     // passes re-measure after the reflow, so the caret still ends up placed.
     const ro = new ResizeObserver(() => run());
-    const onInput = () => run();
+    const onInput = () => {
+      rearm(); // typing is a legitimate mover; freeze again once it settles
+      run();
+    };
     // a field marked data-room-center anchors its own tail (the today zone owns
     // its scroll) — this generic room stays out of its way entirely.
     const managed = (t: HTMLElement | null) =>
@@ -138,19 +174,28 @@ export function useKeyboardRoom(
         // extra late passes to outlast the keyboard's rise (~250ms) and iOS's
         // settle-scroll after it
         run([140, 300, 450]);
+        rearm();
       }
     };
     const onFocusOut = () => {
       if (field) ro.unobserve(field);
       field = null;
+      thaw();
+      clearTimeout(armT);
       clearSettles();
       clearPad();
     };
-    const onVvResize = () => run([140, 300]); // the keyboard opens/closes
+    const onVvResize = () => { rearm(); run([140, 300]); }; // the keyboard opens/closes
     const onVvScroll = () => run();
+    const onWheel = () => rearm();
     el.addEventListener("focusin", onFocusIn);
     el.addEventListener("focusout", onFocusOut);
     el.addEventListener("input", onInput);
+    el.addEventListener("scroll", onElScroll, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    window.addEventListener("wheel", onWheel, { passive: true });
     vv.addEventListener("resize", onVvResize);
     vv.addEventListener("scroll", onVvScroll);
     // A field can be focused BEFORE this effect attaches — the entry editor
@@ -162,11 +207,18 @@ export function useKeyboardRoom(
       field = pre;
       ro.observe(pre);
       run([140, 300, 450]);
+      rearm();
     }
     return () => {
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
       el.removeEventListener("input", onInput);
+      el.removeEventListener("scroll", onElScroll);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
+      window.removeEventListener("wheel", onWheel);
+      clearTimeout(armT);
       vv.removeEventListener("resize", onVvResize);
       vv.removeEventListener("scroll", onVvScroll);
       ro.disconnect();
