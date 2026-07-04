@@ -107,7 +107,10 @@ function Bake() {
   const colorFront = sp.get("colorFront") ?? seed.colorFront;
   const params = paramsFromSearch(sp, SHIPPED.params);
   return (
-    <div data-texture-bake style={{ position: "fixed", inset: 0, background: colorBack }}>
+    // z-50 lifts the bake clear of the app-shell chrome (wordmark, dock) that
+    // the root layout draws behind every route — otherwise it bleeds into the
+    // baked bitmap, as the old bake view did
+    <div data-texture-bake style={{ position: "fixed", inset: 0, zIndex: 50, background: colorBack }}>
       <PaperTexture
         colorBack={colorBack}
         colorFront={colorFront}
