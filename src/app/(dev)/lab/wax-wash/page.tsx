@@ -7,9 +7,12 @@
    TodayZoneFill; the animated rounds live here until one is chosen.
    Round two sweeps the three finalists — inhale, aurora, curtains —
    across intensity (pigment), speed (period), and extent (reach).
+   The desk at the top has every dial live; tapping a sweep card loads
+   its recipe onto the desk. The recipe line under each desk zone is
+   the values to carry into production.
    Theme: localStorage.setItem('theme','dark') + reload, as everywhere. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
    Paper mixes from --wax (pigment into paper); Lamplight from --wax-bright
@@ -33,12 +36,12 @@ const FOUR_EDGE = fourEdge();
 const edgeMask = (inner = 52) =>
   `radial-gradient(85% 85% at 50% 50%, transparent ${inner}%, black 95%)`;
 
-const EDGE_MASK = edgeMask();
-
 interface Layer {
   className?: string;
   style: React.CSSProperties;
 }
+
+type FamilyKey = "inhale" | "aurora" | "curtains";
 
 interface Variant {
   key: string;
@@ -51,21 +54,29 @@ interface Variant {
   layers?: Layer[];
   /** mask on the container, confining light to the edges */
   mask?: string;
+  /** which desk bench this card's recipe loads onto, and the resolved dials */
+  family?: FamilyKey;
+  opts?: Record<string, number>;
 }
 
 /* ---- inhale: the seep's reach swells and settles ---------------------- */
+
+const INHALE_DEFAULTS = { mult: 1, reach: 1, dur: 3.2, scale: 1.05, dim: 0.66 };
+type InhaleOpts = typeof INHALE_DEFAULTS;
 
 function inhale(
   key: string,
   label: string,
   note: string,
-  opts: { mult?: number; reach?: number; dur?: number; scale?: number; dim?: number } = {},
+  opts: Partial<InhaleOpts> = {},
 ): Variant {
-  const { mult = 1, reach = 1, dur = 3.2, scale = 1.05, dim = 0.66 } = opts;
+  const { mult, reach, dur, scale, dim } = { ...INHALE_DEFAULTS, ...opts };
   return {
     key,
     label,
     note,
+    family: "inhale",
+    opts: { mult, reach, dur, scale, dim },
     washClass: "wash-inhale",
     wash: {
       background: fourEdge(mult, reach),
@@ -81,17 +92,22 @@ function inhale(
 const conic = (m: number) =>
   `conic-gradient(from 0deg, ${WASH(19 * m)}, ${WASH(7 * m)}, ${WASH(24 * m)}, ${WASH(9 * m)}, ${WASH(17 * m)}, ${WASH(6 * m)}, ${WASH(19 * m)})`;
 
+const AURORA_DEFAULTS = { mult: 1, dur: 26, blur: 26, inner: 52 };
+type AuroraOpts = typeof AURORA_DEFAULTS;
+
 function aurora(
   key: string,
   label: string,
   note: string,
-  opts: { mult?: number; dur?: number; blur?: number; inner?: number } = {},
+  opts: Partial<AuroraOpts> = {},
 ): Variant {
-  const { mult = 1, dur = 26, blur = 26, inner = 52 } = opts;
+  const { mult, dur, blur, inner } = { ...AURORA_DEFAULTS, ...opts };
   return {
     key,
     label,
     note,
+    family: "aurora",
+    opts: { mult, dur, blur, inner },
     mask: edgeMask(inner),
     layers: [
       {
@@ -113,18 +129,23 @@ function aurora(
 
 /* ---- curtains: two counter-drifting glows ----------------------------- */
 
+const CURTAINS_DEFAULTS = { mult: 1, durA: 14, durB: 19, drift: 7, spread: 1, inner: 52 };
+type CurtainsOpts = typeof CURTAINS_DEFAULTS;
+
 function curtains(
   key: string,
   label: string,
   note: string,
-  opts: { mult?: number; durA?: number; durB?: number; drift?: number; spread?: number; inner?: number } = {},
+  opts: Partial<CurtainsOpts> = {},
 ): Variant {
-  const { mult = 1, durA = 14, durB = 19, drift = 7, spread = 1, inner } = opts;
+  const { mult, durA, durB, drift, spread, inner } = { ...CURTAINS_DEFAULTS, ...opts };
   return {
     key,
     label,
     note,
-    mask: inner === undefined ? EDGE_MASK : edgeMask(inner),
+    family: "curtains",
+    opts: { mult, durA, durB, drift, spread, inner },
+    mask: edgeMask(inner),
     layers: [
       {
         className: "wash-curtain-a",
@@ -269,10 +290,23 @@ const FAMILIES: Family[] = [
   },
 ];
 
-function MockZone({ v, on }: { v: Variant; on: boolean }) {
+function MockZone({
+  v,
+  on,
+  onPick,
+}: {
+  v: Variant;
+  on: boolean;
+  /** when set, tapping the card loads its recipe onto the desk */
+  onPick?: (v: Variant) => void;
+}) {
   return (
     <figure className="m-0">
-      <div className="relative h-[430px] w-[300px] rounded-2xl border border-wax/45">
+      <div
+        className={`relative h-[430px] w-[300px] rounded-2xl border border-wax/45 ${onPick ? "cursor-pointer" : ""}`}
+        onClick={onPick ? () => onPick(v) : undefined}
+        title={onPick ? "load onto the desk" : undefined}
+      >
         {/* the wash container — clipped to the frame, masked to its edges */}
         <div
           aria-hidden
@@ -331,6 +365,75 @@ function MockZone({ v, on }: { v: Variant; on: boolean }) {
   );
 }
 
+/* one dial on the desk: label + live value + range, stamp-lab style */
+function Dial({
+  label,
+  value,
+  min,
+  max,
+  step,
+  fmt,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  fmt?: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[0.85rem]">
+      <span className="voice-data w-28 shrink-0 lowercase">
+        {label} {(fmt ?? ((v: number) => v.toFixed(2)))(value)}
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(+e.target.value)}
+        className="w-full min-w-0"
+      />
+    </label>
+  );
+}
+
+/* a bench: one live zone + its dial column + the recipe to carry away */
+function Bench({
+  v,
+  on,
+  onReset,
+  children,
+}: {
+  v: Variant;
+  on: boolean;
+  onReset: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-5">
+      <MockZone v={v} on={on} />
+      <div className="mt-9 flex w-60 flex-col gap-2.5">
+        {children}
+        <button
+          type="button"
+          onClick={onReset}
+          className="voice-label pressable mt-1 self-start rounded-full border border-rule px-3 py-1 text-[0.68rem] text-ink-soft"
+        >
+          reset
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const s = (v: number) => `${v.toFixed(1)}s`;
+const pct = (v: number) => `${v.toFixed(1)}%`;
+const int = (v: number) => String(Math.round(v));
+
 export default function WaxWashLab() {
   const [on, setOn] = useState(true);
   const [auto, setAuto] = useState(false);
@@ -339,6 +442,38 @@ export default function WaxWashLab() {
     const t = setInterval(() => setOn((v) => !v), 1600);
     return () => clearInterval(t);
   }, [auto]);
+
+  const [inh, setInh] = useState(INHALE_DEFAULTS);
+  const [aur, setAur] = useState(AURORA_DEFAULTS);
+  const [cur, setCur] = useState(CURTAINS_DEFAULTS);
+  const deskRef = useRef<HTMLElement>(null);
+
+  /* tapping a sweep card sends its recipe to the matching bench */
+  const pick = (v: Variant) => {
+    if (v.family === "inhale") setInh({ ...INHALE_DEFAULTS, ...(v.opts as Partial<InhaleOpts>) });
+    if (v.family === "aurora") setAur({ ...AURORA_DEFAULTS, ...(v.opts as Partial<AuroraOpts>) });
+    if (v.family === "curtains") setCur({ ...CURTAINS_DEFAULTS, ...(v.opts as Partial<CurtainsOpts>) });
+    deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const inhZone = inhale(
+    "desk-inhale",
+    "inhale",
+    `mult ${inh.mult.toFixed(2)} · reach ${inh.reach.toFixed(2)} · ${inh.dur.toFixed(1)}s · scale ${inh.scale.toFixed(3)} · dim ${inh.dim.toFixed(2)}`,
+    inh,
+  );
+  const aurZone = aurora(
+    "desk-aurora",
+    "aurora",
+    `mult ${aur.mult.toFixed(2)} · ${aur.dur.toFixed(0)}s · blur ${aur.blur.toFixed(0)} · inner ${aur.inner.toFixed(0)}%`,
+    aur,
+  );
+  const curZone = curtains(
+    "desk-curtains",
+    "curtains",
+    `mult ${cur.mult.toFixed(2)} · ${cur.durA.toFixed(1)}s/${cur.durB.toFixed(1)}s · drift ${cur.drift.toFixed(1)}% · spread ${cur.spread.toFixed(2)} · inner ${cur.inner.toFixed(0)}%`,
+    cur,
+  );
 
   return (
     <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-8" data-wash-lab>
@@ -410,6 +545,36 @@ export default function WaxWashLab() {
           {auto ? "auto: on" : "auto: off"}
         </button>
       </header>
+      <section ref={deskRef} className="mb-12 scroll-mt-8">
+        <h2 className="voice-label text-[0.78rem] text-ink-soft">the desk</h2>
+        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
+          every dial live — tap any card below to send its recipe here; the line under each zone is what production gets
+        </p>
+        <div className="flex flex-wrap gap-x-12 gap-y-8">
+          <Bench v={inhZone} on={on} onReset={() => setInh(INHALE_DEFAULTS)}>
+            <Dial label="pigment" value={inh.mult} min={0.2} max={2} step={0.05} onChange={(v) => setInh({ ...inh, mult: v })} />
+            <Dial label="reach" value={inh.reach} min={0.4} max={2} step={0.05} onChange={(v) => setInh({ ...inh, reach: v })} />
+            <Dial label="breath" value={inh.dur} min={1.5} max={7} step={0.1} fmt={s} onChange={(v) => setInh({ ...inh, dur: v })} />
+            <Dial label="swell" value={inh.scale} min={1} max={1.12} step={0.005} fmt={(v) => v.toFixed(3)} onChange={(v) => setInh({ ...inh, scale: v })} />
+            <Dial label="trough" value={inh.dim} min={0.3} max={1} step={0.02} onChange={(v) => setInh({ ...inh, dim: v })} />
+          </Bench>
+          <Bench v={aurZone} on={on} onReset={() => setAur(AURORA_DEFAULTS)}>
+            <Dial label="pigment" value={aur.mult} min={0.2} max={2} step={0.05} onChange={(v) => setAur({ ...aur, mult: v })} />
+            <Dial label="turn" value={aur.dur} min={6} max={60} step={1} fmt={s} onChange={(v) => setAur({ ...aur, dur: v })} />
+            <Dial label="blur" value={aur.blur} min={8} max={48} step={2} fmt={int} onChange={(v) => setAur({ ...aur, blur: v })} />
+            <Dial label="inner" value={aur.inner} min={25} max={70} step={1} fmt={int} onChange={(v) => setAur({ ...aur, inner: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">inner: where the clear middle ends — lower reaches further in</p>
+          </Bench>
+          <Bench v={curZone} on={on} onReset={() => setCur(CURTAINS_DEFAULTS)}>
+            <Dial label="pigment" value={cur.mult} min={0.2} max={2} step={0.05} onChange={(v) => setCur({ ...cur, mult: v })} />
+            <Dial label="period a" value={cur.durA} min={4} max={40} step={0.5} fmt={s} onChange={(v) => setCur({ ...cur, durA: v })} />
+            <Dial label="period b" value={cur.durB} min={4} max={45} step={0.5} fmt={s} onChange={(v) => setCur({ ...cur, durB: v })} />
+            <Dial label="drift" value={cur.drift} min={0} max={18} step={0.5} fmt={pct} onChange={(v) => setCur({ ...cur, drift: v })} />
+            <Dial label="spread" value={cur.spread} min={0.6} max={1.6} step={0.05} onChange={(v) => setCur({ ...cur, spread: v })} />
+            <Dial label="inner" value={cur.inner} min={25} max={70} step={1} fmt={int} onChange={(v) => setCur({ ...cur, inner: v })} />
+          </Bench>
+        </div>
+      </section>
       <section className="mb-12">
         <h2 className="voice-label text-[0.78rem] text-ink-soft">round one</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
@@ -427,7 +592,7 @@ export default function WaxWashLab() {
           <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">{f.note}</p>
           <div className="flex flex-wrap gap-8">
             {f.variants.map((v) => (
-              <MockZone key={v.key} v={v} on={on} />
+              <MockZone key={v.key} v={v} on={on} onPick={pick} />
             ))}
           </div>
         </section>
