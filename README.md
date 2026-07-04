@@ -42,15 +42,30 @@ pnpm dev            # http://localhost:3000
 Both are optional; the app is fully functional with neither.
 
 ```sh
-# Live voice transcription via ElevenLabs Scribe v2 Realtime — words
-# stream onto the page as you speak, in any browser with a microphone.
-# The key never reaches the browser; the server mints single-use
-# tokens (/api/scribe-token) for each take.
+# Live voice transcription — words stream onto the page as you speak, in
+# any browser with a microphone. Two streaming providers are supported;
+# the key never reaches the browser (the server mints a short-lived
+# token per take). Configure either or both — the first one that has a
+# key wins as the default, the other is an automatic backup.
+
+# Deepgram Nova-3 (the default) — lowest latency, ~2x faster than Scribe
+# to the first word and mid-sentence; language=multi accepts any language
+# and switches mid-sentence. Token via /api/deepgram-token.
+DEEPGRAM_API_KEY=…
+# DEEPGRAM_MODEL=nova-3
+# DEEPGRAM_LANGUAGE=multi
+
+# ElevenLabs Scribe v2 Realtime — broadest language coverage (90+),
+# highest accuracy on tough accents. Token via /api/scribe-token.
 ELEVENLABS_API_KEY=…
-# SCRIBE_MODEL=scribe_v2_realtime              # override the model
+# SCRIBE_MODEL=scribe_v2_realtime
 # ELEVENLABS_BASE_URL=https://api.elevenlabs.io
 
-# Batch fallback (used when no ElevenLabs key is set): a proxy that
+# Provider preference (default + backup order). First available wins;
+# reorder and redeploy to switch — no code change.
+# NEXT_PUBLIC_SPEECH_PROVIDERS=deepgram,scribe
+
+# Batch fallback (used when no streaming key is set): a proxy that
 # speaks the OpenAI Whisper dialect — recordings upload when you stop.
 # TRANSCRIBE_API_KEY=…
 # TRANSCRIBE_BASE_URL=https://api.aqua.sh/v1   # default: Aqua's Avalon
