@@ -18,6 +18,8 @@ import { db } from "@/lib/db";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
+import { signOut, useSession } from "@/lib/auth";
+import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +83,8 @@ export default function SettingsPage() {
       </header>
 
       <div className="space-y-10">
+        <AccountSection />
+
         <section aria-label={copy.settings.appearance.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.heading}</h2>
           <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label={copy.settings.appearance.themeLabel}>
@@ -337,27 +341,50 @@ function ThemeSwatch({
   );
 }
 
-/** A raised paper button: lit on top, it depresses when pressed. */
-function PaperButton({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
+/**
+ * The account section — sign in, or the signed-in address with a quiet
+ * way out. Sync/backup status lines join this section as those layers
+ * land.
+ */
+function AccountSection() {
+  const router = useRouter();
+  const { user, status } = useSession();
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-[5px] bg-paper-raised px-3.5 py-1.5 font-serif text-[0.92rem] text-ink",
-        "shadow-[inset_0_1px_0_var(--press-highlight),inset_0_-1px_0_rgb(0_0_0/0.05),0_0_0_1px_rgb(var(--shadow-hue)/0.1),0_1px_2px_rgb(var(--shadow-hue)/0.12),0_2px_6px_rgb(var(--shadow-hue)/0.07)]",
-        "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-        "active:translate-y-px active:scale-[0.98] active:shadow-[inset_0_1px_3px_rgb(0_0_0/0.12),0_0_0_1px_rgb(var(--shadow-hue)/0.1)]",
+    <section aria-label={copy.settings.account.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.account.heading}
+      </h2>
+      {user ? (
+        <div className="mt-4">
+          <p className="font-serif text-[0.98rem]">
+            {copy.settings.account.signedInAs(user.email)}
+          </p>
+          <div className="mt-4 flex items-center gap-4">
+            <PaperButton onClick={() => void signOut()}>
+              {copy.settings.account.signOut}
+            </PaperButton>
+            <p className="voice-prose text-[0.9rem] text-ink-faint">
+              {copy.settings.account.signOutHint}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+            {copy.settings.account.signedOutLead}
+          </p>
+          <div className="mt-4">
+            <PaperButton
+              onClick={() => router.push("/signin")}
+              disabled={status === "loading"}
+            >
+              {copy.settings.account.signIn}
+            </PaperButton>
+          </div>
+        </div>
       )}
-    >
-      {children}
-    </button>
+    </section>
   );
 }
 

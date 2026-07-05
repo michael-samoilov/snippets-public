@@ -5,16 +5,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useSession } from "@/lib/auth";
+import { signOut, useSession } from "@/lib/auth";
 import { copy } from "@/lib/copy";
 
 /**
- * The account mark on the desk's top edge. Until a sync provider is
- * wired it stands as the promise of one — and the quiet door to
- * Settings, which left the nav to live here.
+ * The account mark on the desk's top edge — the door to sign-in and
+ * to Settings. While the session is still loading it renders as
+ * signed-out; no flicker states.
  */
 export function ProfileMenu() {
   const router = useRouter();
@@ -53,13 +54,24 @@ export function ProfileMenu() {
         align="end"
         className="float origin-(--radix-dropdown-menu-content-transform-origin) border-none font-serif data-[state=closed]:duration-100 data-[state=open]:duration-150"
       >
-        <DropdownMenuItem disabled className="italic">
-          {copy.account.syncSoon}
-        </DropdownMenuItem>
+        {user ? (
+          <DropdownMenuLabel className="max-w-[16rem] truncate font-normal text-ink-faint">
+            {user.email}
+          </DropdownMenuLabel>
+        ) : (
+          <DropdownMenuItem onSelect={() => router.push("/signin")}>
+            {copy.account.signIn}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push("/settings")}>
           {copy.account.settings}
         </DropdownMenuItem>
+        {user && (
+          <DropdownMenuItem onSelect={() => void signOut()}>
+            {copy.account.signOut}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

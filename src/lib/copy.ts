@@ -255,14 +255,52 @@ export const copy = {
   /** the account mark and its menu */
   account: {
     label: "Account",
-    syncSoon: "Sign in to sync across devices — soon",
+    signIn: "Sign in to sync across devices",
     settings: "Settings…",
+    signOut: "Sign out",
+  },
+
+  /** the sign-in page */
+  signin: {
+    title: "Sign in",
+    back: "Back to the book",
+    lead:
+      "Your book stays on this device either way — signing in keeps a copy on the server and lets another device carry it too.",
+    emailLabel: "Email",
+    emailPlaceholder: "you@example.com",
+    sendCode: "Send a code",
+    sending: "Sending…",
+    /** after the code goes out */
+    codeSent: (email: string) => `A six-digit code is on its way to ${email}.`,
+    codeLabel: "The six-digit code",
+    verify: "Sign in",
+    verifying: "A moment…",
+    differentEmail: "Use a different address",
+    /** the rule between the email flow and Google */
+    or: "or",
+    google: "Continue with Google",
+    errors: {
+      invalidEmail: "That doesn’t look like an address.",
+      sendFailed: "The code couldn’t be sent. Try again in a moment.",
+      badCode: "That code didn’t match. Codes last ten minutes.",
+      notConfigured: "Sign-in isn’t switched on for this install.",
+      googleFailed: "Google didn’t complete the sign-in. Try again.",
+    },
   },
 
   /** the Settings page */
   settings: {
     title: "Settings",
     back: "Back to the book",
+    account: {
+      heading: "Account",
+      signedOutLead:
+        "Sign in and the book keeps a copy on the server — carried to any device you sign in on.",
+      signIn: "Sign in",
+      signedInAs: (email: string) => `Signed in as ${email}.`,
+      signOut: "Sign out",
+      signOutHint: "Your entries stay on this device.",
+    },
     appearance: {
       heading: "Appearance",
       /** the theme radiogroup's accessible name */
