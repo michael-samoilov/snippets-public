@@ -3400,6 +3400,11 @@ function TodayZoneFill({
   // finger can hover motionless for seconds and the anchor must stay silent.
   const walkSessionRef = useRef(false);
   const lastInputRef = useRef(0); // when the field last received a keystroke
+  // a live selection-handle drag: set to a short deadline on each selectionchange
+  // that extends a selection under a finger, so the scroll clamp knows to keep
+  // the drag inside the entry (see onScScroll). Collapsed carets never set it —
+  // typing, taps, and caret walks are untouched.
+  const selDragRef = useRef(0);
   const vvEndListenerRef = useRef<(() => void) | null>(null);
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
@@ -3495,6 +3500,14 @@ function TodayZoneFill({
         // seats the caret on focus (its caret branch), so the walk machinery
         // simply stands down until the focus has settled.
         if (performance.now() - lastFocusAt.current < 900) return;
+        // a selection extending under a finger = an iOS handle drag. Arm the
+        // scroll clamp (onScScroll) for a short window so WebKit's own
+        // auto-scroll — which, with this field un-scrollable, lands on the book
+        // feed — can reveal the entry's earlier lines but can't drag on into
+        // earlier days. Collapsed carets fall through to the walk logic below.
+        if (area && area.selectionStart !== area.selectionEnd && touchActiveRef.current) {
+          selDragRef.current = performance.now() + 250;
+        }
         // a collapsed-caret move with no finger on the page = a caret walk;
         // open (or extend) the walk window the scroll clamp acts within
         if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
@@ -3565,6 +3578,26 @@ function TodayZoneFill({
           const st = sc.scrollTop;
           const d = walk.prevSt < 0 ? 0 : st - walk.prevSt;
           walk.prevSt = st;
+          // Selection-handle drag containment (see selDragRef). This field is
+          // un-scrollable by design, so WebKit's selection auto-scroll lands on
+          // the book feed and can haul it up past today into earlier days. While
+          // a drag is live, if the today zone's top has slipped below the
+          // scroller's top, earlier days are showing — pull the feed back so the
+          // drag reveals the entry and halts at its head. A selection drag
+          // carries no fling momentum, so this write can't kill one, and it's
+          // scoped to the drag window; every other scroll falls straight through.
+          if (performance.now() < selDragRef.current) {
+            const zone = areaRef.current?.closest<HTMLElement>("[data-today-zone]");
+            if (zone) {
+              const over = zone.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+              if (over > 0.5) {
+                sc.scrollTop = st + over;
+                walk.sanctioned = sc.scrollTop;
+                walk.prevSt = sc.scrollTop;
+              }
+            }
+            return;
+          }
           if (touchActiveRef.current) return;
           if (Math.abs(st - walk.sanctioned) < 2) return; // our own write settling
           if (performance.now() > walk.until) return;
@@ -3867,6 +3900,10 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
+        // the containment boundary for a selection-handle drag: nothing above
+        // this element is today — a drag that reaches here has revealed the
+        // whole entry and must not haul the feed on into earlier days
+        data-today-zone=""
         // when a rule sits above the zone (today empty, prior days present), set
         // the gap from the rule to the zone's top edge equal to the "chin" — the
         // space below the scroller, from its bottom down to the sheet's bottom
