@@ -254,6 +254,33 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
           <div className="size-9" />
         </div>
       </div>
+      {/* the weekday rail and its hairline — the scroll area's top terminus,
+          sitting beneath the header exactly as in the app (collapsed to the bare
+          rule everywhere but the month grid). Carrying it here means the today
+          zone lands at its final height, with nothing to shift when the real
+          layout arrives. */}
+      <div
+        className={cn(
+          "mt-5 grid border-b border-rule-faint",
+          view === "month" ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="overflow-hidden">
+          <div
+            className={cn("grid grid-cols-7", view === "month" ? "opacity-100" : "opacity-0")}
+            aria-hidden="true"
+          >
+            {Array.from({ length: 7 }).map((_, i) => (
+              <span key={i} className="flex justify-center pb-2">
+                <span
+                  className="skeleton-shimmer h-2.5 w-2.5 rounded-[2px]"
+                  style={{ backgroundColor: "var(--rule-faint)" }}
+                />
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
       <div className="relative -mt-px min-h-0 flex-1 overflow-hidden">
         {view === "year" ? (
           <YearSkeleton />
