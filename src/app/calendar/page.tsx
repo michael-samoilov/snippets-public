@@ -3596,13 +3596,21 @@ function TodayZoneFill({
         // seats the caret on focus (its caret branch), so the walk machinery
         // simply stands down until the focus has settled.
         if (performance.now() - lastFocusAt.current < 900) return;
-        // a selection extending under a finger = an iOS handle drag. Arm the
-        // scroll clamp (onScScroll) for a short window so WebKit's own
+        // a non-collapsed selection moving on its own (not a keystroke) = an iOS
+        // handle drag. Arm the scroll clamp (onScScroll) so WebKit's own
         // auto-scroll — which, with this field un-scrollable, lands on the book
         // feed — can reveal the entry's earlier lines but can't drag on into
-        // earlier days. Collapsed carets fall through to the walk logic below.
-        if (area && area.selectionStart !== area.selectionEnd && touchActiveRef.current) {
-          selDragRef.current = performance.now() + 250;
+        // earlier days. No touch guard: iOS doesn't reliably deliver page touch
+        // events under a selection handle. The clamp keeps its own window alive
+        // as the feed scrolls, so it can't lapse when the selection stops
+        // changing (handle parked at line 1) while iOS keeps scrolling.
+        // Collapsed carets fall through to the walk logic below.
+        if (
+          area &&
+          area.selectionStart !== area.selectionEnd &&
+          performance.now() - lastInputRef.current > 300
+        ) {
+          selDragRef.current = performance.now() + 400;
         }
         // a collapsed-caret move with no finger on the page = a caret walk;
         // open (or extend) the walk window the scroll clamp acts within
@@ -3682,8 +3690,18 @@ function TodayZoneFill({
           // drag reveals the entry and halts at its head. A selection drag
           // carries no fling momentum, so this write can't kill one, and it's
           // scoped to the drag window; every other scroll falls straight through.
-          if (performance.now() < selDragRef.current) {
-            const zone = areaRef.current?.closest<HTMLElement>("[data-today-zone]");
+          const areaEl = areaRef.current;
+          if (
+            performance.now() < selDragRef.current &&
+            areaEl &&
+            areaEl.selectionStart !== areaEl.selectionEnd
+          ) {
+            // keep the window alive as long as the feed is being auto-scrolled
+            // under a live selection — iOS scrolls on past the last
+            // selectionchange (handle parked at line 1), and a lapsed window
+            // there is exactly what let the overshoot through.
+            selDragRef.current = performance.now() + 400;
+            const zone = areaEl.closest<HTMLElement>("[data-today-zone]");
             if (zone) {
               const over = zone.getBoundingClientRect().top - sc.getBoundingClientRect().top;
               if (over > 0.5) {
