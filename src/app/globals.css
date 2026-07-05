@@ -250,13 +250,7 @@ html {
 /* ── base ──────────────────────────────────────────────────── */
 
 html {
-  /* NB: deliberately NO `height: 100%` here (nor on body below). The shell is
-     `position: fixed; inset: 0`, sized straight to the viewport — it needs no
-     percentage-height chain. And on iOS a root with `height: 100%` was making
-     that fixed shell resolve against a too-tall box (the address-bar-retracted
-     height) instead of the visible viewport, so the today zone overflowed and
-     the seal clipped — while the identical shell on a bare page (no root height)
-     rendered correctly. Leaving html/body at their auto height matches that. */
+  height: 100%;
   hanging-punctuation: first allow-end last;
   -webkit-text-size-adjust: 100%;
 }
@@ -281,6 +275,11 @@ html {
   /* color only — the canvas extends it through every zoom gap, so the desk
      has no findable edge */
   background: var(--desk);
+}
+
+html,
+body {
+  height: 100%;
 }
 
 /* lamplight: a pool of light upper-center, edges falling away. It
@@ -312,6 +311,7 @@ body::before {
 }
 
 body {
+  min-height: 100%;
   background: transparent;
   color: var(--ink);
   font-family: var(--font-serif);
