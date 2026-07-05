@@ -6,9 +6,22 @@ import { MotionConfig } from "motion/react";
 import { Toaster } from "@/components/ui/sonner";
 import { purgeOldDeleted } from "@/lib/db";
 import { retryPendingEnrichment } from "@/lib/enrich";
+import { startSync } from "@/lib/sync";
+import { useSession } from "@/lib/auth";
 import { KeptDraftContext, type KeptDraftStore } from "@/lib/kept-draft";
 import { useZoomRelief } from "@/hooks/use-zoom-relief";
 import type { Snippet } from "@/lib/types";
+
+/** Sync follows the session: signed in → the engine runs; out → it rests. */
+function SyncManager() {
+  const { user, status } = useSession();
+  const userId = status === "signed-in" ? user?.id : undefined;
+  useEffect(() => {
+    if (!userId) return;
+    return startSync(userId);
+  }, [userId]);
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // shed the heavy GPU layers the instant a pinch begins (the zoom-crash fix)
@@ -48,6 +61,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <MotionConfig reducedMotion="user">
         <KeptDraftContext.Provider value={draftStore}>
+          <SyncManager />
           {children}
         </KeptDraftContext.Provider>
       </MotionConfig>

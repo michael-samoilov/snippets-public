@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { db, allSnippetsNewestFirst } from "@/lib/db";
+import { allSnippetsNewestFirst, importSnippets } from "@/lib/db";
 import { dayKey, dateFromDayKey } from "@/lib/dates";
 import { KIND_META } from "@/lib/kinds";
 import { KINDS, type Snippet } from "@/lib/types";
@@ -23,7 +23,8 @@ export async function exportJSON(): Promise<void> {
     app: "snippets",
     version: 1,
     exportedAt: new Date().toISOString(),
-    snippets,
+    // _dirty is device bookkeeping, not part of the book
+    snippets: snippets.map(({ _dirty, ...s }) => s),
   };
   download(
     `snippets-${dayKey()}.json`,
@@ -79,6 +80,5 @@ export async function importJSON(file: File): Promise<number> {
     },
   );
   if (rows.length === 0) throw new Error(copy.data.noEntriesInFile);
-  await db.snippets.bulkPut(rows);
-  return rows.length;
+  return importSnippets(rows);
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { format, isToday } from "date-fns";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -14,11 +15,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { db } from "@/lib/db";
+import { eraseAll } from "@/lib/db";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
 import { signOut, useSession } from "@/lib/auth";
+import { reconcile, useSyncStatus } from "@/lib/sync";
 import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,7 @@ export default function SettingsPage() {
     else router.push("/calendar");
   };
   const stats = useStats();
+  const { user } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [eraseOpen, setEraseOpen] = useState(false);
   // theme is unknowable server-side; render the swatches neutral until hydrated
@@ -208,7 +211,7 @@ export default function SettingsPage() {
               {copy.settings.erase.title}
             </DialogTitle>
             <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
-              {copy.settings.erase.body}
+              {user ? copy.settings.erase.bodySynced : copy.settings.erase.body}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -221,7 +224,7 @@ export default function SettingsPage() {
             </Button>
             <HoldToErase
               onComplete={async () => {
-                await db.snippets.clear();
+                await eraseAll();
                 setEraseOpen(false);
                 toast(copy.settings.toasts.erased);
               }}
@@ -229,6 +232,68 @@ export default function SettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * The sync trust lines. One quiet sentence for state, and beneath it
+ * the integrity count — device vs server — in the data voice. When
+ * the two disagree beyond what's still in flight, a reconcile action
+ * appears (rewind the cursor, re-walk the feed; always safe).
+ */
+function SyncLines() {
+  const sync = useSyncStatus();
+
+  let line: string;
+  if (sync.phase === "offline") line = copy.settings.sync.offline;
+  else if (sync.phase === "error") line = copy.settings.sync.error;
+  else if (sync.pendingCount > 0)
+    line = copy.settings.sync.pending(sync.pendingCount);
+  else if (sync.lastSyncedAt === null) line = copy.settings.sync.neverSynced;
+  else if (Date.now() - sync.lastSyncedAt < 90_000)
+    line = copy.settings.sync.syncedJustNow;
+  else
+    line = copy.settings.sync.syncedAt(
+      format(
+        sync.lastSyncedAt,
+        isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
+      ),
+    );
+
+  const outOfStep =
+    sync.localCount !== null &&
+    sync.serverCount !== null &&
+    Math.abs(sync.localCount - sync.serverCount) > sync.pendingCount;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <p className="voice-prose text-[0.9rem] text-ink-soft">{line}</p>
+      {sync.skewed && (
+        <p className="voice-prose text-[0.9rem] text-ink-faint">
+          {copy.settings.sync.skewed}
+        </p>
+      )}
+      {sync.localCount !== null && sync.serverCount !== null && (
+        <p className="voice-data text-ink-faint">
+          {copy.settings.sync.counts(
+            sync.localCount.toLocaleString(),
+            sync.serverCount.toLocaleString(),
+          )}
+        </p>
+      )}
+      {outOfStep && (
+        <p className="voice-prose text-[0.9rem] text-ember">
+          {copy.settings.sync.outOfStep}{" "}
+          <button
+            type="button"
+            onClick={() => void reconcile()}
+            className="pressable rounded-[3px] underline decoration-ember/40 underline-offset-2 hover:decoration-ember"
+          >
+            {copy.settings.sync.reconcile}
+          </button>
+        </p>
+      )}
     </div>
   );
 }
@@ -342,9 +407,9 @@ function ThemeSwatch({
 }
 
 /**
- * The account section — sign in, or the signed-in address with a quiet
- * way out. Sync/backup status lines join this section as those layers
- * land.
+ * The account section — sign in, or the signed-in address with the
+ * sync trust lines beneath it: what's waiting, when it last went
+ * through, and the device-vs-server entry counts.
  */
 function AccountSection() {
   const router = useRouter();
@@ -360,6 +425,7 @@ function AccountSection() {
           <p className="font-serif text-[0.98rem]">
             {copy.settings.account.signedInAs(user.email)}
           </p>
+          <SyncLines />
           <div className="mt-4 flex items-center gap-4">
             <PaperButton onClick={() => void signOut()}>
               {copy.settings.account.signOut}

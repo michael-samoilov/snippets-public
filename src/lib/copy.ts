@@ -301,6 +301,21 @@ export const copy = {
       signOut: "Sign out",
       signOutHint: "Your entries stay on this device.",
     },
+    sync: {
+      syncedJustNow: "Synced just now.",
+      syncedAt: (time: string) => `Synced ${time}.`,
+      neverSynced: "Waiting for the first sync…",
+      pending: (n: number) =>
+        `${n} ${n === 1 ? "entry" : "entries"} waiting to sync.`,
+      offline: "Offline — changes will sync when you’re back.",
+      error: "Sync hit a snag — retrying.",
+      skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
+      /** the tiny mono integrity line, e.g. "1,204 here · 1,204 on the server" */
+      counts: (device: string, server: string) =>
+        `${device} here · ${server} on the server`,
+      outOfStep: "The counts disagree.",
+      reconcile: "Reconcile",
+    },
     appearance: {
       heading: "Appearance",
       /** the theme radiogroup's accessible name */
@@ -344,6 +359,8 @@ export const copy = {
       title: "Let everything go?",
       body:
         "This erases every entry on this device, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
+      bodySynced:
+        "This erases every entry — here, on the server, and on every device signed in to this account, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
       cancel: "Keep everything",
       hold: "Hold to erase",
       holding: "Hold…",
