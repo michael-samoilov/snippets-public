@@ -241,17 +241,23 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
   return (
     <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
       <div className="sticky top-0 z-30">
-        <div className="flex items-center justify-between">
-          <div
+        {/* the title's line box IS the header's height in the app (the search
+            glass sits absolute, never growing the row). Reproduce it with an
+            invisible date in the same voice, so the header — and the hairline
+            below it — stand at exactly the app's height, at every width. */}
+        <div className="relative flex items-center voice-display text-(length:--date-head)">
+          <span className="invisible" aria-hidden="true">
+            July
+          </span>
+          <span
             // the month grid shimmers as one left→right wave; its title joins
             // that same sweep at zero delay, leading with the first column
             className={cn(
               view === "month" ? "skeleton-shimmer-wave" : "skeleton-shimmer",
-              "my-1 h-8 w-36 rounded-[5px] opacity-60",
+              "absolute inset-y-[16%] left-0 w-36 rounded-[5px] opacity-60",
             )}
             style={{ backgroundColor: "var(--rule-faint)" }}
           />
-          <div className="size-9" />
         </div>
       </div>
       {/* the weekday rail and its hairline — the scroll area's top terminus,
@@ -281,7 +287,16 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
           </div>
         </div>
       </div>
-      <div className="relative -mt-px min-h-0 flex-1 overflow-hidden">
+      {/* -mt-px only where a top border must ride onto the rail (the book's
+          first day rule, the month grid's first week) — as the app's scroller
+          does. The today zone and the rest have no such rule and must not be
+          pulled up, or they'd land a pixel high. */}
+      <div
+        className={cn(
+          "relative min-h-0 flex-1 overflow-hidden",
+          (view === "schedule" || view === "month") && "-mt-px",
+        )}
+      >
         {view === "year" ? (
           <YearSkeleton />
         ) : view === "month" ? (
