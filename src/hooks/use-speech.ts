@@ -403,15 +403,27 @@ const STREAM_ADAPTERS: Record<string, StreamAdapter> = {
   deepgram: deepgramAdapter,
 };
 
-/** Provider preference: first available wins as the default, the rest
- *  are automatic backups. Reorder with NEXT_PUBLIC_SPEECH_PROVIDERS
- *  (e.g. "scribe,deepgram") and redeploy — no code change. */
-const PROVIDER_ORDER = (
+/** A batch token in the provider order selects the upload proxy
+ *  (/api/transcribe → Aqua Avalon by default). Aqua rides the proxy, not
+ *  a live socket: it mints no browser-safe ephemeral token, so a direct
+ *  WebSocket would have to carry the raw API key. The proxy keeps the key
+ *  server-side. Words land on stop, not as you speak. */
+const BATCH_ALIASES = new Set(["aqua", "batch"]);
+
+/** The configured engine order: streaming provider names (deepgram,
+ *  scribe) and/or a batch token (aqua/batch). First available wins;
+ *  the rest are automatic backups. Set NEXT_PUBLIC_SPEECH_PROVIDERS
+ *  (e.g. "aqua,deepgram,scribe" to benchmark Avalon first) and redeploy —
+ *  no code change. */
+const CONFIGURED_ORDER = (
   process.env.NEXT_PUBLIC_SPEECH_PROVIDERS ?? "deepgram,scribe"
 )
   .split(",")
   .map((s) => s.trim())
-  .filter((s) => s in STREAM_ADAPTERS);
+  .filter((s) => s in STREAM_ADAPTERS || BATCH_ALIASES.has(s));
+
+/** streaming providers only, in order — for the warm grant + runtime fallback */
+const PROVIDER_ORDER = CONFIGURED_ORDER.filter((s) => s in STREAM_ADAPTERS);
 
 /* ── public surface ────────────────────────────────────────────────── */
 
@@ -537,18 +549,30 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
         for (const [name, ok] of checks)
           if (ok) available.push(STREAM_ADAPTERS[name]);
       }
-      const batch = available.length ? false : await batchAvailable();
-      if (!alive) return;
       availableStreamsRef.current = available;
-      const picked = available[0] ?? null;
+
+      // Walk the configured order: the first available streaming provider
+      // wins; a batch token (aqua/batch) selects the upload proxy if it's
+      // configured. This lets "aqua,deepgram,scribe" force Avalon even when
+      // the streaming providers are also live — for accuracy benchmarking.
+      let picked: StreamAdapter | null = null;
+      let chosen: SpeechEngineKind | null = null;
+      for (const token of CONFIGURED_ORDER) {
+        const adapter = STREAM_ADAPTERS[token];
+        if (adapter) {
+          if (available.includes(adapter)) { picked = adapter; chosen = adapter.name; break; }
+        } else if (hasRecorder() && (await batchAvailable())) {
+          chosen = "batch"; // a batch token whose proxy is configured
+          break;
+        }
+      }
+      // nothing configured was available → the batch proxy, then the browser
+      if (!chosen) {
+        if (hasRecorder() && (await batchAvailable())) chosen = "batch";
+        else if (getRecognizer()) chosen = "web";
+      }
+      if (!alive) return;
       adapterRef.current = picked;
-      const chosen: SpeechEngineKind | null = picked
-        ? picked.name
-        : batch && hasRecorder()
-          ? "batch"
-          : getRecognizer()
-            ? "web"
-            : null;
       vlog(
         "engine:",
         chosen,

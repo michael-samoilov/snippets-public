@@ -12,17 +12,21 @@ export const runtime = "nodejs";
  * The AQUA_* names remain honored as aliases. Without a key the client
  * falls back to the browser's own speech engine; typing always works.
  *
- * Aqua's base and model are configurable because both appear in the
- * wild: docs say api.aqua.sh/v1 + "avalon-1"; some integrations use
- * api.aquavoice.com/api/v1 + "avalon-v1-en".
+ * Base and model default to the values verified live against Aqua in CI
+ * (scripts/aqua-live-test.mjs): api.aquavoice.com/api/v1 + "avalon-v1.5",
+ * which returned an accurate, verbatim transcript. Both stay overridable
+ * (the older api.aqua.sh/v1 + "avalon-1" also appears in the wild).
+ * Aqua's API is upload-only: it exposes no live-audio socket and no SSE
+ * output streaming, so this proxy is the whole integration — words settle
+ * on stop, not as you speak.
  */
 
 const BASE = (
   process.env.TRANSCRIBE_BASE_URL ??
   process.env.AQUA_BASE_URL ??
-  "https://api.aqua.sh/v1"
+  "https://api.aquavoice.com/api/v1"
 ).replace(/\/$/, "");
-const MODEL = process.env.TRANSCRIBE_MODEL ?? process.env.AQUA_MODEL ?? "avalon-1";
+const MODEL = process.env.TRANSCRIBE_MODEL ?? process.env.AQUA_MODEL ?? "avalon-v1.5";
 const MAX_BYTES = 25 * 1024 * 1024;
 
 const apiKey = () => process.env.TRANSCRIBE_API_KEY ?? process.env.AQUA_API_KEY;

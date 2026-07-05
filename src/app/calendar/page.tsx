@@ -3523,6 +3523,11 @@ function TodayZoneFill({
   // finger can hover motionless for seconds and the anchor must stay silent.
   const walkSessionRef = useRef(false);
   const lastInputRef = useRef(0); // when the field last received a keystroke
+  // a live selection-handle drag: set to a short deadline on each selectionchange
+  // that extends a selection under a finger, so the scroll clamp knows to keep
+  // the drag inside the entry (see onScScroll). Collapsed carets never set it —
+  // typing, taps, and caret walks are untouched.
+  const selDragRef = useRef(0);
   const vvEndListenerRef = useRef<(() => void) | null>(null);
   const anchorPass = () => { sizeKbSpacer(); anchorTail(); };
   const scheduleAnchor = () => {
@@ -3618,6 +3623,22 @@ function TodayZoneFill({
         // seats the caret on focus (its caret branch), so the walk machinery
         // simply stands down until the focus has settled.
         if (performance.now() - lastFocusAt.current < 900) return;
+        // a non-collapsed selection moving on its own (not a keystroke) = an iOS
+        // handle drag. Arm the scroll clamp (onScScroll) so WebKit's own
+        // auto-scroll — which, with this field un-scrollable, lands on the book
+        // feed — can reveal the entry's earlier lines but can't drag on into
+        // earlier days. No touch guard: iOS doesn't reliably deliver page touch
+        // events under a selection handle. The clamp keeps its own window alive
+        // as the feed scrolls, so it can't lapse when the selection stops
+        // changing (handle parked at line 1) while iOS keeps scrolling.
+        // Collapsed carets fall through to the walk logic below.
+        if (
+          area &&
+          area.selectionStart !== area.selectionEnd &&
+          performance.now() - lastInputRef.current > 300
+        ) {
+          selDragRef.current = performance.now() + 400;
+        }
         // a collapsed-caret move with no finger on the page = a caret walk;
         // open (or extend) the walk window the scroll clamp acts within
         if (area && area.selectionStart === area.selectionEnd && !touchActiveRef.current) {
@@ -3688,6 +3709,36 @@ function TodayZoneFill({
           const st = sc.scrollTop;
           const d = walk.prevSt < 0 ? 0 : st - walk.prevSt;
           walk.prevSt = st;
+          // Selection-handle drag containment (see selDragRef). This field is
+          // un-scrollable by design, so WebKit's selection auto-scroll lands on
+          // the book feed and can haul it up past today into earlier days. While
+          // a drag is live, if the today zone's top has slipped below the
+          // scroller's top, earlier days are showing — pull the feed back so the
+          // drag reveals the entry and halts at its head. A selection drag
+          // carries no fling momentum, so this write can't kill one, and it's
+          // scoped to the drag window; every other scroll falls straight through.
+          const areaEl = areaRef.current;
+          if (
+            performance.now() < selDragRef.current &&
+            areaEl &&
+            areaEl.selectionStart !== areaEl.selectionEnd
+          ) {
+            // keep the window alive as long as the feed is being auto-scrolled
+            // under a live selection — iOS scrolls on past the last
+            // selectionchange (handle parked at line 1), and a lapsed window
+            // there is exactly what let the overshoot through.
+            selDragRef.current = performance.now() + 400;
+            const zone = areaEl.closest<HTMLElement>("[data-today-zone]");
+            if (zone) {
+              const over = zone.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+              if (over > 0.5) {
+                sc.scrollTop = st + over;
+                walk.sanctioned = sc.scrollTop;
+                walk.prevSt = sc.scrollTop;
+              }
+            }
+            return;
+          }
           if (touchActiveRef.current) return;
           if (Math.abs(st - walk.sanctioned) < 2) return; // our own write settling
           if (performance.now() > walk.until) return;
@@ -3882,6 +3933,17 @@ function TodayZoneFill({
     wasVoicing.current = voicing;
   }, [shownText, liveSpoken, transcribing]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Safety net for the seal's press pose. The press rotates the seal
+  // imperatively (pushdown ramp), and the pointer-up release is a double-rAF
+  // that, on tap-to-start, races the glyph re-bake speech.start() triggers
+  // (mic→stop). When that release is lost, the stop square stays frozen at
+  // the ~30° press angle for the whole take. A running take means the finger
+  // is up, so the seal must never hold the press then — release it. (A keep
+  // sets holdDown and is guarded out, so its lift-off choreography is intact.)
+  useEffect(() => {
+    if ((listening || transcribing) && !holdDown) sealCtl.current?.press(false);
+  }, [listening, transcribing, holdDown]);
+
   // voice must never fail silently — every failure says what happened, and
   // the words must match reality: a "service" failure blames the browser
   // only when it's the browser's own engine that refused; a network
@@ -4004,6 +4066,10 @@ function TodayZoneFill({
     <AnimatePresence mode="popLayout" initial={false}>
       <motion.div
         key={gen}
+        // the containment boundary for a selection-handle drag: nothing above
+        // this element is today — a drag that reaches here has revealed the
+        // whole entry and must not haul the feed on into earlier days
+        data-today-zone=""
         // the zone sits in the book's standard frame: its top gap matches the
         // side gutter (px-5) and the chin below it, so the content reads with one
         // even ~20px margin on every side. first-ever keeps just a hair (nothing
