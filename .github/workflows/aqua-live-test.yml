@@ -1,0 +1,31 @@
+# Live probe of Aqua's Avalon API (scripts/aqua-live-test.mjs). The app
+# can't reach api.aquavoice.com from the build sandbox, so this runs the
+# real handshake in CI — where the AQUA_API_KEY secret and the network
+# exist — to learn what Aqua's OpenAI-compatibility actually covers:
+# file transcription, streamed output, and whether a browser-safe
+# ephemeral token exists for true live streaming. Spends a little
+# transcription credit; on demand or when the probe changes.
+name: aqua-live-test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/aqua-live-test.mjs"
+      - ".github/workflows/aqua-live-test.yml"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe Aqua Avalon (batch + streamed + realtime)
+        env:
+          AQUA_API_KEY: ${{ secrets.AQUA_API_KEY }}
+        # a synthesized speech clip already in the repo (16k mono) — the same
+        # fixture the Scribe/Deepgram harnesses transcribe
+        run: node scripts/aqua-live-test.mjs public/scribe-sample.wav fox morning
