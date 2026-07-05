@@ -43,7 +43,7 @@ import {
 } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
-import { isIOSStandalone, useSpeech } from "@/hooks/use-speech";
+import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
@@ -58,10 +58,18 @@ import type {
   MonthFeedHandle,
   YearFeedHandle,
 } from "@/components/calendar/shared";
+import {
+  MonthSkeleton,
+  YearSkeleton,
+  TodaySkeleton,
+  EntrySkeleton,
+} from "@/components/calendar/skeletons";
 
 const EntryView = dynamic(
   () => import("@/components/calendar/entry-view").then((m) => m.EntryView),
-  { ssr: false, loading: () => null },
+  // a deep-link or cold first open shows the card's skeleton while the chunk
+  // loads, rather than a blank layer
+  { ssr: false, loading: () => <EntrySkeleton /> },
 );
 const MarkedPreview = dynamic(
   () => import("@/components/calendar/entry-view").then((m) => m.MarkedPreview),
@@ -69,11 +77,13 @@ const MarkedPreview = dynamic(
 );
 const MonthFeed = dynamic(
   () => import("@/components/calendar/month-feed").then((m) => m.MonthFeed),
-  { ssr: false, loading: () => null },
+  // a deep-link that lands in the month grid shows its ruled skeleton while the
+  // chunk loads, not a blank layer (the layer's invisible during a warm-in)
+  { ssr: false, loading: () => <MonthSkeleton /> },
 );
 const YearFeed = dynamic(
   () => import("@/components/calendar/year-feed").then((m) => m.YearFeed),
-  { ssr: false, loading: () => null },
+  { ssr: false, loading: () => <YearSkeleton /> },
 );
 
 /* ── feed geometry: decades of time, computed, never reflowed ──────
@@ -140,59 +150,144 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
   return g;
 }
 
-// The book's faint ruled rows — shown while the real entries are still loading
-// so the ledger reads as "settling in" rather than blank. Shared by the SSR
-// Suspense fallback AND the in-feed loading state, so the paper stays put
-// continuously (no skeleton→blank→book flash) right up until the book lands.
+// The book's faint days — shown while the real entries are still loading so the
+// ledger reads as "settling in" rather than blank. Shared by the SSR Suspense
+// fallback AND the in-feed loading state, so the paper stays put continuously
+// (no skeleton→blank→book flash) right up until the book lands.
+//
+// Each day stands in a margin date and a stack of blank entry tiles — the same
+// paper-and-hairline material the real cards wear (ScheduleCards), just wordless
+// — so the wait pre-echoes the book's shape instead of a bare ruled grid. The
+// tile counts are a fixed pattern (never random): SSR and client must paint the
+// identical skeleton, and a steady rhythm reads calmer than noise.
+// lines-per-tile, per day. About half the tiles run the full six — the real
+// card's line-clamp, so a max-height tile — and the rest are shorter, so the
+// stack reads as a real week of entries rather than a uniform block.
+const LEDGER_SHAPE: number[][] = [
+  [6, 2],
+  [6],
+  [3],
+  [6, 1],
+  [4],
+  [2, 6],
+  [6],
+  [1],
+];
+
+// one blank entry tile: the book-card recipe (bg-paper, hairline, inset top
+// highlight) with faint bars where the prose would sit. Each bar rides a line
+// box of the real prose rhythm (0.9rem × 1.42 ≈ 20px), so a six-line tile
+// stands exactly as tall as a full six-line card; the last line is short, as a
+// paragraph's is. The bars shimmer while the book settles in.
+function LedgerCard({ lines }: { lines: number }) {
+  return (
+    <div className="rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[0.9rem] leading-[1.42] shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} className="flex h-[1.42em] items-center">
+          <span
+            className="skeleton-shimmer h-[7px] rounded-[2px]"
+            style={{
+              backgroundColor: "var(--rule-faint)",
+              width: i === lines - 1 ? "58%" : "100%",
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LedgerRows() {
   return (
     <>
-      {Array.from({ length: 8 }).map((_, i) => (
+      {LEDGER_SHAPE.map((tiles, i) => (
         <div
           key={i}
           aria-hidden="true"
           className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
         >
-          <div />
-          <div className="h-14" />
+          {/* the margin date: a small weekday bar over a taller day-number bar */}
+          <div className="flex flex-col items-center gap-1.5 pt-[3.5px]">
+            <div
+              className="skeleton-shimmer h-1.5 w-5 rounded-[2px] opacity-70"
+              style={{ backgroundColor: "var(--rule-faint)" }}
+            />
+            <div
+              className="skeleton-shimmer h-3 w-4 rounded-[2px]"
+              style={{ backgroundColor: "var(--rule-faint)" }}
+            />
+          </div>
+          {/* the day's entry tiles — same gap as the real ScheduleCards list */}
+          <div className="flex flex-col gap-1">
+            {tiles.map((lines, j) => (
+              <LedgerCard key={j} lines={lines} />
+            ))}
+          </div>
         </div>
       ))}
     </>
   );
 }
 
+type SkeletonView = "today" | "schedule" | "month" | "year" | "entry";
+
 // A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
-// the ledger frame shows the instant the HTML lands instead of a blank sheet.
-function CalendarSkeleton() {
+// the frame shows the instant the HTML lands instead of a blank sheet. The
+// static shell defaults to the today zone — the book's home, and the view the
+// app opens onto far more often than any other. A deep-link into the year
+// glance or month grid picks up its own skeleton once the feed mounts (the
+// dynamic-import loading state above), and ?skeldebug can hold any of them.
+function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
   return (
     <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
       <div className="sticky top-0 z-30">
         <div className="flex items-center justify-between">
           <div
-            className="my-1 h-8 w-36 rounded-[5px] opacity-60"
-            style={{ background: "var(--rule-faint)" }}
+            // the month grid shimmers as one left→right wave; its title joins
+            // that same sweep at zero delay, leading with the first column
+            className={cn(
+              view === "month" ? "skeleton-shimmer-wave" : "skeleton-shimmer",
+              "my-1 h-8 w-36 rounded-[5px] opacity-60",
+            )}
+            style={{ backgroundColor: "var(--rule-faint)" }}
           />
           <div className="size-9" />
         </div>
       </div>
       <div className="relative -mt-px min-h-0 flex-1 overflow-hidden">
-        <LedgerRows />
+        {view === "year" ? (
+          <YearSkeleton />
+        ) : view === "month" ? (
+          <MonthSkeleton />
+        ) : view === "schedule" ? (
+          <LedgerRows />
+        ) : view === "entry" ? (
+          <EntrySkeleton />
+        ) : (
+          <TodaySkeleton />
+        )}
       </div>
     </div>
   );
 }
 
-// Dev-only: ?skeldebug holds the pageload skeleton on screen so its look can be
-// inspected and tuned (it normally flashes by in the Suspense gap). The real
-// skeleton verbatim, plus a quiet pill — same recipe as the perf A/B pill — so
-// it's clear you're parked in the held view, not stuck loading.
+// Dev-only: ?skeldebug holds a pageload skeleton on screen so its look can be
+// inspected and tuned (it normally flashes by in the Suspense gap). Add a value
+// to choose the view — ?skeldebug=today (default) / schedule / month / year /
+// entry. The real skeleton verbatim, plus a quiet pill — same recipe as the
+// perf A/B pill — so it's clear you're parked in the held view, not stuck loading.
 function SkeletonDebug() {
+  const held = useSearchParams().get("skeldebug");
+  const view: SkeletonView =
+    held === "year" || held === "month" || held === "schedule" || held === "entry"
+      ? held
+      : "today";
   return (
     <>
-      <CalendarSkeleton />
+      <CalendarSkeleton view={view} />
       <div className="float fixed bottom-3 left-3 z-50 rounded-full px-2.5 py-1">
         <span className="voice-label text-[0.72rem] text-ink-soft">
-          skeleton — held
+          {view} skeleton — held
         </span>
       </div>
     </>
@@ -1738,7 +1833,7 @@ function Calendar() {
           along to sit beneath the month header */}
       <div
         className={cn(
-          "mt-3 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
+          "mt-5 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
           view === "month" && !searchActive
             ? "grid-rows-[1fr]"
             : "grid-rows-[0fr]",
@@ -2646,10 +2741,11 @@ function ScheduleFeedBase({
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {/* until the live query returns, `body` is undefined — keep the ruled
-            paper showing (same rows as the SSR skeleton) so the wait reads as a
-            continuous "settling in", never a blank gap that then pops */}
-        {body ?? <LedgerRows />}
+        {/* until the live query returns, `body` is undefined — hold the today
+            zone (the same skeleton the SSR shell shows, and the view the book
+            almost always opens onto) so the wait reads as a continuous
+            "settling in", never a blank gap that then pops */}
+        {body ?? <TodaySkeleton />}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
@@ -3792,19 +3888,44 @@ function TodayZoneFill({
     wasVoicing.current = voicing;
   }, [shownText, liveSpoken, transcribing]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // voice must never fail silently — every failure says what happened
+  // Safety net for the seal's press pose. The press rotates the seal
+  // imperatively (pushdown ramp), and the pointer-up release is a double-rAF
+  // that, on tap-to-start, races the glyph re-bake speech.start() triggers
+  // (mic→stop). When that release is lost, the stop square stays frozen at
+  // the ~30° press angle for the whole take. A running take means the finger
+  // is up, so the seal must never hold the press then — release it. (A keep
+  // sets holdDown and is guarded out, so its lift-off choreography is intact.)
+  useEffect(() => {
+    if ((listening || transcribing) && !holdDown) sealCtl.current?.press(false);
+  }, [listening, transcribing, holdDown]);
+
+  // voice must never fail silently — every failure says what happened, and
+  // the words must match reality: a "service" failure blames the browser
+  // only when it's the browser's own engine that refused; a network
+  // transcriber refusing (bad key, quota, unconfigured) is on our side.
   useEffect(() => {
     if (!speech.failure) return;
     const f = copy.capture.voiceFailures;
-    const m: { title: string; description: string } =
-      speech.failure === "service"
-        ? {
-            title: f.service.title,
-            description: isIOSStandalone()
-              ? f.service.descriptionInstalledIOS
+    let m: { title: string; description: string };
+    if (speech.failure === "service") {
+      if (speech.engine === "web") {
+        // the browser's built-in dictation refused — the one real browser
+        // fault. On iOS all browsers are WebKit, so never suggest switching.
+        m = {
+          title: f.service.title,
+          description: isIOSStandalone()
+            ? f.service.descriptionInstalledIOS
+            : isIOS()
+              ? f.service.descriptionIOSBrowser
               : f.service.descriptionOtherwise,
-          }
-        : f[speech.failure];
+        };
+      } else {
+        // Deepgram/Scribe/batch refused — not the browser
+        m = f.serviceRemote;
+      }
+    } else {
+      m = f[speech.failure];
+    }
     toast(m.title, { description: m.description });
   }, [speech.failure]);
 
@@ -3904,19 +4025,13 @@ function TodayZoneFill({
         // this element is today — a drag that reaches here has revealed the
         // whole entry and must not haul the feed on into earlier days
         data-today-zone=""
-        // when a rule sits above the zone (today empty, prior days present), set
-        // the gap from the rule to the zone's top edge equal to the "chin" — the
-        // space below the scroller, from its bottom down to the sheet's bottom
-        // (~26px). The 1px short is the rule's own hairline sitting in that gap.
-        // When today's CARDS sit above instead, the zone owns the WHOLE 26px
-        // itself (today's section cedes its bottom padding): the row is
-        // min-h-full INCLUDING this padding, so at the book's foot the entire
-        // breath sits inside the viewport between the top terminus and the
-        // zone's border — not partly spent on the card section above the fold.
-        // First-ever keeps just a hair (nothing above to breathe from).
+        // the zone sits in the book's standard frame: its top gap matches the
+        // side gutter (px-5) and the chin below it, so the content reads with one
+        // even ~20px margin on every side. first-ever keeps just a hair (nothing
+        // above it to breathe from).
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[26px] mb-[3px]" : "pt-[25px] mb-[3px]",
+          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[20px]" : "pt-[19px] mb-[3px]",
           className,
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
@@ -3991,6 +4106,7 @@ function TodayZoneFill({
           <AnimatePresence>
             {listening && (
               <motion.div
+                key="wash-fill"
                 aria-hidden
                 className="pointer-events-none absolute inset-0 rounded-[inherit]"
                 initial={{ opacity: 0 }}

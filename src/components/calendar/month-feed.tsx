@@ -24,6 +24,7 @@ import { dayKey, dateFromDayKey } from "@/lib/dates";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { useScrollEdges, ScrollTerminus } from "@/components/ui/scroll-terminus";
+import { MonthSkeleton } from "./skeletons";
 import {
   buildMonthGeom,
   indexAt,
@@ -332,6 +333,9 @@ function MonthFeedBase({
       >
         June 2026
       </p>
+      {/* the measurement gap: geometry needs a layout pass before the grid can
+          be placed — hold the ruled skeleton so the layer never flashes blank */}
+      {!geom && <MonthSkeleton />}
       {geom && (
         // the floor is laid out, not measured: blocks live in a px-high
         // container up to the last offset, and a min-h-full tail keeps
