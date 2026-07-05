@@ -3,7 +3,6 @@ import { Sheet } from "@/components/shell/sheet";
 import { SheetScroll } from "@/components/shell/sheet-scroll";
 import { CommandMenu } from "@/components/command-menu";
 import { Wordmark } from "@/components/shell/wordmark";
-import { VhProbe } from "@/components/dev/vh-probe";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -19,7 +18,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // seal clipped off the bottom — until a refresh. A live measurement can't
     // over-report that way; --app-h falls back to 100svh only for the no-JS frame.
     <div className="mx-auto flex h-[var(--app-h)] w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
-      <VhProbe />
       {/* desk chrome — the book is the only page now, so there's no nav: just
           the wordmark and the account mark on the desk's top edge */}
       <header className="flex shrink-0 items-center justify-between px-2 pb-2 pt-2 sm:px-1 sm:pb-3 sm:pt-4">
