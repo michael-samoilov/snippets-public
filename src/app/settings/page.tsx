@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { format, isToday } from "date-fns";
+import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -20,7 +20,8 @@ import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
 import { signOut, useSession } from "@/lib/auth";
-import { reconcile, useSyncStatus } from "@/lib/sync";
+import { authClient } from "@/lib/auth-client";
+import { reconcile, requestSync, useSyncStatus } from "@/lib/sync";
 import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,7 @@ export default function SettingsPage() {
 
       <div className="space-y-10">
         <AccountSection />
+        {user && <BackupSection />}
 
         <section aria-label={copy.settings.appearance.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.heading}</h2>
@@ -248,11 +250,10 @@ function SyncLines() {
   let line: string;
   if (sync.phase === "offline") line = copy.settings.sync.offline;
   else if (sync.phase === "error") line = copy.settings.sync.error;
+  else if (sync.phase === "syncing") line = copy.settings.sync.syncing;
   else if (sync.pendingCount > 0)
     line = copy.settings.sync.pending(sync.pendingCount);
   else if (sync.lastSyncedAt === null) line = copy.settings.sync.neverSynced;
-  else if (Date.now() - sync.lastSyncedAt < 90_000)
-    line = copy.settings.sync.syncedJustNow;
   else
     line = copy.settings.sync.syncedAt(
       format(
@@ -295,6 +296,127 @@ function SyncLines() {
         </p>
       )}
     </div>
+  );
+}
+
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+/**
+ * The backup section — the standing arrangement with the writer's own
+ * Drive. Connect is a separate, single Google consent (the drive.file
+ * scope only); after that the freshness line carries the trust: when
+ * the last delivery landed, or that deliveries are failing and how to
+ * mend it. Never silent.
+ */
+function BackupSection() {
+  const sync = useSyncStatus();
+  const backup = sync.backup;
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // returning from the Google consent: finalize server-side, then let
+  // the status refresh carry the freshness line
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("drive") !== "connected") return;
+    window.history.replaceState(null, "", "/settings");
+    void (async () => {
+      setConnecting(true);
+      try {
+        const response = await fetch("/api/backup/connect", { method: "POST" });
+        if (response.status === 409)
+          setError(copy.settings.backup.scopeDeclined);
+        else if (!response.ok) setError(copy.settings.backup.connectFailed);
+      } catch {
+        setError(copy.settings.backup.connectFailed);
+      } finally {
+        setConnecting(false);
+        requestSync();
+      }
+    })();
+  }, []);
+
+  const connect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      await authClient.linkSocial({
+        provider: "google",
+        scopes: [DRIVE_SCOPE],
+        callbackURL: "/settings?drive=connected",
+      });
+      // on success the browser navigates to Google; reaching here quietly
+      // means it didn't
+    } catch {
+      setError(copy.settings.backup.connectFailed);
+    }
+    setConnecting(false);
+  };
+
+  const deliveredWhen = (iso: string) => {
+    const at = new Date(iso);
+    if (isToday(at)) return format(at, "h:mm a");
+    if (isYesterday(at)) return `yesterday, ${format(at, "h:mm a")}`;
+    return format(at, "MMMM d");
+  };
+
+  let statusLine: React.ReactNode = null;
+  let action: React.ReactNode = null;
+  if (!backup) {
+    action = (
+      <PaperButton onClick={() => void connect()} disabled={connecting}>
+        {connecting
+          ? copy.settings.backup.connecting
+          : copy.settings.backup.connect}
+      </PaperButton>
+    );
+  } else if (backup.state === "active") {
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ink-soft">
+        {backup.lastSuccessAt
+          ? copy.settings.backup.lastDelivered(
+              deliveredWhen(backup.lastSuccessAt),
+            )
+          : copy.settings.backup.firstOnItsWay}
+      </p>
+    );
+  } else {
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ember">
+        {backup.lastSuccessAt
+          ? copy.settings.backup.failingSince(
+              format(new Date(backup.lastSuccessAt), "MMMM d"),
+            )
+          : copy.settings.backup.failingNoSuccess}
+      </p>
+    );
+    action = (
+      <PaperButton onClick={() => void connect()} disabled={connecting}>
+        {connecting
+          ? copy.settings.backup.connecting
+          : copy.settings.backup.reconnect}
+      </PaperButton>
+    );
+  }
+
+  return (
+    <section aria-label={copy.settings.backup.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.backup.heading}
+      </h2>
+      <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+        {copy.settings.backup.lead}
+      </p>
+      <div className="mt-3 space-y-3">
+        {statusLine}
+        {error && (
+          <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+            {error}
+          </p>
+        )}
+        {action && <div>{action}</div>}
+      </div>
+    </section>
   );
 }
 

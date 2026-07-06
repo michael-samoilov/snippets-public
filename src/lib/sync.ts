@@ -34,6 +34,7 @@ import {
 import {
   fromWireRow,
   toWireChange,
+  type BackupStatusSummary,
   type PullResponse,
   type PushResponse,
   type StatusResponse,
@@ -52,6 +53,8 @@ export interface SyncStatus {
   serverCount: number | null;
   /** this device's clock disagrees with the server's by > 5 minutes */
   skewed: boolean;
+  /** the Drive backup ledger, as of the last status fetch */
+  backup: BackupStatusSummary | null;
 }
 
 // ── status store (useSyncExternalStore, as settings.ts does) ────
@@ -63,6 +66,7 @@ let status: SyncStatus = {
   localCount: null,
   serverCount: null,
   skewed: false,
+  backup: null,
 };
 const listeners = new Set<() => void>();
 
@@ -88,6 +92,7 @@ const SERVER_SNAPSHOT: SyncStatus = {
   localCount: null,
   serverCount: null,
   skewed: false,
+  backup: null,
 };
 
 export function useSyncStatus(): SyncStatus {
@@ -307,7 +312,12 @@ async function refreshCounts(): Promise<void> {
   if (!response.ok) throw new Error(`status ${response.status}`);
   const data = (await response.json()) as StatusResponse;
 
-  setStatus({ pendingCount, localCount, serverCount: data.entryCount });
+  setStatus({
+    pendingCount,
+    localCount,
+    serverCount: data.entryCount,
+    backup: data.backup,
+  });
 }
 
 /**

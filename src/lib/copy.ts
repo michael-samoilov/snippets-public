@@ -302,7 +302,7 @@ export const copy = {
       signOutHint: "Your entries stay on this device.",
     },
     sync: {
-      syncedJustNow: "Synced just now.",
+      syncing: "Syncing…",
       syncedAt: (time: string) => `Synced ${time}.`,
       neverSynced: "Waiting for the first sync…",
       pending: (n: number) =>
@@ -315,6 +315,23 @@ export const copy = {
         `${device} here · ${server} on the server`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
+    },
+    backup: {
+      heading: "Backup",
+      lead:
+        "A copy of your book, delivered to a Snippets folder in your own Google Drive once a day — readable Markdown and a restorable archive. Yours even if this app disappears.",
+      connect: "Connect Google Drive",
+      connecting: "Connecting…",
+      /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
+      lastDelivered: (when: string) => `Last delivered to your Drive: ${when}.`,
+      firstOnItsWay: "The first delivery is on its way…",
+      /** e.g. "Backups haven’t gone through since June 30." */
+      failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
+      failingNoSuccess: "Backups haven’t gone through yet.",
+      reconnect: "Reconnect Google Drive",
+      scopeDeclined:
+        "Google didn’t grant the Drive permission — try again and leave the box ticked.",
+      connectFailed: "Drive couldn’t be connected. Try again in a moment.",
     },
     appearance: {
       heading: "Appearance",
