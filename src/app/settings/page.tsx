@@ -22,6 +22,7 @@ import { useStats } from "@/hooks/use-snippets";
 import { signOut, useSession } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
 import { reconcile, requestSync, useSyncStatus } from "@/lib/sync";
+import { formatBytes, useStorageHealth } from "@/lib/storage-health";
 import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -185,6 +186,7 @@ export default function SettingsPage() {
               }}
             />
           </div>
+          <StorageLine signedIn={!!user} />
           <div className="mt-8 border-t border-rule-faint pt-4">
             <Button
               variant="ghost"
@@ -293,6 +295,36 @@ function SyncLines() {
           >
             {copy.settings.sync.reconcile}
           </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One quiet data-voice line on device storage: persistent or
+ * best-effort, and the room left. Best-effort earns a hint — eviction
+ * is the one silent loss the device itself can inflict.
+ */
+function StorageLine({ signedIn }: { signedIn: boolean }) {
+  const storage = useStorageHealth();
+  if (storage.usageBytes === null || storage.quotaBytes === null) return null;
+  const line =
+    storage.persisted === true
+      ? copy.settings.data.storagePersistent(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        )
+      : copy.settings.data.storageBestEffort(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        );
+  return (
+    <div className="mt-4 space-y-1">
+      <p className="voice-data text-ink-faint">{line}</p>
+      {storage.persisted !== true && !signedIn && (
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+          {copy.settings.data.storageEvictionHint}
         </p>
       )}
     </div>

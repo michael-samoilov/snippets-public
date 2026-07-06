@@ -360,6 +360,14 @@ export const copy = {
       countSoFar: (n: number) =>
         `${n} ${n === 1 ? "entry" : "entries"} so far.`,
       takeCopy: "Take a copy whenever you like.",
+      /** the storage-health line, e.g. "persistent · using 4 MB of 60 GB" */
+      storagePersistent: (used: string, quota: string) =>
+        `storage: persistent · using ${used} of ${quota}`,
+      storageBestEffort: (used: string, quota: string) =>
+        `storage: best-effort · using ${used} of ${quota}`,
+      /** shown under a best-effort line — why it matters, what helps */
+      storageEvictionHint:
+        "This browser may let go of local data under pressure — signing in keeps a copy on the server.",
       exportJSON: "Export JSON",
       exportMarkdown: "Export Markdown",
       restore: "Restore from JSON…",
@@ -396,6 +404,9 @@ export const copy = {
     noEntriesInFile: "No entries found in that file.",
     /** the inline composer's catch-all when a keep fails */
     keepFailed: "That didn’t take. Try again.",
+    /** the loud, specific case: the device is out of room */
+    storageFull:
+      "This device’s storage is full — that entry was not saved. Your words are still in the composer; clear some space and keep it again.",
   },
 } as const;
 

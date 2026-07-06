@@ -369,6 +369,19 @@ never red.
 ## Architecture notes that protect the design
 
 - Local-first Dexie; soft delete + undo; day keys in local time.
+- **Sync is strictly additive.** The device copy is always whole;
+  signing in only adds a server copy on top (per-row last-write-wins,
+  hand filing outranks the clock, the server's verdict is final —
+  src/lib/merge.ts is the one rule). Capture never waits on the
+  network; every sync/backup state is a visible line in Settings,
+  never a silent stall. Settings/preferences stay per-device by
+  intent. Erase on a synced book erases everywhere, and says so.
+- **Backup is the escape hatch, not a feature.** Once a day the
+  server delivers readable Markdown + a restorable JSON archive into
+  a visible folder in the writer's own Drive; the JSON stays
+  bit-compatible with "Restore from JSON…" so the book outlives the
+  app. Failures escalate: ledger → Settings line → one quiet email
+  per streak.
 - Enrichment is best-effort decoration; `enriched: "manual"` wins; the
   app must remain whole with zero AI and zero network.
 - **Ink on paper:** `.voice-prose`/`.voice-display` use
@@ -387,6 +400,10 @@ never red.
 
 ## Deferred (intentionally)
 
-Sync layer · weekly digest · push nudges · vaul drawer
+Weekly digest · push nudges · more backup channels (email digest,
+Dropbox — the `backup_status.provider` column is the seam) · optional
+per-user end-to-end encryption (the sync payload is already a
+versioned envelope; a client-encrypted format is a `payloadFormat`
+bump, at the cost of server-rendered Markdown backups) · vaul drawer
 editor on touch · opt-in UI sound (paper-thud at 440→220Hz, gain ≤0.08,
 default off) · view transitions (no list→detail route pair yet).

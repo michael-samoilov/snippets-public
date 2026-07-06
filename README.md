@@ -85,6 +85,33 @@ ELEVENLABS_API_KEY=…
 ANTHROPIC_API_KEY=sk-ant-…   # uses claude-haiku-4-5; override with ENRICH_MODEL
 ```
 
+### Accounts, sync, and Drive backup (optional, like everything)
+
+The app is whole with none of this. With it, signing in keeps a copy
+of the book on the server (cross-device sync), and a once-daily job
+delivers readable Markdown plus a restorable JSON archive into a
+visible "Snippets" folder in the user's own Google Drive — theirs even
+if this app disappears. See `.env.example` for the variables; the
+moving parts:
+
+```sh
+DATABASE_URL=…          # Neon Postgres (pooled URL); pnpm db:migrate once
+BETTER_AUTH_SECRET=…    # openssl rand -base64 32
+BETTER_AUTH_URL=…       # the canonical origin
+GOOGLE_CLIENT_ID/SECRET # Google sign-in + the Drive grant
+RESEND_API_KEY/FROM     # sign-in codes + backup-failure alerts
+CRON_SECRET=…           # guards /api/cron/backup (vercel.json schedules it)
+```
+
+One-time setup outside the repo: create the Neon project and run
+`pnpm db:migrate`; in Google Cloud make an OAuth Web client
+(redirect `…/api/auth/callback/google`), enable the Drive API, put
+`/privacy` on the consent screen, and **publish the OAuth app to
+Production** — in Testing status Google expires refresh tokens after
+seven days, which would quietly kill backups. Verify the Resend
+sending domain. Sign-in uses only basic scopes; the `drive.file`
+grant is a separate one-tap consent in Settings → Backup.
+
 ### Production
 
 ```sh

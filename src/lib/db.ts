@@ -55,6 +55,28 @@ function notifyWrite(): void {
 
 // ── writes ──────────────────────────────────────────────────────
 
+/**
+ * A keep that didn't take, told apart by cause so the surface can say
+ * the right thing: a full disk is actionable ("clear some space"); a
+ * generic failure is "try again".
+ */
+export class StorageWriteError extends Error {
+  readonly full: boolean;
+  constructor(full: boolean, cause: unknown) {
+    super(full ? "storage full" : "storage write failed", { cause });
+    this.name = "StorageWriteError";
+    this.full = full;
+  }
+}
+
+function classifyWriteError(error: unknown): StorageWriteError {
+  const name = (error as { name?: string })?.name ?? "";
+  // Dexie wraps the engine's error; the original sits on `inner`
+  const inner = (error as { inner?: { name?: string } })?.inner?.name ?? "";
+  const full = /quota/i.test(name) || /quota/i.test(inner);
+  return new StorageWriteError(full, error);
+}
+
 export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
   const now = Date.now();
   const capturedAt = draft.capturedAt ?? now;
@@ -73,11 +95,15 @@ export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
     updatedAt: now,
     _dirty: 1,
   };
-  await db.snippets.add(snippet);
-  // the vocab-app lesson: a write that reports success must be readable
-  // back, or the failure is surfaced now — never discovered months later
-  const readBack = await db.snippets.get(snippet.id);
-  if (!readBack) throw new Error("entry did not persist");
+  try {
+    await db.snippets.add(snippet);
+    // the vocab-app lesson: a write that reports success must be readable
+    // back, or the failure surfaces now — never discovered months later
+    const readBack = await db.snippets.get(snippet.id);
+    if (!readBack) throw new Error("entry did not persist");
+  } catch (error) {
+    throw classifyWriteError(error);
+  }
   notifyWrite();
   return snippet;
 }

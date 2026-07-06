@@ -40,6 +40,7 @@ import {
   addSnippet,
   restoreSnippet,
   softDeleteSnippet,
+  StorageWriteError,
 } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
@@ -2986,7 +2987,23 @@ function FlowBackfillCapture({
       enriched: "pending",
       updatedAt: capturedAt,
     });
-    void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).then(enrichSnippet);
+    void addSnippet({ id, text: trimmed, source: "typed", capturedAt })
+      .then(enrichSnippet)
+      .catch((error: unknown) => {
+        // the keep did not take — withdraw the optimistic card, put the
+        // words back, say why. Never a silent loss.
+        draftStore?.clear(day);
+        setText(trimmed);
+        if (areaRef.current) {
+          areaRef.current.value = trimmed;
+          autosizeArea(areaRef.current);
+        }
+        toast(
+          error instanceof StorageWriteError && error.full
+            ? copy.data.storageFull
+            : copy.data.keepFailed,
+        );
+      });
     setText("");
     if (areaRef.current) {
       areaRef.current.value = "";
@@ -4027,7 +4044,19 @@ function TodayZoneFill({
         id, text: t, kind: null, tags: [], capturedAt, day,
         source, favorite: 0, enriched: "pending", updatedAt: capturedAt,
       });
-      void addSnippet({ id, text: t, source, capturedAt }).then(enrichSnippet);
+      void addSnippet({ id, text: t, source, capturedAt })
+        .then(enrichSnippet)
+        .catch((error: unknown) => {
+          // the keep did not take — withdraw the optimistic card, put the
+          // words back, say why. Never a silent loss.
+          draft?.clear(day);
+          setText(t);
+          toast(
+            error instanceof StorageWriteError && error.full
+              ? copy.data.storageFull
+              : copy.data.keepFailed,
+          );
+        });
     };
     // freeze the words; hold the seal pressed-down through the lead; dismiss the
     // keyboard and bring the seal fully into view

@@ -74,6 +74,26 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   `public/textures`. The wax-wash lab's aurora/neuro candidates sit on
   a small hand-rolled WebGL mount in
   `src/app/(dev)/lab/wax-wash/shader-box.tsx`.
+- **Accounts + sync (optional):** Better Auth (Google + email OTP via
+  Resend) on Neon Postgres/Drizzle — schema in `src/server/db/schema.ts`,
+  SQL migrations in `drizzle/` (`pnpm db:generate` / `db:migrate`).
+  Absent `DATABASE_URL`/`BETTER_AUTH_SECRET`, auth routes 503 and the
+  app stays device-only. Sync is a custom pull/push protocol
+  (`src/app/api/sync/*`, client engine `src/lib/sync.ts`): per-row LWW
+  with ONE rule shared client/server (`src/lib/merge.ts` — unit-tested,
+  `pnpm test`; hand filing outranks the clock; the server's verdict is
+  final). Dexie v2 adds an indexed `_dirty` flag; every write in
+  `db.ts` stamps it (db.ts stays the single write choke point — never
+  write around it). Tombstones live forever server-side; client purge
+  only drops server-acknowledged ones. Erase-all on a synced book
+  soft-deletes (propagates) — never `clear()`.
+- **Drive backup:** `src/server/backup/` delivers readable Markdown +
+  a JSON archive (bit-compatible with Restore from JSON — keep
+  `src/lib/render-book.ts` the single renderer) into a visible Drive
+  folder via `drive.file`; daily cron `/api/cron/backup`
+  (`CRON_SECRET`, vercel.json). Failures: ledger → Settings line →
+  one alert email per streak. Google OAuth app must be *published to
+  Production* or refresh tokens die in 7 days.
 - **PWA:** `src/app/manifest.ts`, hand-rolled `public/sw.js`
   (registered in `src/components/providers.tsx`, production only).
   Bump `VERSION` in `sw.js` when changing caching behavior.
