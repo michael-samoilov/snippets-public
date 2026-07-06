@@ -74,32 +74,97 @@ export function useKeyboardRoom(
     const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
     let frozenSt: number | null = null;
     let touchDown = false;
+    let lastElMoveAt = 0; // the scroller's last movement (any cause)
     let armT: ReturnType<typeof setTimeout> | undefined;
     const thaw = () => { frozenSt = null; };
     const rearm = () => {
       thaw();
       clearTimeout(armT);
       if (!coarse) return;
-      armT = setTimeout(() => {
+      const arm = () => {
+        // never freeze a book still in motion: a fling can outlast the arm
+        // delay, and locking mid-momentum both kills the fling (the exact
+        // jank the feed design exists to avoid) and captures an arbitrary
+        // scroll as "the" position — stranding the field off-screen
+        if (performance.now() - lastElMoveAt < 300) {
+          armT = setTimeout(arm, 400);
+          return;
+        }
         if (field && document.activeElement === field && !touchDown) frozenSt = el.scrollTop;
-      }, 900);
+      };
+      armT = setTimeout(arm, 900);
     };
     const onTouchStart = () => { touchDown = true; thaw(); clearTimeout(armT); };
     const onTouchEnd = () => { touchDown = false; rearm(); };
+
+    // A SELECTION-HANDLE drag is the freeze's hardest case: iOS delivers no
+    // touch events under a native handle, and WebKit's auto-scroll chases the
+    // handle into the outer book — snapping back after each step painted as a
+    // janky tug-of-war. The words the drag could want are all reachable inside
+    // the contained box, so while a non-collapsed selection is moving in the
+    // managed field the outer scroller is made unscrollable outright
+    // (overflow hidden — the scrollbar is already hidden, so nothing shifts),
+    // with the snap kept underneath as a fallback for engines that still
+    // programmatically scroll a hidden-overflow box. The lock lifts when the
+    // selection collapses, the field blurs, or the drag goes quiet.
+    let selLocked = false;
+    let selLockTimer: ReturnType<typeof setTimeout> | undefined;
+    let savedOverflowY = "";
+    const unlockSelection = () => {
+      if (!selLocked) return;
+      selLocked = false;
+      clearTimeout(selLockTimer);
+      el.style.overflowY = savedOverflowY;
+      rearm();
+    };
+    const lockForSelection = () => {
+      if (!selLocked) {
+        selLocked = true;
+        savedOverflowY = el.style.overflowY;
+        el.style.overflowY = "hidden";
+        if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
+      }
+      clearTimeout(selLockTimer);
+      selLockTimer = setTimeout(unlockSelection, 700);
+    };
+    const onDocSelChange = () => {
+      if (!coarse || !field || document.activeElement !== field) return;
+      const f = field as HTMLTextAreaElement;
+      if (typeof f.selectionStart !== "number") return;
+      if (f.selectionStart !== f.selectionEnd) lockForSelection();
+      else unlockSelection();
+    };
+
     const onElScroll = () => {
+      const st = el.scrollTop;
+      if (selLocked && frozenSt != null) {
+        // during a handle drag the page holds still, full stop — the finger
+        // on the handle is not a page scroll, so touchDown doesn't exempt it
+        if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt;
+        lastElMoveAt = performance.now();
+        return;
+      }
+      lastElMoveAt = performance.now();
       if (frozenSt == null || touchDown) return;
-      if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
+      if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
     };
 
     const correct = () => {
+      if (selLocked) return; // a handle drag owns the view outright
       if (frozenSt != null) return; // a walk owns the view; the box reveals its own caret
       if (!field) {
         clearPad();
         return;
       }
       baseVh = Math.max(baseVh, vv.height);
+      // vv.offsetTop is document-relative on iOS (== pageTop, double-counting
+      // the keyboard pan); pageTop minus the document scroll is the visual
+      // viewport's offset in LAYOUT coordinates on every engine — the same
+      // read as the today zone's kbGeom and useContainedField
+      const doc = document.scrollingElement?.scrollTop ?? window.scrollY ?? 0;
+      const layoutTop = vv.pageTop - doc;
       const kb = Math.max(
-        window.innerHeight - vv.height - vv.offsetTop, // Safari: layout stays full
+        window.innerHeight - vv.height - layoutTop, // Safari: layout stays full
         baseVh - vv.height, // PWA: layout viewport shrinks with the keyboard
       );
       if (kb < 60) {
@@ -108,13 +173,24 @@ export function useKeyboardRoom(
       }
       // the top of the keyboard's floating accessory band (autofill pills +
       // dismiss button) — the real ceiling the words must stay above
-      const bandTop = vv.offsetTop + vv.height - FLOAT;
+      const bandTop = layoutTop + vv.height - FLOAT;
       // float the field's foot above the band, no more
       padOurs = true;
       el.style.paddingBottom = `${kb + FLOAT}px`;
       el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
-      const over = field.getBoundingClientRect().bottom - bandTop;
-      if (over > 0.5) el.scrollTop += over;
+      const r = field.getBoundingClientRect();
+      const over = r.bottom - bandTop;
+      if (over > 0.5) {
+        el.scrollTop += over;
+      } else if (!touchDown) {
+        // …and the symmetric rescue: a scroll (or a freeze that captured the
+        // wrong moment) can park the book PAST the field, leaving the writer
+        // typing into a card stranded above the fold — the down-clamp alone
+        // never brings it back. Pull the field's foot back under the top
+        // chrome so the last lines and the caret are visible again.
+        const under = layoutTop + 72 - r.bottom;
+        if (under > 0.5) el.scrollTop -= under;
+      }
     };
     // Run the correction NOW and again after the browser's own scrolling
     // settles. iOS runs its OWN focus/caret scroll across a focus, each newline,
@@ -179,6 +255,7 @@ export function useKeyboardRoom(
     };
     const onFocusOut = () => {
       if (field) ro.unobserve(field);
+      unlockSelection();
       field = null;
       thaw();
       clearTimeout(armT);
@@ -192,6 +269,7 @@ export function useKeyboardRoom(
     el.addEventListener("focusout", onFocusOut);
     el.addEventListener("input", onInput);
     el.addEventListener("scroll", onElScroll, { passive: true });
+    document.addEventListener("selectionchange", onDocSelChange);
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
     window.addEventListener("touchcancel", onTouchEnd, { passive: true });
@@ -210,6 +288,9 @@ export function useKeyboardRoom(
       rearm();
     }
     return () => {
+      unlockSelection();
+      clearTimeout(selLockTimer);
+      document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
       el.removeEventListener("input", onInput);
