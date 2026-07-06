@@ -28,6 +28,15 @@ html {
 }
 
 :root {
+  /* the shell's one-screen height. The root layout's pre-paint inline script
+     overrides this with the MEASURED viewport in pixels (visualViewport /
+     innerHeight read correctly from the first script tick, while iOS's CSS
+     viewport — every unit AND fixed-inset geometry — can be stale-tall through
+     a cold navigation's first frames; see AppShell). 100% is only the no-JS
+     fallback: on the fixed shell it resolves against the same (possibly stale)
+     viewport that inset:0 would, i.e. exactly the old behavior. */
+  --app-h: 100%;
+
   /* the date header is the largest size that still keeps the longest
      full date ("Wednesday, September 22, 2020") on one line — it scales
      with the viewport on phones and caps on wider screens */

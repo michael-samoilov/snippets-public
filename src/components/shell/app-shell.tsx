@@ -9,19 +9,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // The desk is exactly one screen: the sheet takes the remaining height and
     // pages scroll inside it, never the page.
     //
-    // The height comes from `position: fixed; inset: 0`, NOT any CSS viewport
-    // unit. A no-JS probe on the reporter's device (see the git history) proved
-    // that svh, lvh, AND dvh ALL resolve too tall there — their bottom edge falls
-    // BELOW the visible viewport, so a full-height today zone overflowed and the
-    // wax seal clipped off the bottom until a refresh. Only fixed/inset:0 — which
-    // the browser sizes directly to the viewport rather than by resolving a
-    // length — lands exactly at the true bottom. So the outer layer is that fixed
-    // box (the correct one-screen height), and the inner column re-establishes the
-    // centered, max-width desk inside it. No measurement, no --app-h script: fixed
-    // inset:0 is immune to the unit mis-resolution by construction. When the
-    // keyboard opens the fixed box stays full height (iOS overlays the keyboard);
-    // useKeyboardRoom lifts the focused field, exactly as before.
-    <div className="fixed inset-0 flex justify-center overflow-hidden">
+    // The box is FIXED and TOP-ANCHORED, and its height is the MEASURED viewport
+    // (--app-h, pinned pre-paint by the root layout's inline script), not a CSS
+    // viewport unit and not the fixed box's own bottom edge. Two on-device facts
+    // (see the git history) forced this shape: a no-JS probe proved svh/lvh/dvh
+    // ALL resolve too tall on iOS, and frame-by-frame video proved that on a cold
+    // navigation iOS lays out the very first paint against a stale, too-tall
+    // viewport — with the browser chrome already visually at rest — and only
+    // re-resolves fixed/inset geometry a beat later. So anything anchored to the
+    // viewport's BOTTOM (inset:0) or sized by its units paints one frame (or two
+    // seconds) of "today zone too tall, seal under the toolbar" before snapping.
+    // A pixel height is immune: visualViewport/innerHeight read CORRECTLY from
+    // the first script tick even while the CSS viewport is stale, the inline
+    // script writes --app-h before first paint, and layout uses the pixel value
+    // as-is. The measured height also intentionally TRACKS the URL-bar keyboard
+    // on cold loads (the page simply grows as the keyboard leaves); the in-app
+    // keyboard is guarded out by the script, so the shell never collapses while
+    // writing — useKeyboardRoom lifts the focused field instead, as before.
+    <div
+      data-app-shell
+      className="fixed inset-x-0 top-0 flex h-[var(--app-h)] justify-center overflow-hidden"
+    >
       <div className="flex h-full w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
         {/* desk chrome — the book is the only page now, so there's no nav: just
             the wordmark and the account mark on the desk's top edge */}
