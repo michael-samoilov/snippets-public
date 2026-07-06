@@ -21,11 +21,14 @@ import {
   BOREALIS_DEFAULTS,
   WashPulsingBorder,
   PULSE_DEFAULTS,
+  WashBorderBeam,
+  BEAM_DEFAULTS,
   WASH,
   edgeMask,
   conic,
   type BorealisOpts,
   type PulseOpts,
+  type BeamOpts,
 } from "@/components/capture/wash-shaders";
 
 /* the shipped four-edge seep, with dials: `mult` scales the pigment,
@@ -45,7 +48,7 @@ interface Layer {
   style: React.CSSProperties;
 }
 
-type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis" | "pulse";
+type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis" | "pulse" | "beam";
 
 interface Variant {
   key: string;
@@ -312,6 +315,44 @@ const ROUND_THREE: Variant[] = [
   },
 ];
 
+/* ---- round four: the courier -------------------------------------------
+   border-beam (beam.jakubantalik.com) rebuilt by hand in wash-shaders —
+   a conic comet arc on the frame ring, spun by one @property angle.
+   No dependency, no canvas, one ink. */
+
+const beamCard = (
+  key: string,
+  label: string,
+  note: string,
+  opts: Partial<BeamOpts> = {},
+): Variant => {
+  const o = { ...BEAM_DEFAULTS, ...opts };
+  return { key, label, note, family: "beam", opts: o, node: <WashBorderBeam o={o} /> };
+};
+
+const ROUND_FOUR: Variant[] = [
+  beamCard("beam", "courier", "one light carried around the frame — tap to put it on the desk"),
+  beamCard("beam-two", "two couriers", "a second head opposite the first, so the frame never goes dark", {
+    heads: 2,
+    arc: 0.24,
+    lap: 9,
+  }),
+  beamCard("beam-lantern", "lantern", "over half the turn lit at once, on a slow patient lap", {
+    arc: 0.55,
+    lap: 14,
+    glow: 0.65,
+    reach: 40,
+    stroke: 2.5,
+  }),
+  beamCard("beam-hairline", "hairline", "the thinnest stroke, brisk and nearly bare — closest to the original", {
+    stroke: 1,
+    arc: 0.22,
+    lap: 3.5,
+    glow: 0.25,
+    bloom: 0.15,
+  }),
+];
+
 /* one treatment's wash container — clipped to the frame, masked to its
    edges; `opacity` lets the combo zone weigh treatments against each other */
 function WashLayer({ v, on, opacity = 1 }: { v: Variant; on: boolean; opacity?: number }) {
@@ -524,6 +565,7 @@ export default function WaxWashLab() {
   const [cur, setCur] = useState(CURTAINS_DEFAULTS);
   const [bor, setBor] = useState(BOREALIS_DEFAULTS);
   const [pul, setPul] = useState(PULSE_DEFAULTS);
+  const [bea, setBea] = useState(BEAM_DEFAULTS);
   /* the combo can stretch its zone, proving every effect refits */
   const [zone, setZone] = useState({ w: 300, h: 430 });
   /* per-treatment weights for the combo zone */
@@ -534,6 +576,7 @@ export default function WaxWashLab() {
     curtains: 0,
     borealis: 1,
     pulse: 1,
+    beam: 0,
   });
   const deskRef = useRef<HTMLElement>(null);
 
@@ -550,6 +593,7 @@ export default function WaxWashLab() {
     if (v.family === "curtains") setCur({ ...CURTAINS_DEFAULTS, ...(v.opts as Partial<CurtainsOpts>) });
     if (v.family === "borealis") setBor({ ...BOREALIS_DEFAULTS, ...(v.opts as Partial<BorealisOpts>) });
     if (v.family === "pulse") setPul({ ...PULSE_DEFAULTS, ...(v.opts as Partial<PulseOpts>) });
+    if (v.family === "beam") setBea({ ...BEAM_DEFAULTS, ...(v.opts as Partial<BeamOpts>) });
     deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -576,6 +620,12 @@ export default function WaxWashLab() {
     label: "borealis",
     note: `int ${bor.intensity.toFixed(2)} · rays ${bor.rays.toFixed(1)} · sway ${bor.sway.toFixed(2)} · pace ${bor.pace.toFixed(2)} · flicker ${bor.flicker.toFixed(2)} · reach ${bor.reach.toFixed(2)}`,
     node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(bor)} />,
+  };
+  const beaZone: Variant = {
+    key: "desk-beam",
+    label: "border beam",
+    note: `mult ${bea.mult.toFixed(2)} · lap ${bea.lap.toFixed(1)}s · arc ${bea.arc.toFixed(2)} · stroke ${bea.stroke.toFixed(1)}px · glow ${bea.glow.toFixed(2)} · reach ${bea.reach.toFixed(0)} · bloom ${bea.bloom.toFixed(2)} · heads ${bea.heads.toFixed(0)}`,
+    node: <WashBorderBeam o={bea} />,
   };
   const pulZone: Variant = {
     key: "desk-pulse",
@@ -696,6 +746,7 @@ export default function WaxWashLab() {
               { v: curZone, opacity: mix.curtains },
               { v: pulZone, opacity: mix.pulse },
               { v: borZone, opacity: mix.borealis },
+              { v: beaZone, opacity: mix.beam },
             ]}
           />
           <div className="flex w-[300px] flex-col gap-2.5 sm:mt-9 sm:w-60">
@@ -705,6 +756,7 @@ export default function WaxWashLab() {
             <Dial label="curtains" value={mix.curtains} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, curtains: v })} />
             <Dial label="borealis" value={mix.borealis} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, borealis: v })} />
             <Dial label="border" value={mix.pulse} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, pulse: v })} />
+            <Dial label="beam" value={mix.beam} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, beam: v })} />
             <Dial label="zone w" value={zone.w} min={220} max={380} step={4} fmt={int} onChange={(v) => setZone({ ...zone, w: v })} />
             <Dial label="zone h" value={zone.h} min={280} max={600} step={4} fmt={int} onChange={(v) => setZone({ ...zone, h: v })} />
             <p className="voice-data text-[0.6rem] lowercase text-ink-faint">
@@ -764,6 +816,17 @@ export default function WaxWashLab() {
             <Dial label="pace" value={pul.pace} min={0.02} max={1} step={0.02} onChange={(v) => setPul({ ...pul, pace: v })} />
             <p className="voice-data text-[0.6rem] lowercase text-ink-faint">paper shaders’ border gradient, vendored — their northern-lights recipe in wash ink</p>
           </Bench>
+          <Bench v={beaZone} on={on} onReset={() => setBea(BEAM_DEFAULTS)}>
+            <Dial label="pigment" value={bea.mult} min={0.2} max={2} step={0.05} onChange={(v) => setBea({ ...bea, mult: v })} />
+            <Dial label="lap" value={bea.lap} min={2} max={24} step={0.5} fmt={s} onChange={(v) => setBea({ ...bea, lap: v })} />
+            <Dial label="arc" value={bea.arc} min={0.06} max={0.85} step={0.01} onChange={(v) => setBea({ ...bea, arc: v })} />
+            <Dial label="stroke" value={bea.stroke} min={1} max={6} step={0.5} fmt={(v) => `${v.toFixed(1)}px`} onChange={(v) => setBea({ ...bea, stroke: v })} />
+            <Dial label="glow" value={bea.glow} min={0} max={1} step={0.05} onChange={(v) => setBea({ ...bea, glow: v })} />
+            <Dial label="reach" value={bea.reach} min={8} max={80} step={2} fmt={int} onChange={(v) => setBea({ ...bea, reach: v })} />
+            <Dial label="bloom" value={bea.bloom} min={0} max={1} step={0.05} onChange={(v) => setBea({ ...bea, bloom: v })} />
+            <Dial label="heads" value={bea.heads} min={1} max={3} step={1} fmt={int} onChange={(v) => setBea({ ...bea, heads: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">border-beam’s comet, hand-rolled — css only; arc is the comet’s length as a share of the turn</p>
+          </Bench>
         </div>
       </section>
       <section className="mb-12">
@@ -784,6 +847,17 @@ export default function WaxWashLab() {
         </p>
         <div className="flex flex-wrap gap-8">
           {ROUND_THREE.map((v) => (
+            <MockZone key={v.key} v={v} on={on} onPick={pick} />
+          ))}
+        </div>
+      </section>
+      <section className="mb-12">
+        <h2 className="voice-label text-[0.78rem] text-ink-soft">round four — the courier</h2>
+        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
+          border-beam rebuilt by hand — a conic comet on the frame ring, one @property angle, no dependency, no canvas
+        </p>
+        <div className="flex flex-wrap gap-8">
+          {ROUND_FOUR.map((v) => (
             <MockZone key={v.key} v={v} on={on} onPick={pick} />
           ))}
         </div>
