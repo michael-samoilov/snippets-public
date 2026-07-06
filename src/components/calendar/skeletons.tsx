@@ -40,7 +40,10 @@ const dateWaveDelay = (col: number) =>
 export function TodaySkeleton() {
   return (
     <div className="flex h-full w-full flex-col pt-[19px]" aria-hidden="true">
-      <div className="relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl border border-wax/45">
+      <div
+        data-today-zone-box
+        className="relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl border border-wax/45"
+      >
         <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
           {/* today's date, seated high under the zone's top */}
           <div className="mt-[83px] flex flex-col items-center gap-2 leading-none">
