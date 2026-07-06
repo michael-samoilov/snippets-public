@@ -2328,6 +2328,11 @@ function ScheduleFeedBase({
       // the next scheduled pass retries against the settled truth.
       const settleFoot = () => {
         if (tookOverRef.current) return;
+        // a focused field hands the scroll to the keyboard pin (anchorTail /
+        // keyboard-room) — and the late passes below live long enough to
+        // overlap a composer focus. Same bail reseat takes: stand down rather
+        // than yank the risen page back to the foot.
+        if (document.activeElement?.tagName === "TEXTAREA") return;
         const d1 = footDelta();
         if (d1 == null || Math.abs(d1) <= 1) return;
         requestAnimationFrame(() => {
@@ -2362,6 +2367,14 @@ function ScheduleFeedBase({
         // a pass skipped for a mid-flight layout retries here, well after the
         // toolbars have settled
         setTimeout(settleFoot, 1400),
+        // …except on a COLD navigation (new tab — worst with the URL-bar
+        // keyboard still up, but reproduced without it), where iOS re-sizes
+        // the layout viewport ~1.5–2s in, AFTER every pass above has fired —
+        // and the landing stayed pinned to the pre-settle foot. Two late
+        // passes reach past that settle; guarded like the rest, so on a page
+        // that's already right they read once and no-op.
+        setTimeout(settleFoot, 2200),
+        setTimeout(settleFoot, 3400),
       );
       // The content keeps BREATHING after the landing — live rows arriving,
       // enrichment chips, font swaps each nudge the heights above the foot —
@@ -2374,16 +2387,43 @@ function ScheduleFeedBase({
       // invisible. Lives only through the settle window; a reader's takeover
       // or a focused field (the keyboard pin owns the scroll then) stands it
       // down.
-      const reseat = () => {
+      const sEl = scrollerRef.current;
+      let reseatTrail: ReturnType<typeof setTimeout> | undefined;
+      const reseat = (entries?: ResizeObserverEntry[]) => {
         if (tookOverRef.current) return;
         if (document.activeElement?.tagName === "TEXTAREA") return; // keyboard pin owns it
+        // the SCROLLER itself resizing is the viewport moving — iOS dismissing
+        // the URL-bar keyboard, the chrome settling after a cold navigation —
+        // and mid-transition its scrollHeight/clientHeight aren't a consistent
+        // pair, so an instant pin here committed a wrong foot that then STUCK
+        // (bottom- or top-clipped, by the sample's sign). Viewport moves take
+        // the guarded path instead: settleFoot skips while the layout is in
+        // motion (it would also jump-cut a still-gliding Today press), and one
+        // trailing retry lands after the transition. Children resizing against
+        // a still viewport is content breath — that keeps the same-frame
+        // instant pin, because deferring THAT by even a frame is the visible
+        // wobble this observer exists to kill. (The MutationObserver calls
+        // with no entries and stays on the instant path.)
+        if (entries?.some((e) => e.target === sEl)) {
+          settleFoot();
+          clearTimeout(reseatTrail);
+          reseatTrail = setTimeout(settleFoot, 180);
+          todaySettleRef.current.push(reseatTrail);
+          return;
+        }
         pinFoot("instant");
       };
       const ro = new ResizeObserver(reseat);
-      const sEl = scrollerRef.current;
       const observeKids = () => {
         ro.disconnect();
-        if (sEl) [...sEl.children].forEach((c) => ro.observe(c));
+        if (!sEl) return;
+        // the scroller ITSELF too: a pure viewport change resizes no child
+        // while the zone is content-governed (keyboard-short viewports) —
+        // watching only the children slept through exactly the moment the
+        // foot moved. (measureRows and ZoneFootRule already observe this
+        // element; observers don't contend.)
+        ro.observe(sEl);
+        [...sEl.children].forEach((c) => ro.observe(c));
       };
       observeKids();
       // a re-render can REPLACE children outright (escaping the RO's
