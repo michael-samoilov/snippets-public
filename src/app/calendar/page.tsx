@@ -2783,11 +2783,12 @@ function ScheduleFeedBase({
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {/* until the live query returns, `body` is undefined — hold the today
-            zone (the same skeleton the SSR shell shows, and the view the book
-            almost always opens onto) so the wait reads as a continuous
-            "settling in", never a blank gap that then pops */}
-        {body ?? <TodaySkeleton />}
+        {/* until the live query returns, `body` is undefined — hold a skeleton
+            so the wait reads as a continuous "settling in", never a blank gap
+            that then pops. Landing on today opens onto the compose zone (the
+            book's foot fills the viewport), so hold that; a deep-link into any
+            other day lands among its entries, so hold the ruled book instead. */}
+        {body ?? (selected === todayKey ? <TodaySkeleton /> : <LedgerRows />)}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
