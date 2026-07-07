@@ -6,8 +6,15 @@ import { copy } from "@/lib/copy";
 import { bumpClock } from "@/lib/merge";
 import { currentDbName, syncAdopted } from "@/lib/sync-state";
 
+/** device-local key/value row (the book key, Drive tokens, delivery marks) */
+export interface MetaRow {
+  key: string;
+  value: unknown;
+}
+
 class SnippetsDB extends Dexie {
   snippets!: Table<Snippet, string>;
+  meta!: Table<MetaRow, string>;
 
   constructor(name = currentDbName()) {
     super(name);
@@ -29,6 +36,13 @@ class SnippetsDB extends Dexie {
             s._dirty = 1;
           }),
       );
+    // v3 adds the meta table: the unwrapped book key rests here as a
+    // structured-clonable, NON-extractable CryptoKey, alongside the
+    // device-held Drive tokens (tokens transit the server, never rest)
+    this.version(3).stores({
+      snippets: "id, day, capturedAt, kind, favorite, enriched, *tags, _dirty",
+      meta: "key",
+    });
   }
 }
 
@@ -230,6 +244,35 @@ export async function eraseAll(): Promise<void> {
     if (s.deletedAt === undefined) s.deletedAt = now;
     s.updatedAt = bumpClock(s.updatedAt);
     s._dirty = 1;
+  });
+  notifyWrite();
+}
+
+// ── device meta ─────────────────────────────────────────────────
+
+export async function getMeta<T>(key: string): Promise<T | undefined> {
+  const row = await db.meta.get(key);
+  return row?.value as T | undefined;
+}
+
+export async function setMeta(key: string, value: unknown): Promise<void> {
+  await db.meta.put({ key, value });
+}
+
+export async function deleteMeta(key: string): Promise<void> {
+  await db.meta.delete(key);
+}
+
+/**
+ * The re-encryption sweep, run once when end-to-end encryption is
+ * turned on: every row goes dirty AND gets a fresh clock, so the next
+ * push re-writes the whole book to the server in the encrypted format
+ * (an unchanged clock would no-op against the server's idempotence).
+ */
+export async function reencryptSweep(): Promise<void> {
+  await db.snippets.toCollection().modify((s) => {
+    s._dirty = 1;
+    s.updatedAt = bumpClock(s.updatedAt);
   });
   notifyWrite();
 }

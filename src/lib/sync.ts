@@ -35,11 +35,14 @@ import {
 import {
   fromWireRow,
   toWireChange,
+  LockedError,
   type BackupStatusSummary,
   type PullResponse,
   type PushResponse,
   type StatusResponse,
 } from "@/lib/sync-wire";
+import { getBookKey, refreshEnrollment } from "@/lib/e2e";
+import { maybeDeliverBackup } from "@/lib/backup-client";
 import type { Snippet } from "@/lib/types";
 
 const PUSH_BATCH = 200;
@@ -56,6 +59,8 @@ export interface SyncStatus {
   skewed: boolean;
   /** the Drive backup ledger, as of the last status fetch */
   backup: BackupStatusSummary | null;
+  /** the account is end-to-end encrypted and this device holds no key */
+  locked: boolean;
 }
 
 // ── status store (useSyncExternalStore, as settings.ts does) ────
@@ -68,6 +73,7 @@ let status: SyncStatus = {
   serverCount: null,
   skewed: false,
   backup: null,
+  locked: false,
 };
 const listeners = new Set<() => void>();
 
@@ -94,6 +100,7 @@ const SERVER_SNAPSHOT: SyncStatus = {
   serverCount: null,
   skewed: false,
   backup: null,
+  locked: false,
 };
 
 export function useSyncStatus(): SyncStatus {
@@ -174,17 +181,34 @@ export function requestSync(): void {
 async function runCycle(): Promise<void> {
   setStatus({ phase: "syncing" });
   try {
-    await pushAll();
-    await pullAll();
+    // an end-to-end encrypted account must never sync without its key:
+    // pushing would leak plaintext, pulling can't be applied. Pause
+    // loudly (Settings shows the unlock) — capture is never blocked.
+    const enrolled = await refreshEnrollment();
+    const key = enrolled ? await getBookKey() : undefined;
+    if (enrolled && !key) {
+      setStatus({ phase: "idle", locked: true });
+      return;
+    }
+    setStatus({ locked: false });
+
+    await pushAll(key);
+    await pullAll(key);
     await refreshCounts();
     const now = Date.now();
     writeSyncState({ lastSyncedAt: now });
     retryAttempt = 0;
     setStatus({ phase: "idle", lastSyncedAt: now });
+    // the book is settled on the server — a fresh copy can go to Drive
+    void maybeDeliverBackup(status.backup);
   } catch (error) {
     if (error instanceof SignedOut) {
       // session gone (expired, signed out elsewhere) — not an error state
       setStatus({ phase: "idle" });
+      return;
+    }
+    if (error instanceof LockedError) {
+      setStatus({ phase: "idle", locked: true });
       return;
     }
     setStatus({
@@ -207,7 +231,7 @@ function scheduleRetry(): void {
   }, delay);
 }
 
-async function pushAll(): Promise<void> {
+async function pushAll(key?: CryptoKey): Promise<void> {
   for (let batch = 0; batch < MAX_BATCHES_PER_CYCLE; batch++) {
     const dirty = await db.snippets
       .where("_dirty")
@@ -216,10 +240,11 @@ async function pushAll(): Promise<void> {
       .toArray();
     if (dirty.length === 0) return;
 
+    const changes = await Promise.all(dirty.map((s) => toWireChange(s, key)));
     const response = await fetch("/api/sync/push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ changes: dirty.map(toWireChange) }),
+      body: JSON.stringify({ changes }),
     });
     if (response.status === 401) throw new SignedOut();
     if (!response.ok) throw new Error(`push ${response.status}`);
@@ -228,6 +253,14 @@ async function pushAll(): Promise<void> {
     setStatus({
       skewed: Math.abs(data.serverNow - Date.now()) > CLOCK_SKEW_MS,
     });
+
+    // decrypt superseded rows BEFORE the transaction — Dexie
+    // transactions die on any foreign await (crypto included)
+    const adopted = new Map<string, Snippet>();
+    for (const result of data.results) {
+      if (result.outcome === "superseded")
+        adopted.set(result.id, await fromWireRow(result.row, key));
+    }
 
     const pushed = new Map(dirty.map((s) => [s.id, s]));
     let progressed = false;
@@ -243,7 +276,8 @@ async function pushAll(): Promise<void> {
           await db.snippets.update(result.id, { _dirty: 0 });
         } else {
           // the server's copy won; adopt it
-          await db.snippets.put(fromWireRow(result.row));
+          const row = adopted.get(result.id);
+          if (row) await db.snippets.put(row);
         }
       }
     });
@@ -256,7 +290,7 @@ async function pushAll(): Promise<void> {
   }
 }
 
-async function pullAll(): Promise<void> {
+async function pullAll(key?: CryptoKey): Promise<void> {
   for (;;) {
     const cursor = readSyncState().lastPulledSeq;
     const response = await fetch(
@@ -267,12 +301,20 @@ async function pullAll(): Promise<void> {
     const data = (await response.json()) as PullResponse;
 
     if (data.rows.length) {
+      // decode (and decrypt) BEFORE the transaction — Dexie transactions
+      // die on any foreign await, crypto included
+      const prepared = await Promise.all(
+        data.rows.map(async (row) => ({
+          row,
+          snippet: await fromWireRow(row, key),
+        })),
+      );
       await db.transaction("rw", db.snippets, async () => {
-        for (const row of data.rows) {
+        for (const { row, snippet } of prepared) {
           const local = await db.snippets.get(row.id);
           if (!local || local._dirty !== 1) {
             // clean rows mirror the server verbatim
-            await db.snippets.put(fromWireRow(row));
+            await db.snippets.put(snippet);
             continue;
           }
           const localSide: MergeSide = {
@@ -283,13 +325,10 @@ async function pullAll(): Promise<void> {
           const incomingSide: MergeSide = {
             updatedAt: row.updatedAt,
             deletedAt: row.deletedAt,
-            enriched:
-              row.payload && typeof row.payload.enriched === "string"
-                ? row.payload.enriched
-                : null,
+            enriched: snippet.enriched,
           };
           if (incomingWins(localSide, incomingSide)) {
-            await db.snippets.put(fromWireRow(row));
+            await db.snippets.put(snippet);
           }
           // else: the dirty local row stays; its own push will settle it
         }

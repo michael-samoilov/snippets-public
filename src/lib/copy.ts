@@ -67,7 +67,7 @@ export const copy = {
       "Snippets is an app to capture your daily moments.",
       "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
       "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
-      "About this app: Everything is stored on this device by default. If you make an account, you can access snippets across devices. You can then connect your Google Drive to sync snippets off the app automatically, so your words are yours even if this app ever disappears.",
+      "About this app: Everything is stored on this device by default. If you make an account, you can access snippets across devices. You can then connect your Google Drive to sync snippets off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can seal the book with end-to-end encryption — then no one but you, including us, can read what you keep.",
       "How you remember your days is how you remember your life.",
     ] as const,
   },
@@ -370,11 +370,44 @@ export const copy = {
         `${device} here · ${server} on the server`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
+      locked: "This book is end-to-end encrypted — unlock below to sync.",
+    },
+    encryption: {
+      heading: "Encryption",
+      offLead:
+        "Turn on end-to-end encryption and your entries are sealed with a key only your devices hold — unreadable on the server, by anyone, including us. Your Drive backups stay readable; they’re yours.",
+      turnOn: "Turn on end-to-end encryption",
+      onLead: "End-to-end encryption is on. Only your devices hold the key.",
+      lockedLead:
+        "This account is end-to-end encrypted, and this device doesn’t hold the key yet.",
+      passphraseLabel: "Choose a passphrase",
+      passphraseConfirmLabel: "Once more",
+      passphrasePlaceholder: "a phrase only you would know",
+      unlockLabel: "Your passphrase",
+      unlock: "Unlock",
+      unlocking: "A moment…",
+      useRecovery: "Use my recovery code instead",
+      usePassphrase: "Use my passphrase instead",
+      recoveryLabel: "Your recovery code",
+      enrollTitle: "Seal the book?",
+      enrollBody:
+        "Your entries will be encrypted with a key only your devices hold. If you forget the passphrase, the recovery code — shown once, next — is the only other way in. Your Google Drive backups stay readable either way, so even a lost key never costs you the words.",
+      enrollConfirm: "Seal it",
+      enrolling: "Sealing…",
+      tooShort: "A passphrase needs at least ten characters.",
+      mismatch: "Those two didn’t match.",
+      wrongSecret: "That didn’t open it. Codes and phrases are exact.",
+      enrollFailed: "The book couldn’t be sealed just now. Try again in a moment.",
+      recoveryTitle: "Your recovery code",
+      recoveryBody:
+        "Shown exactly once. If you forget your passphrase, this code is the only other key — save the kit somewhere safe.",
+      downloadKit: "Download the kit",
+      recoveryDone: "I’ve saved it",
     },
     backup: {
       heading: "Backup",
       lead:
-        "A copy of your book, delivered to a Snippets folder in your own Google Drive once a day — readable Markdown and a restorable archive. Yours even if this app disappears.",
+        "A copy of your book, delivered from your own device to a Snippets folder in your own Google Drive as you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
       connect: "Connect Google Drive",
       connecting: "Connecting…",
       /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
@@ -382,7 +415,7 @@ export const copy = {
       firstOnItsWay: "The first delivery is on its way…",
       /** reassurance: the folder is a one-way mirror, safe to touch */
       mirrors:
-        "That folder only mirrors your book — delete or change anything in it and the next day’s copy sets it right again.",
+        "That folder only mirrors your book — delete or change anything in it and the next delivery sets it right again.",
       /** e.g. "Backups haven’t gone through since June 30." */
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",

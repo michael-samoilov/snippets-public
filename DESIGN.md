@@ -376,12 +376,16 @@ never red.
   network; every sync/backup state is a visible line in Settings,
   never a silent stall. Settings/preferences stay per-device by
   intent. Erase on a synced book erases everywhere, and says so.
-- **Backup is the escape hatch, not a feature.** Once a day the
-  server delivers readable Markdown + a restorable JSON archive into
-  a visible folder in the writer's own Drive; the JSON stays
-  bit-compatible with "Restore from JSON…" so the book outlives the
-  app. Failures escalate: ledger → Settings line → one quiet email
-  per streak.
+- **Backup is the escape hatch, not a feature.** The writer's own
+  device delivers readable Markdown + a restorable JSON archive into
+  a visible folder in their own Drive after each settled sync; the
+  JSON stays bit-compatible with "Restore from JSON…" so the book
+  outlives the app. The server keeps no Drive credentials (tokens
+  transit, never rest) and, under end-to-end encryption, no readable
+  entries either — the operator cannot read the book. The plaintext
+  Drive files double as the key-loss safety net; they are never
+  encrypted. Failures escalate: ledger → Settings line → one quiet
+  watchdog email per silence.
 - Enrichment is best-effort decoration; `enriched: "manual"` wins; the
   app must remain whole with zero AI and zero network.
 - **Ink on paper:** `.voice-prose`/`.voice-display` use

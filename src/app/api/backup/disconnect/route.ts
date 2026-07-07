@@ -10,7 +10,7 @@
 import { and, eq } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { getSession } from "@/server/auth";
-import { PROVIDER } from "@/server/backup/run";
+import { PROVIDER } from "@/lib/backup-shared";
 
 export const runtime = "nodejs";
 

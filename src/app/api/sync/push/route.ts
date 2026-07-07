@@ -16,6 +16,7 @@ import { getSession } from "@/server/auth";
 import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
   PAYLOAD_FORMAT_PLAIN,
+  PAYLOAD_FORMAT_SEALED,
   type PushResult,
   type SnippetPayload,
   type WireRow,
@@ -27,7 +28,12 @@ const MAX_PAYLOAD_BYTES = 64_000;
 
 const changeSchema = z.object({
   id: z.string().min(10).max(40),
-  payloadFormat: z.literal(PAYLOAD_FORMAT_PLAIN),
+  // format 1 = plaintext JSON; format 2 = a sealed AES-GCM envelope the
+  // server stores and merges without ever being able to open
+  payloadFormat: z.union([
+    z.literal(PAYLOAD_FORMAT_PLAIN),
+    z.literal(PAYLOAD_FORMAT_SEALED),
+  ]),
   payload: z.record(z.string(), z.unknown()),
   updatedAt: z.number().int().positive(),
   deletedAt: z.number().int().positive().nullable().optional(),
@@ -108,7 +114,10 @@ export async function POST(request: Request) {
       const incoming: MergeSide = {
         updatedAt: change.updatedAt,
         deletedAt: change.deletedAt ?? null,
+        // a sealed payload's enriched state is invisible here; the
+        // manual-sticky rule is enforced client-side, LWW stands in
         enriched:
+          change.payloadFormat === PAYLOAD_FORMAT_PLAIN &&
           typeof change.payload.enriched === "string"
             ? change.payload.enriched
             : null,

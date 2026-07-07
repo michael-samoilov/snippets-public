@@ -1,9 +1,9 @@
 /**
  * The book's archive formats, rendered by one pure module so the two
  * callers can never drift: the in-app export buttons (src/lib/export.ts)
- * and the server's Drive backup (src/server/backup). Drift here would
- * quietly break the platform-death escape hatch — the Drive archive
- * must stay bit-compatible with "Restore from JSON…".
+ * and the device-side Drive delivery (src/lib/backup-client.ts). Drift
+ * here would quietly break the platform-death escape hatch — the Drive
+ * archive must stay bit-compatible with "Restore from JSON…".
  */
 import { format } from "date-fns";
 import { dateFromDayKey } from "@/lib/dates";

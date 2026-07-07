@@ -1,15 +1,12 @@
-/**
- * A small Google Drive REST client — plain fetch, no googleapis SDK.
- * Scope is drive.file: the app sees only what it created, and the
- * "Snippets" folder it creates is a normal, visible folder in the
- * user's own Drive (never the hidden appDataFolder — the entire point
- * is that these files remain findable if this app disappears).
- *
- * Drive keeps ~30 days of old revisions on every update-in-place, a
- * free second belt against a bad backup run.
- */
-import "server-only";
+"use client";
 
+/**
+ * Google Drive from the browser — the same small REST surface the
+ * server used to own (find-or-create the visible folder, update
+ * files in place, heal what's missing), now run by the writer's own
+ * device with the writer's own token. Scope is drive.file: only what
+ * this app created is even visible.
+ */
 const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -24,14 +21,10 @@ async function driveFetch(
 ): Promise<Response> {
   const response = await fetch(url, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
+    headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
   });
   if (response.status === 401 || response.status === 403) {
     const body = await response.text().catch(() => "");
-    // insufficient scope or a dead token both mean: reconnect
     throw new DriveTokenRevoked(`drive ${response.status}: ${body.slice(0, 200)}`);
   }
   return response;
@@ -67,6 +60,25 @@ async function findByName(
   return data.files?.[0]?.id ?? null;
 }
 
+function multipartBody(
+  boundary: string,
+  metadata: Record<string, unknown>,
+  mimeType: string,
+  body: string,
+): string {
+  return [
+    `--${boundary}`,
+    "Content-Type: application/json; charset=UTF-8",
+    "",
+    JSON.stringify(metadata),
+    `--${boundary}`,
+    `Content-Type: ${mimeType}; charset=UTF-8`,
+    "",
+    body,
+    `--${boundary}--`,
+  ].join("\r\n");
+}
+
 async function createFile(
   token: string,
   metadata: Record<string, unknown>,
@@ -81,33 +93,20 @@ async function createFile(
     });
   } else {
     const boundary = `snippets-${Date.now().toString(36)}`;
-    const body = [
-      `--${boundary}`,
-      "Content-Type: application/json; charset=UTF-8",
-      "",
-      JSON.stringify(metadata),
-      `--${boundary}`,
-      `Content-Type: ${content.mimeType}; charset=UTF-8`,
-      "",
-      content.body,
-      `--${boundary}--`,
-    ].join("\r\n");
     response = await driveFetch(
       token,
       `${UPLOAD}/files?uploadType=multipart&fields=id`,
       {
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-        body,
+        body: multipartBody(boundary, metadata, content.mimeType, content.body),
       },
     );
   }
   if (!response.ok) throw new Error(`drive create ${response.status}`);
-  const data = (await response.json()) as { id: string };
-  return data.id;
+  return ((await response.json()) as { id: string }).id;
 }
 
-/** Find-or-create the visible "Snippets" folder. Returns its id. */
 export async function ensureFolder(
   token: string,
   knownId: string | null,
@@ -119,11 +118,7 @@ export async function ensureFolder(
   return createFile(token, { name, mimeType: FOLDER_MIME });
 }
 
-/**
- * Update-in-place, or create when the file is gone (the user may
- * delete or move anything — we heal rather than fail). Returns the
- * current file id.
- */
+/** Update-in-place (re-setting the mimeType), or create when gone. */
 export async function upsertFile(
   token: string,
   options: {
@@ -139,37 +134,19 @@ export async function upsertFile(
   let fileId = knownId && (await fileExists(token, knownId)) ? knownId : null;
   if (!fileId) fileId = await findByName(token, name, parentId);
 
+  const boundary = `snippets-${Date.now().toString(36)}`;
   if (fileId) {
-    // multipart PATCH (metadata + media), not media-only, so the file's
-    // stored mimeType is re-set on every write — that's what corrects an
-    // already-uploaded file whose old MIME the Drive app won't preview
-    const boundary = `snippets-${Date.now().toString(36)}`;
-    const multipart = [
-      `--${boundary}`,
-      "Content-Type: application/json; charset=UTF-8",
-      "",
-      JSON.stringify({ mimeType }),
-      `--${boundary}`,
-      `Content-Type: ${mimeType}; charset=UTF-8`,
-      "",
-      body,
-      `--${boundary}--`,
-    ].join("\r\n");
     const response = await driveFetch(
       token,
       `${UPLOAD}/files/${fileId}?uploadType=multipart&fields=id`,
       {
         method: "PATCH",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-        body: multipart,
+        body: multipartBody(boundary, { mimeType }, mimeType, body),
       },
     );
     if (!response.ok) throw new Error(`drive update ${response.status}`);
     return fileId;
   }
-  return createFile(
-    token,
-    { name, parents: [parentId] },
-    { mimeType, body },
-  );
+  return createFile(token, { name, parents: [parentId] }, { mimeType, body });
 }

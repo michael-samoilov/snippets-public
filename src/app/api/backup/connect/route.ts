@@ -1,19 +1,18 @@
 /**
  * Finalizes the Drive grant. The client returns here after
  * `linkSocial` with the drive.file scope; we verify the scope was
- * actually granted (the consent screen lets people untick it), seed
- * the ledger, and run the first delivery immediately — the freshness
- * line in Settings is never blank.
+ * actually granted (the consent screen lets people untick it) and
+ * seed the ledger. Delivery itself happens on the device — the
+ * client adopts the refresh token next (/api/backup/adopt, after
+ * which the server keeps no way into anyone's Drive) and runs the
+ * first delivery itself.
  */
 import { and, eq } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { getSession } from "@/server/auth";
-import { PROVIDER, runBackupForUser } from "@/server/backup/run";
+import { DRIVE_SCOPE, PROVIDER } from "@/lib/backup-shared";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
-
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 export async function POST(request: Request) {
   if (!serverDb)
@@ -49,6 +48,5 @@ export async function POST(request: Request) {
       set: { state: "active", consecutiveFailures: 0, lastError: null },
     });
 
-  const outcome = await runBackupForUser(userId, { force: true });
-  return Response.json({ outcome });
+  return Response.json({ ok: true });
 }

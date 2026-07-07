@@ -5,7 +5,23 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { eraseAll } from "@/lib/db";
+import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "@/lib/e2e";
+import {
+  adoptDriveToken,
+  deliverBackup,
+  forgetDriveTokens,
+} from "@/lib/backup-client";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
@@ -78,6 +94,7 @@ export default function SettingsPage() {
 
       <div className="space-y-10">
         <AccountSection />
+        {user && <EncryptionSection email={user.email} />}
         {user && <BackupSection />}
 
         <section aria-label={copy.settings.appearance.heading}>
@@ -252,7 +269,8 @@ function SyncLines() {
   const sync = useSyncStatus();
 
   let line: string;
-  if (sync.phase === "offline") line = copy.settings.sync.offline;
+  if (sync.locked) line = copy.settings.sync.locked;
+  else if (sync.phase === "offline") line = copy.settings.sync.offline;
   else if (sync.phase === "error") line = copy.settings.sync.error;
   else if (sync.phase === "syncing") line = copy.settings.sync.syncing;
   else if (sync.pendingCount > 0)
@@ -333,6 +351,275 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
   );
 }
 
+/**
+ * End-to-end encryption. Three states: not yet sealed (offer it),
+ * sealed and this device holds the key (one quiet line), sealed and
+ * locked (the unlock form — sync waits on it, capture never does).
+ * Enrollment shows the recovery code exactly once, with the kit
+ * download; the code is not reconstructable afterward.
+ */
+function EncryptionSection({ email }: { email: string }) {
+  const sync = useSyncStatus();
+  const [enrolled, setEnrolled] = useState<boolean | null>(null);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [pass, setPass] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [secret, setSecret] = useState("");
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void refreshEnrollment().then(setEnrolled);
+    void getBookKey().then((k) => setHasKey(!!k));
+  }, [sync.locked]);
+
+  const doEnroll = async () => {
+    if (pass.length < 10) {
+      setError(copy.settings.encryption.tooShort);
+      return;
+    }
+    if (pass !== confirm) {
+      setError(copy.settings.encryption.mismatch);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const code = await enroll(pass);
+      setPass("");
+      setConfirm("");
+      setEnrollOpen(false);
+      setRecoveryCode(code);
+      setEnrolled(true);
+      setHasKey(true);
+      requestSync();
+    } catch {
+      setError(copy.settings.encryption.enrollFailed);
+    }
+    setBusy(false);
+  };
+
+  const doUnlock = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await unlock(secret, recoveryMode ? "recovery" : "passphrase");
+      setSecret("");
+      setHasKey(true);
+      requestSync();
+    } catch {
+      setError(copy.settings.encryption.wrongSecret);
+    }
+    setBusy(false);
+  };
+
+  const downloadKit = () => {
+    if (!recoveryCode) return;
+    const blob = new Blob([recoveryKitText(recoveryCode, email)], {
+      type: "text/plain",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "snippets-recovery-kit.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  let body: React.ReactNode;
+  if (enrolled === null) body = null;
+  else if (!enrolled) {
+    body = (
+      <>
+        <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+          {copy.settings.encryption.offLead}
+        </p>
+        <div className="mt-4">
+          <PaperButton onClick={() => setEnrollOpen(true)}>
+            {copy.settings.encryption.turnOn}
+          </PaperButton>
+        </div>
+      </>
+    );
+  } else if (hasKey) {
+    body = (
+      <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+        {copy.settings.encryption.onLead}
+      </p>
+    );
+  } else {
+    body = (
+      <form
+        className="mt-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void doUnlock();
+        }}
+      >
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+          {copy.settings.encryption.lockedLead}
+        </p>
+        <div className="mt-3 flex max-w-[26rem] items-stretch gap-2">
+          <Input
+            type={recoveryMode ? "text" : "password"}
+            autoComplete="current-password"
+            aria-label={
+              recoveryMode
+                ? copy.settings.encryption.recoveryLabel
+                : copy.settings.encryption.unlockLabel
+            }
+            placeholder={
+              recoveryMode
+                ? copy.settings.encryption.recoveryLabel
+                : copy.settings.encryption.unlockLabel
+            }
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            className="h-10 flex-1 font-serif text-[1rem]"
+          />
+          <PaperButton
+            type="submit"
+            disabled={busy || secret.length === 0}
+            className="inline-flex h-10 shrink-0 items-center justify-center"
+          >
+            {busy
+              ? copy.settings.encryption.unlocking
+              : copy.settings.encryption.unlock}
+          </PaperButton>
+        </div>
+        <button
+          type="button"
+          className="pressable mt-2 rounded-[5px] font-serif text-[0.9rem] text-ink-faint hover:text-ink-soft"
+          onClick={() => {
+            setRecoveryMode((v) => !v);
+            setError(null);
+          }}
+        >
+          {recoveryMode
+            ? copy.settings.encryption.usePassphrase
+            : copy.settings.encryption.useRecovery}
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <section aria-label={copy.settings.encryption.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.encryption.heading}
+      </h2>
+      {body}
+      {error && (
+        <p role="alert" className="voice-prose mt-3 text-[0.9rem] text-ember">
+          {error}
+        </p>
+      )}
+
+      {/* enrollment: choose the passphrase */}
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="voice-display text-left text-lg">
+              {copy.settings.encryption.enrollTitle}
+            </DialogTitle>
+            <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
+              {copy.settings.encryption.enrollBody}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void doEnroll();
+            }}
+          >
+            <label className="voice-label block text-[0.75rem]" htmlFor="e2e-pass">
+              {copy.settings.encryption.passphraseLabel}
+            </label>
+            <Input
+              id="e2e-pass"
+              type="password"
+              autoComplete="new-password"
+              placeholder={copy.settings.encryption.passphrasePlaceholder}
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              className="h-10 font-serif text-[1rem]"
+            />
+            <label className="voice-label block text-[0.75rem]" htmlFor="e2e-confirm">
+              {copy.settings.encryption.passphraseConfirmLabel}
+            </label>
+            <Input
+              id="e2e-confirm"
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className="h-10 font-serif text-[1rem]"
+            />
+            {error && (
+              <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+                {error}
+              </p>
+            )}
+            <DialogFooter className="gap-2">
+              <Button
+                variant="ghost"
+                type="button"
+                className="font-serif"
+                onClick={() => setEnrollOpen(false)}
+              >
+                {copy.settings.erase.cancel}
+              </Button>
+              <PaperButton type="submit" disabled={busy}>
+                {busy
+                  ? copy.settings.encryption.enrolling
+                  : copy.settings.encryption.enrollConfirm}
+              </PaperButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* the recovery code — shown exactly once */}
+      <Dialog
+        open={recoveryCode !== null}
+        onOpenChange={(open) => {
+          if (!open) setRecoveryCode(null);
+        }}
+      >
+        <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="voice-display text-left text-lg">
+              {copy.settings.encryption.recoveryTitle}
+            </DialogTitle>
+            <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
+              {copy.settings.encryption.recoveryBody}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="voice-data select-all break-all text-center text-[1.05rem] leading-relaxed">
+            {recoveryCode}
+          </p>
+          <DialogFooter className="gap-2">
+            <PaperButton onClick={downloadKit}>
+              {copy.settings.encryption.downloadKit}
+            </PaperButton>
+            <Button
+              variant="ghost"
+              className="font-serif"
+              onClick={() => setRecoveryCode(null)}
+            >
+              {copy.settings.encryption.recoveryDone}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 /**
@@ -359,9 +646,18 @@ function BackupSection() {
       setConnecting(true);
       try {
         const response = await fetch("/api/backup/connect", { method: "POST" });
-        if (response.status === 409)
+        if (response.status === 409) {
           setError(copy.settings.backup.scopeDeclined);
-        else if (!response.ok) setError(copy.settings.backup.connectFailed);
+          return;
+        }
+        if (!response.ok) {
+          setError(copy.settings.backup.connectFailed);
+          return;
+        }
+        // this device adopts the token (the server forgets it) and runs
+        // the first delivery itself — the freshness line is never blank
+        const adopted = await adoptDriveToken();
+        if (adopted) await deliverBackup();
       } catch {
         setError(copy.settings.backup.connectFailed);
       } finally {
@@ -394,6 +690,7 @@ function BackupSection() {
     try {
       const response = await fetch("/api/backup/disconnect", { method: "POST" });
       if (!response.ok) throw new Error(`disconnect ${response.status}`);
+      await forgetDriveTokens(); // this device drops its copy too
     } catch {
       setError(copy.settings.backup.disconnectFailed);
     } finally {

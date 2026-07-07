@@ -84,16 +84,34 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   `pnpm test`; hand filing outranks the clock; the server's verdict is
   final). Dexie v2 adds an indexed `_dirty` flag; every write in
   `db.ts` stamps it (db.ts stays the single write choke point — never
-  write around it). Tombstones live forever server-side; client purge
-  only drops server-acknowledged ones. Erase-all on a synced book
-  soft-deletes (propagates) — never `clear()`.
-- **Drive backup:** `src/server/backup/` delivers readable Markdown +
-  a JSON archive (bit-compatible with Restore from JSON — keep
-  `src/lib/render-book.ts` the single renderer) into a visible Drive
-  folder via `drive.file`; daily cron `/api/cron/backup`
-  (`CRON_SECRET`, vercel.json). Failures: ledger → Settings line →
-  one alert email per streak. Google OAuth app must be *published to
-  Production* or refresh tokens die in 7 days.
+  write around it); v3 adds a `meta` table (book key, Drive tokens).
+  Tombstones live forever server-side; client purge only drops
+  server-acknowledged ones. Erase-all on a synced book soft-deletes
+  (propagates) — never `clear()`.
+- **End-to-end encryption (opt-in):** `payloadFormat: 2` seals entry
+  payloads with AES-GCM under a per-user book key
+  (`src/lib/crypto.ts`, unit-tested; state machine in `src/lib/e2e.ts`).
+  The key is wrapped under the passphrase AND a recovery code; only
+  the wrapped envelopes rest server-side (`/api/keys` — PUT once,
+  never replaceable, that's deliberate). On-device the key is a
+  NON-extractable CryptoKey in the meta table. Enrolled + no key =
+  the `locked` sync state: sync pauses loudly, capture never does.
+  Decrypt/encrypt OUTSIDE Dexie transactions (foreign awaits kill
+  them). Manual-sticky merge degrades to client-only for sealed rows.
+- **Drive backup (device-delivered):** the writer's device renders
+  (keep `src/lib/render-book.ts` the single renderer — the JSON stays
+  bit-compatible with Restore from JSON) and uploads to the visible
+  Drive folder itself (`src/lib/backup-client.ts` + `drive-client.ts`),
+  after each settled sync. The server keeps NO Drive tokens: the
+  device adopts the refresh token once (`/api/backup/adopt` — the
+  server then forgets it) and exchanges it statelessly
+  (`/api/backup/refresh`). The device reports deliveries
+  (`/api/backup/delivered`); the daily cron (`CRON_SECRET`,
+  vercel.json) is a watchdog only — stale ledger + moving book →
+  one email per silence — plus the tombstone scrubber. Google OAuth
+  app must be *published to Production* or refresh tokens die in
+  7 days. Plaintext Drive files are the key-loss safety net; never
+  encrypt them.
 - **PWA:** `src/app/manifest.ts`, hand-rolled `public/sw.js`
   (registered in `src/components/providers.tsx`, production only).
   Bump `VERSION` in `sw.js` when changing caching behavior.

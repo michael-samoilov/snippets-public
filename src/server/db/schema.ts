@@ -125,6 +125,24 @@ export const snippets = pgTable(
   ],
 );
 
+// ── End-to-end encryption ───────────────────────────────────────
+
+/**
+ * The user's book key, wrapped twice — once by a key derived from
+ * their passphrase, once by their recovery code. The server stores
+ * only these sealed envelopes; unwrapping happens exclusively on the
+ * user's devices. Envelope JSON: { v, kdf, iterations, salt, iv, ct }.
+ */
+export const userKeys = pgTable("user_keys", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  passphraseKey: jsonb("passphrase_key").notNull(),
+  recoveryKey: jsonb("recovery_key").notNull(),
+  keyVersion: integer("key_version").notNull().default(1),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ── Backup ledger ───────────────────────────────────────────────
 
 /**
