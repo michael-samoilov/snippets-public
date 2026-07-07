@@ -7,14 +7,20 @@ export const metadata: Metadata = { title: "Privacy" };
 /**
  * The privacy page: plain sentences, in the order a worried person
  * would ask. It states only what the code actually does — when the
- * code changes, this page changes in the same commit.
+ * code changes, this page changes in the same commit, and the date
+ * below moves with it.
  */
+const LAST_UPDATED = "July 8, 2026";
+
 export default function PrivacyPage() {
   return (
     <div className="page-settle">
       <PageBackHeader title="Privacy" />
 
       <div className="max-w-[52ch] space-y-8">
+        <p className="voice-data -mt-4 text-ink-faint">
+          last updated {LAST_UPDATED.toLowerCase()}
+        </p>
         <section className="space-y-3">
           <h2 className="voice-label border-b border-rule pb-1.5">
             Where your words live
