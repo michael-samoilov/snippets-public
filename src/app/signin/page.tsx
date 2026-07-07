@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { PaperButton } from "@/components/paper-button";
+import { GoogleMark } from "@/components/google-mark";
 import { authClient } from "@/lib/auth-client";
 import { useSession } from "@/lib/auth";
 import { copy } from "@/lib/copy";
@@ -137,18 +138,24 @@ export default function SignInPage() {
             >
               {copy.signin.emailLabel}
             </label>
-            <Input
-              id="signin-email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder={copy.signin.emailPlaceholder}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-4 h-10 font-serif text-[1rem]"
-            />
-            <div className="mt-4">
-              <PaperButton type="submit" disabled={busy}>
+            {/* one row: the field fills, the button sits at its natural width
+                on the right, both the same height */}
+            <div className="mt-4 flex items-stretch gap-2">
+              <Input
+                id="signin-email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                placeholder={copy.signin.emailPlaceholder}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10 flex-1 font-serif text-[1rem]"
+              />
+              <PaperButton
+                type="submit"
+                disabled={busy}
+                className="inline-flex h-10 shrink-0 items-center justify-center"
+              >
                 {busy ? copy.signin.sending : copy.signin.sendCode}
               </PaperButton>
             </div>
@@ -211,8 +218,15 @@ export default function SignInPage() {
         </div>
 
         <div className="mt-6">
-          <PaperButton onClick={() => void google()} disabled={busy}>
-            {copy.signin.google}
+          <PaperButton
+            onClick={() => void google()}
+            disabled={busy}
+            className="h-10 w-full"
+          >
+            <span className="flex w-full items-center justify-center gap-2.5">
+              <GoogleMark tone="color" />
+              {copy.signin.google}
+            </span>
           </PaperButton>
         </div>
       </div>

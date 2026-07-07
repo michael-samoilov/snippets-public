@@ -5,16 +5,6 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { eraseAll } from "@/lib/db";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
@@ -40,7 +30,6 @@ export default function SettingsPage() {
   const stats = useStats();
   const { user } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [eraseOpen, setEraseOpen] = useState(false);
   // theme is unknowable server-side; render the swatches neutral until hydrated
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -125,32 +114,10 @@ export default function SettingsPage() {
         <section aria-label={copy.settings.calendar.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.calendar.heading}</h2>
           <div className="mt-4 flex items-center justify-between gap-6">
-            <div>
-              <p className="font-serif text-[0.98rem]">{copy.settings.calendar.startWeek}</p>
-              <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                {copy.settings.calendar.startWeekHint}
-              </p>
-            </div>
+            <p className="font-serif text-[0.98rem]">{copy.settings.calendar.startWeek}</p>
             <WeekStartChoice
               value={settings.weekStart}
               onChange={(v) => updateSettings({ weekStart: v })}
-            />
-          </div>
-        </section>
-
-        <section aria-label={copy.settings.filing.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.filing.heading}</h2>
-          <div className="mt-4 flex items-start justify-between gap-6">
-            <div>
-              <p className="font-serif text-[0.98rem]">{copy.settings.filing.auto}</p>
-              <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                {copy.settings.filing.autoHint}
-              </p>
-            </div>
-            <Switch
-              checked={settings.autoFile}
-              onCheckedChange={(checked) => updateSettings({ autoFile: checked })}
-              aria-label={copy.settings.filing.auto}
             />
           </div>
         </section>
@@ -187,55 +154,90 @@ export default function SettingsPage() {
             />
           </div>
           <StorageLine signedIn={!!user} />
-          <div className="mt-8 border-t border-rule-faint pt-4">
-            <Button
-              variant="ghost"
-              className="px-0 font-serif text-ember hover:bg-transparent hover:text-ember-deep"
-              onClick={() => setEraseOpen(true)}
-            >
-              {copy.settings.data.eraseAll}
-            </Button>
-          </div>
         </section>
 
-        <section aria-label={copy.settings.about.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.about.heading}</h2>
-          <p className="voice-prose mt-4 max-w-[48ch] text-[0.9rem] text-ink-soft">
-            {copy.settings.about.lead}
-            <em>{copy.settings.about.workTitle}</em>
-            {copy.settings.about.rest}
-          </p>
-        </section>
+        <DangerZone user={user} />
       </div>
+    </div>
+  );
+}
 
-      <Dialog open={eraseOpen} onOpenChange={setEraseOpen}>
-        <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="voice-display text-left text-lg">
-              {copy.settings.erase.title}
-            </DialogTitle>
-            <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
-              {user ? copy.settings.erase.bodySynced : copy.settings.erase.body}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="ghost"
-              className="font-serif"
-              onClick={() => setEraseOpen(false)}
-            >
-              {copy.settings.erase.cancel}
-            </Button>
-            <HoldToErase
-              onComplete={async () => {
-                await eraseAll();
-                setEraseOpen(false);
-                toast(copy.settings.toasts.erased);
-              }}
+/**
+ * The danger zone — every irreversible action, fenced behind a red
+ * hairline (the today zone's blue outline, in ember) and each held to
+ * confirm. Erase is always here; delete-account joins it when signed
+ * in. Each carries its own description so the two can't be confused.
+ */
+function DangerZone({ user }: { user: { email: string } | null }) {
+  const doErase = async () => {
+    await eraseAll();
+    toast(copy.settings.toasts.erased);
+  };
+  const doDelete = async () => {
+    try {
+      const response = await fetch("/api/account/delete", { method: "POST" });
+      if (!response.ok) throw new Error(`delete ${response.status}`);
+    } catch {
+      toast(copy.settings.account.deleteAccount.failed);
+      return;
+    }
+    await releaseBinding().catch(() => {});
+    await authClient.signOut().catch(() => {});
+    toast(copy.settings.account.deleteAccount.done);
+  };
+
+  return (
+    <section aria-label={copy.settings.danger.heading}>
+      <div className="rounded-2xl border border-ember/45 p-5 sm:p-6">
+        <h2 className="voice-label text-ember">{copy.settings.danger.heading}</h2>
+        <div className="mt-5 space-y-6">
+          <DangerAction
+            title={copy.settings.danger.eraseTitle}
+            description={
+              user
+                ? copy.settings.danger.eraseDescSynced
+                : copy.settings.danger.eraseDesc
+            }
+            hold={copy.settings.danger.eraseHold}
+            onComplete={doErase}
+          />
+          {user && (
+            <DangerAction
+              title={copy.settings.danger.deleteTitle}
+              description={copy.settings.danger.deleteDesc}
+              hold={copy.settings.danger.deleteHold}
+              onComplete={doDelete}
             />
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** One fenced destructive action: what it does, and a held confirm. */
+function DangerAction({
+  title,
+  description,
+  hold,
+  onComplete,
+}: {
+  title: string;
+  description: string;
+  hold: string;
+  onComplete: () => void | Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="max-w-[42ch]">
+        <p className="font-serif text-[0.98rem] text-ink">{title}</p>
+        <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
+          {description}
+        </p>
+      </div>
+      <div className="shrink-0">
+        <HoldToErase label={hold} onComplete={() => void onComplete()} />
+      </div>
     </div>
   );
 }
@@ -344,6 +346,7 @@ function BackupSection() {
   const sync = useSyncStatus();
   const backup = sync.backup;
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // returning from the Google consent: finalize server-side, then let
@@ -385,6 +388,20 @@ function BackupSection() {
     setConnecting(false);
   };
 
+  const disconnect = async () => {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/backup/disconnect", { method: "POST" });
+      if (!response.ok) throw new Error(`disconnect ${response.status}`);
+    } catch {
+      setError(copy.settings.backup.disconnectFailed);
+    } finally {
+      setDisconnecting(false);
+      requestSync(); // refresh the ledger line
+    }
+  };
+
   const deliveredWhen = (iso: string) => {
     const at = new Date(iso);
     if (isToday(at)) return format(at, "h:mm a");
@@ -392,16 +409,16 @@ function BackupSection() {
     return format(at, "MMMM d");
   };
 
+  const connectButton = (label: string) => (
+    <PaperButton onClick={() => void connect()} disabled={connecting}>
+      {connecting ? copy.settings.backup.connecting : label}
+    </PaperButton>
+  );
+
   let statusLine: React.ReactNode = null;
   let action: React.ReactNode = null;
   if (!backup) {
-    action = (
-      <PaperButton onClick={() => void connect()} disabled={connecting}>
-        {connecting
-          ? copy.settings.backup.connecting
-          : copy.settings.backup.connect}
-      </PaperButton>
-    );
+    action = connectButton(copy.settings.backup.connect);
   } else if (backup.state === "active") {
     statusLine = (
       <p className="voice-prose text-[0.9rem] text-ink-soft">
@@ -412,7 +429,15 @@ function BackupSection() {
           : copy.settings.backup.firstOnItsWay}
       </p>
     );
-  } else {
+    action = (
+      <PaperButton onClick={() => void disconnect()} disabled={disconnecting}>
+        {disconnecting
+          ? copy.settings.backup.disconnecting
+          : copy.settings.backup.disconnect}
+      </PaperButton>
+    );
+  } else if (backup.state === "error") {
+    // failing but still trying — ember, and offer a reconnect
     statusLine = (
       <p className="voice-prose text-[0.9rem] text-ember">
         {backup.lastSuccessAt
@@ -422,13 +447,15 @@ function BackupSection() {
           : copy.settings.backup.failingNoSuccess}
       </p>
     );
-    action = (
-      <PaperButton onClick={() => void connect()} disabled={connecting}>
-        {connecting
-          ? copy.settings.backup.connecting
-          : copy.settings.backup.reconnect}
-      </PaperButton>
+    action = connectButton(copy.settings.backup.reconnect);
+  } else {
+    // deliberately off (disconnected, or the grant was revoked) — neutral
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ink-soft">
+        {copy.settings.backup.off}
+      </p>
     );
+    action = connectButton(copy.settings.backup.reconnect);
   }
 
   return (
@@ -535,15 +562,20 @@ function ThemeSwatch({
             }}
           />
         )}
+        {/* the sheet in miniature, laid out like the today zone: date
+            centred, the composer element centred (its text lines flush
+            left within it), the wax seal centred beneath */}
         <span
-          className="relative h-11 w-14 rounded-[2.5px] p-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.18),0_3px_6px_rgb(0_0_0/0.12)]"
+          className="relative flex h-11 w-14 flex-col items-center justify-center gap-[3px] rounded-[2.5px] p-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.18),0_3px_6px_rgb(0_0_0/0.12)]"
           style={{ background: paper }}
         >
-          <span className="block h-[2.5px] w-7 rounded-full" style={{ background: ink, opacity: 0.85 }} />
-          <span className="mt-1 block h-[2px] w-9 rounded-full" style={{ background: ink, opacity: 0.3 }} />
-          <span className="mt-[3px] block h-[2px] w-8 rounded-full" style={{ background: ink, opacity: 0.3 }} />
+          <span className="block h-[2.5px] w-6 rounded-full" style={{ background: ink, opacity: 0.85 }} />
+          <span className="flex w-9 flex-col items-start gap-[2.5px]">
+            <span className="block h-[2px] w-full rounded-full" style={{ background: ink, opacity: 0.3 }} />
+            <span className="block h-[2px] w-7 rounded-full" style={{ background: ink, opacity: 0.3 }} />
+          </span>
           <span
-            className="mt-1.5 block size-2 rounded-full"
+            className="mt-[1px] block size-2 rounded-full"
             style={{ background: "#2e5685" }}
           />
         </span>
@@ -568,23 +600,6 @@ function ThemeSwatch({
 function AccountSection() {
   const router = useRouter();
   const { user, status } = useSession();
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const deleteAccount = async () => {
-    try {
-      const response = await fetch("/api/account/delete", { method: "POST" });
-      if (!response.ok) throw new Error(`delete ${response.status}`);
-    } catch {
-      setDeleteOpen(false);
-      toast(copy.settings.account.deleteAccount.failed);
-      return;
-    }
-    // the server side is gone; return this book to local-only
-    await releaseBinding().catch(() => {});
-    await authClient.signOut().catch(() => {});
-    setDeleteOpen(false);
-    toast(copy.settings.account.deleteAccount.done);
-  };
 
   return (
     <section aria-label={copy.settings.account.heading}>
@@ -605,40 +620,6 @@ function AccountSection() {
               {copy.settings.account.signOutHint}
             </p>
           </div>
-          <div className="mt-6 border-t border-rule-faint pt-3">
-            <Button
-              variant="ghost"
-              className="px-0 font-serif text-ember hover:bg-transparent hover:text-ember-deep"
-              onClick={() => setDeleteOpen(true)}
-            >
-              {copy.settings.account.deleteAccount.trigger}
-            </Button>
-          </div>
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="voice-display text-left text-lg">
-                  {copy.settings.account.deleteAccount.title}
-                </DialogTitle>
-                <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
-                  {copy.settings.account.deleteAccount.body}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter className="gap-2">
-                <Button
-                  variant="ghost"
-                  className="font-serif"
-                  onClick={() => setDeleteOpen(false)}
-                >
-                  {copy.settings.erase.cancel}
-                </Button>
-                <HoldToErase
-                  label={copy.settings.account.deleteAccount.hold}
-                  onComplete={() => void deleteAccount()}
-                />
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       ) : (
         <div className="mt-4">
