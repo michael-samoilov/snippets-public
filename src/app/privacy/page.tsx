@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PageBackHeader } from "@/components/page-back-header";
 
 export const metadata: Metadata = { title: "Privacy" };
 
@@ -11,11 +12,7 @@ export const metadata: Metadata = { title: "Privacy" };
 export default function PrivacyPage() {
   return (
     <div className="page-settle">
-      <header className="mb-8">
-        <h1 className="voice-display text-[2.5rem] leading-[1.02] sm:text-[2.9rem]">
-          Privacy
-        </h1>
-      </header>
+      <PageBackHeader title="Privacy" />
 
       <div className="max-w-[52ch] space-y-8">
         <section className="space-y-3">
@@ -25,8 +22,8 @@ export default function PrivacyPage() {
           <p className="voice-prose text-[0.95rem]">
             Snippets is local-first. Your entries are written into this
             browser&rsquo;s own storage, on your device. With no account,
-            nothing you write leaves it — except as described under Filing,
-            below.
+            nothing you type ever leaves it — the only thing sent anywhere
+            is the audio of a snippet you choose to speak (see Voice, below).
           </p>
         </section>
 

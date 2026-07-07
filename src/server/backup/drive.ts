@@ -140,13 +140,28 @@ export async function upsertFile(
   if (!fileId) fileId = await findByName(token, name, parentId);
 
   if (fileId) {
+    // multipart PATCH (metadata + media), not media-only, so the file's
+    // stored mimeType is re-set on every write — that's what corrects an
+    // already-uploaded file whose old MIME the Drive app won't preview
+    const boundary = `snippets-${Date.now().toString(36)}`;
+    const multipart = [
+      `--${boundary}`,
+      "Content-Type: application/json; charset=UTF-8",
+      "",
+      JSON.stringify({ mimeType }),
+      `--${boundary}`,
+      `Content-Type: ${mimeType}; charset=UTF-8`,
+      "",
+      body,
+      `--${boundary}--`,
+    ].join("\r\n");
     const response = await driveFetch(
       token,
-      `${UPLOAD}/files/${fileId}?uploadType=media&fields=id`,
+      `${UPLOAD}/files/${fileId}?uploadType=multipart&fields=id`,
       {
         method: "PATCH",
-        headers: { "Content-Type": `${mimeType}; charset=UTF-8` },
-        body,
+        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+        body: multipart,
       },
     );
     if (!response.ok) throw new Error(`drive update ${response.status}`);

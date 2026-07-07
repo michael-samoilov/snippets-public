@@ -117,11 +117,18 @@ export async function runBackupForUser(
 
     const folderId = await ensureFolder(token, status.driveFolderId);
 
+    // Upload as text/plain, not the semantically-exact application/json /
+    // text/markdown: the Google Drive mobile app has no built-in viewer for
+    // those and shows "unsupported filetype", which defeats the whole point
+    // of a *readable* archive. text/plain previews everywhere; the .json /
+    // .md file names are preserved, so "Restore from JSON" (which reads the
+    // bytes, not the MIME) still works and the files still read as Markdown
+    // in any editor.
     const jsonFileId = await upsertFile(token, {
       knownId: status.jsonFileId,
       name: "Snippets archive.json",
       parentId: folderId,
-      mimeType: "application/json",
+      mimeType: "text/plain",
       body: renderArchiveJSON(book, new Date()),
     });
 
@@ -134,7 +141,7 @@ export async function runBackupForUser(
         knownId: mdFileIds[year] ?? null,
         name: `Snippets ${year}.md`,
         parentId: folderId,
-        mimeType: "text/markdown",
+        mimeType: "text/plain",
         body: renderMarkdown(yearBook, `Snippets ${year}`),
       });
     }
