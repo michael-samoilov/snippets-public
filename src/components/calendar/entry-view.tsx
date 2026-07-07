@@ -175,6 +175,22 @@ function EntryBody({
     vv.addEventListener("resize", onResize);
     return () => vv.removeEventListener("resize", onResize);
   }, [editing]);
+  // `e` opens the words for rewriting while the entry is up (the keyboard
+  // shortcut for the same tap). Stands down while already editing or when a
+  // field/menu holds focus, so it never eats a keystroke meant for typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "e" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      e.preventDefault();
+      startEdit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // the parent owns the deletion (it marks the close as a dissolve, soft-deletes,
   // and raises the undo toast) so the camera knows not to shrink back to the slot
   const letGo = () => void onLetGo(snippet);
@@ -221,6 +237,11 @@ function EntryBody({
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") stopEdit();
+            // Enter saves, Shift+Enter is a newline (the chat-compose idiom)
+            else if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              stopEdit();
+            }
           }}
           onBlur={() => {
             if (editing) stopEdit();

@@ -254,6 +254,34 @@ export const copy = {
     exportMarkdown: "Export as Markdown",
   },
 
+  /** the `?` keyboard cheat sheet */
+  shortcuts: {
+    title: "Keyboard",
+    groups: {
+      move: "Move around",
+      write: "Write",
+      grid: "In the calendar",
+      global: "Anywhere",
+    },
+    back: "Back a level",
+    search: "Search the book",
+    today: "Go to today",
+    step: "Step through time",
+    goCanvas: "To the calendar",
+    goGlance: "To the year",
+    capture: "Start writing today",
+    edit: "Rewrite the open entry",
+    file: "File the entry",
+    newline: "New line",
+    dayStep: "Move a day",
+    weekStep: "Move a week",
+    monthStep: "Move a month",
+    yearStep: "Move a year",
+    openDay: "Open the day",
+    command: "Command menu",
+    thisSheet: "This sheet",
+  },
+
   /** theme names (settings swatches + the command menu's switch) */
   themes: {
     paper: "Paper",

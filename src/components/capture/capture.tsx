@@ -193,7 +193,8 @@ export function Capture() {
             autosize(e.target);
           }}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            // Enter files, Shift+Enter is a newline (the chat-compose idiom)
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void keep();
             }

@@ -16,6 +16,7 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
+  addDays,
   addMonths,
   format,
   isAfter,
@@ -46,6 +47,7 @@ import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { renderInline } from "@/lib/inline-markup";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
@@ -1486,12 +1488,89 @@ function Calendar() {
     }
   };
 
+  // Quick capture (the `c` key): land in today's book and put the pen in the
+  // writer's hand, from wherever the camera is. Polls for the today-zone field
+  // to mount (behind the zoom) and focuses it — a hardware-keyboard gesture,
+  // so no on-screen-keyboard concern.
+  const focusCaptureField = (frames = 90) => {
+    const ta = document.querySelector<HTMLTextAreaElement>("textarea[data-room-center]");
+    const a = document.activeElement;
+    // keep trying until focus actually TAKES: a .focus() during the dive zoom
+    // (the schedule layer still mid-transition / not yet visible) is silently
+    // ignored, so one attempt isn't enough. Only claim focus from nothing (the
+    // body) — never yank it off a field the writer chose in the meantime.
+    if (ta && a !== ta && (a === document.body || a === null)) {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+    if (frames > 0 && document.activeElement !== ta) {
+      requestAnimationFrame(() => focusCaptureField(frames - 1));
+    }
+  };
+  const quickCapture = () => {
+    const t = dayKey();
+    const cur = viewRef.current;
+    if (cur === "schedule") jumpTo(t, true);
+    else if (cur === "month") pick(t);
+    else if (cur === "entry") { appBack(); setTimeout(() => jumpTo(t, true), 260); }
+    else if (cur === "year") { descendFromYear(); setTimeout(() => pick(t), 300); }
+    focusCaptureField();
+  };
+
+  // Date-grid keyboard navigation (WAI-ARIA date-picker pattern), attached to
+  // the month layer so it hears whichever day button holds focus. Arrows step
+  // a day (←→) or a week (↑↓); Home/End snap to the week's ends; PageUp/Down
+  // step a month; Shift+PageUp/Down step a year. Focus follows to the target
+  // day — stepping the feed first when the target's month isn't yet rendered
+  // (the feed is virtualized), so nav flows across month boundaries seamlessly.
+  const focusDayKey = (key: string, tries = 12) => {
+    const btn = monthLayerRef.current?.querySelector<HTMLButtonElement>(
+      `button[data-day-key="${key}"]`,
+    );
+    if (btn) {
+      if (btn.disabled) return; // future day — nothing to land on
+      btn.tabIndex = 0; // becomes the roving tab stop
+      btn.focus();
+      return;
+    }
+    if (tries <= 0) return;
+    // the target's month isn't rendered — glide the feed to it, then retry
+    monthFeedRef.current?.goTo(startOfMonth(dateFromDayKey(key)), false);
+    requestAnimationFrame(() => focusDayKey(key, tries - 1));
+  };
+  const onDayGridKey = (e: React.KeyboardEvent) => {
+    const el = document.activeElement as HTMLElement | null;
+    const from = el?.getAttribute("data-day-key");
+    if (!from) return; // focus isn't on a day cell
+    const d = dateFromDayKey(from);
+    let target: Date | null = null;
+    switch (e.key) {
+      case "ArrowLeft": target = addDays(d, -1); break;
+      case "ArrowRight": target = addDays(d, 1); break;
+      case "ArrowUp": target = addDays(d, -7); break;
+      case "ArrowDown": target = addDays(d, 7); break;
+      case "Home": target = addDays(d, -((d.getDay() - weekStart + 7) % 7)); break;
+      case "End": target = addDays(d, 6 - ((d.getDay() - weekStart + 7) % 7)); break;
+      case "PageUp": target = addMonths(d, e.shiftKey ? -12 : -1); break;
+      case "PageDown": target = addMonths(d, e.shiftKey ? 12 : 1); break;
+      default: return;
+    }
+    e.preventDefault();
+    e.stopPropagation(); // don't also trigger the stage's PageUp/Down feed step
+    if (isAfter(startOfMonth(target), startOfMonth(today))) return; // no future months
+    if (isAfter(target, today)) target = today; // clamp a future day to today
+    el?.setAttribute("tabindex", "-1"); // hand the roving tab stop to the target
+    focusDayKey(dayKey(target));
+  };
+
   /* ── the header search: a pill that borrows the whole title row ──
      The title slides off left, the buttons off right; Clear hands the
      row back, reversing the same moves. While a query stands, the
      stage shows the book filtered to it. */
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
+  // the `?` keyboard cheat-sheet
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // the bar IS the glass's circle, grown to the row: its geometry
   // animates between the circle's measured box and the full row
@@ -1572,6 +1651,81 @@ function Calendar() {
       setPillClosing(false);
     }, 200);
   };
+
+  // ── App-wide keyboard shortcuts ─────────────────────────────────────────
+  // A single window listener, reading the latest handlers from a ref so it
+  // subscribes once. Never hijacks typing (fields, the ⌘K command input);
+  // ⌘/Ctrl/Alt combos pass straight through to the browser and the command
+  // menu. Discoverable via `?`. The vocabulary:
+  //   Esc      climb one altitude (entry→book→canvas→glance)
+  //   /        open search        ·  t  jump to today  ·  c/n quick-capture
+  //   j / k    step the feed forward / back (a month, a screen)
+  //   g then m/y/t   go to canvas / glance / today   ·  ?  this cheat sheet
+  const kbRef = useRef({
+    view, searching, shortcutsOpen,
+    appBack, goToday, openYear, goToCanvas, openSearch, closeSearch,
+    quickCapture, stepFeed, setShortcutsOpen,
+  });
+  // refresh the handler snapshot after each commit (never during render); this
+  // deliberately runs every render, so no dependency array
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    kbRef.current = {
+      view, searching, shortcutsOpen,
+      appBack, goToday, openYear, goToCanvas, openSearch, closeSearch,
+      quickCapture, stepFeed, setShortcutsOpen,
+    };
+  });
+  useEffect(() => {
+    const isTyping = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return (
+        !!el &&
+        (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
+      );
+    };
+    let gAt = 0; // when `g` was last pressed, for the go-to prefix
+    const onKey = (e: KeyboardEvent) => {
+      const h = kbRef.current;
+      if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K etc. belong to others
+      // the cheat sheet, once open, owns the keys: Esc or ? closes it
+      if (h.shortcutsOpen) {
+        if (e.key === "Escape" || e.key === "?") {
+          e.preventDefault();
+          h.setShortcutsOpen(false);
+        }
+        return;
+      }
+      if (isTyping()) return; // a field is focused — leave every key to it
+      if (e.key === "?") { e.preventDefault(); h.setShortcutsOpen(true); return; }
+      // the go-to prefix: `g` then a target within 1.2s
+      const now = performance.now();
+      if (gAt && now - gAt < 1200) {
+        gAt = 0;
+        if (e.key === "t") { e.preventDefault(); h.goToday(); return; }
+        if (e.key === "m") { e.preventDefault(); h.goToCanvas(); return; }
+        if (e.key === "y") { e.preventDefault(); if (h.view === "month") h.openYear(); return; }
+      }
+      switch (e.key) {
+        case "Escape":
+          if (h.view === "entry" || h.view === "schedule" || h.view === "year") {
+            e.preventDefault();
+            h.appBack();
+          }
+          break;
+        case "/": e.preventDefault(); h.openSearch(); break;
+        case "t": e.preventDefault(); h.goToday(); break;
+        case "c": case "n": e.preventDefault(); h.quickCapture(); break;
+        case "j": e.preventDefault(); h.stepFeed(1); break;
+        case "k": e.preventDefault(); h.stepFeed(-1); break;
+        case "g": gAt = now; break;
+        default: break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   /** a found page opens in the book itself — straight there, from any
       altitude, never through the canvas */
   const jumpFromSearch = (day: string) => {
@@ -1622,6 +1776,18 @@ function Calendar() {
 
   return (
     <div className="page-settle flex h-full min-h-0 flex-col">
+      {/* the current altitude, spoken to assistive tech after every zoom/jump */}
+      <p aria-live="polite" className="sr-only">
+        {view === "year"
+          ? `Year ${visibleYear}`
+          : view === "month"
+            ? format(visibleMonth, "MMMM yyyy")
+            : view === "schedule"
+              ? friendlyDay(selected)
+              : "Entry"}
+      </p>
+      {/* the `?` keyboard cheat sheet */}
+      <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book cards'
           ink between blended and flat to test scroll/zoom jank on-device */}
       {perfDebug && (
@@ -1660,6 +1826,7 @@ function Calendar() {
         ) : (
           <button
             type="button"
+            data-cal-title
             onClick={
               view === "month"
                 ? openYear
@@ -1930,6 +2097,7 @@ function Calendar() {
         <div
           ref={monthLayerRef}
           data-layer="month"
+          onKeyDown={onDayGridKey}
           // a swipe begun on the canvas itself (the blank cells and
           // label rows between months, never a day) climbs to the year
           onPointerDown={(e) => armSwipe(e, true)}
@@ -3136,7 +3304,8 @@ function FlowBackfillCapture({
               autosizeArea(e.target);
             }}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              // Enter files, Shift+Enter is a newline (the chat-compose idiom)
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 keep();
               }
@@ -4335,7 +4504,7 @@ function TodayZoneFill({
               }}
               onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
-              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
               placeholder={
                 listening
                   ? copy.capture.listeningPlaceholder
