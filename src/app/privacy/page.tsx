@@ -67,17 +67,6 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="voice-label border-b border-rule pb-1.5">Filing</h2>
-          <p className="voice-prose text-[0.95rem]">
-            When automatic filing is on, the text of a new entry is sent to
-            Anthropic&rsquo;s Claude API to suggest a title, kind, and tags.
-            Only the entry text is sent, it is not used to train models, and
-            you can turn filing off in Settings — everything else works the
-            same.
-          </p>
-        </section>
-
-        <section className="space-y-3">
           <h2 className="voice-label border-b border-rule pb-1.5">Voice</h2>
           <p className="voice-prose text-[0.95rem]">
             Speaking a snippet streams your audio to a transcription service

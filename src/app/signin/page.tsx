@@ -221,7 +221,7 @@ export default function SignInPage() {
           <PaperButton
             onClick={() => void google()}
             disabled={busy}
-            className="w-full"
+            className="h-10 w-full"
           >
             <span className="flex w-full items-center justify-center gap-2.5">
               <GoogleMark tone="color" />

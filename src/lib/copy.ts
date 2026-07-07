@@ -273,7 +273,8 @@ export const copy = {
   account: {
     label: "Account",
     signIn: "Sign in to sync across devices",
-    settings: "Settings…",
+    settings: "Settings",
+    privacy: "Privacy policy",
     signOut: "Sign out",
   },
 
@@ -355,9 +356,14 @@ export const copy = {
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
       reconnect: "Reconnect Google Drive",
+      disconnect: "Disconnect",
+      disconnecting: "Disconnecting…",
+      /** deliberate off-state, distinct from a failure */
+      off: "Backups are off. Reconnect whenever you like — your Drive files stay put.",
       scopeDeclined:
         "Google didn’t grant the Drive permission — try again and leave the box ticked.",
       connectFailed: "Drive couldn’t be connected. Try again in a moment.",
+      disconnectFailed: "Couldn’t disconnect just now. Try again in a moment.",
     },
     appearance: {
       heading: "Appearance",
@@ -377,6 +383,19 @@ export const copy = {
       auto: "Automatic filing",
       autoHint:
         "New entries are quietly filed by Claude — a title, a kind, tags — kept in the data to make search smarter, never shown on the page. Needs an API key on the server. Your words stay on this device either way — only the entry text is sent for filing.",
+    },
+    danger: {
+      heading: "Danger zone",
+      eraseTitle: "Let everything go",
+      eraseDesc:
+        "Erase every entry on this device, permanently. Export a copy first if you might want one.",
+      eraseDescSynced:
+        "Erase every entry — here, on the server, and on every device signed in to this account — permanently. Export a copy first if you might want one.",
+      eraseHold: "Hold to erase",
+      deleteTitle: "Delete account",
+      deleteDesc:
+        "Remove your account and everything it keeps on the server — your sign-in, synced entries, and the Google Drive connection. This device keeps its copy.",
+      deleteHold: "Hold to delete",
     },
     data: {
       heading: "Your data",

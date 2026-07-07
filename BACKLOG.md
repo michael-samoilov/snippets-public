@@ -265,3 +265,46 @@ here."). Same surface, same voice, same retirement rule.
 `src/components/capture/capture.tsx` if the standalone today page wants
 it too. Screenshot both themes, both widths; the intro must read as ink
 on the sheet, never as chrome.
+
+## 6. 404 and error pages
+
+> "404 / error pages"
+
+Accepted 2026-07-08. The app currently falls to Next's defaults: the
+framework 404 and the bare error boundary ("This page couldn't load" —
+seen in the field during testing, and it reads as a broken foreign
+app, not Snippets). Ship `src/app/not-found.tsx` and
+`src/app/error.tsx` (+ `global-error.tsx` for the shell itself), each
+a quiet page in the house voice on the sheet: what happened, one line;
+the way back ("Back to the book"); no mascots, no illustrations, no
+jokes at the writer's expense. The error page should offer reload
+without dumping a stack trace on the reader. Copy lives in `copy.ts`.
+
+## 7. Empty states — a pass over every "nothing here" moment
+
+> "Custom empty states, if needed." And, from field testing: "how does
+> the app empty state look — if the full prior year is available when a
+> user joins in the middle of the year, that's probably not necessary."
+
+Accepted 2026-07-08, deliberately scoped as an *audit first*: walk
+every surface with an empty or sparse book and decide which need a
+designed state versus which are quietly fine. Known candidates:
+
+- **The calendar's back-catalogue on a young book** (the owner's
+  concrete case): a writer who joins mid-year can page into a full
+  prior year of blank months — dead territory that implies neglect
+  rather than a fresh start. Consider bounding the navigable range at
+  the book's first entry (or the join month), letting history unlock
+  as backfill happens. Decide what the year-at-a-glance shows for
+  months before the book began.
+- Search with no results vs. search on an empty book (today: one
+  "Nothing found." — fine for the former, odd for the latter).
+- "On this day" is already quietly absent when empty (correct — the
+  model to copy).
+- A day view opened on a past day with no entries (the backfill
+  composer may already carry this).
+
+The first-ever intro (#5, shipped) owns the today-zone empty state;
+this item is everything else. Rule of thumb from the constitution:
+gaps stay blank, never scolding — an empty state earns copy only when
+silence would read as breakage.

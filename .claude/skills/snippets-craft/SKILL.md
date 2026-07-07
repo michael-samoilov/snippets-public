@@ -56,7 +56,11 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    hand-drawn strokes (quill + calendar, small-caps words beneath),
    the calendar header's search glass, the entry card's foot marks
    (a wax quill CONFIRM-stamp — editing an entry, or the composer once
-   it holds words — + an ember trash — destructive red, NOT wax), and the account glyph — nothing
+   it holds words — + an ember trash — destructive red, NOT wax), the account glyph,
+   the account menu's stroke glyphs (gear · shield · door · person —
+   Feather set, 1.8/24 ≡ the app's 1.5/20 line, ink-faint, menu rows
+   ONLY), and the Google "G" on the sign-in button (owner-approved,
+   4-hue, that one button only) — nothing
    else. Wax (a sealing-wax BLUE) is
    semantic (recording, rule, today) and never destructive — the ember
    red (`--ember`) is destructive's alone; the marker yellow

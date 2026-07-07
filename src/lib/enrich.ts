@@ -14,7 +14,14 @@ import { KINDS } from "@/lib/types";
  * the entry is already kept; this only adds a title, kind, and tags.
  * If the endpoint is missing, unconfigured, or offline, we fall back to
  * small heuristics and leave the rest to one-tap chips.
+ *
+ * DEPRECATED FOR NOW (owner, 2026-07): automatic filing is switched off
+ * at the source — no entry text is sent to Claude, and every reference
+ * to it is hidden from Settings and the privacy page. The pipeline is
+ * left intact behind this one flag; flip it back to true to restore the
+ * feature (and re-surface its Settings toggle + privacy disclosure).
  */
+const FILING_ENABLED = false;
 
 const QUOTE_PAIRS: [string, string][] = [
   ['"', '"'],
@@ -53,7 +60,7 @@ function isEnrichment(data: unknown): data is Enrichment {
 }
 
 export async function enrichSnippet(snippet: Snippet): Promise<void> {
-  if (!getSettings().autoFile) {
+  if (!FILING_ENABLED || !getSettings().autoFile) {
     await markEnrichment(snippet.id, "off");
     return;
   }
@@ -105,6 +112,7 @@ let sweeping = false;
 
 /** Re-attempt anything still waiting — on app start and on reconnect. */
 export function retryPendingEnrichment(): void {
+  if (!FILING_ENABLED) return;
   if (sweeping) return;
   sweeping = true;
   (async () => {
