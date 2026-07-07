@@ -37,9 +37,13 @@ export default function PrivacyPage() {
           <p className="voice-prose text-[0.95rem]">
             Signing in keeps a copy of your entries on the server so another
             device can carry them too. That copy is stored in a managed
-            Postgres database, encrypted at rest and in transit. We keep your
-            email address for signing in and nothing else about you. Signing
-            in is never required — the app is whole without it.
+            Postgres database, encrypted at rest and in transit. The only
+            things kept about you are what signing in needs: your email
+            address, and — if you use Google — the name and profile picture
+            on your Google account. Connecting Drive backup also stores
+            Google&rsquo;s access tokens so the daily backup can run; you can
+            revoke them anytime from your Google account. Signing in is never
+            required — the app is whole without it.
           </p>
           <p className="voice-prose text-[0.95rem]">
             Erasing your book in Settings while signed in erases it from the
