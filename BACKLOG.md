@@ -212,3 +212,56 @@ instant swap (settled ⇄ dome), never a missing or stuck frame.
 **Touches the rules.** Law 6's sanctioned-marks list names the foot's
 "wax quill CONFIRM-stamp + ember trash"; standing a wax seal there changes
 it — amend `DESIGN.md` and the `snippets-craft` SKILL on ship.
+
+## 5. First-run introduction: the purpose, and the quiet reassurance
+
+> "Intro card to app that: 1) explains purpose (storyworthy etc.)
+> 2) reassures about sync & security"
+
+Accepted 2026-07-07, right after accounts/sync/backup shipped. Two jobs
+in one first impression: say *what this is for* (Homework for Life —
+keep the storyworthy moment before it evaporates) and *why it's safe to
+invest* (yours on this device; signing in keeps a server copy; daily
+delivery to your own Drive; the app's death doesn't take your book).
+
+**Form: not literally a card.** Law 6 bans cards; law 8 bans dialogs
+anywhere near capture. The intent — orientation + reassurance — should
+live *on the sheet* as the first-ever empty state, not float over it as
+a modal. Today that state is already split across two seams: the today
+zone's `placeholderFirstEver` ("Start saving your memories…") and
+`copy.today.empty` ("Your days are fuller than you think…" — the
+purpose half already exists there in miniature). This item grows that
+moment into a proper introduction, then gets out of the way forever.
+
+**Content, in the house voice.** Three short strokes, no more:
+
+1. *Purpose* — extend the `copy.today.empty` register; the About
+   section's Matthew Dicks sentence (`copy.settings.about`) is the
+   source of truth to echo, not duplicate.
+2. *Reassurance* — one sentence, not a security brochure. The register
+   is `signin.lead` ("Your book stays on this device either way…") +
+   the backup section's "Yours even if this app disappears." Link the
+   word, not a button: a quiet underline to `/privacy`.
+3. *The door* — the existing capture affordance IS the call to action;
+   don't add another.
+
+**Retirement.** The first kept entry retires it naturally (the empty
+state ceases to exist). No localStorage "seen" flag unless the intro
+outgrows the empty state; if it ever does, key it
+`snippets:introSeen` and keep dismissal implicit (writing = dismissing),
+never an ✕.
+
+**Kindred case discovered in the field (2026-07-07, the owner hit it):
+the blank-book heart-stop.** A returning writer whose entries live under
+another origin (domain migration) or another sign-in sees an empty book
+with no explanation — indistinguishable from loss. When the book is
+empty AND a signed-in account's server copy is also empty, the intro
+moment may add one gentle line ("Expecting entries? They may live under
+another address or sign-in — Restore from JSON in Settings brings them
+here."). Same surface, same voice, same retirement rule.
+
+**Where.** `src/app/calendar/page.tsx` (today zone empty state),
+`src/lib/copy.ts` (new `intro` group beside `today`), possibly
+`src/components/capture/capture.tsx` if the standalone today page wants
+it too. Screenshot both themes, both widths; the intro must read as ink
+on the sheet, never as chrome.
