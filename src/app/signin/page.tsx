@@ -138,18 +138,24 @@ export default function SignInPage() {
             >
               {copy.signin.emailLabel}
             </label>
-            <Input
-              id="signin-email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder={copy.signin.emailPlaceholder}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-4 h-10 font-serif text-[1rem]"
-            />
-            <div className="mt-4">
-              <PaperButton type="submit" disabled={busy}>
+            {/* one row: the field fills, the button sits at its natural width
+                on the right, both the same height */}
+            <div className="mt-4 flex items-stretch gap-2">
+              <Input
+                id="signin-email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                placeholder={copy.signin.emailPlaceholder}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10 flex-1 font-serif text-[1rem]"
+              />
+              <PaperButton
+                type="submit"
+                disabled={busy}
+                className="inline-flex h-10 shrink-0 items-center justify-center"
+              >
                 {busy ? copy.signin.sending : copy.signin.sendCode}
               </PaperButton>
             </div>
@@ -211,26 +217,17 @@ export default function SignInPage() {
           <span className="h-px flex-1 bg-rule-faint" />
         </div>
 
-        {/* REVIEW: two icon tones stacked for comparison — keep one */}
-        <div className="mt-6 flex flex-col items-start gap-4">
-          <div className="flex flex-col items-start gap-1.5">
-            <span className="voice-data text-ink-faint">color</span>
-            <PaperButton onClick={() => void google()} disabled={busy}>
-              <span className="inline-flex items-center gap-2.5">
-                <GoogleMark tone="color" />
-                {copy.signin.google}
-              </span>
-            </PaperButton>
-          </div>
-          <div className="flex flex-col items-start gap-1.5">
-            <span className="voice-data text-ink-faint">ink</span>
-            <PaperButton onClick={() => void google()} disabled={busy}>
-              <span className="inline-flex items-center gap-2.5">
-                <GoogleMark tone="ink" />
-                {copy.signin.google}
-              </span>
-            </PaperButton>
-          </div>
+        <div className="mt-6">
+          <PaperButton
+            onClick={() => void google()}
+            disabled={busy}
+            className="w-full"
+          >
+            <span className="flex w-full items-center justify-center gap-2.5">
+              <GoogleMark tone="color" />
+              {copy.signin.google}
+            </span>
+          </PaperButton>
         </div>
       </div>
     </div>
