@@ -421,13 +421,18 @@ function BackupSection() {
     action = connectButton(copy.settings.backup.connect);
   } else if (backup.state === "active") {
     statusLine = (
-      <p className="voice-prose text-[0.9rem] text-ink-soft">
-        {backup.lastSuccessAt
-          ? copy.settings.backup.lastDelivered(
-              deliveredWhen(backup.lastSuccessAt),
-            )
-          : copy.settings.backup.firstOnItsWay}
-      </p>
+      <div className="space-y-1">
+        <p className="voice-prose text-[0.9rem] text-ink-soft">
+          {backup.lastSuccessAt
+            ? copy.settings.backup.lastDelivered(
+                deliveredWhen(backup.lastSuccessAt),
+              )
+            : copy.settings.backup.firstOnItsWay}
+        </p>
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+          {copy.settings.backup.mirrors}
+        </p>
+      </div>
     );
     action = (
       <PaperButton onClick={() => void disconnect()} disabled={disconnecting}>

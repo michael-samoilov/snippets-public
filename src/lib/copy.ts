@@ -380,6 +380,9 @@ export const copy = {
       /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
       lastDelivered: (when: string) => `Last delivered to your Drive: ${when}.`,
       firstOnItsWay: "The first delivery is on its way…",
+      /** reassurance: the folder is a one-way mirror, safe to touch */
+      mirrors:
+        "That folder only mirrors your book — delete or change anything in it and the next day’s copy sets it right again.",
       /** e.g. "Backups haven’t gone through since June 30." */
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
