@@ -25,6 +25,7 @@ import { useSyncExternalStore } from "react";
 import { db, setWriteNotifier } from "@/lib/db";
 import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
+  clearSyncState,
   currentDbName,
   dbNameForUser,
   readSyncState,
@@ -328,6 +329,28 @@ async function refreshCounts(): Promise<void> {
 export async function reconcile(): Promise<void> {
   writeSyncState({ lastPulledSeq: 0 });
   requestSync();
+}
+
+/**
+ * After account deletion: the book returns to local-only. Forget the
+ * binding and cursor, and mark every row dirty again — the subtle but
+ * essential half. Rows the old account had synced sit clean; without
+ * re-dirtying them, a future sign-in (even the same person signing up
+ * afresh) would upload only what changed since, and quietly strand
+ * the rest of the book off the server.
+ */
+export async function releaseBinding(): Promise<void> {
+  clearSyncState();
+  await db.snippets.toCollection().modify((s) => {
+    s._dirty = 1;
+  });
+  setStatus({
+    phase: "idle",
+    lastSyncedAt: null,
+    serverCount: null,
+    backup: null,
+    skewed: false,
+  });
 }
 
 // ── triggers ────────────────────────────────────────────────────

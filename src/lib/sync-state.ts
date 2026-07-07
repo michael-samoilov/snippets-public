@@ -85,6 +85,15 @@ export function writeSyncState(
   return next;
 }
 
+/** Forget a book's account binding and cursor — it returns to local-only. */
+export function clearSyncState(dbName = currentDbName()): void {
+  try {
+    window.localStorage.removeItem(stateKey(dbName));
+  } catch {
+    // storage unavailable — nothing to clear
+  }
+}
+
 /**
  * Whether this book belongs to an account. Purge consults this: a
  * synced book only hard-deletes tombstones the server has acknowledged

@@ -98,13 +98,23 @@ export default function PrivacyPage() {
           </p>
         </section>
 
-        <p className="voice-prose text-[0.9rem] text-ink-faint">
-          Questions, or want your account and its data removed entirely —{" "}
-          <Link href="/settings" className="underline underline-offset-2">
-            erase from Settings
-          </Link>{" "}
-          or write to the address on the account that sent your sign-in code.
-        </p>
+        <section className="space-y-3">
+          <h2 className="voice-label border-b border-rule pb-1.5">
+            Leaving
+          </h2>
+          <p className="voice-prose text-[0.95rem]">
+            Erasing your book (
+            <Link href="/settings" className="underline underline-offset-2">
+              Settings
+            </Link>
+            , &ldquo;Let everything go&rdquo;) removes your entries from the
+            server and from every signed-in device. Deleting your account
+            (Settings → Account) removes the account itself — your sign-in,
+            synced entries, and the Drive connection — from the server
+            immediately and permanently. Copies on your devices, and backup
+            files already delivered to your Drive, remain yours.
+          </p>
+        </section>
       </div>
     </div>
   );
