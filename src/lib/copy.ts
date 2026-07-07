@@ -255,14 +255,84 @@ export const copy = {
   /** the account mark and its menu */
   account: {
     label: "Account",
-    syncSoon: "Sign in to sync across devices — soon",
+    signIn: "Sign in to sync across devices",
     settings: "Settings…",
+    signOut: "Sign out",
+  },
+
+  /** the sign-in page */
+  signin: {
+    title: "Sign in",
+    back: "Back to the book",
+    lead:
+      "Your book stays on this device either way — signing in keeps a copy on the server and lets another device carry it too.",
+    emailLabel: "Email",
+    emailPlaceholder: "you@example.com",
+    sendCode: "Send a code",
+    sending: "Sending…",
+    /** after the code goes out */
+    codeSent: (email: string) => `A six-digit code is on its way to ${email}.`,
+    codeLabel: "The six-digit code",
+    verify: "Sign in",
+    verifying: "A moment…",
+    differentEmail: "Use a different address",
+    /** the rule between the email flow and Google */
+    or: "or",
+    google: "Continue with Google",
+    errors: {
+      invalidEmail: "That doesn’t look like an address.",
+      sendFailed: "The code couldn’t be sent. Try again in a moment.",
+      badCode: "That code didn’t match. Codes last ten minutes.",
+      notConfigured: "Sign-in isn’t switched on for this install.",
+      googleFailed: "Google didn’t complete the sign-in. Try again.",
+    },
   },
 
   /** the Settings page */
   settings: {
     title: "Settings",
     back: "Back to the book",
+    account: {
+      heading: "Account",
+      signedOutLead:
+        "Sign in and the book keeps a copy on the server — carried to any device you sign in on.",
+      signIn: "Sign in",
+      signedInAs: (email: string) => `Signed in as ${email}.`,
+      signOut: "Sign out",
+      signOutHint: "Your entries stay on this device.",
+    },
+    sync: {
+      syncing: "Syncing…",
+      syncedAt: (time: string) => `Synced ${time}.`,
+      neverSynced: "Waiting for the first sync…",
+      pending: (n: number) =>
+        `${n} ${n === 1 ? "entry" : "entries"} waiting to sync.`,
+      offline: "Offline — changes will sync when you’re back.",
+      error: "Sync hit a snag — retrying.",
+      skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
+      /** the tiny mono integrity line, e.g. "1,204 here · 1,204 on the server" */
+      counts: (device: string, server: string) =>
+        `${device} here · ${server} on the server`,
+      outOfStep: "The counts disagree.",
+      reconcile: "Reconcile",
+    },
+    backup: {
+      heading: "Backup",
+      lead:
+        "A copy of your book, delivered to a Snippets folder in your own Google Drive once a day — readable Markdown and a restorable archive. Yours even if this app disappears.",
+      connect: "Connect Google Drive",
+      connecting: "Connecting…",
+      /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
+      lastDelivered: (when: string) => `Last delivered to your Drive: ${when}.`,
+      firstOnItsWay: "The first delivery is on its way…",
+      /** e.g. "Backups haven’t gone through since June 30." */
+      failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
+      failingNoSuccess: "Backups haven’t gone through yet.",
+      reconnect: "Reconnect Google Drive",
+      scopeDeclined:
+        "Google didn’t grant the Drive permission — try again and leave the box ticked.",
+      connectFailed: "Drive couldn’t be connected. Try again in a moment.",
+    },
     appearance: {
       heading: "Appearance",
       /** the theme radiogroup's accessible name */
@@ -290,6 +360,14 @@ export const copy = {
       countSoFar: (n: number) =>
         `${n} ${n === 1 ? "entry" : "entries"} so far.`,
       takeCopy: "Take a copy whenever you like.",
+      /** the storage-health line, e.g. "persistent · using 4 MB of 60 GB" */
+      storagePersistent: (used: string, quota: string) =>
+        `storage: persistent · using ${used} of ${quota}`,
+      storageBestEffort: (used: string, quota: string) =>
+        `storage: best-effort · using ${used} of ${quota}`,
+      /** shown under a best-effort line — why it matters, what helps */
+      storageEvictionHint:
+        "This browser may let go of local data under pressure — signing in keeps a copy on the server.",
       exportJSON: "Export JSON",
       exportMarkdown: "Export Markdown",
       restore: "Restore from JSON…",
@@ -306,6 +384,8 @@ export const copy = {
       title: "Let everything go?",
       body:
         "This erases every entry on this device, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
+      bodySynced:
+        "This erases every entry — here, on the server, and on every device signed in to this account, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
       cancel: "Keep everything",
       hold: "Hold to erase",
       holding: "Hold…",
@@ -324,6 +404,9 @@ export const copy = {
     noEntriesInFile: "No entries found in that file.",
     /** the inline composer's catch-all when a keep fails */
     keepFailed: "That didn’t take. Try again.",
+    /** the loud, specific case: the device is out of room */
+    storageFull:
+      "This device’s storage is full — that entry was not saved. Your words are still in the composer; clear some space and keep it again.",
   },
 } as const;
 

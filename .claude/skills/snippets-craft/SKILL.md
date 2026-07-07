@@ -70,6 +70,11 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.
+   Accounts obey the same law: signing in is never required, sync is a
+   quiet additive layer (its states are terse Settings lines — "Synced
+   3:12 pm.", counts in the data voice — never banners or spinners in
+   the capture path), and no keep ever fails silently — a failed write
+   un-stamps, restores the words, and says why.
 9. **Quality floor:** wax focus ring on controls (caret + darkened rule
    on text fields), hit targets ≥44px touch, URL reflects view state,
    `touch-action: manipulation`, both themes + reduced-motion checked,

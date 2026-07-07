@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
-import { addSnippet } from "@/lib/db";
+import { addSnippet, StorageWriteError } from "@/lib/db";
 import { enrichSnippet } from "@/lib/enrich";
 import { promptForDate } from "@/lib/kinds";
 import {
@@ -115,12 +115,27 @@ export function Capture() {
     if (stampTimer.current) clearTimeout(stampTimer.current);
     stampTimer.current = setTimeout(() => setStampVisible(false), 1300);
 
-    const snippet = await addSnippet({
-      text: trimmed,
-      source: voiceUsed ? "voice" : "typed",
-    });
-    setVoiceUsed(false);
-    void enrichSnippet(snippet);
+    try {
+      const snippet = await addSnippet({
+        text: trimmed,
+        source: voiceUsed ? "voice" : "typed",
+      });
+      setVoiceUsed(false);
+      void enrichSnippet(snippet);
+    } catch (error) {
+      // the keep did not take — un-stamp, put the words back, say why
+      setStampVisible(false);
+      setText(trimmed);
+      if (el) {
+        el.value = trimmed;
+        autosize(el);
+      }
+      toast(
+        error instanceof StorageWriteError && error.full
+          ? copy.data.storageFull
+          : copy.data.keepFailed,
+      );
+    }
   }, [text, listening, transcribing, voiceUsed]);
 
   const hasText = text.trim().length > 0;

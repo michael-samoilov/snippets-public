@@ -3,16 +3,32 @@ import { ulid } from "ulidx";
 import type { Snippet, SnippetDraft, SnippetKind } from "@/lib/types";
 import { dayKey } from "@/lib/dates";
 import { copy } from "@/lib/copy";
+import { bumpClock } from "@/lib/merge";
+import { currentDbName, syncAdopted } from "@/lib/sync-state";
 
 class SnippetsDB extends Dexie {
   snippets!: Table<Snippet, string>;
 
-  constructor(name = "snippets") {
+  constructor(name = currentDbName()) {
     super(name);
     this.version(1).stores({
       // id is the primary key; the rest are query indexes
       snippets: "id, day, capturedAt, kind, favorite, enriched, *tags",
     });
+    // v2 adds sync dirty-tracking; marking every existing row dirty IS
+    // the initial upload — first sign-in pushes the whole book
+    this.version(2)
+      .stores({
+        snippets: "id, day, capturedAt, kind, favorite, enriched, *tags, _dirty",
+      })
+      .upgrade((tx) =>
+        tx
+          .table("snippets")
+          .toCollection()
+          .modify((s: Snippet) => {
+            s._dirty = 1;
+          }),
+      );
   }
 }
 
@@ -24,7 +40,42 @@ export function notDeleted(s: Snippet): boolean {
   return s.deletedAt === undefined;
 }
 
+/**
+ * The sync engine registers here to hear about local writes (it
+ * debounces and pushes). db.ts stays the single write choke point;
+ * sync stays an optional layer on top.
+ */
+let writeNotifier: (() => void) | null = null;
+export function setWriteNotifier(fn: (() => void) | null): void {
+  writeNotifier = fn;
+}
+function notifyWrite(): void {
+  writeNotifier?.();
+}
+
 // ── writes ──────────────────────────────────────────────────────
+
+/**
+ * A keep that didn't take, told apart by cause so the surface can say
+ * the right thing: a full disk is actionable ("clear some space"); a
+ * generic failure is "try again".
+ */
+export class StorageWriteError extends Error {
+  readonly full: boolean;
+  constructor(full: boolean, cause: unknown) {
+    super(full ? "storage full" : "storage write failed", { cause });
+    this.name = "StorageWriteError";
+    this.full = full;
+  }
+}
+
+function classifyWriteError(error: unknown): StorageWriteError {
+  const name = (error as { name?: string })?.name ?? "";
+  // Dexie wraps the engine's error; the original sits on `inner`
+  const inner = (error as { inner?: { name?: string } })?.inner?.name ?? "";
+  const full = /quota/i.test(name) || /quota/i.test(inner);
+  return new StorageWriteError(full, error);
+}
 
 export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
   const now = Date.now();
@@ -42,8 +93,18 @@ export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
     favorite: 0,
     enriched: "pending",
     updatedAt: now,
+    _dirty: 1,
   };
-  await db.snippets.add(snippet);
+  try {
+    await db.snippets.add(snippet);
+    // the vocab-app lesson: a write that reports success must be readable
+    // back, or the failure surfaces now — never discovered months later
+    const readBack = await db.snippets.get(snippet.id);
+    if (!readBack) throw new Error("entry did not persist");
+  } catch (error) {
+    throw classifyWriteError(error);
+  }
+  notifyWrite();
   return snippet;
 }
 
@@ -51,7 +112,16 @@ export async function updateSnippet(
   id: string,
   changes: Partial<Omit<Snippet, "id">>,
 ): Promise<void> {
-  await db.snippets.update(id, { ...changes, updatedAt: Date.now() });
+  await db.transaction("rw", db.snippets, async () => {
+    const current = await db.snippets.get(id);
+    if (!current) return;
+    await db.snippets.update(id, {
+      ...changes,
+      updatedAt: bumpClock(current.updatedAt),
+      _dirty: 1,
+    });
+  });
+  notifyWrite();
 }
 
 /** Apply enrichment results only onto fields the writer hasn't touched. */
@@ -70,22 +140,40 @@ export async function applyEnrichment(
       tags: current.tags.length ? current.tags : (enrichment.tags ?? []),
       attribution: current.attribution ?? enrichment.attribution,
       enriched: "done",
-      updatedAt: Date.now(),
+      updatedAt: bumpClock(current.updatedAt),
+      _dirty: 1,
     });
   });
+  notifyWrite();
 }
 
 export async function markEnrichment(
   id: string,
   state: Snippet["enriched"],
 ): Promise<void> {
-  const current = await db.snippets.get(id);
-  if (!current || current.enriched === "manual") return;
-  await db.snippets.update(id, { enriched: state });
+  await db.transaction("rw", db.snippets, async () => {
+    const current = await db.snippets.get(id);
+    if (!current || current.enriched === "manual") return;
+    await db.snippets.update(id, {
+      enriched: state,
+      updatedAt: bumpClock(current.updatedAt),
+      _dirty: 1,
+    });
+  });
+  notifyWrite();
 }
 
 export async function softDeleteSnippet(id: string): Promise<void> {
-  await db.snippets.update(id, { deletedAt: Date.now() });
+  await db.transaction("rw", db.snippets, async () => {
+    const current = await db.snippets.get(id);
+    if (!current) return;
+    await db.snippets.update(id, {
+      deletedAt: Date.now(),
+      updatedAt: bumpClock(current.updatedAt),
+      _dirty: 1,
+    });
+  });
+  notifyWrite();
 }
 
 export async function restoreSnippet(id: string): Promise<void> {
@@ -94,21 +182,74 @@ export async function restoreSnippet(id: string): Promise<void> {
     .equals(id)
     .modify((s) => {
       delete s.deletedAt;
-      s.updatedAt = Date.now();
+      s.updatedAt = bumpClock(s.updatedAt);
+      s._dirty = 1;
     });
+  notifyWrite();
 }
 
 export async function toggleFavorite(id: string): Promise<void> {
-  const s = await db.snippets.get(id);
-  if (!s) return;
-  await db.snippets.update(id, { favorite: s.favorite ? 0 : 1 });
+  await db.transaction("rw", db.snippets, async () => {
+    const s = await db.snippets.get(id);
+    if (!s) return;
+    await db.snippets.update(id, {
+      favorite: s.favorite ? 0 : 1,
+      updatedAt: bumpClock(s.updatedAt),
+      _dirty: 1,
+    });
+  });
+  notifyWrite();
 }
 
-/** Housekeeping: permanently remove long-deleted entries. */
+/**
+ * Restore from an export file. Existing entries with the same id are
+ * overwritten; everything lands dirty so the next sync offers it to
+ * the server — which arbitrates by each row's own clock, so restoring
+ * an old file can never clobber newer synced work elsewhere.
+ */
+export async function importSnippets(rows: Snippet[]): Promise<number> {
+  const stamped = rows.map((r) => ({ ...r, _dirty: 1 as const }));
+  await db.snippets.bulkPut(stamped);
+  notifyWrite();
+  return stamped.length;
+}
+
+/**
+ * Let everything go. On an unsynced book this clears the table, as it
+ * always has. On a synced book it must soft-delete instead: erase is a
+ * user action that propagates to every device as tombstones — a bare
+ * local clear() would just resurrect the book on the next pull.
+ */
+export async function eraseAll(): Promise<void> {
+  if (!syncAdopted()) {
+    await db.snippets.clear();
+    return;
+  }
+  const now = Date.now();
+  await db.snippets.toCollection().modify((s) => {
+    if (s.deletedAt === undefined) s.deletedAt = now;
+    s.updatedAt = bumpClock(s.updatedAt);
+    s._dirty = 1;
+  });
+  notifyWrite();
+}
+
+/**
+ * Housekeeping: permanently remove long-deleted entries. On a synced
+ * book, only rows the server has acknowledged (`_dirty` cleared) may
+ * go — a tombstone the server hasn't heard about yet must survive to
+ * be delivered, or the entry would resurrect from another device.
+ */
 export async function purgeOldDeleted(): Promise<void> {
   const cutoff = Date.now() - PURGE_AFTER_MS;
+  const adopted = syncAdopted();
   await db.snippets
-    .filter((s) => s.deletedAt !== undefined && s.deletedAt < cutoff)
+    .filter(
+      (s) =>
+        s.deletedAt !== undefined &&
+        s.deletedAt < cutoff &&
+        (!adopted || s._dirty !== 1),
+    )
     .delete();
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -14,10 +15,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { db } from "@/lib/db";
+import { eraseAll } from "@/lib/db";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
+import { signOut, useSession } from "@/lib/auth";
+import { authClient } from "@/lib/auth-client";
+import { reconcile, requestSync, useSyncStatus } from "@/lib/sync";
+import { formatBytes, useStorageHealth } from "@/lib/storage-health";
+import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +38,7 @@ export default function SettingsPage() {
     else router.push("/calendar");
   };
   const stats = useStats();
+  const { user } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [eraseOpen, setEraseOpen] = useState(false);
   // theme is unknowable server-side; render the swatches neutral until hydrated
@@ -81,6 +88,9 @@ export default function SettingsPage() {
       </header>
 
       <div className="space-y-10">
+        <AccountSection />
+        {user && <BackupSection />}
+
         <section aria-label={copy.settings.appearance.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.heading}</h2>
           <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label={copy.settings.appearance.themeLabel}>
@@ -176,6 +186,7 @@ export default function SettingsPage() {
               }}
             />
           </div>
+          <StorageLine signedIn={!!user} />
           <div className="mt-8 border-t border-rule-faint pt-4">
             <Button
               variant="ghost"
@@ -204,7 +215,7 @@ export default function SettingsPage() {
               {copy.settings.erase.title}
             </DialogTitle>
             <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
-              {copy.settings.erase.body}
+              {user ? copy.settings.erase.bodySynced : copy.settings.erase.body}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -217,7 +228,7 @@ export default function SettingsPage() {
             </Button>
             <HoldToErase
               onComplete={async () => {
-                await db.snippets.clear();
+                await eraseAll();
                 setEraseOpen(false);
                 toast(copy.settings.toasts.erased);
               }}
@@ -226,6 +237,218 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * The sync trust lines. One quiet sentence for state, and beneath it
+ * the integrity count — device vs server — in the data voice. When
+ * the two disagree beyond what's still in flight, a reconcile action
+ * appears (rewind the cursor, re-walk the feed; always safe).
+ */
+function SyncLines() {
+  const sync = useSyncStatus();
+
+  let line: string;
+  if (sync.phase === "offline") line = copy.settings.sync.offline;
+  else if (sync.phase === "error") line = copy.settings.sync.error;
+  else if (sync.phase === "syncing") line = copy.settings.sync.syncing;
+  else if (sync.pendingCount > 0)
+    line = copy.settings.sync.pending(sync.pendingCount);
+  else if (sync.lastSyncedAt === null) line = copy.settings.sync.neverSynced;
+  else
+    line = copy.settings.sync.syncedAt(
+      format(
+        sync.lastSyncedAt,
+        isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
+      ),
+    );
+
+  const outOfStep =
+    sync.localCount !== null &&
+    sync.serverCount !== null &&
+    Math.abs(sync.localCount - sync.serverCount) > sync.pendingCount;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <p className="voice-prose text-[0.9rem] text-ink-soft">{line}</p>
+      {sync.skewed && (
+        <p className="voice-prose text-[0.9rem] text-ink-faint">
+          {copy.settings.sync.skewed}
+        </p>
+      )}
+      {sync.localCount !== null && sync.serverCount !== null && (
+        <p className="voice-data text-ink-faint">
+          {copy.settings.sync.counts(
+            sync.localCount.toLocaleString(),
+            sync.serverCount.toLocaleString(),
+          )}
+        </p>
+      )}
+      {outOfStep && (
+        <p className="voice-prose text-[0.9rem] text-ember">
+          {copy.settings.sync.outOfStep}{" "}
+          <button
+            type="button"
+            onClick={() => void reconcile()}
+            className="pressable rounded-[3px] underline decoration-ember/40 underline-offset-2 hover:decoration-ember"
+          >
+            {copy.settings.sync.reconcile}
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One quiet data-voice line on device storage: persistent or
+ * best-effort, and the room left. Best-effort earns a hint — eviction
+ * is the one silent loss the device itself can inflict.
+ */
+function StorageLine({ signedIn }: { signedIn: boolean }) {
+  const storage = useStorageHealth();
+  if (storage.usageBytes === null || storage.quotaBytes === null) return null;
+  const line =
+    storage.persisted === true
+      ? copy.settings.data.storagePersistent(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        )
+      : copy.settings.data.storageBestEffort(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        );
+  return (
+    <div className="mt-4 space-y-1">
+      <p className="voice-data text-ink-faint">{line}</p>
+      {storage.persisted !== true && !signedIn && (
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+          {copy.settings.data.storageEvictionHint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+/**
+ * The backup section — the standing arrangement with the writer's own
+ * Drive. Connect is a separate, single Google consent (the drive.file
+ * scope only); after that the freshness line carries the trust: when
+ * the last delivery landed, or that deliveries are failing and how to
+ * mend it. Never silent.
+ */
+function BackupSection() {
+  const sync = useSyncStatus();
+  const backup = sync.backup;
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // returning from the Google consent: finalize server-side, then let
+  // the status refresh carry the freshness line
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("drive") !== "connected") return;
+    window.history.replaceState(null, "", "/settings");
+    void (async () => {
+      setConnecting(true);
+      try {
+        const response = await fetch("/api/backup/connect", { method: "POST" });
+        if (response.status === 409)
+          setError(copy.settings.backup.scopeDeclined);
+        else if (!response.ok) setError(copy.settings.backup.connectFailed);
+      } catch {
+        setError(copy.settings.backup.connectFailed);
+      } finally {
+        setConnecting(false);
+        requestSync();
+      }
+    })();
+  }, []);
+
+  const connect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      await authClient.linkSocial({
+        provider: "google",
+        scopes: [DRIVE_SCOPE],
+        callbackURL: "/settings?drive=connected",
+      });
+      // on success the browser navigates to Google; reaching here quietly
+      // means it didn't
+    } catch {
+      setError(copy.settings.backup.connectFailed);
+    }
+    setConnecting(false);
+  };
+
+  const deliveredWhen = (iso: string) => {
+    const at = new Date(iso);
+    if (isToday(at)) return format(at, "h:mm a");
+    if (isYesterday(at)) return `yesterday, ${format(at, "h:mm a")}`;
+    return format(at, "MMMM d");
+  };
+
+  let statusLine: React.ReactNode = null;
+  let action: React.ReactNode = null;
+  if (!backup) {
+    action = (
+      <PaperButton onClick={() => void connect()} disabled={connecting}>
+        {connecting
+          ? copy.settings.backup.connecting
+          : copy.settings.backup.connect}
+      </PaperButton>
+    );
+  } else if (backup.state === "active") {
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ink-soft">
+        {backup.lastSuccessAt
+          ? copy.settings.backup.lastDelivered(
+              deliveredWhen(backup.lastSuccessAt),
+            )
+          : copy.settings.backup.firstOnItsWay}
+      </p>
+    );
+  } else {
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ember">
+        {backup.lastSuccessAt
+          ? copy.settings.backup.failingSince(
+              format(new Date(backup.lastSuccessAt), "MMMM d"),
+            )
+          : copy.settings.backup.failingNoSuccess}
+      </p>
+    );
+    action = (
+      <PaperButton onClick={() => void connect()} disabled={connecting}>
+        {connecting
+          ? copy.settings.backup.connecting
+          : copy.settings.backup.reconnect}
+      </PaperButton>
+    );
+  }
+
+  return (
+    <section aria-label={copy.settings.backup.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.backup.heading}
+      </h2>
+      <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+        {copy.settings.backup.lead}
+      </p>
+      <div className="mt-3 space-y-3">
+        {statusLine}
+        {error && (
+          <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+            {error}
+          </p>
+        )}
+        {action && <div>{action}</div>}
+      </div>
+    </section>
   );
 }
 
@@ -337,27 +560,51 @@ function ThemeSwatch({
   );
 }
 
-/** A raised paper button: lit on top, it depresses when pressed. */
-function PaperButton({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
+/**
+ * The account section — sign in, or the signed-in address with the
+ * sync trust lines beneath it: what's waiting, when it last went
+ * through, and the device-vs-server entry counts.
+ */
+function AccountSection() {
+  const router = useRouter();
+  const { user, status } = useSession();
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-[5px] bg-paper-raised px-3.5 py-1.5 font-serif text-[0.92rem] text-ink",
-        "shadow-[inset_0_1px_0_var(--press-highlight),inset_0_-1px_0_rgb(0_0_0/0.05),0_0_0_1px_rgb(var(--shadow-hue)/0.1),0_1px_2px_rgb(var(--shadow-hue)/0.12),0_2px_6px_rgb(var(--shadow-hue)/0.07)]",
-        "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-        "active:translate-y-px active:scale-[0.98] active:shadow-[inset_0_1px_3px_rgb(0_0_0/0.12),0_0_0_1px_rgb(var(--shadow-hue)/0.1)]",
+    <section aria-label={copy.settings.account.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.account.heading}
+      </h2>
+      {user ? (
+        <div className="mt-4">
+          <p className="font-serif text-[0.98rem]">
+            {copy.settings.account.signedInAs(user.email)}
+          </p>
+          <SyncLines />
+          <div className="mt-4 flex items-center gap-4">
+            <PaperButton onClick={() => void signOut()}>
+              {copy.settings.account.signOut}
+            </PaperButton>
+            <p className="voice-prose text-[0.9rem] text-ink-faint">
+              {copy.settings.account.signOutHint}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+            {copy.settings.account.signedOutLead}
+          </p>
+          <div className="mt-4">
+            <PaperButton
+              onClick={() => router.push("/signin")}
+              disabled={status === "loading"}
+            >
+              {copy.settings.account.signIn}
+            </PaperButton>
+          </div>
+        </div>
       )}
-    >
-      {children}
-    </button>
+    </section>
   );
 }
 

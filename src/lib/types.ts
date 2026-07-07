@@ -43,6 +43,12 @@ export interface Snippet {
   updatedAt: number;
   /** soft delete: set, then purged after 30 days */
   deletedAt?: number;
+  /**
+   * 0 | 1 (IndexedDB can't index booleans) — set on every local write,
+   * cleared when the server acknowledges the row. Local bookkeeping
+   * only: stripped from exports and from sync payloads.
+   */
+  _dirty?: 0 | 1;
 }
 
 export interface SnippetDraft {
