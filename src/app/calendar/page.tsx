@@ -46,6 +46,7 @@ import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
+import { renderInline } from "@/lib/inline-markup";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
 import { queryTerms } from "@/lib/search";
@@ -4223,7 +4224,7 @@ function TodayZoneFill({
                     key={i}
                     className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
                   >
-                    {para}
+                    {renderInline(para, `intro-${i}`)}
                   </p>
                 ))}
               </motion.div>
