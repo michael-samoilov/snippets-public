@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { PaperButton } from "@/components/paper-button";
+import { GoogleMark } from "@/components/google-mark";
 import { authClient } from "@/lib/auth-client";
 import { useSession } from "@/lib/auth";
 import { copy } from "@/lib/copy";
@@ -210,10 +211,26 @@ export default function SignInPage() {
           <span className="h-px flex-1 bg-rule-faint" />
         </div>
 
-        <div className="mt-6">
-          <PaperButton onClick={() => void google()} disabled={busy}>
-            {copy.signin.google}
-          </PaperButton>
+        {/* REVIEW: two icon tones stacked for comparison — keep one */}
+        <div className="mt-6 flex flex-col items-start gap-4">
+          <div className="flex flex-col items-start gap-1.5">
+            <span className="voice-data text-ink-faint">color</span>
+            <PaperButton onClick={() => void google()} disabled={busy}>
+              <span className="inline-flex items-center gap-2.5">
+                <GoogleMark tone="color" />
+                {copy.signin.google}
+              </span>
+            </PaperButton>
+          </div>
+          <div className="flex flex-col items-start gap-1.5">
+            <span className="voice-data text-ink-faint">ink</span>
+            <PaperButton onClick={() => void google()} disabled={busy}>
+              <span className="inline-flex items-center gap-2.5">
+                <GoogleMark tone="ink" />
+                {copy.signin.google}
+              </span>
+            </PaperButton>
+          </div>
         </div>
       </div>
     </div>
