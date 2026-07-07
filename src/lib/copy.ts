@@ -55,6 +55,23 @@ export const copy = {
       "Your days are fuller than you think. Catch one true moment before it evaporates — a line someone said, a small scene, a joke that landed. Two sentences is plenty.",
   },
 
+  /**
+   * The first-ever introduction — shown on the today zone only before
+   * anything has been kept, and it retires itself the moment the writer
+   * starts (it's prose on the sheet, never a card or a dialog). Two
+   * jobs: what this is for, and why it's safe to invest in. Workshop
+   * the paragraphs here; they render as-is.
+   */
+  intro: {
+    body: [
+      "Snippets is an app to capture your daily moments.",
+      "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
+      "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
+      "About this app: Everything is stored on this device by default. If you make an account, you can access snippets across devices. You can then connect your Google Drive to sync snippets off the app automatically, so your words are yours even if this app ever disappears.",
+      "How you remember your days is how you remember your life.",
+    ] as const,
+  },
+
   /** capture — the day's composer and the voice seal */
   capture: {
     sectionLabel: "Capture a snippet",

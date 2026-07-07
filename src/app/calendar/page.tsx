@@ -46,6 +46,7 @@ import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
+import { renderInline } from "@/lib/inline-markup";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
 import { queryTerms } from "@/lib/search";
@@ -4250,7 +4251,12 @@ function TodayZoneFill({
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
+          {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
+              px), so the ruled field and the intro keep the same visual margin
+              from a narrow phone up to the wide desk — the ruled paper and the
+              intro both fill this padded column (w-full), which is what keeps
+              their left/right edges aligned */}
+          <div className="flex flex-1 flex-col items-center gap-4 px-[8%] py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
               seats it 107px under the zone's top. That's 11px more than the
               seal's box clearance below, on purpose: the wax is painted high in
@@ -4262,19 +4268,39 @@ function TodayZoneFill({
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
+          {/* the first-ever introduction: prose on the sheet, retiring itself
+              the instant the writer starts (law 8 — nothing modal near capture).
+              Only on a truly empty book, and only before a keystroke. */}
+          <AnimatePresence>
+            {firstEver && text.trim().length === 0 && (
+              <motion.div
+                key="intro"
+                initial={false}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                className="w-full space-y-3 text-left"
+              >
+                {copy.intro.body.map((para, i) => (
+                  <p
+                    key={i}
+                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                  >
+                    {renderInline(para, `intro-${i}`)}
+                  </p>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
           {/* the flexible half of the field's centring slack (see centerField);
               the entry grows into this, top first, so its foot never moves */}
           <div ref={topSlackRef} className="w-px flex-1" aria-hidden />
 
-          {/* the ruled "paper" — the clickable entry. Its width exactly matches
-              the schedule card's preview text: the row grid indents 2.1rem +
-              0.5rem gap (41.6px) and the card wears 1px borders + p-2.5 (22px),
-              so preview text = scroller − 63.6px; this column sits inside the
-              zone's 1px borders + px-4 (34px), leaving 29.6px to shave. Same
-              width + the same 0.9rem type as the preview ⇒ identical wrapping:
-              words that fill N rules here fill N preview lines there, and six
-              rules is exactly the card's clamp. */}
-          <div className="relative w-[calc(100%-29.6px)] min-w-[14rem]">
+          {/* the ruled "paper" — the clickable entry. It fills the padded
+              column (the wrapper's px-[8%] sets the proportional side margin),
+              so it and the intro share the same left/right edges at every width.
+              (This trades away the old fixed-px width that matched the schedule
+              card's 6-rule wrap exactly — margins-scale-with-the-sheet won.) */}
+          <div className="relative w-full min-w-[14rem]">
             <textarea
               ref={areaRef}
               value={shownText}
