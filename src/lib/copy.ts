@@ -55,6 +55,21 @@ export const copy = {
       "Your days are fuller than you think. Catch one true moment before it evaporates — a line someone said, a small scene, a joke that landed. Two sentences is plenty.",
   },
 
+  /**
+   * The first-ever introduction — shown on the today zone only before
+   * anything has been kept, and it retires itself the moment the writer
+   * starts (it's prose on the sheet, never a card or a dialog). Two
+   * jobs: what this is for, and why it's safe to invest in. Workshop
+   * the paragraphs here; they render as-is.
+   */
+  intro: {
+    body: [
+      "At the end of each day, keep the one moment most worth telling — a line someone said, a small scene, a joke that landed. Matthew Dicks calls it Homework for Life: five minutes a day, and your days stop blurring into one another. You gather a bank of stories, and even a hard week leaves you something worth keeping.",
+      "Jokes, quotes, and stray thoughts belong here too. Never let a good line go to waste, as Gwern Branwen put it — someone says something worth remembering, then laughs and forgets it by morning.",
+      "Everything stays on this device, yours alone. Sign in and a copy travels with you — to your other devices, and to a folder in your own Google Drive — so your book is yours even if this app ever disappears.",
+    ] as const,
+  },
+
   /** capture — the day's composer and the voice seal */
   capture: {
     sectionLabel: "Capture a snippet",

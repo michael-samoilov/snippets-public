@@ -4206,6 +4206,29 @@ function TodayZoneFill({
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
+          {/* the first-ever introduction: prose on the sheet, retiring itself
+              the instant the writer starts (law 8 — nothing modal near capture).
+              Only on a truly empty book, and only before a keystroke. */}
+          <AnimatePresence>
+            {firstEver && text.trim().length === 0 && (
+              <motion.div
+                key="intro"
+                initial={false}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                className="mx-auto max-w-[42ch] space-y-3 px-2 text-left"
+              >
+                {copy.intro.body.map((para, i) => (
+                  <p
+                    key={i}
+                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                  >
+                    {para}
+                  </p>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
           {/* the flexible half of the field's centring slack (see centerField);
               the entry grows into this, top first, so its foot never moves */}
           <div ref={topSlackRef} className="w-px flex-1" aria-hidden />
