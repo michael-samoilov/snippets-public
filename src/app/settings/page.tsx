@@ -21,7 +21,7 @@ import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
 import { signOut, useSession } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
-import { reconcile, requestSync, useSyncStatus } from "@/lib/sync";
+import { releaseBinding, reconcile, requestSync, useSyncStatus } from "@/lib/sync";
 import { formatBytes, useStorageHealth } from "@/lib/storage-health";
 import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
@@ -568,6 +568,23 @@ function ThemeSwatch({
 function AccountSection() {
   const router = useRouter();
   const { user, status } = useSession();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const deleteAccount = async () => {
+    try {
+      const response = await fetch("/api/account/delete", { method: "POST" });
+      if (!response.ok) throw new Error(`delete ${response.status}`);
+    } catch {
+      setDeleteOpen(false);
+      toast(copy.settings.account.deleteAccount.failed);
+      return;
+    }
+    // the server side is gone; return this book to local-only
+    await releaseBinding().catch(() => {});
+    await authClient.signOut().catch(() => {});
+    setDeleteOpen(false);
+    toast(copy.settings.account.deleteAccount.done);
+  };
 
   return (
     <section aria-label={copy.settings.account.heading}>
@@ -588,6 +605,40 @@ function AccountSection() {
               {copy.settings.account.signOutHint}
             </p>
           </div>
+          <div className="mt-6 border-t border-rule-faint pt-3">
+            <Button
+              variant="ghost"
+              className="px-0 font-serif text-ember hover:bg-transparent hover:text-ember-deep"
+              onClick={() => setDeleteOpen(true)}
+            >
+              {copy.settings.account.deleteAccount.trigger}
+            </Button>
+          </div>
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="voice-display text-left text-lg">
+                  {copy.settings.account.deleteAccount.title}
+                </DialogTitle>
+                <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
+                  {copy.settings.account.deleteAccount.body}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="ghost"
+                  className="font-serif"
+                  onClick={() => setDeleteOpen(false)}
+                >
+                  {copy.settings.erase.cancel}
+                </Button>
+                <HoldToErase
+                  label={copy.settings.account.deleteAccount.hold}
+                  onComplete={() => void deleteAccount()}
+                />
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       ) : (
         <div className="mt-4">
@@ -611,9 +662,16 @@ function AccountSection() {
 /**
  * Hold to erase — slow where the writer is deciding, fast where the
  * system responds. The wax fills the button while held; release and
- * it drains back instantly.
+ * it drains back instantly. The label bends to the act (erase, delete);
+ * the physics never does.
  */
-function HoldToErase({ onComplete }: { onComplete: () => void }) {
+function HoldToErase({
+  onComplete,
+  label = copy.settings.erase.hold,
+}: {
+  onComplete: () => void;
+  label?: string;
+}) {
   const [holding, setHolding] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -664,7 +722,7 @@ function HoldToErase({ onComplete }: { onComplete: () => void }) {
         }}
       />
       <span className="relative">
-        {holding ? copy.settings.erase.holding : copy.settings.erase.hold}
+        {holding ? copy.settings.erase.holding : label}
       </span>
     </button>
   );

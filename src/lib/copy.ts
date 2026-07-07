@@ -300,6 +300,15 @@ export const copy = {
       signedInAs: (email: string) => `Signed in as ${email}.`,
       signOut: "Sign out",
       signOutHint: "Your entries stay on this device.",
+      deleteAccount: {
+        trigger: "Delete account…",
+        title: "Delete your account?",
+        body:
+          "This removes your account and everything it keeps on the server — your synced entries, your sign-in, the Google Drive connection — immediately and permanently. The entries on this device stay, and backups already delivered to your Drive remain yours. Hold the button down to be sure.",
+        hold: "Hold to delete",
+        done: "Your account is gone. This device keeps its copy.",
+        failed: "The account couldn’t be deleted. Try again in a moment.",
+      },
     },
     sync: {
       syncing: "Syncing…",
