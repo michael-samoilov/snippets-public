@@ -4195,7 +4195,12 @@ function TodayZoneFill({
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
+          {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
+              px), so the ruled field and the intro keep the same visual margin
+              from a narrow phone up to the wide desk — the ruled paper and the
+              intro both fill this padded column (w-full), which is what keeps
+              their left/right edges aligned */}
+          <div className="flex flex-1 flex-col items-center gap-4 px-[8%] py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
               seats it 107px under the zone's top. That's 11px more than the
               seal's box clearance below, on purpose: the wax is painted high in
@@ -4217,7 +4222,7 @@ function TodayZoneFill({
                 initial={false}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: { duration: 0.18 } }}
-                className="mx-auto max-w-[42ch] space-y-3 px-2 text-left"
+                className="w-full space-y-3 text-left"
               >
                 {copy.intro.body.map((para, i) => (
                   <p
@@ -4234,15 +4239,12 @@ function TodayZoneFill({
               the entry grows into this, top first, so its foot never moves */}
           <div ref={topSlackRef} className="w-px flex-1" aria-hidden />
 
-          {/* the ruled "paper" — the clickable entry. Its width exactly matches
-              the schedule card's preview text: the row grid indents 2.1rem +
-              0.5rem gap (41.6px) and the card wears 1px borders + p-2.5 (22px),
-              so preview text = scroller − 63.6px; this column sits inside the
-              zone's 1px borders + px-4 (34px), leaving 29.6px to shave. Same
-              width + the same 0.9rem type as the preview ⇒ identical wrapping:
-              words that fill N rules here fill N preview lines there, and six
-              rules is exactly the card's clamp. */}
-          <div className="relative w-[calc(100%-29.6px)] min-w-[14rem]">
+          {/* the ruled "paper" — the clickable entry. It fills the padded
+              column (the wrapper's px-[8%] sets the proportional side margin),
+              so it and the intro share the same left/right edges at every width.
+              (This trades away the old fixed-px width that matched the schedule
+              card's 6-rule wrap exactly — margins-scale-with-the-sheet won.) */}
+          <div className="relative w-full min-w-[14rem]">
             <textarea
               ref={areaRef}
               value={shownText}

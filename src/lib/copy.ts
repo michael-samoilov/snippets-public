@@ -67,7 +67,7 @@ export const copy = {
       "Snippets is an app to capture your daily moments.",
       "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
       "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
-      "About this app: Everything stays here on this device by default. If you sign in, you can access your snippets across devices, and you connect your Google Drive to sync your snippets off of the app automatically, so your words are yours even if this app ever disappears.",
+      "About this app: Everything stays here on this device by default. If you sign in, you can access your snippets across devices, and you can connect your Google Drive to sync your snippets off of the app automatically, so your words are yours even if this app ever disappears.",
       "How you remember your days is how you remember your life. Start saving your memories.",
     ] as const,
   },
