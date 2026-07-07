@@ -28,7 +28,6 @@ import {
   conic,
   type BorealisOpts,
   type PulseOpts,
-  type BeamOpts,
 } from "@/components/capture/wash-shaders";
 
 /* the shipped four-edge seep, with dials: `mult` scales the pigment,
@@ -48,7 +47,7 @@ interface Layer {
   style: React.CSSProperties;
 }
 
-type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis" | "pulse" | "beam";
+type FamilyKey = "inhale" | "aurora" | "curtains" | "borealis" | "pulse";
 
 interface Variant {
   key: string;
@@ -315,44 +314,6 @@ const ROUND_THREE: Variant[] = [
   },
 ];
 
-/* ---- round four: the courier -------------------------------------------
-   border-beam (beam.jakubantalik.com) rebuilt by hand in wash-shaders —
-   a conic comet arc on the frame ring, spun by one @property angle.
-   No dependency, no canvas, one ink. */
-
-const beamCard = (
-  key: string,
-  label: string,
-  note: string,
-  opts: Partial<BeamOpts> = {},
-): Variant => {
-  const o = { ...BEAM_DEFAULTS, ...opts };
-  return { key, label, note, family: "beam", opts: o, node: <WashBorderBeam o={o} /> };
-};
-
-const ROUND_FOUR: Variant[] = [
-  beamCard("beam", "courier", "one light carried around the frame — tap to put it on the desk"),
-  beamCard("beam-two", "two couriers", "a second head opposite the first, so the frame never goes dark", {
-    heads: 2,
-    arc: 0.24,
-    lap: 9,
-  }),
-  beamCard("beam-lantern", "lantern", "over half the turn lit at once, on a slow patient lap", {
-    arc: 0.55,
-    lap: 14,
-    glow: 0.65,
-    reach: 40,
-    stroke: 2.5,
-  }),
-  beamCard("beam-hairline", "hairline", "the thinnest stroke, brisk and nearly bare — closest to the original", {
-    stroke: 1,
-    arc: 0.22,
-    lap: 3.5,
-    glow: 0.25,
-    bloom: 0.15,
-  }),
-];
-
 /* one treatment's wash container — clipped to the frame, masked to its
    edges; `opacity` lets the combo zone weigh treatments against each other */
 function WashLayer({ v, on, opacity = 1 }: { v: Variant; on: boolean; opacity?: number }) {
@@ -576,7 +537,7 @@ export default function WaxWashLab() {
     curtains: 0,
     borealis: 1,
     pulse: 1,
-    beam: 0,
+    beam: 1,
   });
   const deskRef = useRef<HTMLElement>(null);
 
@@ -593,7 +554,6 @@ export default function WaxWashLab() {
     if (v.family === "curtains") setCur({ ...CURTAINS_DEFAULTS, ...(v.opts as Partial<CurtainsOpts>) });
     if (v.family === "borealis") setBor({ ...BOREALIS_DEFAULTS, ...(v.opts as Partial<BorealisOpts>) });
     if (v.family === "pulse") setPul({ ...PULSE_DEFAULTS, ...(v.opts as Partial<PulseOpts>) });
-    if (v.family === "beam") setBea({ ...BEAM_DEFAULTS, ...(v.opts as Partial<BeamOpts>) });
     deskRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -847,17 +807,6 @@ export default function WaxWashLab() {
         </p>
         <div className="flex flex-wrap gap-8">
           {ROUND_THREE.map((v) => (
-            <MockZone key={v.key} v={v} on={on} onPick={pick} />
-          ))}
-        </div>
-      </section>
-      <section className="mb-12">
-        <h2 className="voice-label text-[0.78rem] text-ink-soft">round four — the courier</h2>
-        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
-          border-beam rebuilt by hand — a conic comet on the frame ring, one @property angle, no dependency, no canvas
-        </p>
-        <div className="flex flex-wrap gap-8">
-          {ROUND_FOUR.map((v) => (
             <MockZone key={v.key} v={v} on={on} onPick={pick} />
           ))}
         </div>
