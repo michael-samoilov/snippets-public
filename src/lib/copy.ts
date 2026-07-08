@@ -401,6 +401,12 @@ export const copy = {
       enrollConfirm: "Seal it",
       enrolling: "Sealing…",
       tooShort: "A passphrase needs at least ten characters.",
+      tooWeak:
+        "That one is still easy to guess — a longer phrase, or a few unexpected words together, is far harder to crack.",
+      // the quiet live read beneath the field, by strength
+      strengthWeak: "Still easy to guess.",
+      strengthOk: "Strong enough.",
+      strengthStrong: "Very strong.",
       mismatch: "Those two didn’t match.",
       wrongSecret: "That didn’t open it. Codes and phrases are exact.",
       enrollFailed: "The book couldn’t be sealed just now. Try again in a moment.",

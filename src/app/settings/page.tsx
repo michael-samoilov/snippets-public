@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { format, isToday, isYesterday } from "date-fns";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eraseAll } from "@/lib/db";
 import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "@/lib/e2e";
+import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
 import {
   adoptDriveToken,
   deliverBackup,
@@ -374,6 +375,7 @@ function EncryptionSection({ email }: { email: string }) {
   const [secret, setSecret] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [strength, setStrength] = useState<PassphraseStrength | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -381,6 +383,28 @@ function EncryptionSection({ email }: { email: string }) {
     void refreshEnrollment().then((e) => setEnrolled(e === "unknown" ? null : e));
     void getBookKey().then((k) => setHasKey(!!k));
   }, [sync.locked]);
+
+  // the things a guesser tries first: the account's email and its local part
+  const guessHints = useMemo(
+    () => [email, email.split("@")[0], "snippets"].filter(Boolean),
+    [email],
+  );
+
+  // quiet live strength read; the dynamic zxcvbn import is memoized so
+  // only the first keystroke pays for it
+  useEffect(() => {
+    if (!pass) {
+      setStrength(null);
+      return;
+    }
+    let alive = true;
+    void checkPassphrase(pass, guessHints).then((s) => {
+      if (alive) setStrength(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [pass, guessHints]);
 
   const doEnroll = async () => {
     if (pass.length < 10) {
@@ -394,6 +418,14 @@ function EncryptionSection({ email }: { email: string }) {
     setBusy(true);
     setError(null);
     try {
+      // the passphrase is the weakest link once its wrapped copy rests
+      // on the server — refuse a guessable one rather than seal behind it
+      const graded = await checkPassphrase(pass, guessHints);
+      if (!graded.ok) {
+        setError(copy.settings.encryption.tooWeak);
+        setBusy(false);
+        return;
+      }
       const code = await enroll(pass);
       setPass("");
       setConfirm("");
@@ -577,6 +609,15 @@ function EncryptionSection({ email }: { email: string }) {
               onChange={(e) => setPass(e.target.value)}
               className="h-10 font-serif text-[1rem]"
             />
+            {pass.length > 0 && strength && (
+              <p className="voice-prose text-[0.85rem] text-ink-faint">
+                {strength.score >= 4
+                  ? copy.settings.encryption.strengthStrong
+                  : strength.ok
+                    ? copy.settings.encryption.strengthOk
+                    : copy.settings.encryption.strengthWeak}
+              </p>
+            )}
             <label className="voice-label block text-[0.75rem]" htmlFor="e2e-confirm">
               {copy.settings.encryption.passphraseConfirmLabel}
             </label>
