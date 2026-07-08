@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "splash": "node scripts/generate-splash.mjs",
+    "icons": "node scripts/bake-icons.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run"
@@ -54,6 +55,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "playwright": "^1.61.1",
     "sharp": "^0.35.0",
     "tailwindcss": "^4",
     "typescript": "^5",

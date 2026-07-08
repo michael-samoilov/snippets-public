@@ -1,47 +1,48 @@
 # App icons — source of truth
 
 **The logo is the live 3-D wax seal, not a file in this folder.** Every shipped
-icon is a high-res render of the `WaxStamp` component
+icon is a render of the `WaxStamp` component
 (`src/components/capture/wax-stamp.tsx`) — the same lit, lobed seal as the
-masthead wordmark. Treat these PNGs as _build output_, and re-bake them from the
-seal whenever the seal changes.
+masthead — composited per platform. Treat these PNGs as _build output_.
 
-There is **no `pnpm icons` command**, on purpose. A flat SVG generator used to
-live here and wrote to these exact paths, so running it silently replaced the
-crafted 3-D icons with a pale flat stand-in. It's gone. `pnpm splash` only
-touches `public/splash/` (the iOS launch screens) and never these files.
+The seal's exact parameters live in **`src/lib/icon-seal.json`** (the single
+source of truth): the `seed` (WaxStamp `playKey`, which fixes the lobe
+silhouette — 5, 6, or 7 lobes, deterministic per seed), the navy `tint`, `puck`,
+the glyph, and per-variant `fill` (how close the lobes crowd the frame) and
+optical `cx`/`cy`. `src/lib/seal-spec.ts` types + reads it.
+
+> The icon seal is intentionally a deeper **navy** than the in-app wordmark seal
+> and the `--wax` accent (those are theme-tuned against the desk and stay
+> `#2e5685`); the home-screen icon runs darker for contrast on the OS grid.
+
+## Tuning + baking
+
+**`/lab/icon-studio`** (run `pnpm dev`, open the route) is the tuner: scrub the
+`seed` to the five-lobe you want (it labels the lobe count), set the navy tint +
+`puck`, then per platform dial `fill` and the optical centre against live
+previews — favicon on light/dark tabs, apple on cream, maskable with its safe
+zone drawn. **Bake to disk** writes the PNGs and saves the spec back to
+`icon-seal.json`.
+
+**`pnpm icons`** reproduces the exact same icons headless (renders the seal via
+`/lab/icon-bake`, composites with `sharp`) — for CI or a clean rebuild. Needs a
+browser once: `pnpm exec playwright install chromium`.
+
+Either path guarantees the icons match the seal and each other — change the seal
+in one place, re-bake, done. Never hand-edit a PNG here.
 
 ## The shipped files
 
-| File | Look | Seal size |
+| File | Look | Notes |
 | --- | --- | --- |
-| `src/app/icon.png` | transparent (browser favicon / tab) | 94% of frame |
-| `public/icons/icon-192.png` | transparent (PWA manifest) | 94% |
-| `public/icons/icon-512.png` | transparent (PWA manifest) | 94% |
-| `src/app/apple-icon.png` | seal on cream `#f6f0e2` (iOS rounds the corners) | 88% (paper margin so the drop shadow reads) |
-| `public/icons/maskable-512.png` | seal on cream, inside the maskable safe zone | 80% (an adaptive circular crop must never clip the wax) |
+| `src/app/icon.png` | transparent | browser favicon / tab (512) |
+| `public/icons/icon-192.png` · `icon-512.png` | transparent | PWA manifest |
+| `src/app/apple-icon.png` | seal on cream `#f6f0e2` (iOS rounds corners) | a little paper so the drop shadow reads |
+| `public/icons/maskable-512.png` | seal on cream | inside the maskable safe zone (adaptive circular crop) |
 
 Manifest wiring: `src/app/manifest.ts`. `icon.png` / `apple-icon.png` are picked
 up by Next's file-based metadata from `src/app/`.
 
-## How to re-bake (the real process)
-
-1. **Render the seal at HD.** Mount `WaxStamp` at a large size (the last bake used
-   **3840px**) in its settled state — `mode="press"`, `still`, `restGlyph`,
-   `superSample` up — with the shipped tint (deep-blue wax `#2e5685`, cream `S`
-   `#eae1cd`). Capture the canvas to a transparent PNG master. The `/lab/stamp`
-   route renders this seal and is the place to eyeball tint/lighting.
-2. **Optically centre it.** The wax is a lobed, asymmetric shape whose mass sits
-   left of its bounding-box centre, so a bbox-centred disc reads shifted left.
-   Re-centre on a **blend of the bbox centre and the mass centroid** (weighted so
-   it doesn't over-correct toward the rim), then trim to a square.
-3. **Composite each variant** from that one master at the sizes in the table
-   (transparent for the manifest/favicon; on cream `#f6f0e2` for apple-icon and
-   maskable, with the safe-zone margins above).
-
-Keep the tint colour-matched between the wordmark seal, these icons, and the
-splash seal (`scripts/generate-splash.mjs`) so the identity is one blue
-everywhere.
-
-_History: `f44d6d2` (re-bake from the live seal at 3840px) and `48a9def`
-(optical centring) are the reference commits._
+_The launch-screen splash seals (`public/splash/`, `pnpm splash`) are a separate,
+flat mark — see `scripts/generate-splash.mjs`. History: `f44d6d2` first baked the
+icons from the live seal; `48a9def` optically centred them._
