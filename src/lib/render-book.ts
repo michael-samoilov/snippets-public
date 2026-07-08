@@ -40,9 +40,11 @@ export function renderMarkdown(snippets: Snippet[], title = "Snippets"): string 
         "",
       );
     } else {
-      // a thematic break between entries within a day — an unambiguous
-      // boundary even when an entry's own text contains blank lines
-      lines.push("---", "");
+      // a thematic break between entries within a day — ten dashes, not
+      // three, so it stays an unambiguous boundary even when an entry's own
+      // text contains blank lines or a literal "---" (Markdown renders any
+      // run of 3+ dashes as the same horizontal rule)
+      lines.push("----------", "");
     }
     if (s.title) lines.push(`**${s.title}**`);
     lines.push(s.text.trim());
