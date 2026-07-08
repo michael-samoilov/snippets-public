@@ -21,6 +21,36 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+// iOS launch screens. A standalone PWA paints its splash from the manifest's
+// single `background_color` (light), so a Lamplight user got a light flash before
+// the dark app on every cold launch. The only theme-aware lever iOS offers is
+// `apple-touch-startup-image` links media-queried on prefers-color-scheme AND the
+// exact device metrics — so we ship one baked image per device per theme (the desk
+// the app settles into + the tapped icon's seal, `pnpm icons` → public/splash).
+// This list MIRRORS APPLE_LAUNCH in scripts/generate-icons.mjs; regenerate both
+// together. Unmatched devices fall back to the manifest colour (prior behaviour).
+const APPLE_LAUNCH = [
+  { w: 320, h: 568, r: 2 },
+  { w: 375, h: 667, r: 2 },
+  { w: 414, h: 736, r: 3 },
+  { w: 375, h: 812, r: 3 },
+  { w: 390, h: 844, r: 3 },
+  { w: 393, h: 852, r: 3 },
+  { w: 402, h: 874, r: 3 },
+  { w: 414, h: 896, r: 2 },
+  { w: 414, h: 896, r: 3 },
+  { w: 428, h: 926, r: 3 },
+  { w: 430, h: 932, r: 3 },
+  { w: 440, h: 956, r: 3 },
+];
+
+const startupImage = APPLE_LAUNCH.flatMap(({ w, h, r }) =>
+  (["dark", "light"] as const).map((scheme) => ({
+    url: `/splash/${scheme}-${w}x${h}@${r}.png`,
+    media: `(prefers-color-scheme: ${scheme}) and (device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)`,
+  })),
+);
+
 export const metadata: Metadata = {
   title: {
     default: copy.app.name,
@@ -33,6 +63,7 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "default",
     title: copy.app.name,
+    startupImage,
   },
   formatDetection: { telephone: false },
 };

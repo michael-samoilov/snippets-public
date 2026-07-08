@@ -42,3 +42,68 @@ await sharp(seal(512)).png().toFile("public/icons/icon-512.png");
 await sharp(seal(512, { pad: 0.26 })).png().toFile("public/icons/maskable-512.png");
 await sharp(seal(180, { pad: 0.12 })).png().toFile("src/app/apple-icon.png");
 console.log("icons written");
+
+/* ── iOS launch screens ────────────────────────────────────────────
+   A standalone PWA's launch splash is painted from the manifest's single
+   `background_color` — static, so a Lamplight (dark) user got a light flash
+   before the dark app on every cold launch. iOS only lets the splash be
+   theme-aware through `apple-touch-startup-image` links media-queried on
+   `prefers-color-scheme` (and the exact device metrics), so we bake one per
+   device per theme: the desk colour the app settles into, with the same wax
+   seal the tapped icon showed, centred — a continuous hand-off, no flash.
+   The <link> tags are emitted from layout.tsx's appleWebApp.startupImage,
+   whose list must mirror APPLE_LAUNCH below. iOS falls back to the manifest
+   colour for any device not matched here, so this is additive, never worse. */
+
+// desk = the surface the app rests on (globals.css --desk); the seal matches
+// the app icon (deep wax + cream S) so the launch reads icon → splash → app.
+const THEMES = {
+  light: { desk: "#e8dcc2", scheme: "light" },
+  dark: { desk: "#0f0c08", scheme: "dark" },
+};
+
+// device-width × device-height (CSS px) × devicePixelRatio, portrait. Covers the
+// modern iPhone lineup; unmatched devices fall back to the manifest colour.
+const APPLE_LAUNCH = [
+  { w: 320, h: 568, r: 2 }, // SE (1st gen)
+  { w: 375, h: 667, r: 2 }, // SE 2/3, 8, 7, 6s
+  { w: 414, h: 736, r: 3 }, // 8/7/6s Plus
+  { w: 375, h: 812, r: 3 }, // X, XS, 11 Pro, 12/13 mini
+  { w: 390, h: 844, r: 3 }, // 12/13/14, 12/13 Pro
+  { w: 393, h: 852, r: 3 }, // 14 Pro, 15/16, 15/16 Pro
+  { w: 402, h: 874, r: 3 }, // 16 Pro
+  { w: 414, h: 896, r: 2 }, // XR, 11
+  { w: 414, h: 896, r: 3 }, // XS Max, 11 Pro Max
+  { w: 428, h: 926, r: 3 }, // 12/13 Pro Max, 14 Plus
+  { w: 430, h: 932, r: 3 }, // 14/15 Pro Max, 15/16 Plus
+  { w: 440, h: 956, r: 3 }, // 16 Pro Max
+];
+
+// a centred wax seal on the desk, sized to the shorter edge — the same mark as
+// the icon (deep #2e5685 seal, cream S), so only the background tells the themes apart.
+const splash = (pw, ph, desk) => {
+  const cx = pw / 2;
+  const cy = ph / 2;
+  const r = Math.min(pw, ph) * 0.15; // seal outer radius
+  const sc = (0.88 * r) / S_H;
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${ph}" viewBox="0 0 ${pw} ${ph}">
+  <rect width="${pw}" height="${ph}" fill="${desk}"/>
+  <circle cx="${cx}" cy="${cy + r * 0.06}" r="${r * 1.07}" fill="#0a1a2e" opacity="0.28"/>
+  <circle cx="${cx}" cy="${cy}" r="${r * 1.04}" fill="#234468"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="#2e5685"/>
+  <circle cx="${cx}" cy="${cy}" r="${r * 0.82}" fill="none" stroke="#1c3a5c" stroke-width="${r * 0.045}" opacity="0.5"/>
+  <g fill="#eae1cd" transform="translate(${cx} ${cy}) scale(${sc} ${-sc}) translate(${-S_CX} ${-S_CY})"><path d="${S_PATH}"/></g>
+</svg>`);
+};
+
+await mkdir("public/splash", { recursive: true });
+for (const [name, { desk }] of Object.entries(THEMES)) {
+  for (const { w, h, r } of APPLE_LAUNCH) {
+    const pw = w * r;
+    const ph = h * r;
+    await sharp(splash(pw, ph, desk))
+      .png()
+      .toFile(`public/splash/${name}-${w}x${h}@${r}.png`);
+  }
+}
+console.log(`splash written (${Object.keys(THEMES).length}×${APPLE_LAUNCH.length})`);
