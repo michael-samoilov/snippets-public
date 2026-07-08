@@ -33,8 +33,9 @@ export default function PrivacyPage() {
           </h2>
           <p className="voice-prose text-[0.95rem]">
             The answer is <Em>no</Em> if you don&rsquo;t sign in, and{" "}
-            <Em>no</Em> if you turn on the app&rsquo;s encryption setting. If
-            you activate the Google Drive backup, or record entries using the
+            <Em>no</Em>{" "}
+            if you turn on the app&rsquo;s encryption setting. If you activate
+            the Google Drive backup, or record entries using the
             app&rsquo;s microphone, then Google and the transcription services
             process your data in accordance with their privacy policies (see
             Google Drive backup and Voice, below).
@@ -83,11 +84,11 @@ export default function PrivacyPage() {
           <p className="voice-prose text-[0.95rem]">
             Turning encryption on seals your whole book, not only the entries
             you write next — every entry already there is re-encrypted on the
-            server too. The one thing it can&rsquo;t reach is the past: anything
-            you had already synced arrived in the clear before you sealed it, so
-            it could have been read then, and a plaintext copy may linger a
-            while in routine database backups. Turning encryption back off does
-            the reverse, re-uploading your book readable again.
+            server too. However: anything you had already synced arrived in the
+            clear before you sealed it, so it could have been read then, and a
+            plaintext copy may linger a while in routine database backups.
+            Turning encryption back off does the reverse, re-uploading your book
+            readable again.
           </p>
           <p className="voice-prose text-[0.95rem]">
             <Em>Two honest limits that every encrypted web app lives with</Em>.
