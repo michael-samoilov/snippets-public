@@ -57,28 +57,89 @@ export default function PrivacyPage() {
             Can you read what I write?
           </h2>
           <p className="voice-prose text-[0.95rem]">
-            Turn on end-to-end encryption (Settings → Encryption) and no.
-            Your entries are sealed on your device with a key derived from
-            your passphrase, and only the sealed form ever reaches the
-            server — it stores and syncs envelopes it cannot open. The key
-            itself never leaves your devices, is held in a form the browser
-            will not export, and the only copies that exist elsewhere are
-            wrapped under your passphrase and your recovery code. This is
-            the same architecture the established end-to-end encrypted
-            services use (Proton Mail, Bitwarden, Signal&rsquo;s web pairing):
-            the server is a courier of sealed envelopes, not a reader.
+            If you turn on end-to-end encryption (Settings → Encryption):
+            no — not the words. Before an entry leaves your device it is
+            locked with a key made from your passphrase, and only the locked
+            version is ever sent to or stored on the server. We hold the
+            locked box; you hold the only key. Syncing, backing up, showing
+            you your own book — all of it works on the locked form, so at no
+            point does the server need to open it, and it cannot.
           </p>
           <p className="voice-prose text-[0.95rem]">
-            One honest limit, shared by every encrypted web app: your browser
-            runs the code our server sends, so you are ultimately trusting
-            that code — reading anything would require shipping compromised
-            software to your browser, never a quiet lookup in a database.
-            And encryption hides content, not rhythm: the server still sees
-            that entries exist, when they change, and their size. Without
-            end-to-end encryption turned on, entries rest on the server
-            under standard provider-level encryption, readable by the
-            service — the same posture as ordinary note apps.
+            The key never leaves your devices, and it is kept in a form your
+            browser refuses to hand back out as raw data. The only copies
+            that exist anywhere else are themselves locked — one under your
+            passphrase, one under your recovery code. This is the same
+            approach the trusted end-to-end encrypted services use (Proton
+            Mail, Bitwarden, Signal): the server is a courier of sealed
+            envelopes, not a reader of them.
           </p>
+          <p className="voice-prose text-[0.95rem]">
+            Two honest limits, the same ones every encrypted web app lives
+            with. First, a website runs code your browser downloads from us
+            each visit, so ultimately you are trusting that code — reading
+            your entries would mean deliberately shipping bad software to
+            your own browser, which is a visible act of sabotage, not a
+            quiet peek at a database. Second, encryption hides the words, not
+            the rhythm: the server can still tell that entries exist, roughly
+            how big they are, and when they change. And if you leave
+            encryption off, your entries rest under ordinary provider-level
+            encryption, readable by the service — the same as a normal notes
+            app.
+          </p>
+
+          {/* the opt-in deep dive — Kerckhoffs's principle: publishing the
+              design costs nothing, since safety rests on the keys, not the
+              secrecy of the method. Native <details>, no JS. */}
+          <details className="group mt-2 rounded-[7px] border border-rule-faint px-4 py-3">
+            <summary className="voice-label cursor-pointer list-none text-[0.75rem] text-ink-soft marker:content-none hover:text-ink">
+              The mechanics, for the curious
+              <span className="ml-1 inline-block transition-transform group-open:rotate-90">
+                ›
+              </span>
+            </summary>
+            <div className="mt-3 space-y-3">
+              <p className="voice-prose text-[0.9rem] text-ink-soft">
+                Every entry is encrypted with{" "}
+                <span className="voice-data">AES-256-GCM</span> — an
+                authenticated cipher, so a tampered entry fails to open
+                rather than decrypting to something wrong — under a fresh
+                random nonce each time. All of your entries share one random
+                256-bit <em>book key</em>, generated on your device.
+              </p>
+              <p className="voice-prose text-[0.9rem] text-ink-soft">
+                That book key is what&rsquo;s wrapped (encrypted) twice, so it
+                can travel between your devices without ever being exposed:
+                once under a key stretched from your passphrase with{" "}
+                <span className="voice-data">
+                  PBKDF2-HMAC-SHA-256, 600,000 iterations
+                </span>{" "}
+                and a random salt, and once under a key stretched from a
+                ~120-bit recovery code. The server stores only those two
+                wrapped envelopes, written once and never silently replaced;
+                it can open neither.
+              </p>
+              <p className="voice-prose text-[0.9rem] text-ink-soft">
+                On your device, the unwrapped book key is held as a{" "}
+                <span className="voice-data">non-extractable CryptoKey</span>{" "}
+                — the browser will use it to decrypt but will not export its
+                bytes, even to the page&rsquo;s own scripts. What rests on the
+                server is the ciphertext of each entry plus the fields sync
+                needs in the clear: an identifier, timestamps, and a change
+                counter. No title, text, tags, or kind.
+              </p>
+              <p className="voice-prose text-[0.9rem] text-ink-soft">
+                Drive backups are rendered and uploaded by your own device
+                from its decrypted copy, so the readable files exist only
+                where your key already is. The server never keeps your Drive
+                credentials — your device holds them and the server only
+                trades them for a short-lived access token when asked. Those
+                plaintext Drive files are also the safety net: if you lose
+                both your passphrase and your recovery code, they are how you
+                get your words back.
+              </p>
+            </div>
+          </details>
         </section>
 
         <section className="space-y-3">
