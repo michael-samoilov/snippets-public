@@ -43,7 +43,6 @@ import {
   softDeleteSnippet,
   StorageWriteError,
 } from "@/lib/db";
-import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
@@ -3209,11 +3208,9 @@ function FlowBackfillCapture({
       day,
       source: "typed",
       favorite: 0,
-      enriched: "pending",
       updatedAt: capturedAt,
     });
     void addSnippet({ id, text: trimmed, source: "typed", capturedAt })
-      .then(enrichSnippet)
       .catch((error: unknown) => {
         // the keep did not take — withdraw the optimistic card, put the
         // words back, say why. Never a silent loss.
@@ -4268,10 +4265,9 @@ function TodayZoneFill({
       const source = voiceUsed.current ? "voice" : "typed";
       draft?.set({
         id, text: t, kind: null, tags: [], capturedAt, day,
-        source, favorite: 0, enriched: "pending", updatedAt: capturedAt,
+        source, favorite: 0, updatedAt: capturedAt,
       });
       void addSnippet({ id, text: t, source, capturedAt })
-        .then(enrichSnippet)
         .catch((error: unknown) => {
           // the keep did not take — withdraw the optimistic card, put the
           // words back, say why. Never a silent loss.

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { addSnippet, StorageWriteError } from "@/lib/db";
-import { enrichSnippet } from "@/lib/enrich";
 import { promptForDate } from "@/lib/kinds";
 import {
   isIOSStandalone,
@@ -116,12 +115,11 @@ export function Capture() {
     stampTimer.current = setTimeout(() => setStampVisible(false), 1300);
 
     try {
-      const snippet = await addSnippet({
+      await addSnippet({
         text: trimmed,
         source: voiceUsed ? "voice" : "typed",
       });
       setVoiceUsed(false);
-      void enrichSnippet(snippet);
     } catch (error) {
       // the keep did not take — un-stamp, put the words back, say why
       setStampVisible(false);

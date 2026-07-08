@@ -21,7 +21,6 @@ const snippet = (over: Partial<Snippet> = {}): Snippet => ({
   day: "2026-07-08",
   source: "typed",
   favorite: 0,
-  enriched: "manual",
   updatedAt: 1_700_000_000_500,
   ...over,
 });
@@ -44,7 +43,7 @@ describe("wire codec — plaintext (format 1)", () => {
     expect(change.payloadFormat).toBe(PAYLOAD_FORMAT_PLAIN);
     const back = await fromWireRow(rowFromChange(s.id, change));
     expect(back.text).toBe(s.text);
-    expect(back.enriched).toBe("manual");
+    expect(back.title).toBe(s.title);
     expect(back._dirty).toBe(0);
   });
 });

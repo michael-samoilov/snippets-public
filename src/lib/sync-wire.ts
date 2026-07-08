@@ -116,7 +116,6 @@ function ghostTombstone(row: WireRow): Snippet {
     day: "",
     source: "typed",
     favorite: 0,
-    enriched: "off",
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt ?? row.updatedAt,
     _dirty: 0,
@@ -140,8 +139,14 @@ export async function fromWireRow(
   } else {
     payload = row.payload as SnippetPayload;
   }
+  // old server rows may still carry the retired `enriched` field inside
+  // their payload — drop it so it never re-enters the local model
+  const { enriched, ...clean } = payload as SnippetPayload & {
+    enriched?: unknown;
+  };
+  void enriched;
   return {
-    ...payload,
+    ...clean,
     id: row.id,
     updatedAt: row.updatedAt,
     ...(row.deletedAt !== null ? { deletedAt: row.deletedAt } : {}),

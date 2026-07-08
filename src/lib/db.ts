@@ -1,6 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import { ulid } from "ulidx";
-import type { Snippet, SnippetDraft, SnippetKind } from "@/lib/types";
+import type { Snippet, SnippetDraft } from "@/lib/types";
 import { dayKey } from "@/lib/dates";
 import { copy } from "@/lib/copy";
 import { bumpClock } from "@/lib/merge";
@@ -43,6 +43,21 @@ class SnippetsDB extends Dexie {
       snippets: "id, day, capturedAt, kind, favorite, enriched, *tags, _dirty",
       meta: "key",
     });
+    // v4 retires automatic filing: drop the `enriched` index and clear the
+    // field from every row. Sync merges by plain last-write-wins now.
+    this.version(4)
+      .stores({
+        snippets: "id, day, capturedAt, kind, favorite, *tags, _dirty",
+        meta: "key",
+      })
+      .upgrade((tx) =>
+        tx
+          .table("snippets")
+          .toCollection()
+          .modify((s: Snippet & { enriched?: unknown }) => {
+            delete s.enriched;
+          }),
+      );
   }
 }
 
@@ -105,7 +120,6 @@ export async function addSnippet(draft: SnippetDraft): Promise<Snippet> {
     day: dayKey(new Date(capturedAt)),
     source: draft.source,
     favorite: 0,
-    enriched: "pending",
     updatedAt: now,
     _dirty: 1,
   };
@@ -131,45 +145,6 @@ export async function updateSnippet(
     if (!current) return;
     await db.snippets.update(id, {
       ...changes,
-      updatedAt: bumpClock(current.updatedAt),
-      _dirty: 1,
-    });
-  });
-  notifyWrite();
-}
-
-/** Apply enrichment results only onto fields the writer hasn't touched. */
-export async function applyEnrichment(
-  id: string,
-  enrichment: { title?: string; kind?: SnippetKind; tags?: string[]; attribution?: string },
-): Promise<void> {
-  await db.transaction("rw", db.snippets, async () => {
-    const current = await db.snippets.get(id);
-    if (!current || current.deletedAt) return;
-    // The writer beat us to it — their filing wins.
-    if (current.enriched === "manual") return;
-    await db.snippets.update(id, {
-      title: current.title ?? enrichment.title,
-      kind: current.kind ?? enrichment.kind ?? null,
-      tags: current.tags.length ? current.tags : (enrichment.tags ?? []),
-      attribution: current.attribution ?? enrichment.attribution,
-      enriched: "done",
-      updatedAt: bumpClock(current.updatedAt),
-      _dirty: 1,
-    });
-  });
-  notifyWrite();
-}
-
-export async function markEnrichment(
-  id: string,
-  state: Snippet["enriched"],
-): Promise<void> {
-  await db.transaction("rw", db.snippets, async () => {
-    const current = await db.snippets.get(id);
-    if (!current || current.enriched === "manual") return;
-    await db.snippets.update(id, {
-      enriched: state,
       updatedAt: bumpClock(current.updatedAt),
       _dirty: 1,
     });
@@ -222,7 +197,12 @@ export async function toggleFavorite(id: string): Promise<void> {
  * an old file can never clobber newer synced work elsewhere.
  */
 export async function importSnippets(rows: Snippet[]): Promise<number> {
-  const stamped = rows.map((r) => ({ ...r, _dirty: 1 as const }));
+  const stamped = rows.map((r) => {
+    // older archives carry the retired `enriched` field — drop it on the way in
+    const { enriched, ...rest } = r as Snippet & { enriched?: unknown };
+    void enriched;
+    return { ...rest, _dirty: 1 as const };
+  });
   await db.snippets.bulkPut(stamped);
   notifyWrite();
   return stamped.length;
@@ -307,11 +287,6 @@ export async function snippetsForDay(day: string): Promise<Snippet[]> {
 
 export async function allSnippetsNewestFirst(): Promise<Snippet[]> {
   const rows = await db.snippets.orderBy("capturedAt").reverse().toArray();
-  return rows.filter(notDeleted);
-}
-
-export async function pendingEnrichment(): Promise<Snippet[]> {
-  const rows = await db.snippets.where("enriched").equals("pending").toArray();
   return rows.filter(notDeleted);
 }
 

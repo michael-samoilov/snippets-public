@@ -39,6 +39,10 @@ export function renderMarkdown(snippets: Snippet[], title = "Snippets"): string 
         `## ${format(dateFromDayKey(s.day), "EEEE, MMMM d, yyyy")}`,
         "",
       );
+    } else {
+      // a thematic break between entries within a day — an unambiguous
+      // boundary even when an entry's own text contains blank lines
+      lines.push("---", "");
     }
     if (s.title) lines.push(`**${s.title}**`);
     lines.push(s.text.trim());

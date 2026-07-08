@@ -5,7 +5,6 @@ import { ThemeProvider } from "next-themes";
 import { MotionConfig } from "motion/react";
 import { Toaster } from "@/components/ui/sonner";
 import { db, purgeOldDeleted } from "@/lib/db";
-import { retryPendingEnrichment } from "@/lib/enrich";
 import { checkStorageHealth } from "@/lib/storage-health";
 import { startSync } from "@/lib/sync";
 import { useSession } from "@/lib/auth";
@@ -30,20 +29,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     purgeOldDeleted().catch(() => {});
-    retryPendingEnrichment();
     // ask the browser to hold this origin's data once the book holds
     // anything; the answer (and the room left) shows in Settings
     db.snippets
       .count()
       .then((count) => checkStorageHealth(count > 0))
       .catch(() => {});
-    const onOnline = () => retryPendingEnrichment();
-    window.addEventListener("online", onOnline);
 
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-    return () => window.removeEventListener("online", onOnline);
   }, []);
 
   // optimistic kept cards: the composer publishes the just-kept snippet here so

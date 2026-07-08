@@ -339,12 +339,10 @@ async function pullAll(key?: CryptoKey): Promise<void> {
           const localSide: MergeSide = {
             updatedAt: local.updatedAt,
             deletedAt: local.deletedAt ?? null,
-            enriched: local.enriched,
           };
           const incomingSide: MergeSide = {
             updatedAt: row.updatedAt,
             deletedAt: row.deletedAt,
-            enriched: snippet.enriched,
           };
           if (incomingWins(localSide, incomingSide)) {
             await db.snippets.put(snippet);

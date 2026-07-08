@@ -3,14 +3,11 @@
 import { useSyncExternalStore } from "react";
 
 export interface Settings {
-  /** automatic titling/filing via the enrichment endpoint */
-  autoFile: boolean;
   /** first day of the week in the calendar grids: 0 = Sunday, 1 = Monday */
   weekStart: 0 | 1;
 }
 
 const DEFAULTS: Settings = {
-  autoFile: true,
   weekStart: 0,
 };
 

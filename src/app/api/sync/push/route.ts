@@ -48,20 +48,8 @@ type SnippetRow = typeof schema.snippets.$inferSelect;
 function mergeSide(row: {
   updatedAt: number;
   deletedAt: number | null;
-  payloadFormat: number;
-  payload: unknown;
 }): MergeSide {
-  const enriched =
-    row.payloadFormat === PAYLOAD_FORMAT_PLAIN &&
-    row.payload &&
-    typeof row.payload === "object"
-      ? (row.payload as { enriched?: unknown }).enriched
-      : null;
-  return {
-    updatedAt: row.updatedAt,
-    deletedAt: row.deletedAt,
-    enriched: typeof enriched === "string" ? enriched : null,
-  };
+  return { updatedAt: row.updatedAt, deletedAt: row.deletedAt };
 }
 
 function toWire(row: SnippetRow): WireRow {
@@ -114,13 +102,6 @@ export async function POST(request: Request) {
       const incoming: MergeSide = {
         updatedAt: change.updatedAt,
         deletedAt: change.deletedAt ?? null,
-        // a sealed payload's enriched state is invisible here; the
-        // manual-sticky rule is enforced client-side, LWW stands in
-        enriched:
-          change.payloadFormat === PAYLOAD_FORMAT_PLAIN &&
-          typeof change.payload.enriched === "string"
-            ? change.payload.enriched
-            : null,
       };
 
       if (!existing) {

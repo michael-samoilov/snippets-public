@@ -2,7 +2,7 @@
  * The server database handle. Absent DATABASE_URL the handle is null
  * and every account feature quietly reports itself unavailable — the
  * same optional-env contract as every other server capability here
- * (enrichment, voice). The app itself never needs it.
+ * (voice). The app itself never needs it.
  *
  * The WebSocket driver (Pool), not neon-http: the sync push handler
  * runs inside a real transaction holding `pg_advisory_xact_lock`, and

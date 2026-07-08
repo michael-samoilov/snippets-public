@@ -9,18 +9,6 @@ export const KINDS = [
 
 export type SnippetKind = (typeof KINDS)[number];
 
-export type EnrichState =
-  /** waiting for (or retrying) automatic filing */
-  | "pending"
-  /** filed automatically */
-  | "done"
-  /** the writer filed it by hand — never overwrite */
-  | "manual"
-  /** automatic filing unavailable; offer chips */
-  | "failed"
-  /** filing disabled in settings */
-  | "off";
-
 export interface Snippet {
   /** ULID — lexicographically time-sortable */
   id: string;
@@ -39,7 +27,6 @@ export interface Snippet {
   source: "voice" | "typed";
   /** 0 | 1 — IndexedDB cannot index booleans */
   favorite: 0 | 1;
-  enriched: EnrichState;
   updatedAt: number;
   /** soft delete: set, then purged after 30 days */
   deletedAt?: number;
@@ -57,12 +44,4 @@ export interface SnippetDraft {
   capturedAt?: number;
   /** pre-set id so an optimistic card and its DB row can share identity. */
   id?: string;
-}
-
-/** Shape returned by the enrichment endpoint. */
-export interface Enrichment {
-  title: string;
-  kind: SnippetKind;
-  tags: string[];
-  attribution?: string;
 }

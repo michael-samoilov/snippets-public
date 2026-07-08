@@ -18,17 +18,13 @@ life is full of stories.
   browser's own speech engine streams words live (Chrome, Safari,
   Edge). Or just type. Nothing is asked of you at the moment of
   capture.
-- **Filed for you, quietly.** A few seconds after you keep an entry,
-  Claude titles it, files it under a kind (story · joke · quote · idea ·
-  phrase · observation), and tags it. No key configured? One-tap chips
-  do the same job. Hand edits always win.
 - **Leaf back through.** A searchable collection grouped by day, a
   calendar ledger with ink-dot density, and *On this day* resurfacing
   what you kept a month and a year ago.
 - **Yours alone.** Everything lives in IndexedDB on your device.
   Installable PWA, works offline, exports to JSON and Markdown anytime.
-  The only thing that ever leaves the device is entry text sent for
-  filing — and you can turn that off.
+  Typing never touches the network; cross-device sync and Google Drive
+  backup are opt-in, and only spoken audio ever leaves for transcription.
 
 ## Running it
 
@@ -79,10 +75,6 @@ ELEVENLABS_API_KEY=…
 #
 # With neither key, voice falls back to the browser's own speech engine
 # (Chrome, Safari, Edge) — typing works everywhere regardless.
-
-# Automatic filing (title/kind/tags) via Claude.
-# Without it, filing falls back to heuristics and one-tap chips.
-ANTHROPIC_API_KEY=sk-ant-…   # uses claude-haiku-4-5; override with ENRICH_MODEL
 ```
 
 ### Accounts, sync, and Drive backup (optional, like everything)
@@ -131,6 +123,6 @@ skills in [`.claude/skills/`](./.claude/skills/).
 
 | | |
 |---|---|
-| Stack | Next.js 16 · React 19 · Tailwind v4 · Dexie · Web Speech API · Claude Haiku |
+| Stack | Next.js 16 · React 19 · Tailwind v4 · Dexie · Web Speech API |
 | Data | Local-first (IndexedDB), soft-delete + undo, JSON/Markdown export |
 | Typography | Fraunces (display + prose) · IBM Plex Mono (meta) |

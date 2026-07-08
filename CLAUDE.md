@@ -3,7 +3,7 @@
 # Snippets — working in this repo
 
 A local-first PWA commonplace book ("Homework for Life"): frictionless
-voice/typed capture, quiet Claude-powered filing, calendar review.
+voice/typed capture, calendar review.
 **Before touching any UI, styling, copy, or animation, use the
 `snippets-craft` skill** (`.claude/skills/snippets-craft/`) — it is the
 design constitution. `DESIGN.md` has the full rationale and tokens.
@@ -57,12 +57,11 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   `GET /api/scribe-token` and `GET /api/transcribe`. Every failure
   surfaces a typed reason (`SpeechFailure`) turned into specific copy
   from `copy.capture.voiceFailures`.
-- **Enrichment:** `src/app/api/enrich/route.ts` (Claude Haiku via
-  `@anthropic-ai/sdk`, structured output with `zodOutputFormat`,
-  model overridable via `ENRICH_MODEL`). Client orchestration +
-  heuristics fallback in `src/lib/enrich.ts`. It must stay best-effort:
-  no key → 503 → chips; `enriched: "manual"` is never overwritten.
-  When changing this code, consult the `claude-api` skill first.
+- **Enrichment (removed 2026-07):** automatic filing — Claude-generated
+  title/kind/tags — has been fully retired. There is no `/api/enrich`
+  route, no `enrich.ts`, and no `enriched` field; the `kind`/`tags`
+  fields survive on the model (unused, kept for possible future
+  tagging). Entries are their words alone.
 - **UI primitives:** `src/components/ui/*` are vendored shadcn sources
   (the registry domain is blocked in some sandboxes; they're ours now
   and intentionally restyled — overlay tint, input focus, etc.). Edit
@@ -81,8 +80,8 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   app stays device-only. Sync is a custom pull/push protocol
   (`src/app/api/sync/*`, client engine `src/lib/sync.ts`): per-row LWW
   with ONE rule shared client/server (`src/lib/merge.ts` — unit-tested,
-  `pnpm test`; hand filing outranks the clock; the server's verdict is
-  final). Dexie v2 adds an indexed `_dirty` flag; every write in
+  `pnpm test`; newer `updatedAt` wins, ties are no-ops; the server's
+  verdict is final). Dexie v2 adds an indexed `_dirty` flag; every write in
   `db.ts` stamps it (db.ts stays the single write choke point — never
   write around it); v3 adds a `meta` table (book key, Drive tokens).
   Tombstones live forever server-side; client purge only drops
@@ -140,6 +139,6 @@ Gotchas learned the hard way:
 
 ## Deploy
 
-Any Node host (Vercel works as-is). `ANTHROPIC_API_KEY` enables filing;
-without it everything still works. Static-export hosting also works —
-the enrich route 404s and the client falls back gracefully.
+Any Node host (Vercel works as-is). Sync/backup need
+`DATABASE_URL`/`BETTER_AUTH_SECRET` (and the Google/Resend keys);
+without them the app stays whole and device-only.
