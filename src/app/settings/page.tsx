@@ -27,7 +27,13 @@ import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
 import { signOut, useSession } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
-import { releaseBinding, reconcile, requestSync, useSyncStatus } from "@/lib/sync";
+import {
+  disableEncryption,
+  releaseBinding,
+  reconcile,
+  requestSync,
+  useSyncStatus,
+} from "@/lib/sync";
 import { formatBytes, useStorageHealth } from "@/lib/storage-health";
 import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
@@ -446,9 +452,32 @@ function EncryptionSection({ email }: { email: string }) {
     );
   } else if (hasKey) {
     body = (
-      <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
-        {copy.settings.encryption.onLead}
-      </p>
+      <div className="mt-4">
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+          {copy.settings.encryption.onLead}
+        </p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <p className="voice-prose max-w-[40ch] text-[0.9rem] text-ink-faint">
+            {copy.settings.encryption.turnOffHint}
+          </p>
+          <div className="shrink-0">
+            <HoldToErase
+              label={copy.settings.encryption.turnOffHold}
+              onComplete={() => {
+                void (async () => {
+                  try {
+                    await disableEncryption();
+                    setHasKey(false);
+                    setEnrolled(false);
+                  } catch {
+                    setError(copy.settings.encryption.turnOffFailed);
+                  }
+                })();
+              }}
+            />
+          </div>
+        </div>
+      </div>
     );
   } else {
     body = (

@@ -22,7 +22,7 @@
  * Every failure lands in a visible status — never a silent stall.
  */
 import { useSyncExternalStore } from "react";
-import { db, setWriteNotifier } from "@/lib/db";
+import { db, setWriteNotifier, reencryptSweep } from "@/lib/db";
 import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
   clearSyncState,
@@ -41,7 +41,12 @@ import {
   type PushResponse,
   type StatusResponse,
 } from "@/lib/sync-wire";
-import { getBookKey, refreshEnrollment } from "@/lib/e2e";
+import {
+  getBookKey,
+  refreshEnrollment,
+  clearLocalKey,
+  deleteServerKeys,
+} from "@/lib/e2e";
 import { maybeDeliverBackup } from "@/lib/backup-client";
 import type { Snippet } from "@/lib/types";
 
@@ -367,6 +372,38 @@ async function refreshCounts(): Promise<void> {
  */
 export async function reconcile(): Promise<void> {
   writeSyncState({ lastPulledSeq: 0 });
+  requestSync();
+}
+
+/**
+ * Turn off end-to-end encryption. Order is chosen so an interruption
+ * can never strand sealed rows the server has no key for:
+ *   1. pull the whole book down WITH the key (every row now plaintext
+ *      on this device — encryption only ever lived at the wire);
+ *   2. mark it all dirty + bump, and push it back as PLAINTEXT (a
+ *      no-key push writes format 1), overwriting every sealed server row;
+ *   3. only then drop the server's wrapped keys, and finally
+ *   4. forget the on-device key.
+ * If the tab dies between 2 and 3, the keys still exist and the book
+ * is already plaintext — re-running is a safe no-op. Requires the key
+ * to be present (you must be unlocked to read your own book).
+ */
+export async function disableEncryption(): Promise<void> {
+  const key = await getBookKey();
+  if (!key) throw new LockedError();
+  await navigator.locks.request(
+    `snippets-sync:${currentDbName()}`,
+    async () => {
+      setStatus({ phase: "syncing" });
+      writeSyncState({ lastPulledSeq: 0 }); // re-walk the whole feed
+      await pullAll(key); // decrypt every server row into local plaintext
+      await reencryptSweep(); // all dirty, fresh clocks
+      await pushAll(undefined); // re-push as plaintext, overwriting seals
+      await deleteServerKeys();
+      await clearLocalKey();
+      setStatus({ phase: "idle", locked: false });
+    },
+  );
   requestSync();
 }
 

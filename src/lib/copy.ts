@@ -378,6 +378,12 @@ export const copy = {
         "Turn on end-to-end encryption and your entries are sealed with a key only your devices hold — unreadable on the server, by anyone, including us. Your Drive backups stay readable; they’re yours.",
       turnOn: "Turn on end-to-end encryption",
       onLead: "End-to-end encryption is on. Only your devices hold the key.",
+      turnOff: "Turn off encryption",
+      turnOffHold: "Hold to turn off",
+      turnOffHint:
+        "Your entries return to standard server-side encryption — readable by the service again. This device must be unlocked to do it.",
+      turningOff: "Turning off…",
+      turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
       lockedLead:
         "This account is end-to-end encrypted, and this device doesn’t hold the key yet.",
       passphraseLabel: "Choose a passphrase",

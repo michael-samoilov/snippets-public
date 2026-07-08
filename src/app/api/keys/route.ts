@@ -70,3 +70,21 @@ export async function PUT(request: Request) {
   });
   return Response.json({ ok: true });
 }
+
+/**
+ * Turn off encryption: drop the wrapped keys. The client only calls
+ * this AFTER it has re-pushed the whole book as plaintext, so the
+ * server never ends up holding sealed rows it has no key for. A 404
+ * is success too — already off.
+ */
+export async function DELETE(request: Request) {
+  if (!serverDb)
+    return Response.json({ error: "accounts are not configured" }, { status: 503 });
+  const session = await getSession(request.headers);
+  if (!session) return Response.json({ error: "signed out" }, { status: 401 });
+
+  await serverDb
+    .delete(schema.userKeys)
+    .where(eq(schema.userKeys.userId, session.user.id));
+  return Response.json({ ok: true });
+}

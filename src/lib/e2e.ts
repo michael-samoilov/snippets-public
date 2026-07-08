@@ -8,7 +8,7 @@
  * `getBookKey()` and treats its absence on an enrolled account as the
  * locked state — sync pauses loudly, capture never does.
  */
-import { getMeta, setMeta, reencryptSweep } from "@/lib/db";
+import { getMeta, setMeta, deleteMeta, reencryptSweep } from "@/lib/db";
 import {
   generateBookKey,
   generateRecoveryCode,
@@ -90,6 +90,19 @@ export async function unlock(
   const key = await unwrapBookKey(wrapped, secret, kind);
   await setMeta(KEY_META, key);
   enrolledCache = true;
+}
+
+/** Drop the on-device key and mark the account not-enrolled locally. */
+export async function clearLocalKey(): Promise<void> {
+  await deleteMeta(KEY_META);
+  enrolledCache = false;
+}
+
+/** Drop the server's wrapped keys — the account is no longer enrolled. */
+export async function deleteServerKeys(): Promise<void> {
+  const response = await fetch("/api/keys", { method: "DELETE" });
+  if (!response.ok && response.status !== 404)
+    throw new Error(`keys delete ${response.status}`);
 }
 
 /** The downloadable recovery kit, in plain text. */
