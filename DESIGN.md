@@ -366,6 +366,18 @@ Quiet, literary, terse, sentence case. Curly quotes, the `…` character.
 emoji, no sparkle-AI framing. Streaks past-tense only; gaps are blank,
 never red.
 
+**Name things plainly.** The desk/paper/light conceit is the *visual*
+skin — it is never a vocabulary the copy imposes on the reader. Say what
+a thing literally does, in words the user already owns: *encrypt your
+entries*, not *seal your book*; *your entries*, not *your book*. "Book"
+(or "notebook") is allowed only in warm, descriptive prose where it
+reads deliberately, and the non-idiomatic "commonplace book" is retired
+everywhere. Metaphor earns its place only when it names an actual
+on-screen object — the **wax seal** you tap to record/keep is a real
+thing, so "tap the seal" stays — or when it genuinely aids
+understanding; otherwise the plainer, more idiomatic word wins. A reader
+should never have to learn our theme to understand what a control does.
+
 ## Architecture notes that protect the design
 
 - Local-first Dexie; soft delete + undo; day keys in local time.

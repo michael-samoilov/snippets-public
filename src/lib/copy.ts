@@ -28,7 +28,7 @@ export const copy = {
     name: "Snippets",
     titleTemplate: "%s · Snippets",
     description:
-      "A pocket commonplace book. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
+      "A pocket notebook. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
   },
 
   /** primary navigation — the desktop links and the mobile dock */
@@ -67,7 +67,7 @@ export const copy = {
       "Snippets is an app to capture your daily moments.",
       "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
       "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
-      "About this app: Everything is stored on this device by default. If you make an account, you can access snippets across devices. You can then connect your Google Drive to sync snippets off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can seal the book with end-to-end encryption — then no one but you, including us, can read what you keep.",
+      "About this app: Everything is stored on this device by default. If you make an account, you can access snippets across devices. You can then connect your Google Drive to sync snippets off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption — then no one but you, including us, can read what you keep.",
       "How you remember your days is how you remember your life.",
     ] as const,
   },
@@ -244,9 +244,9 @@ export const copy = {
   /** the ⌘K command menu */
   commandMenu: {
     title: "Command menu",
-    description: "Search the book or jump somewhere",
+    description: "Search your entries or jump somewhere",
     empty: "Nothing found.",
-    inTheBook: "In the book",
+    inTheBook: "In your entries",
     goTo: "Go to",
     do: "Do",
     switchTo: (themeName: string) => `Switch to ${themeName}`,
@@ -264,7 +264,7 @@ export const copy = {
       global: "Anywhere",
     },
     back: "Back a level",
-    search: "Search the book",
+    search: "Search your entries",
     today: "Go to today",
     step: "Step through time",
     goCanvas: "To the calendar",
@@ -309,9 +309,9 @@ export const copy = {
   /** the sign-in page */
   signin: {
     title: "Sign in",
-    back: "Back to the book",
+    back: "Back to your entries",
     lead:
-      "Your book stays on this device either way — signing in keeps a copy on the server and lets another device carry it too.",
+      "Your entries stay on this device either way — signing in keeps a copy on the server and lets another device carry them too.",
     emailLabel: "Email",
     emailPlaceholder: "you@example.com",
     sendCode: "Send a code",
@@ -336,13 +336,13 @@ export const copy = {
 
   /**
    * The one-time offer shown just after signing in: now that a copy of
-   * the book rests on the server, this is the honest moment to offer to
-   * seal it. Never required — "Not now" leaves it exactly where it is,
-   * in Settings, and the offer doesn't return on this device.
+   * your entries rests on the server, this is the honest moment to offer
+   * to encrypt them. Never required — "Not now" leaves it exactly where
+   * it is, in Settings, and the offer doesn't return on this device.
    */
   welcome: {
-    title: "Seal your book?",
-    body: "Your book now keeps a copy on our server, so you can reach it from another device. If you like, you can seal it — encrypted with a key only your devices hold, so no one else can read it, us included. It takes a minute, and you can always turn it on later in Settings.",
+    title: "Encrypt your entries?",
+    body: "Your entries now keep a copy on our server, so you can reach them from another device. If you like, you can encrypt them — with a key only your devices hold, so no one else can read them, us included. It takes a minute, and you can always turn it on later in Settings.",
     seal: "Set up encryption",
     later: "Not now",
   },
@@ -350,11 +350,11 @@ export const copy = {
   /** the Settings page */
   settings: {
     title: "Settings",
-    back: "Back to the book",
+    back: "Back to your entries",
     account: {
       heading: "Account",
       signedOutLead:
-        "Sign in and the book keeps a copy on the server — carried to any device you sign in on.",
+        "Sign in and your entries keep a copy on the server — carried to any device you sign in on.",
       signIn: "Sign in",
       signedInAs: (email: string) => `Signed in as ${email}.`,
       signOut: "Sign out",
@@ -383,18 +383,18 @@ export const copy = {
         `${device} here · ${server} on the server`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
-      locked: "This book is end-to-end encrypted — unlock below to sync.",
+      locked: "Your entries are end-to-end encrypted — unlock below to sync.",
     },
     encryption: {
       heading: "Encryption",
       offLead:
-        "Turn on end-to-end encryption and your entries are sealed with a key only your devices hold — unreadable on the server, by anyone, including us. Your Drive backups stay readable; they’re yours.",
+        "Turn on end-to-end encryption and your entries are encrypted with a key only your devices hold — unreadable on the server, by anyone, including us. Your Drive backups stay readable; they’re yours.",
       turnOn: "Turn on end-to-end encryption",
       onLead: "End-to-end encryption is on. Only your devices hold the key.",
       turnOff: "Turn off encryption",
       turnOffHold: "Hold to turn off",
       turnOffHint:
-        "Every entry — including ones written while sealed — returns to standard server-side encryption, readable by the service again. This device must be unlocked to do it.",
+        "Every entry — including ones written while encrypted — returns to standard server-side encryption, readable by the service again. This device must be unlocked to do it.",
       turningOff: "Turning off…",
       turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
       lockedLead:
@@ -408,11 +408,11 @@ export const copy = {
       useRecovery: "Use my recovery code instead",
       usePassphrase: "Use my passphrase instead",
       recoveryLabel: "Your recovery code",
-      enrollTitle: "Seal the book?",
+      enrollTitle: "Encrypt your entries?",
       enrollBody:
         "Your entries — including everything you’ve already written — will be encrypted with a key only your devices hold. If you forget the passphrase, the recovery code — shown once, next — is the only other way in. Your Google Drive backups stay readable either way, so even a lost key never costs you the words.",
-      enrollConfirm: "Seal it",
-      enrolling: "Sealing…",
+      enrollConfirm: "Encrypt",
+      enrolling: "Encrypting…",
       tooShort: "A passphrase needs at least ten characters.",
       tooWeak:
         "That one is still easy to guess — a longer phrase, or a few unexpected words together, is far harder to crack.",
@@ -422,7 +422,7 @@ export const copy = {
       strengthStrong: "Very strong.",
       mismatch: "Those two didn’t match.",
       wrongSecret: "That didn’t open it. Codes and phrases are exact.",
-      enrollFailed: "The book couldn’t be sealed just now. Try again in a moment.",
+      enrollFailed: "Your entries couldn’t be encrypted just now. Try again in a moment.",
       recoveryTitle: "Your recovery code",
       recoveryBody:
         "Shown exactly once. If you forget your passphrase, this code is the only other key — save the kit somewhere safe.",
@@ -432,7 +432,7 @@ export const copy = {
     backup: {
       heading: "Backup",
       lead:
-        "A copy of your book, delivered from your own device to a Snippets folder in your own Google Drive as you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
+        "A copy of your entries, delivered from your own device to a Snippets folder in your own Google Drive as you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
       connect: "Connect Google Drive",
       connecting: "Connecting…",
       /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
@@ -440,7 +440,7 @@ export const copy = {
       firstOnItsWay: "The first delivery is on its way…",
       /** reassurance: the folder is a one-way mirror, safe to touch */
       mirrors:
-        "That folder only mirrors your book — delete or change anything in it and the next delivery sets it right again.",
+        "That folder only mirrors your entries — delete or change anything in it and the next delivery sets it right again.",
       /** e.g. "Backups haven’t gone through since June 30." */
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
@@ -510,7 +510,7 @@ export const copy = {
     about: {
       heading: "About",
       // a paragraph with the book title in italics — rendered in three parts
-      lead: "Snippets is a pocket commonplace book, made in the spirit of Matthew Dicks’ ",
+      lead: "Snippets is a pocket notebook, made in the spirit of Matthew Dicks’ ",
       workTitle: "Homework for Life",
       rest: ": at the end of each day, keep the most storyworthy thing that happened. Jokes, quotes, and stray phrases are welcome too. Good lines shouldn’t go to waste.",
     },

@@ -46,7 +46,7 @@ export default function PrivacyPage() {
             <Em>so we cannot read what you write</Em>.
           </p>
           <p className="voice-prose text-[0.95rem]">
-            <Em>If you sign in</Em>, a copy of your book rests on our server so
+            <Em>If you sign in</Em>, a copy of your entries rests on our server so
             you can add entries from your other devices. It has ordinary
             encryption where the service (us) holds the keys, just like Apple
             Notes or Google Keep.{" "}
@@ -82,13 +82,13 @@ export default function PrivacyPage() {
             key that decodes it.
           </p>
           <p className="voice-prose text-[0.95rem]">
-            Turning encryption on seals your whole book, not only the entries
-            you write next — every entry already there is re-encrypted on the
-            server too. However: anything you had already synced arrived in the
-            clear before you sealed it, so it could have been read then, and a
-            plaintext copy may linger a while in routine database backups.
-            Turning encryption back off does the reverse, re-uploading your book
-            readable again.
+            Turning encryption on encrypts your existing entries too, not only
+            the ones you write next — every entry already on the server is
+            re-encrypted. However: anything you had already synced arrived in
+            the clear before you encrypted it, so it could have been read then,
+            and a plaintext copy may linger a while in routine database backups.
+            Turning encryption back off does the reverse, re-uploading your
+            entries readable again.
           </p>
           <p className="voice-prose text-[0.95rem]">
             <Em>Two honest limits that every encrypted web app lives with</Em>.
@@ -120,11 +120,11 @@ export default function PrivacyPage() {
                 <span className="voice-data">AES-256-GCM</span> — an
                 authenticated cipher, so a tampered entry fails to open rather
                 than decrypting to something wrong — under a fresh random nonce
-                each time. All of your entries share one random 256-bit{" "}
-                <em>book key</em>, generated on your device.
+                each time. All of your entries share one random 256-bit key,
+                generated on your device.
               </p>
               <p className="voice-prose text-[0.9rem] text-ink-soft">
-                That book key is what&rsquo;s wrapped (encrypted) twice, so it
+                That key is what&rsquo;s wrapped (encrypted) twice, so it
                 can travel between your devices without ever being exposed: once
                 under a key stretched from your passphrase with{" "}
                 <span className="voice-data">
@@ -136,7 +136,7 @@ export default function PrivacyPage() {
                 neither.
               </p>
               <p className="voice-prose text-[0.9rem] text-ink-soft">
-                On your device, the unwrapped book key is held as a{" "}
+                On your device, the unwrapped key is held as a{" "}
                 <span className="voice-data">non-extractable CryptoKey</span> —
                 the browser will use it to decrypt but will not export its
                 bytes, even to the page&rsquo;s own scripts. What rests on the
@@ -243,7 +243,7 @@ export default function PrivacyPage() {
         <section className="space-y-3">
           <h2 className="voice-label border-b border-rule pb-1.5">Leaving</h2>
           <p className="voice-prose text-[0.95rem]">
-            <Em>Erasing your book</Em> (
+            <Em>Erasing your entries</Em> (
             <Link href="/settings" className="underline underline-offset-2">
               Settings
             </Link>

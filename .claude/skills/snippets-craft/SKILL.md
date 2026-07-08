@@ -70,7 +70,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    mode.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,
    `…`. No exclamation marks, emoji, or sparkle-AI framing. Streaks
-   past-tense; gaps blank, never red.
+   past-tense; gaps blank, never red. **Name things plainly — the desk /
+   paper / light conceit is the *visual* skin, never a vocabulary the
+   copy makes the reader learn.** Say what a thing literally does, in
+   words the user already owns: **encrypt your entries**, not *seal your
+   book*; **your entries**, not *your book* (allow "book"/"notebook" only
+   in warm, descriptive prose where it's deliberate, and never the
+   non-idiomatic "commonplace book"). Metaphor earns its place only when
+   it names an actual on-screen object — the **wax seal** you tap to
+   record/keep is real, so "tap the seal" stays — or genuinely aids
+   understanding; otherwise the plainer word wins. When in doubt, prefer
+   the word a non-user would understand.
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.
