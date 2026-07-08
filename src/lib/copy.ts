@@ -67,14 +67,14 @@ export const copy = {
       "Snippets is an app to capture your daily moments.",
       "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
       "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
-      "About this app: Everything is stored on this device by default. If you make an account, you can access snippets across devices. You can then connect your Google Drive to sync snippets off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption — then no one but you, including us, can read what you keep.",
+      "About this app: Everything is stored on this device by default. If you make an account, you can access your entries across devices. You can then connect your Google Drive to sync your entries off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption — then no one but you, including us, can read what you keep.",
       "How you remember your days is how you remember your life.",
     ] as const,
   },
 
   /** capture — the day's composer and the voice seal */
   capture: {
-    sectionLabel: "Capture a snippet",
+    sectionLabel: "Capture an entry",
     keep: "Keep",
     /**
      * The day's rotating questions, in the spirit of Homework for Life.
@@ -112,7 +112,7 @@ export const copy = {
       "this browser doesn’t offer voice capture — Chrome, Safari, or Edge do; writing works everywhere",
     /** the wax seal's accessible name, by state */
     seal: {
-      speak: "Speak a snippet",
+      speak: "Speak an entry",
       stop: "Stop listening",
       busy: "Setting your words",
     },
@@ -131,7 +131,7 @@ export const copy = {
       denied: {
         title: "The microphone was declined.",
         description:
-          "Re-allow it in your browser’s site settings to speak your snippets.",
+          "Re-allow it in your browser’s site settings to speak your entries.",
       },
       "no-mic": {
         title: "No microphone found.",

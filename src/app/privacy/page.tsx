@@ -51,7 +51,7 @@ export default function PrivacyPage() {
             encryption where the service (us) holds the keys, just like Apple
             Notes or Google Keep.{" "}
             <Em>
-              In principle your snippets here could be accessed, but in practice
+              In principle your entries here could be accessed, but in practice
               we don&rsquo;t
             </Em>
             . Otherwise, the only data we collect about you is what signing in
@@ -203,7 +203,7 @@ export default function PrivacyPage() {
         <section className="space-y-3">
           <h2 className="voice-label border-b border-rule pb-1.5">Voice</h2>
           <p className="voice-prose text-[0.95rem]">
-            <Em>If you speak a snippet with the in-app microphone</Em>, the app
+            <Em>If you speak an entry with the in-app microphone</Em>, the app
             streams your audio to a transcription service — currently{" "}
             <a
               href="https://deepgram.com/privacy"
