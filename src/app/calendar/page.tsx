@@ -1774,7 +1774,14 @@ function Calendar() {
     !searchActive && (view === "entry" || zoom?.from === "entry");
 
   return (
-    <div className="page-settle flex h-full min-h-0 flex-col">
+    // NO page-settle here — the SSR Suspense fallback (CalendarSkeleton) already
+    // wears it and plays the ONE entrance. This root mounts when Suspense swaps
+    // the (already faded-in) skeleton for the real page, and a page-settle here
+    // would restart the keyframe from opacity:0 on that fresh mount — a blank
+    // frame that fades back in, reading as the book flashing out and returning a
+    // beat after it first appeared. The swap is a seamless continuation instead:
+    // the settled skeleton becomes the settled page with no second fade.
+    <div className="flex h-full min-h-0 flex-col">
       {/* the current altitude, spoken to assistive tech after every zoom/jump */}
       <p aria-live="polite" className="sr-only">
         {view === "year"
