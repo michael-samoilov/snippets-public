@@ -334,6 +334,19 @@ export const copy = {
     },
   },
 
+  /**
+   * The one-time offer shown just after signing in: now that a copy of
+   * the book rests on the server, this is the honest moment to offer to
+   * seal it. Never required — "Not now" leaves it exactly where it is,
+   * in Settings, and the offer doesn't return on this device.
+   */
+  welcome: {
+    title: "Seal your book?",
+    body: "Your book now keeps a copy on our server, so you can reach it from another device. If you like, you can seal it — encrypted with a key only your devices hold, so no one else can read it, us included. It takes a minute, and you can always turn it on later in Settings.",
+    seal: "Set up encryption",
+    later: "Not now",
+  },
+
   /** the Settings page */
   settings: {
     title: "Settings",

@@ -77,7 +77,7 @@ export default function SignInPage() {
       setError(copy.signin.errors.badCode);
       return;
     }
-    router.push("/calendar");
+    router.push("/welcome");
   };
 
   const google = async () => {
@@ -85,7 +85,7 @@ export default function SignInPage() {
     setError(null);
     const { error: googleError } = await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/calendar",
+      callbackURL: "/welcome",
     });
     // on success the browser navigates away; reaching here means it didn't
     setBusy(false);

@@ -384,6 +384,21 @@ function EncryptionSection({ email }: { email: string }) {
     void getBookKey().then((k) => setHasKey(!!k));
   }, [sync.locked]);
 
+  // arriving from the post-sign-in offer (/welcome → "Set up encryption"):
+  // open the enroll dialog straight away, once we know the account isn't
+  // already sealed. Clean the query so a refresh doesn't reopen it.
+  const [wantSeal] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("seal") === "1",
+  );
+  useEffect(() => {
+    if (wantSeal && enrolled === false) {
+      window.history.replaceState(null, "", "/settings");
+      setEnrollOpen(true);
+    }
+  }, [wantSeal, enrolled]);
+
   // the things a guesser tries first: the account's email and its local part
   const guessHints = useMemo(
     () => [email, email.split("@")[0], "snippets"].filter(Boolean),
