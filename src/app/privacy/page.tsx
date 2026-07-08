@@ -81,6 +81,15 @@ export default function PrivacyPage() {
             key that decodes it.
           </p>
           <p className="voice-prose text-[0.95rem]">
+            Turning encryption on seals your whole book, not only the entries
+            you write next — every entry already there is re-encrypted on the
+            server too. The one thing it can&rsquo;t reach is the past: anything
+            you had already synced arrived in the clear before you sealed it, so
+            it could have been read then, and a plaintext copy may linger a
+            while in routine database backups. Turning encryption back off does
+            the reverse, re-uploading your book readable again.
+          </p>
+          <p className="voice-prose text-[0.95rem]">
             <Em>Two honest limits that every encrypted web app lives with</Em>.
             First, the app is a website: your browser downloads its code from us
             on each visit, so you are ultimately trusting that code. For us to

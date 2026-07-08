@@ -381,7 +381,7 @@ export const copy = {
       turnOff: "Turn off encryption",
       turnOffHold: "Hold to turn off",
       turnOffHint:
-        "Your entries return to standard server-side encryption — readable by the service again. This device must be unlocked to do it.",
+        "Every entry — including ones written while sealed — returns to standard server-side encryption, readable by the service again. This device must be unlocked to do it.",
       turningOff: "Turning off…",
       turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
       lockedLead:
@@ -397,7 +397,7 @@ export const copy = {
       recoveryLabel: "Your recovery code",
       enrollTitle: "Seal the book?",
       enrollBody:
-        "Your entries will be encrypted with a key only your devices hold. If you forget the passphrase, the recovery code — shown once, next — is the only other way in. Your Google Drive backups stay readable either way, so even a lost key never costs you the words.",
+        "Your entries — including everything you’ve already written — will be encrypted with a key only your devices hold. If you forget the passphrase, the recovery code — shown once, next — is the only other way in. Your Google Drive backups stay readable either way, so even a lost key never costs you the words.",
       enrollConfirm: "Seal it",
       enrolling: "Sealing…",
       tooShort: "A passphrase needs at least ten characters.",
