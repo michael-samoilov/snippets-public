@@ -33,6 +33,7 @@ interface FileIds {
 }
 
 let delivering = false;
+let adoptTried = false;
 
 /** Adopt the refresh token minted by the connect consent; the server forgets it. */
 export async function adoptDriveToken(): Promise<boolean> {
@@ -137,7 +138,15 @@ export async function maybeDeliverBackup(
 ): Promise<void> {
   if (delivering) return;
   if (!backup || backup.state === "disconnected") return;
-  if (!(await hasDriveToken())) return;
+  if (!(await hasDriveToken())) {
+    // a device connected before delivery moved client-side (or a fresh
+    // one) adopts the server-held token once; if the server has none to
+    // give — already adopted on another device — this device just won't
+    // deliver, which is fine, one delivering device is enough
+    if (adoptTried) return;
+    adoptTried = true;
+    if (!(await adoptDriveToken().catch(() => false))) return;
+  }
 
   const last = (await getMeta<number>(LAST_DELIVERY_META)) ?? 0;
   if (Date.now() - last < MIN_DELIVERY_GAP_MS) return;
