@@ -141,6 +141,16 @@ export default function IconStudio() {
     setSpec((s) => ({ ...s, variants: s.variants.map((v) => ({ ...v, ...centreFor(a, v.fill) })) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // rebalance ONE variant against its current fill — the optical centre depends on
+  // scale, so this recomputes the best position for that variant's size alone,
+  // leaving the others (and any manual tweaks) untouched.
+  const balanceOne = (key: string) => {
+    const a = opticalAnchor();
+    setSpec((s) => ({
+      ...s,
+      variants: s.variants.map((v) => (v.key === key ? { ...v, ...centreFor(a, v.fill) } : v)),
+    }));
+  };
 
   const [autoBal, setAutoBal] = useState(true);
   // re-balance when the SHAPE changes — after a beat, so the master canvas has
@@ -297,6 +307,7 @@ export default function IconStudio() {
                   <div style={row}>fill<input style={rng} type="range" min={0.6} max={1.5} step={0.005} value={v.fill} onChange={(e) => setFill(v.key, +e.target.value)} />{v.fill.toFixed(3)}</div>
                   <div style={row}>centre x<input style={rng} type="range" min={0.4} max={0.6} step={0.002} value={v.cx} onChange={(e) => patchVar(v.key, { cx: +e.target.value })} />{v.cx.toFixed(3)}</div>
                   <div style={row}>centre y<input style={rng} type="range" min={0.4} max={0.6} step={0.002} value={v.cy} onChange={(e) => patchVar(v.key, { cy: +e.target.value })} />{v.cy.toFixed(3)}</div>
+                  <button onClick={() => balanceOne(v.key)} title="recompute the optical centre for this size">⊙ rebalance</button>
                 </div>
               </div>
             </div>
