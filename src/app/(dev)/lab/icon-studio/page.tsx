@@ -99,6 +99,67 @@ export default function IconStudio() {
     patch({ seed: k });
   };
 
+  // ── automatic optical balancing ───────────────────────────────────
+  // The wax is a lobed, asymmetric shape, so a geometrically-centred disc reads
+  // shifted. Find the seal's optical anchor from its actual mass — the centroid
+  // of the OPAQUE wax (soft shadow excluded), blended halfway to the bounding-box
+  // centre so it doesn't over-correct toward the rim (the 48a9def method) — then
+  // per variant place THAT point at the frame centre. It depends on fill, so it's
+  // recomputed per variant, and re-run whenever the seal's shape changes.
+  const opticalAnchor = () => {
+    const m = masterCanvas();
+    const g = m?.getContext("2d");
+    if (!m || !g) return { x: 0.5, y: 0.5 };
+    const { data, width, height } = g.getImageData(0, 0, m.width, m.height);
+    let minx = width, miny = height, maxx = 0, maxy = 0, sx = 0, sy = 0, n = 0;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 180) {
+          if (x < minx) minx = x;
+          if (x > maxx) maxx = x;
+          if (y < miny) miny = y;
+          if (y > maxy) maxy = y;
+          sx += x;
+          sy += y;
+          n++;
+        }
+      }
+    }
+    if (!n) return { x: 0.5, y: 0.5 };
+    return {
+      x: ((minx + maxx) / 2 + sx / n) / 2 / width,
+      y: ((miny + maxy) / 2 + sy / n) / 2 / height,
+    };
+  };
+  const clamp46 = (v: number) => Math.max(0.4, Math.min(0.6, +v.toFixed(3)));
+  const centreFor = (a: { x: number; y: number }, fill: number) => ({
+    cx: clamp46(0.5 - (a.x - 0.5) * fill),
+    cy: clamp46(0.5 - (a.y - 0.5) * fill),
+  });
+  const balanceAll = useCallback(() => {
+    const a = opticalAnchor();
+    setSpec((s) => ({ ...s, variants: s.variants.map((v) => ({ ...v, ...centreFor(a, v.fill) })) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [autoBal, setAutoBal] = useState(true);
+  // re-balance when the SHAPE changes — after a beat, so the master canvas has
+  // repainted the new seal for us to measure.
+  useEffect(() => {
+    if (!autoBal) return;
+    const id = setTimeout(balanceAll, 220);
+    return () => clearTimeout(id);
+  }, [spec.seed, spec.puck, spec.glyphScale, autoBal, balanceAll]);
+
+  // changing a variant's fill shifts its optical centre too — keep it balanced
+  const setFill = (key: string, fill: number) =>
+    setSpec((s) => ({
+      ...s,
+      variants: s.variants.map((v) =>
+        v.key === key ? { ...v, fill, ...(autoBal ? centreFor(opticalAnchor(), fill) : {}) } : v,
+      ),
+    }));
+
   const composeFiles = () =>
     spec.variants.map((v) => {
       const cv = document.createElement("canvas");
@@ -203,6 +264,11 @@ export default function IconStudio() {
           <div style={row}>bright<input type="color" value={spec.tint.bright} onChange={(e) => patchTint("bright", e.target.value)} /></div>
           <div style={row}>shadow<input type="color" value={spec.tint.shadow} onChange={(e) => patchTint("shadow", e.target.value)} /></div>
           <div style={row}>S ink<input type="color" value={spec.glyphColor} onChange={(e) => patch({ glyphColor: e.target.value })} /></div>
+          <label style={{ ...row, cursor: "pointer" }}>
+            <input type="checkbox" checked={autoBal} onChange={(e) => setAutoBal(e.target.checked)} />
+            auto optical-balance ⊙
+            <button onClick={balanceAll} title="re-balance now">balance now</button>
+          </label>
           <div style={{ marginTop: 10 }}>
             <button onClick={bake} style={{ padding: "8px 16px", fontWeight: 700, background: "#1e3a5f", color: "#eae1cd", border: "none", borderRadius: 6, cursor: "pointer" }}>Bake to disk</button>
             <button onClick={download} style={{ marginLeft: 8, padding: "8px 16px", fontWeight: 700, background: "transparent", color: "#1e3a5f", border: "1px solid #1e3a5f", borderRadius: 6, cursor: "pointer" }}>Download PNGs</button>
@@ -228,7 +294,7 @@ export default function IconStudio() {
                 </div>
                 <div style={{ flex: "1 1 190px", minWidth: 0 }}>
                   <div style={{ fontWeight: 700, wordBreak: "break-word" }}>{v.key} <span style={{ opacity: 0.6, fontWeight: 400 }}>· {v.file} · {v.size}px {v.bg ? "on cream" : "transparent"}{v.key === "maskable" ? " · red = safe zone" : ""}</span></div>
-                  <div style={row}>fill<input style={rng} type="range" min={0.6} max={1.5} step={0.005} value={v.fill} onChange={(e) => patchVar(v.key, { fill: +e.target.value })} />{v.fill.toFixed(3)}</div>
+                  <div style={row}>fill<input style={rng} type="range" min={0.6} max={1.5} step={0.005} value={v.fill} onChange={(e) => setFill(v.key, +e.target.value)} />{v.fill.toFixed(3)}</div>
                   <div style={row}>centre x<input style={rng} type="range" min={0.4} max={0.6} step={0.002} value={v.cx} onChange={(e) => patchVar(v.key, { cx: +e.target.value })} />{v.cx.toFixed(3)}</div>
                   <div style={row}>centre y<input style={rng} type="range" min={0.4} max={0.6} step={0.002} value={v.cy} onChange={(e) => patchVar(v.key, { cy: +e.target.value })} />{v.cy.toFixed(3)}</div>
                 </div>
