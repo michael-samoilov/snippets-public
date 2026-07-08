@@ -17,6 +17,53 @@ function Em({ children }: { children: React.ReactNode }) {
   return <strong className="font-bold">{children}</strong>;
 }
 
+/** A subheading inside a section — small-caps, quieter than the section head. */
+function Sub({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <h3
+      id={id}
+      className="voice-label scroll-mt-8 pt-3 text-[0.72rem] text-ink-soft"
+    >
+      {children}
+    </h3>
+  );
+}
+
+/** Contents links — a top-level one, and the nested (subheading) variant. */
+function TocLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className="voice-prose text-[0.92rem] text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+    >
+      {children}
+    </a>
+  );
+}
+
+function TocSubLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className="voice-prose text-[0.85rem] text-ink-faint underline-offset-2 hover:text-ink-soft hover:underline"
+    >
+      {children}
+    </a>
+  );
+}
+
 export default function PrivacyPage() {
   return (
     <div className="page-settle">
@@ -27,8 +74,47 @@ export default function PrivacyPage() {
           last updated {LAST_UPDATED.toLowerCase()}
         </p>
 
+        <nav aria-label="Contents" className="border-y border-rule-faint py-4">
+          <p className="voice-label text-[0.72rem] text-ink-faint">Contents</p>
+          <ul className="mt-3 space-y-2">
+            <li>
+              <TocLink href="#can-you-read">Can you read what I write?</TocLink>
+              <ul className="mt-2 ml-3.5 space-y-1.5 border-l border-rule-faint pl-3.5">
+                <li>
+                  <TocSubLink href="#before-you-sign-in">
+                    Before you sign in
+                  </TocSubLink>
+                </li>
+                <li>
+                  <TocSubLink href="#if-you-sign-in">If you sign in</TocSubLink>
+                </li>
+                <li>
+                  <TocSubLink href="#end-to-end-encryption">
+                    If you turn on end-to-end encryption
+                  </TocSubLink>
+                </li>
+              </ul>
+            </li>
+            <li>
+              <TocLink href="#google-drive-backup">Google Drive backup</TocLink>
+            </li>
+            <li>
+              <TocLink href="#voice">Voice</TocLink>
+            </li>
+            <li>
+              <TocLink href="#what-we-dont-do">What we don&rsquo;t do</TocLink>
+            </li>
+            <li>
+              <TocLink href="#leaving">Leaving</TocLink>
+            </li>
+          </ul>
+        </nav>
+
         <section className="space-y-3">
-          <h2 className="voice-label border-b border-rule pb-1.5">
+          <h2
+            id="can-you-read"
+            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
+          >
             Can you read what I write?
           </h2>
           <p className="voice-prose text-[0.95rem]">
@@ -40,16 +126,17 @@ export default function PrivacyPage() {
             process your data in accordance with their privacy policies (see
             Google Drive backup and Voice, below).
           </p>
+          <Sub id="before-you-sign-in">Before you sign in</Sub>
           <p className="voice-prose text-[0.95rem]">
-            <Em>Before you sign in</Em>, your entries are only written into this
-            browser&rsquo;s own storage and never sent to our server,{" "}
+            Your entries are only written into this browser&rsquo;s own storage
+            and never sent to our server,{" "}
             <Em>so we cannot read what you write</Em>.
           </p>
+          <Sub id="if-you-sign-in">If you sign in</Sub>
           <p className="voice-prose text-[0.95rem]">
-            <Em>If you sign in</Em>, a copy of your entries rests on our server so
-            you can add entries from your other devices. It has ordinary
-            encryption where the service (us) holds the keys, just like Apple
-            Notes or Google Keep.{" "}
+            A copy of your entries rests on our server so you can add entries
+            from your other devices. It has ordinary encryption where the
+            service (us) holds the keys, just like Apple Notes or Google Keep.{" "}
             <Em>
               In principle your entries here could be accessed, but in practice
               we don&rsquo;t
@@ -60,9 +147,12 @@ export default function PrivacyPage() {
             passwords for our sign-in process, and{" "}
             <Em>signing in is never required to use the app</Em>.
           </p>
+          <Sub id="end-to-end-encryption">
+            If you turn on end-to-end encryption
+          </Sub>
           <p className="voice-prose text-[0.95rem]">
-            <Em>If you turn on end-to-end encryption</Em> (Settings →
-            Encryption), <Em>we cannot read what you write</Em>. Before an entry
+            Turn it on in Settings → Encryption, and{" "}
+            <Em>we cannot read what you write</Em>. Before an entry
             leaves your device, your browser encrypts it: the words are turned
             into a random-looking string of characters (what our server
             receives) that can only be decoded back into text with one specific
@@ -158,7 +248,10 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="voice-label border-b border-rule pb-1.5">
+          <h2
+            id="google-drive-backup"
+            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
+          >
             Google Drive backup
           </h2>
           <p className="voice-prose text-[0.95rem]">
@@ -201,7 +294,12 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="voice-label border-b border-rule pb-1.5">Voice</h2>
+          <h2
+            id="voice"
+            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
+          >
+            Voice
+          </h2>
           <p className="voice-prose text-[0.95rem]">
             <Em>If you speak an entry with the in-app microphone</Em>, the app
             streams your audio to a transcription service — currently{" "}
@@ -229,7 +327,10 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="voice-label border-b border-rule pb-1.5">
+          <h2
+            id="what-we-dont-do"
+            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
+          >
             What we don&rsquo;t do
           </h2>
           <p className="voice-prose text-[0.95rem]">
@@ -241,7 +342,12 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="voice-label border-b border-rule pb-1.5">Leaving</h2>
+          <h2
+            id="leaving"
+            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
+          >
+            Leaving
+          </h2>
           <p className="voice-prose text-[0.95rem]">
             <Em>Erasing your entries</Em> (
             <Link href="/settings" className="underline underline-offset-2">
