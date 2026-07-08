@@ -12,9 +12,9 @@ export const metadata: Metadata = { title: "Privacy" };
  */
 const LAST_UPDATED = "July 8, 2026";
 
-/** Quiet emphasis — a touch heavier than the 420 prose, no colour shift. */
+/** Emphasis — bold against the 420 prose, so load-bearing lines stand out. */
 function Em({ children }: { children: React.ReactNode }) {
-  return <strong className="font-semibold">{children}</strong>;
+  return <strong className="font-bold">{children}</strong>;
 }
 
 export default function PrivacyPage() {
