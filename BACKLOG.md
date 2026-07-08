@@ -308,3 +308,66 @@ The first-ever intro (#5, shipped) owns the today-zone empty state;
 this item is everything else. Rule of thumb from the constitution:
 gaps stay blank, never scolding — an empty state earns copy only when
 silence would read as breakage.
+
+## 8. E2E: bind the envelope's cleartext fields into the cipher (AAD)
+
+> Adversarial security review, 2026-07-08. (The critical sibling
+> finding — the plaintext-downgrade bug, where the server's enrollment
+> answer, not the local key, chose whether to encrypt — was fixed the
+> same day: `runCycle` now makes the on-device key authoritative.)
+
+AES-256-GCM authenticates each entry's *ciphertext*, but the row's
+identity, `updatedAt`, `deletedAt`, and `payloadFormat` ride *outside*
+the sealed envelope, unsigned (`src/lib/sync-wire.ts`). A tampered body
+fails to open — but a hostile (or buggy) server can still swap one
+sealed entry's ciphertext onto another row, roll a row back to an
+earlier sealed version, or flip `deletedAt` to hide or resurrect an
+entry, all without reading a word. Close it by binding those cleartext
+fields as AES-GCM **additional authenticated data (AAD)** so decryption
+fails if the envelope has been moved or its metadata edited.
+
+Design notes:
+- AAD = a canonical serialization of `{id, updatedAt, deletedAt,
+  payloadFormat}` (exactly the fields sync needs in the clear).
+  `encryptJSON`/`decryptJSON` in `crypto.ts` take it as a parameter;
+  decrypt recomputes it from the wire row and a mismatch throws — surface
+  it as the same "tampered entry" failure that a bad tag already gives.
+- This is a `payloadFormat` bump. Existing format-2 seals carry no AAD,
+  so either add **format 3** for AAD-bound seals and keep format 2
+  decryptable through a migration, or re-seal the whole book on next
+  unlock (`reencryptSweep` already exists for exactly this). **Check
+  whether any live encrypted books exist before choosing** — a re-seal
+  sweep is simplest if the install base is still zero/small.
+- Extend `crypto.test.ts`: a row decrypts under the right AAD and fails
+  under a swapped `id`, a bumped `updatedAt`, or a flipped `deletedAt`.
+- The privacy deep-dive says "a tampered entry fails to open"; once this
+  ships that becomes true of the *envelope* too — tighten the copy to
+  say so (today it slightly overclaims).
+
+## 9. E2E: refuse weak passphrases at enrollment (+ two crypto tidies)
+
+> Adversarial security review, 2026-07-08.
+
+Enrollment gates only on length (`pass.length < 10`,
+`src/app/settings/page.tsx`), so `password12` seals a book. PBKDF2 at
+600k iterations slows a guesser but can't rescue a guessable passphrase
+— it is the weakest link in the whole scheme, and the copy implies
+stronger protection than a weak phrase delivers. Add real strength
+enforcement at the "Seal the book?" dialog: a zxcvbn-style estimator +
+a common-password blocklist, with a **quiet, in-voice** strength read
+(not a coloured nagging meter — laws 6/7) and a floor below which "Seal
+it" won't fire.
+
+Design notes:
+- Dependency call: `@zxcvbn-ts/core` with lazy-loaded dictionaries, or a
+  lighter estimator — load it **only** in the enrollment path, never
+  anywhere near capture (law 8) and never in the main bundle.
+- The read is one line in the house voice ("that phrase is easy to
+  guess — try a longer, stranger one"), not a rainbow bar. The floor is
+  a strength score, not a character count; keep the ten-character
+  minimum as a floor beneath it.
+- Two small hardening tidies to fold in while in `crypto.ts`:
+  (a) `generateRecoveryCode` uses `bytes[i] % 30` — modulo bias over the
+  30-char alphabet; switch to rejection sampling so every symbol is
+  uniform. (b) A comment claims "128 bits"; reconcile it with the true
+  figure (~120). Neither is exploitable, but both should read honestly.
