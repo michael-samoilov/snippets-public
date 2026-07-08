@@ -22,7 +22,9 @@ optical `cx`/`cy`. `src/lib/seal-spec.ts` types + reads it.
 `puck`, then per platform dial `fill` and the optical centre against live
 previews — favicon on light/dark tabs, apple on cream, maskable with its safe
 zone drawn. **Bake to disk** writes the PNGs and saves the spec back to
-`icon-seal.json`.
+`icon-seal.json` (local `pnpm dev` only — the writer is a dev-only route). On a
+deployed host the filesystem is read-only, so there **Download PNGs** (and the
+Bake fallback) hand you the composed files + spec to commit by hand.
 
 **`pnpm icons`** reproduces the exact same icons headless (renders the seal via
 `/lab/icon-bake`, composites with `sharp`) — for CI or a clean rebuild. Needs a

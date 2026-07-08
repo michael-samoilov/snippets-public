@@ -90,20 +90,49 @@ export default function IconStudio() {
     patch({ seed: k });
   };
 
-  const bake = async () => {
-    setStatus("baking…");
-    const files: { file: string; dataUrl: string }[] = [];
-    for (const v of spec.variants) {
+  const composeFiles = () =>
+    spec.variants.map((v) => {
       const cv = document.createElement("canvas");
       composeInto(cv, v, v.size);
-      files.push({ file: v.file, dataUrl: cv.toDataURL("image/png") });
-    }
-    const res = await fetch("/api/lab/bake-icons", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ spec, files }),
+      return { file: v.file, name: v.file.split("/").pop()!, dataUrl: cv.toDataURL("image/png") };
     });
-    setStatus(res.ok ? "baked ✓ wrote 5 icons + saved spec" : `bake failed (${res.status})`);
+
+  const save = (name: string, dataUrl: string) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = name;
+    a.click();
+  };
+  const specDataUrl = () =>
+    "data:application/json," + encodeURIComponent(JSON.stringify(spec, null, 2));
+
+  // download the composed PNGs + spec to the browser — works anywhere (prod too)
+  const download = () => {
+    const files = composeFiles();
+    for (const f of files) save(f.name, f.dataUrl);
+    save("icon-seal.json", specDataUrl());
+    setStatus(`downloaded ${files.length} PNGs + icon-seal.json`);
+  };
+
+  // write straight into the repo — only works against the dev-only API (local
+  // `pnpm dev`). On prod the FS is read-only + the route 404s, so fall back to a
+  // download so the studio is still useful there.
+  const bake = async () => {
+    setStatus("baking…");
+    const files = composeFiles();
+    try {
+      const res = await fetch("/api/lab/bake-icons", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ spec, files }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setStatus("baked ✓ wrote 5 icons + saved spec");
+    } catch {
+      for (const f of files) save(f.name, f.dataUrl);
+      save("icon-seal.json", specDataUrl());
+      setStatus("no disk writer here (prod) — downloaded the 5 PNGs + spec instead");
+    }
   };
 
   const N = useMemo(() => lobeCount(spec.seed), [spec.seed]);
@@ -150,7 +179,8 @@ export default function IconStudio() {
           <div style={row}>S ink<input type="color" value={spec.glyphColor} onChange={(e) => patch({ glyphColor: e.target.value })} /></div>
           <div style={{ marginTop: 10 }}>
             <button onClick={bake} style={{ padding: "8px 16px", fontWeight: 700, background: "#1e3a5f", color: "#eae1cd", border: "none", borderRadius: 6, cursor: "pointer" }}>Bake to disk</button>
-            <span style={{ marginLeft: 10 }}>{status}</span>
+            <button onClick={download} style={{ marginLeft: 8, padding: "8px 16px", fontWeight: 700, background: "transparent", color: "#1e3a5f", border: "1px solid #1e3a5f", borderRadius: 6, cursor: "pointer" }}>Download PNGs</button>
+            <div style={{ marginTop: 6, fontSize: 12 }}>{status}</div>
           </div>
         </div>
 
