@@ -124,7 +124,10 @@ Everything clickable feels physical:
   `scale(0.98)` + shadow compresses to an inset.
 - The seal — radial wax material (`--wax-bright` specular at 32%/28%),
   grooved rim, breathing animation + rings while listening, icon
-  crossfades through 2px blur (Emil's blur-masking).
+  crossfades through 2px blur (Emil's blur-masking). This live seal
+  (`WaxStamp`) is also the **source of truth for the app icons/favicons** —
+  they're HD renders of it, not standalone art; re-bake per
+  `public/icons/README.md`.
 - Chips stamp: `whileTap 0.93`, pop `[1, 1.07, 1]` on selection, tinted
   fill via `color-mix`.
 - Destructive = **hold-to-confirm** (`HoldToErase`): ember fills via
