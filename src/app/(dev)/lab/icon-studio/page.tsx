@@ -13,13 +13,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { ICON_SEAL, lobeCount, type IconSealSpec, type IconVariant } from "@/lib/seal-spec";
 
-const MASTER = 360; // on-screen master seal size (backing = ×dpr×superSample)
-
 export default function IconStudio() {
   const [spec, setSpec] = useState<IconSealSpec>(() => structuredClone(ICON_SEAL));
   const [status, setStatus] = useState("");
   const masterWrap = useRef<HTMLDivElement>(null);
   const previews = useRef<Map<string, HTMLCanvasElement>>(new Map());
+
+  // the master seal sizes to the viewport so it never overflows on a phone
+  // (backing = this × dpr × superSample, so the bake stays high-res regardless)
+  const [vw, setVw] = useState(1024);
+  useEffect(() => {
+    const on = () => setVw(window.innerWidth);
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  const masterSize = Math.max(160, Math.min(340, vw - 88));
 
   // load the persisted spec (so the studio opens on whatever was last baked)
   useEffect(() => {
@@ -138,18 +147,35 @@ export default function IconStudio() {
   const N = useMemo(() => lobeCount(spec.seed), [spec.seed]);
 
   const box: React.CSSProperties = { border: "1px solid #8884", borderRadius: 8, padding: 10 };
-  const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, margin: "4px 0", fontSize: 13 };
+  const row: React.CSSProperties = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, margin: "4px 0", fontSize: 13 };
+  const rng: React.CSSProperties = { flex: "1 1 90px", minWidth: 80, maxWidth: 220 };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#d8cdb4", color: "#241e15", padding: 20, fontFamily: "ui-monospace, monospace" }}>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", maxWidth: 1100, margin: "0 auto" }}>
+    // fixed full-viewport surface with its OWN scroll — the studio is a full-page
+    // tool, so it breaks out of the app's fixed-height desk/sheet (which would
+    // otherwise clip it and can't scroll it) and owns the whole screen.
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        background: "#d8cdb4",
+        color: "#241e15",
+        padding: 14,
+        fontFamily: "ui-monospace, monospace",
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", maxWidth: 1100, margin: "0 auto" }}>
         {/* master seal + shape/appearance controls */}
-        <div style={{ ...box, background: "#e8dcc2" }}>
+        <div style={{ ...box, background: "#e8dcc2", flex: "1 1 300px", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>master seal</div>
-          <div ref={masterWrap} style={{ width: MASTER, height: MASTER, display: "grid", placeItems: "center", background: "#e8dcc2" }}>
+          <div ref={masterWrap} style={{ width: "100%", height: masterSize, display: "grid", placeItems: "center", background: "#e8dcc2" }}>
             <WaxStamp
               playKey={spec.seed}
-              size={MASTER}
+              size={masterSize}
               glyph={spec.glyph}
               mode="press"
               still
@@ -171,8 +197,8 @@ export default function IconStudio() {
             <button onClick={() => nextFiveLobe(1)}>next 5-lobe ▶</button>
             <button onClick={() => nextFiveLobe(-1)}>◀</button>
           </div>
-          <div style={row}>puck<input type="range" min={0} max={1.5} step={0.05} value={spec.puck} onChange={(e) => patch({ puck: +e.target.value })} />{spec.puck.toFixed(2)}</div>
-          <div style={row}>glyph<input type="range" min={0.3} max={0.6} step={0.01} value={spec.glyphScale} onChange={(e) => patch({ glyphScale: +e.target.value })} />{spec.glyphScale.toFixed(2)}</div>
+          <div style={row}>puck<input style={rng} type="range" min={0} max={1.5} step={0.05} value={spec.puck} onChange={(e) => patch({ puck: +e.target.value })} />{spec.puck.toFixed(2)}</div>
+          <div style={row}>glyph<input style={rng} type="range" min={0.3} max={0.6} step={0.01} value={spec.glyphScale} onChange={(e) => patch({ glyphScale: +e.target.value })} />{spec.glyphScale.toFixed(2)}</div>
           <div style={row}>wax<input type="color" value={spec.tint.wax} onChange={(e) => patchTint("wax", e.target.value)} />{spec.tint.wax}</div>
           <div style={row}>bright<input type="color" value={spec.tint.bright} onChange={(e) => patchTint("bright", e.target.value)} /></div>
           <div style={row}>shadow<input type="color" value={spec.tint.shadow} onChange={(e) => patchTint("shadow", e.target.value)} /></div>
@@ -185,11 +211,11 @@ export default function IconStudio() {
         </div>
 
         {/* per-variant previews + fill/centre controls */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: 1, minWidth: 420 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: "1 1 300px", minWidth: 0 }}>
           {spec.variants.map((v) => (
-            <div key={v.key} style={{ ...box, background: "#e8dcc2" }}>
-              <div style={{ display: "flex", gap: 12 }}>
-                <div>
+            <div key={v.key} style={{ ...box, background: "#e8dcc2", boxSizing: "border-box" }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ flex: "0 0 auto" }}>
                   {v.key === "favicon" ? (
                     <FaviconPreviews previews={previews} />
                   ) : (
@@ -200,11 +226,11 @@ export default function IconStudio() {
                     />
                   )}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{v.key} <span style={{ opacity: 0.6, fontWeight: 400 }}>· {v.file} · {v.size}px {v.bg ? "on cream" : "transparent"}{v.key === "maskable" ? " · red = safe zone" : ""}</span></div>
-                  <div style={row}>fill<input type="range" min={0.6} max={1.5} step={0.005} value={v.fill} onChange={(e) => patchVar(v.key, { fill: +e.target.value })} />{v.fill.toFixed(3)}</div>
-                  <div style={row}>centre x<input type="range" min={0.4} max={0.6} step={0.002} value={v.cx} onChange={(e) => patchVar(v.key, { cx: +e.target.value })} />{v.cx.toFixed(3)}</div>
-                  <div style={row}>centre y<input type="range" min={0.4} max={0.6} step={0.002} value={v.cy} onChange={(e) => patchVar(v.key, { cy: +e.target.value })} />{v.cy.toFixed(3)}</div>
+                <div style={{ flex: "1 1 190px", minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, wordBreak: "break-word" }}>{v.key} <span style={{ opacity: 0.6, fontWeight: 400 }}>· {v.file} · {v.size}px {v.bg ? "on cream" : "transparent"}{v.key === "maskable" ? " · red = safe zone" : ""}</span></div>
+                  <div style={row}>fill<input style={rng} type="range" min={0.6} max={1.5} step={0.005} value={v.fill} onChange={(e) => patchVar(v.key, { fill: +e.target.value })} />{v.fill.toFixed(3)}</div>
+                  <div style={row}>centre x<input style={rng} type="range" min={0.4} max={0.6} step={0.002} value={v.cx} onChange={(e) => patchVar(v.key, { cx: +e.target.value })} />{v.cx.toFixed(3)}</div>
+                  <div style={row}>centre y<input style={rng} type="range" min={0.4} max={0.6} step={0.002} value={v.cy} onChange={(e) => patchVar(v.key, { cy: +e.target.value })} />{v.cy.toFixed(3)}</div>
                 </div>
               </div>
             </div>
