@@ -26,8 +26,8 @@ const plexMono = IBM_Plex_Mono({
 // the dark app on every cold launch. The only theme-aware lever iOS offers is
 // `apple-touch-startup-image` links media-queried on prefers-color-scheme AND the
 // exact device metrics — so we ship one baked image per device per theme (the desk
-// the app settles into + the tapped icon's seal, `pnpm icons` → public/splash).
-// This list MIRRORS APPLE_LAUNCH in scripts/generate-icons.mjs; regenerate both
+// the app settles into + the icon's seal, `pnpm splash` → public/splash).
+// This list MIRRORS APPLE_LAUNCH in scripts/generate-splash.mjs; regenerate both
 // together. Unmatched devices fall back to the manifest colour (prior behaviour).
 const APPLE_LAUNCH = [
   { w: 320, h: 568, r: 2 },
