@@ -186,19 +186,33 @@ export function requestSync(): void {
 async function runCycle(): Promise<void> {
   setStatus({ phase: "syncing" });
   try {
-    // an end-to-end encrypted account must never sync without its key:
-    // pushing would leak plaintext, pulling can't be applied. Pause
-    // loudly (Settings shows the unlock) — capture is never blocked.
-    const enrolled = await refreshEnrollment();
-    const key = enrolled ? await getBookKey() : undefined;
-    if (enrolled && !key) {
-      setStatus({ phase: "idle", locked: true });
-      return;
+    // The on-device book key — not the server — decides whether we
+    // encrypt. If this device holds a key, every wire write is sealed,
+    // full stop: a server that reports "not enrolled" (by fault or by
+    // malice) can never coax a plaintext upload out of a sealed book.
+    const key = await getBookKey();
+    if (key) {
+      setStatus({ locked: false });
+      await pushAll(key);
+      await pullAll(key);
+    } else {
+      // No key on this device. Either an enrolled account missing its
+      // key (→ locked, pause loudly; Settings shows the unlock), a
+      // plaintext account (→ sync in the clear), or we can't tell. When
+      // we can't tell, we refuse to guess: a plaintext push to what
+      // might be a sealed account would leak, so retry rather than risk
+      // it. Capture is never blocked either way.
+      const enrolled = await refreshEnrollment();
+      if (enrolled === "unknown")
+        throw new Error("enrollment unconfirmed — refusing a plaintext push");
+      if (enrolled) {
+        setStatus({ phase: "idle", locked: true });
+        return;
+      }
+      setStatus({ locked: false });
+      await pushAll(undefined);
+      await pullAll(undefined);
     }
-    setStatus({ locked: false });
-
-    await pushAll(key);
-    await pullAll(key);
     await refreshCounts();
     const now = Date.now();
     writeSyncState({ lastSyncedAt: now });

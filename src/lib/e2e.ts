@@ -26,15 +26,22 @@ export function e2eEnrolledCached(): boolean | null {
   return enrolledCache;
 }
 
-export async function refreshEnrollment(): Promise<boolean> {
+/**
+ * Ask the server whether this account holds wrapped keys. Tri-state on
+ * purpose: a definite yes/no, or `"unknown"` when the server can't be
+ * reached or answers with an error we can't interpret. The sync engine
+ * must treat `"unknown"` as "do not assume plaintext" — never as a
+ * licence to downgrade a sealed book. Only a clean 404 means "not
+ * enrolled"; anything short of a clean 404/200 stays unknown.
+ */
+export async function refreshEnrollment(): Promise<boolean | "unknown"> {
   try {
     const response = await fetch("/api/keys");
     if (response.status === 404) return (enrolledCache = false);
-    if (!response.ok) return enrolledCache ?? false;
-    enrolledCache = true;
-    return true;
+    if (response.ok) return (enrolledCache = true);
+    return enrolledCache ?? "unknown";
   } catch {
-    return enrolledCache ?? false;
+    return enrolledCache ?? "unknown";
   }
 }
 

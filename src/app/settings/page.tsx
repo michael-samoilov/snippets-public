@@ -378,7 +378,7 @@ function EncryptionSection({ email }: { email: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void refreshEnrollment().then(setEnrolled);
+    void refreshEnrollment().then((e) => setEnrolled(e === "unknown" ? null : e));
     void getBookKey().then((k) => setHasKey(!!k));
   }, [sync.locked]);
 
