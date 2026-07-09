@@ -1124,6 +1124,9 @@ function AccountSection() {
  * it drains back instantly. The label bends to the act (erase, delete);
  * the physics never does.
  */
+/** The deliberate hold: long enough that a destructive act can't be a slip. */
+const HOLD_MS = 10_000;
+
 function HoldToErase({
   onComplete,
   label = copy.settings.erase.hold,
@@ -1142,7 +1145,7 @@ function HoldToErase({
       timer.current = null;
       setHolding(false);
       onComplete();
-    }, 1400);
+    }, HOLD_MS);
   };
   const cancel = () => {
     if (timer.current) {
@@ -1177,7 +1180,7 @@ function HoldToErase({
         style={{
           clipPath: holding ? "inset(0 0 0 0)" : "inset(0 100% 0 0)",
           transition: holding
-            ? "clip-path 1.4s linear"
+            ? `clip-path ${HOLD_MS}ms linear`
             : "clip-path 200ms var(--ease-out)",
         }}
       />

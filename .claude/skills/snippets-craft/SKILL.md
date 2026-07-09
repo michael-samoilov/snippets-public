@@ -41,7 +41,7 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
 5. **Feedback at the trigger.** Confirmations stamp in place ("Kept."
    beside the button); toasts only for undo (delete) or far-from-trigger
    results; counters animate with `<NumberFlow>`; destructive actions
-   are hold-to-confirm (ember `clip-path` fill, 1.4s linear hold /
+   are hold-to-confirm (ember `clip-path` fill, ~10s linear hold /
    200ms release). Haptic taps (`navigator.vibrate` 6–10ms) on keep/file/select.
 6. **No cards, no iconography.** Entries are typeset lists with the
    `.entry-list` margin rule, and they are their words ALONE: title,

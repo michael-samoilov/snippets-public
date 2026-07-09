@@ -131,8 +131,8 @@ Everything clickable feels physical:
 - Chips stamp: `whileTap 0.93`, pop `[1, 1.07, 1]` on selection, tinted
   fill via `color-mix`.
 - Destructive = **hold-to-confirm** (`HoldToErase`): ember fills via
-  `clip-path` over 1.4s linear while held, drains in 200ms on release —
-  slow where deciding, fast where responding.
+  `clip-path` over ~10s linear while held, drains in 200ms on release —
+  a deliberate hold so an irreversible act can never be a slip.
 - Haptics: `navigator.vibrate` 6–10ms taps on keep/file/select (Android
   enhancement; never load-bearing).
 
