@@ -116,13 +116,20 @@ export default function PrivacyPage() {
             Can you read what I write?
           </h2>
           <p className="voice-prose text-[0.95rem]">
-            The answer is <Em>no</Em> if you don&rsquo;t sign in, and{" "}
-            <Em>no</Em>{" "}
-            if you turn on the app&rsquo;s encryption setting. If you activate
-            the Google Drive backup, or record entries using the
-            app&rsquo;s microphone, then Google and the transcription services
-            process your data in accordance with their privacy policies (see
-            Google Drive backup and Voice, below).
+            Whether we can read what you write is up to you. If you
+            don&rsquo;t sign in, the answer is <Em>no</Em> — your entries stay
+            in this browser and never reach us. If you sign in without
+            enabling end-to-end encryption, it&rsquo;s <Em>yes</Em> — a copy
+            rests on our server under ordinary encryption whose keys we hold,
+            so in principle we could (in practice, we don&rsquo;t). If you turn
+            on end-to-end encryption, it&rsquo;s <Em>no</Em> again — only your
+            devices hold the key.
+          </p>
+          <p className="voice-prose text-[0.95rem]">
+            Two features reach beyond the app. If you turn on the Google Drive
+            backup, or record an entry with the microphone, then Google and the
+            transcription service handle that data under their own privacy
+            policies — see Google Drive backup and Voice, below.
           </p>
           <Sub id="before-you-sign-in">Before you sign in</Sub>
           <p className="voice-prose text-[0.95rem]">
