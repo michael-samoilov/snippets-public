@@ -96,6 +96,7 @@ function EntryBody({
     let last = -1;
     let stable = 0;
     let frames = 0;
+    let ro: ResizeObserver | null = null;
     const tick = () => {
       frames += 1;
       const h = el.clientHeight;
@@ -106,13 +107,28 @@ function EntryBody({
       }
       if (stable >= 3 || frames > 90) {
         setCompact(el.scrollHeight > el.clientHeight + 1);
+        // …and stay live afterwards. The one-shot alone missed real
+        // overflow: a save flips `editing` back before the live query
+        // delivers the longer text, and a late font load re-wraps the
+        // words — either way the entry sat at full prose while the foot
+        // fade (which tracks live) showed more below. One-way only: at
+        // the compact size, "fits" says nothing about whether full prose
+        // would fit, so the observer never un-compacts — a fresh
+        // measure (new text / edit cycle) is what resets it.
+        ro = new ResizeObserver(() => {
+          if (el.scrollHeight > el.clientHeight + 1) setCompact(true);
+        });
+        ro.observe(el);
+        if (el.firstElementChild) ro.observe(el.firstElementChild);
         return;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
   }, [snippet.text, editing]);
   // the foot terminus shows while more words lie below, and clears at the last
   // line (or if they all fit). compact is a dep because shrinking the font
