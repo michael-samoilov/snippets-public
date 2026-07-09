@@ -11,7 +11,7 @@
     { "key": "favicon", "file": "src/app/icon.png", "size": 512, "bg": null, "fill": 1.14, "cx": 0.5, "cy": 0.5 },
     { "key": "pwa-192", "file": "public/icons/icon-192.png", "size": 192, "bg": null, "fill": 1.14, "cx": 0.5, "cy": 0.5 },
     { "key": "pwa-512", "file": "public/icons/icon-512.png", "size": 512, "bg": null, "fill": 1.14, "cx": 0.5, "cy": 0.5 },
-    { "key": "apple", "file": "src/app/apple-icon.png", "size": 180, "bg": "#f6f0e2", "fill": 1.0, "cx": 0.5, "cy": 0.5 },
-    { "key": "maskable", "file": "public/icons/maskable-512.png", "size": 512, "bg": "#f6f0e2", "fill": 0.88, "cx": 0.5, "cy": 0.5 }
+    { "key": "apple", "file": "src/app/apple-icon.png", "size": 180, "bg": "#f6f0e2", "fill": 1.14, "cx": 0.5, "cy": 0.5 },
+    { "key": "maskable", "file": "public/icons/maskable-512.png", "size": 512, "bg": "#f6f0e2", "fill": 0.87, "cx": 0.5, "cy": 0.5 }
   ]
 }

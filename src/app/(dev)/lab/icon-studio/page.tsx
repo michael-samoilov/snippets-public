@@ -29,6 +29,7 @@ export default function IconStudio() {
     return () => window.removeEventListener("resize", on);
   }, []);
   const masterSize = Math.max(160, Math.min(340, vw - 88));
+  const RENDER = 400; // fixed render resolution; scaled to masterSize for display
 
   // load the persisted spec (so the studio opens on whatever was last baked)
   useEffect(() => {
@@ -48,6 +49,8 @@ export default function IconStudio() {
       if (!g || !m) return;
       cv.width = px;
       cv.height = px;
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = "high"; // clean downscale of the hi-res master → no jaggies
       g.clearRect(0, 0, px, px);
       if (v.bg) { g.fillStyle = v.bg; g.fillRect(0, 0, px, px); }
       const d = v.fill * px;
@@ -243,22 +246,39 @@ export default function IconStudio() {
         {/* master seal + shape/appearance controls */}
         <div style={{ ...box, background: "#e8dcc2", flex: "1 1 300px", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>master seal</div>
-          <div ref={masterWrap} style={{ width: "100%", height: masterSize, display: "grid", placeItems: "center", background: "#e8dcc2" }}>
-            <WaxStamp
-              playKey={spec.seed}
-              size={masterSize}
-              glyph={spec.glyph}
-              mode="press"
-              still
-              restGlyph
-              variant="spring"
-              superSample={3}
-              puck={spec.puck}
-              glyphScale={spec.glyphScale}
-              tint={spec.tint}
-              glyphColor={spec.glyphColor}
-              ignoreReducedMotion
-            />
+          {/* the seal renders at a FIXED high resolution (RENDER) and is scaled DOWN
+              for display, so the on-screen seal — and the previews/bake composed from
+              its canvas — stay crisp on any screen, not tied to the display size. */}
+          <div
+            ref={masterWrap}
+            style={{ position: "relative", width: masterSize, height: masterSize, margin: "0 auto", background: "#e8dcc2", overflow: "hidden" }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: RENDER,
+                height: RENDER,
+                transform: `translate(-50%, -50%) scale(${masterSize / RENDER})`,
+              }}
+            >
+              <WaxStamp
+                playKey={spec.seed}
+                size={RENDER}
+                glyph={spec.glyph}
+                mode="press"
+                still
+                restGlyph
+                variant="spring"
+                superSample={3}
+                puck={spec.puck}
+                glyphScale={spec.glyphScale}
+                tint={spec.tint}
+                glyphColor={spec.glyphColor}
+                ignoreReducedMotion
+              />
+            </div>
           </div>
           <div style={row}>
             <button onClick={() => patch({ seed: Math.max(1, spec.seed - 1) })}>◀</button>
