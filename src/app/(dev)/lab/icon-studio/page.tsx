@@ -271,7 +271,7 @@ export default function IconStudio() {
                 still
                 restGlyph
                 variant="spring"
-                superSample={3}
+                superSample={2}
                 puck={spec.puck}
                 glyphScale={spec.glyphScale}
                 tint={spec.tint}

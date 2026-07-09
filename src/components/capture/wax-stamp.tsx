@@ -753,7 +753,11 @@ function bakeGlyph(out: Float32Array, outR: Float32Array, iconImg: HTMLCanvasEle
   out.fill(0); outR.fill(0);
   iconImg.getContext("2d")!.clearRect(0, 0, dim, dim);
   if (!glyph) return;
-  const OV = 3, big = dim * OV;          // oversample factor + working resolution
+  // oversample for crisp AA, but CAP the working canvas to iOS's ~4096²-px limit:
+  // a large seal (the icon studio / bake, dim in the thousands) pushed big past it
+  // and iOS silently drew NO glyph — the seal rendered with a blank face on-device.
+  const OV = Math.max(1, Math.min(3, Math.floor(4096 / dim)));
+  const big = dim * OV;                  // oversample factor + working resolution
   const gc = document.createElement("canvas");
   gc.width = big; gc.height = big;
   const gx = gc.getContext("2d");
