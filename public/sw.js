@@ -4,7 +4,7 @@
    old try/catch, the respondWith promise rejected, and Safari showed "This
    page couldn't load" for every visit — surviving reloads and redeploys.
    Every cache operation is now best-effort; the network answer stands alone. */
-const VERSION = "snippets-v9";
+const VERSION = "snippets-v10";
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {
@@ -12,7 +12,11 @@ self.addEventListener("install", (event) => {
     (async () => {
       try {
         const cache = await caches.open(VERSION);
-        await cache.add(SHELL_URL);
+        // Try to cache the shell, following any redirects to get the final page.
+        const response = await fetch(SHELL_URL, { redirect: "follow" });
+        if (response.ok) {
+          await cache.put(SHELL_URL, response);
+        }
       } catch {
         /* no offline shell this round — installing still must succeed */
       }
@@ -29,20 +33,6 @@ self.addEventListener("activate", (event) => {
         await Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)));
       } catch {
         /* stale caches linger; the app still runs */
-      }
-      // Clean up any cached redirect responses in the current version — they will
-      // crash Safari when offline. Delete them and let the shell handle offline routing.
-      try {
-        const cache = await caches.open(VERSION);
-        const keys = await cache.keys();
-        for (const request of keys) {
-          const response = await cache.match(request);
-          if (response && response.status >= 300 && response.status < 400) {
-            await cache.delete(request);
-          }
-        }
-      } catch {
-        /* cleanup best-effort */
       }
       await self.clients.claim();
     })(),
@@ -66,53 +56,32 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
-        const key = url.pathname;
         try {
-          // Fetch with manual redirect handling so we never cache a redirect.
-          const network = await fetch(request, { redirect: "manual" });
-          // If it's a redirect, don't cache it — fetch the final destination instead.
-          if (network.status >= 300 && network.status < 400) {
-            const location = network.headers.get("Location");
-            if (location) {
-              const finalResponse = await fetch(new Request(location, { redirect: "manual" }));
-              try {
-                const cache = await caches.open(VERSION);
-                if (finalResponse.status >= 200 && finalResponse.status < 300) {
-                  await cache.put(key, finalResponse.clone());
-                }
-              } catch {
-                /* couldn't cache */
-              }
-              return finalResponse;
-            }
-          }
-          // Not a redirect; cache if successful.
-          if (network.status >= 200 && network.status < 300) {
+          // Online: always fetch fresh from network for navigations.
+          const response = await fetch(request);
+          // Cache successful responses only (2xx/3xx redirects to 2xx).
+          if (response.status >= 200 && response.status < 300) {
             try {
               const cache = await caches.open(VERSION);
-              await cache.put(key, network.clone());
+              await cache.put(url.pathname, response.clone());
             } catch {
               /* couldn't cache */
             }
           }
-          return network;
+          return response;
         } catch {
+          // Offline: serve the shell so the SPA can route client-side to any path.
+          // The shell "/" is fully hydrated and can navigate within itself without network.
           try {
             const cache = await caches.open(VERSION);
-            // Offline: try exact path, but only if it's NOT a redirect (which Safari rejects).
-            const cached = await cache.match(key);
-            if (cached && cached.status >= 200 && cached.status < 300) {
-              return cached;
-            }
-            // Redirect or missing; fall back to shell so the SPA can route.
             const shell = await cache.match(SHELL_URL);
             if (shell && shell.status >= 200 && shell.status < 300) {
               return shell;
             }
-            return new Response("Offline", { status: 503, statusText: "Offline" });
           } catch {
-            return new Response("Offline", { status: 503, statusText: "Offline" });
+            /* cache unavailable */
           }
+          return new Response("Offline", { status: 503, statusText: "Offline" });
         }
       })(),
     );
