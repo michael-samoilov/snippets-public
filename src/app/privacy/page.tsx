@@ -66,11 +66,9 @@ function TocSubLink({
 
 export default function PrivacyPage() {
   return (
-    <div className="page-settle">
-      <PageBackHeader title="Privacy" />
-
+    <PageBackHeader title="Privacy">
       <div className="max-w-[52ch] space-y-8">
-        <p className="voice-data -mt-4 text-ink-faint">
+        <p className="voice-data text-ink-faint">
           last updated {LAST_UPDATED.toLowerCase()}
         </p>
 
@@ -376,6 +374,6 @@ export default function PrivacyPage() {
           </p>
         </section>
       </div>
-    </div>
+    </PageBackHeader>
   );
 }
