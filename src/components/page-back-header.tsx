@@ -1,30 +1,54 @@
 "use client";
 
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
+import {
+  useScrollEdges,
+  ScrollTerminus,
+} from "@/components/ui/scroll-terminus";
 import { copy } from "@/lib/copy";
 
 /**
- * A page title that is also the way back — the drawn guillemet from the
- * schedule header sits in front of it, and pressing it returns to
- * wherever you came from (falling back to the book on a cold load).
- * Shared by Settings and Privacy so the two can't drift.
+ * The shell every sub-page (Settings, Privacy) wears, so they can't drift
+ * from each other or from the book. It is the calendar's schedule/entry
+ * header, exactly: a small `--date-head` title that is itself the way back
+ * (the drawn guillemet in front of it), a persistent hairline beneath —
+ * the scroll area's top terminus, the same rule the month header wears —
+ * and the page's content in its own scroller below, carrying the fading
+ * foot terminus. The header sits ABOVE that scroller, so content never
+ * bleeds under it and no painted band is needed (a flat fill over the
+ * textured sheet would read as one).
  */
-export function PageBackHeader({ title }: { title: string }) {
+export function PageBackHeader({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   const router = useRouter();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // liveHeight: sections appear/disappear on sign-in and unlock, changing the
+  // content height without resizing the scroller — read it live so the foot
+  // terminus stays honest.
+  const edges = useScrollEdges(scrollRef, [], true);
+
   const goBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1)
       router.back();
     else router.push("/calendar");
   };
+
   return (
-    <header className="mb-8">
+    <div className="page-settle flex h-full min-h-0 flex-col">
       <button
         type="button"
         onClick={goBack}
         aria-label={copy.settings.back}
-        // font-size on the button so the chevron's em scales to the title,
-        // at the same 0.58em ratio it wears against the month header
-        className="pressable inline-flex items-baseline rounded-[5px] text-left text-[2.5rem] leading-[1.02] hover:text-wax sm:text-[2.9rem]"
+        // font-size on the button so the chevron's em scales to the title, at
+        // the same 0.58em ratio and `--date-head` size it wears in the book's
+        // month/entry header
+        className="pressable inline-flex shrink-0 items-baseline self-start whitespace-nowrap rounded-[5px] text-left text-(length:--date-head) leading-[1.02] hover:text-wax"
       >
         <svg
           aria-hidden="true"
@@ -36,6 +60,21 @@ export function PageBackHeader({ title }: { title: string }) {
         </svg>
         <h1 className="voice-display leading-[1.02]">{title}</h1>
       </button>
-    </header>
+
+      {/* the scroll area's top terminus: a persistent hairline beneath the
+          header, exactly the month header's rule */}
+      <div className="mt-4 shrink-0 border-b border-rule-faint" aria-hidden="true" />
+
+      {/* the page's own scroller — content clips at the hairline and never
+          overlaps the header above it (the -mx/px pair keeps focus rings and
+          selection shadows at the content edge inside the clip) */}
+      <div
+        ref={scrollRef}
+        className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pt-6 [scrollbar-width:none]"
+      >
+        {children}
+        <ScrollTerminus show={edges.bottom} />
+      </div>
+    </div>
   );
 }

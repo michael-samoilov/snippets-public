@@ -359,6 +359,9 @@ export const copy = {
       signedInAs: (email: string) => `Signed in as ${email}.`,
       signOut: "Sign out",
       signOutHint: "Your entries stay on this device.",
+      /** the tiny mono device-count line shown when signed out, e.g. "1,204 entries on this device" */
+      deviceCount: (n: string, one: boolean) =>
+        `${n} ${one ? "entry" : "entries"} on this device`,
       deleteAccount: {
         trigger: "Delete account…",
         title: "Delete your account?",
@@ -381,6 +384,9 @@ export const copy = {
       /** the tiny mono integrity line, e.g. "1,204 locally on this device · 1,204 on the server" */
       counts: (device: string, server: string) =>
         `${device} locally on this device · ${server} on the server`,
+      /** same line while offline — the server side can't be known, so name the state */
+      countsOffline: (device: string) =>
+        `${device} locally on this device · you’re offline`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
       locked: "Your entries are end-to-end encrypted — unlock below to sync.",
