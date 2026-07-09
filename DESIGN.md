@@ -124,12 +124,15 @@ Everything clickable feels physical:
   `scale(0.98)` + shadow compresses to an inset.
 - The seal — radial wax material (`--wax-bright` specular at 32%/28%),
   grooved rim, breathing animation + rings while listening, icon
-  crossfades through 2px blur (Emil's blur-masking).
+  crossfades through 2px blur (Emil's blur-masking). This live seal
+  (`WaxStamp`) is also the **source of truth for the app icons/favicons** —
+  they're HD renders of it, not standalone art; re-bake per
+  `public/icons/README.md`.
 - Chips stamp: `whileTap 0.93`, pop `[1, 1.07, 1]` on selection, tinted
   fill via `color-mix`.
 - Destructive = **hold-to-confirm** (`HoldToErase`): ember fills via
-  `clip-path` over 1.4s linear while held, drains in 200ms on release —
-  slow where deciding, fast where responding.
+  `clip-path` over ~10s linear while held, drains in 200ms on release —
+  a deliberate hold so an irreversible act can never be a slip.
 - Haptics: `navigator.vibrate` 6–10ms taps on keep/file/select (Android
   enhancement; never load-bearing).
 
@@ -366,9 +369,38 @@ Quiet, literary, terse, sentence case. Curly quotes, the `…` character.
 emoji, no sparkle-AI framing. Streaks past-tense only; gaps are blank,
 never red.
 
+**Name things plainly.** The desk/paper/light conceit is the *visual*
+skin — it is never a vocabulary the copy imposes on the reader. Say what
+a thing literally does, in words the user already owns: *encrypt your
+entries*, not *seal your book*; *your entries*, not *your book*. "Book"
+(or "notebook") is allowed only in warm, descriptive prose where it
+reads deliberately, and the non-idiomatic "commonplace book" is retired
+everywhere. Metaphor earns its place only when it names an actual
+on-screen object — the **wax seal** you tap to record/keep is a real
+thing, so "tap the seal" stays — or when it genuinely aids
+understanding; otherwise the plainer, more idiomatic word wins. A reader
+should never have to learn our theme to understand what a control does.
+
 ## Architecture notes that protect the design
 
 - Local-first Dexie; soft delete + undo; day keys in local time.
+- **Sync is strictly additive.** The device copy is always whole;
+  signing in only adds a server copy on top (per-row last-write-wins,
+  hand filing outranks the clock, the server's verdict is final —
+  src/lib/merge.ts is the one rule). Capture never waits on the
+  network; every sync/backup state is a visible line in Settings,
+  never a silent stall. Settings/preferences stay per-device by
+  intent. Erase on a synced book erases everywhere, and says so.
+- **Backup is the escape hatch, not a feature.** The writer's own
+  device delivers readable Markdown + a restorable JSON archive into
+  a visible folder in their own Drive after each settled sync; the
+  JSON stays bit-compatible with "Restore from JSON…" so the book
+  outlives the app. The server keeps no Drive credentials (tokens
+  transit, never rest) and, under end-to-end encryption, no readable
+  entries either — the operator cannot read the book. The plaintext
+  Drive files double as the key-loss safety net; they are never
+  encrypted. Failures escalate: ledger → Settings line → one quiet
+  watchdog email per silence.
 - Enrichment is best-effort decoration; `enriched: "manual"` wins; the
   app must remain whole with zero AI and zero network.
 - **Ink on paper:** `.voice-prose`/`.voice-display` use
@@ -387,6 +419,10 @@ never red.
 
 ## Deferred (intentionally)
 
-Sync layer · weekly digest · push nudges · vaul drawer
+Weekly digest · push nudges · more backup channels (email digest,
+Dropbox — the `backup_status.provider` column is the seam) · optional
+per-user end-to-end encryption (the sync payload is already a
+versioned envelope; a client-encrypted format is a `payloadFormat`
+bump, at the cost of server-rendered Markdown backups) · vaul drawer
 editor on touch · opt-in UI sound (paper-thud at 440→220Hz, gain ≤0.08,
 default off) · view transitions (no list→detail route pair yet).

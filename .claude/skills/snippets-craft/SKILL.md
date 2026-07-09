@@ -41,7 +41,7 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
 5. **Feedback at the trigger.** Confirmations stamp in place ("Kept."
    beside the button); toasts only for undo (delete) or far-from-trigger
    results; counters animate with `<NumberFlow>`; destructive actions
-   are hold-to-confirm (ember `clip-path` fill, 1.4s linear hold /
+   are hold-to-confirm (ember `clip-path` fill, ~10s linear hold /
    200ms release). Haptic taps (`navigator.vibrate` 6–10ms) on keep/file/select.
 6. **No cards, no iconography.** Entries are typeset lists with the
    `.entry-list` margin rule, and they are their words ALONE: title,
@@ -56,20 +56,43 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    hand-drawn strokes (quill + calendar, small-caps words beneath),
    the calendar header's search glass, the entry card's foot marks
    (a wax quill CONFIRM-stamp — editing an entry, or the composer once
-   it holds words — + an ember trash — destructive red, NOT wax), and the account glyph — nothing
+   it holds words — + an ember trash — destructive red, NOT wax), the account glyph,
+   the account menu's stroke glyphs (gear · shield · door · person —
+   Feather set, 1.8/24 ≡ the app's 1.5/20 line, ink-faint, menu rows
+   ONLY), the Google "G" on the sign-in button (owner-approved,
+   4-hue, that one button only), and the passphrase field's eye /
+   eye-off toggle (same Feather set, encryption enrollment/unlock ONLY)
+   — nothing
    else. Wax (a sealing-wax BLUE) is
    semantic (recording, rule, today) and never destructive — the ember
    red (`--ember`) is destructive's alone; the marker yellow
    (`--marker`) belongs to found words in search, nothing else;
-   gilt = favorites only. Text on the sheet is real ink:
+   gilt = favorites only. One owner-approved off-palette exception: the
+   passphrase strength meter ramps ember→green (`--strength-weak` …
+   `--strength-strong`), the app's only green, that meter alone. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
    mode.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,
    `…`. No exclamation marks, emoji, or sparkle-AI framing. Streaks
-   past-tense; gaps blank, never red.
+   past-tense; gaps blank, never red. **Name things plainly — the desk /
+   paper / light conceit is the *visual* skin, never a vocabulary the
+   copy makes the reader learn.** Say what a thing literally does, in
+   words the user already owns: **encrypt your entries**, not *seal your
+   book*; **your entries**, not *your book* (allow "book"/"notebook" only
+   in warm, descriptive prose where it's deliberate, and never the
+   non-idiomatic "commonplace book"). Metaphor earns its place only when
+   it names an actual on-screen object — the **wax seal** you tap to
+   record/keep is real, so "tap the seal" stays — or genuinely aids
+   understanding; otherwise the plainer word wins. When in doubt, prefer
+   the word a non-user would understand.
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.
+   Accounts obey the same law: signing in is never required, sync is a
+   quiet additive layer (its states are terse Settings lines — "Synced
+   3:12 pm.", counts in the data voice — never banners or spinners in
+   the capture path), and no keep ever fails silently — a failed write
+   un-stamps, restores the words, and says why.
 9. **Quality floor:** wax focus ring on controls (caret + darkened rule
    on text fields), hit targets ≥44px touch, URL reflects view state,
    `touch-action: manipulation`, both themes + reduced-motion checked,

@@ -21,6 +21,8 @@ import {
   BOREALIS_DEFAULTS,
   WashPulsingBorder,
   PULSE_DEFAULTS,
+  WashBorderBeam,
+  BEAM_DEFAULTS,
   WASH,
   edgeMask,
   conic,
@@ -524,6 +526,7 @@ export default function WaxWashLab() {
   const [cur, setCur] = useState(CURTAINS_DEFAULTS);
   const [bor, setBor] = useState(BOREALIS_DEFAULTS);
   const [pul, setPul] = useState(PULSE_DEFAULTS);
+  const [bea, setBea] = useState(BEAM_DEFAULTS);
   /* the combo can stretch its zone, proving every effect refits */
   const [zone, setZone] = useState({ w: 300, h: 430 });
   /* per-treatment weights for the combo zone */
@@ -534,6 +537,7 @@ export default function WaxWashLab() {
     curtains: 0,
     borealis: 1,
     pulse: 1,
+    beam: 1,
   });
   const deskRef = useRef<HTMLElement>(null);
 
@@ -576,6 +580,12 @@ export default function WaxWashLab() {
     label: "borealis",
     note: `int ${bor.intensity.toFixed(2)} · rays ${bor.rays.toFixed(1)} · sway ${bor.sway.toFixed(2)} · pace ${bor.pace.toFixed(2)} · flicker ${bor.flicker.toFixed(2)} · reach ${bor.reach.toFixed(2)}`,
     node: <ShaderBox frag={AURORA_FRAG} uniforms={borealisUniforms(bor)} />,
+  };
+  const beaZone: Variant = {
+    key: "desk-beam",
+    label: "border beam",
+    note: `mult ${bea.mult.toFixed(2)} · lap ${bea.lap.toFixed(1)}s · arc ${bea.arc.toFixed(2)} · stroke ${bea.stroke.toFixed(1)}px · glow ${bea.glow.toFixed(2)} · reach ${bea.reach.toFixed(0)} · bloom ${bea.bloom.toFixed(2)} · heads ${bea.heads.toFixed(0)}`,
+    node: <WashBorderBeam o={bea} />,
   };
   const pulZone: Variant = {
     key: "desk-pulse",
@@ -696,6 +706,7 @@ export default function WaxWashLab() {
               { v: curZone, opacity: mix.curtains },
               { v: pulZone, opacity: mix.pulse },
               { v: borZone, opacity: mix.borealis },
+              { v: beaZone, opacity: mix.beam },
             ]}
           />
           <div className="flex w-[300px] flex-col gap-2.5 sm:mt-9 sm:w-60">
@@ -705,6 +716,7 @@ export default function WaxWashLab() {
             <Dial label="curtains" value={mix.curtains} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, curtains: v })} />
             <Dial label="borealis" value={mix.borealis} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, borealis: v })} />
             <Dial label="border" value={mix.pulse} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, pulse: v })} />
+            <Dial label="beam" value={mix.beam} min={0} max={1} step={0.05} onChange={(v) => setMix({ ...mix, beam: v })} />
             <Dial label="zone w" value={zone.w} min={220} max={380} step={4} fmt={int} onChange={(v) => setZone({ ...zone, w: v })} />
             <Dial label="zone h" value={zone.h} min={280} max={600} step={4} fmt={int} onChange={(v) => setZone({ ...zone, h: v })} />
             <p className="voice-data text-[0.6rem] lowercase text-ink-faint">
@@ -763,6 +775,17 @@ export default function WaxWashLab() {
             <Dial label="smoke size" value={pul.smokeSize} min={0} max={1} step={0.05} onChange={(v) => setPul({ ...pul, smokeSize: v })} />
             <Dial label="pace" value={pul.pace} min={0.02} max={1} step={0.02} onChange={(v) => setPul({ ...pul, pace: v })} />
             <p className="voice-data text-[0.6rem] lowercase text-ink-faint">paper shaders’ border gradient, vendored — their northern-lights recipe in wash ink</p>
+          </Bench>
+          <Bench v={beaZone} on={on} onReset={() => setBea(BEAM_DEFAULTS)}>
+            <Dial label="pigment" value={bea.mult} min={0.2} max={2} step={0.05} onChange={(v) => setBea({ ...bea, mult: v })} />
+            <Dial label="lap" value={bea.lap} min={2} max={24} step={0.5} fmt={s} onChange={(v) => setBea({ ...bea, lap: v })} />
+            <Dial label="arc" value={bea.arc} min={0.06} max={0.85} step={0.01} onChange={(v) => setBea({ ...bea, arc: v })} />
+            <Dial label="stroke" value={bea.stroke} min={1} max={6} step={0.5} fmt={(v) => `${v.toFixed(1)}px`} onChange={(v) => setBea({ ...bea, stroke: v })} />
+            <Dial label="glow" value={bea.glow} min={0} max={1} step={0.05} onChange={(v) => setBea({ ...bea, glow: v })} />
+            <Dial label="reach" value={bea.reach} min={8} max={80} step={2} fmt={int} onChange={(v) => setBea({ ...bea, reach: v })} />
+            <Dial label="bloom" value={bea.bloom} min={0} max={1} step={0.05} onChange={(v) => setBea({ ...bea, bloom: v })} />
+            <Dial label="heads" value={bea.heads} min={1} max={3} step={1} fmt={int} onChange={(v) => setBea({ ...bea, heads: v })} />
+            <p className="voice-data text-[0.6rem] lowercase text-ink-faint">border-beam’s comet, hand-rolled — css only; arc is the comet’s length as a share of the turn</p>
           </Bench>
         </div>
       </section>

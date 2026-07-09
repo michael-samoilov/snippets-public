@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -13,11 +14,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { db } from "@/lib/db";
+import { Input } from "@/components/ui/input";
+import { eraseAll } from "@/lib/db";
+import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "@/lib/e2e";
+import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
+import {
+  adoptDriveToken,
+  deliverBackup,
+  forgetDriveTokens,
+} from "@/lib/backup-client";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
+import { signOut, useSession } from "@/lib/auth";
+import { authClient } from "@/lib/auth-client";
+import {
+  disableEncryption,
+  releaseBinding,
+  reconcile,
+  requestSync,
+  useSyncStatus,
+} from "@/lib/sync";
+import { formatBytes, useStorageHealth } from "@/lib/storage-health";
+import { PaperButton } from "@/components/paper-button";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +51,8 @@ export default function SettingsPage() {
     else router.push("/calendar");
   };
   const stats = useStats();
+  const { user } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [eraseOpen, setEraseOpen] = useState(false);
   // theme is unknowable server-side; render the swatches neutral until hydrated
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -81,6 +100,10 @@ export default function SettingsPage() {
       </header>
 
       <div className="space-y-10">
+        <AccountSection />
+        {user && <EncryptionSection email={user.email} />}
+        {user && <BackupSection />}
+
         <section aria-label={copy.settings.appearance.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.heading}</h2>
           <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label={copy.settings.appearance.themeLabel}>
@@ -115,32 +138,10 @@ export default function SettingsPage() {
         <section aria-label={copy.settings.calendar.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.calendar.heading}</h2>
           <div className="mt-4 flex items-center justify-between gap-6">
-            <div>
-              <p className="font-serif text-[0.98rem]">{copy.settings.calendar.startWeek}</p>
-              <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                {copy.settings.calendar.startWeekHint}
-              </p>
-            </div>
+            <p className="font-serif text-[0.98rem]">{copy.settings.calendar.startWeek}</p>
             <WeekStartChoice
               value={settings.weekStart}
               onChange={(v) => updateSettings({ weekStart: v })}
-            />
-          </div>
-        </section>
-
-        <section aria-label={copy.settings.filing.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.filing.heading}</h2>
-          <div className="mt-4 flex items-start justify-between gap-6">
-            <div>
-              <p className="font-serif text-[0.98rem]">{copy.settings.filing.auto}</p>
-              <p className="voice-prose mt-0.5 max-w-[42ch] text-[0.9rem] text-ink-soft">
-                {copy.settings.filing.autoHint}
-              </p>
-            </div>
-            <Switch
-              checked={settings.autoFile}
-              onCheckedChange={(checked) => updateSettings({ autoFile: checked })}
-              aria-label={copy.settings.filing.auto}
             />
           </div>
         </section>
@@ -176,56 +177,783 @@ export default function SettingsPage() {
               }}
             />
           </div>
-          <div className="mt-8 border-t border-rule-faint pt-4">
-            <Button
-              variant="ghost"
-              className="px-0 font-serif text-ember hover:bg-transparent hover:text-ember-deep"
-              onClick={() => setEraseOpen(true)}
-            >
-              {copy.settings.data.eraseAll}
-            </Button>
-          </div>
+          <StorageLine signedIn={!!user} />
         </section>
 
-        <section aria-label={copy.settings.about.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.about.heading}</h2>
-          <p className="voice-prose mt-4 max-w-[48ch] text-[0.9rem] text-ink-soft">
-            {copy.settings.about.lead}
-            <em>{copy.settings.about.workTitle}</em>
-            {copy.settings.about.rest}
-          </p>
-        </section>
+        <DangerZone user={user} />
       </div>
+    </div>
+  );
+}
 
-      <Dialog open={eraseOpen} onOpenChange={setEraseOpen}>
+/**
+ * The danger zone — every irreversible action, fenced behind a red
+ * hairline (the today zone's blue outline, in ember) and each held to
+ * confirm. Erase is always here; delete-account joins it when signed
+ * in. Each carries its own description so the two can't be confused.
+ */
+function DangerZone({ user }: { user: { email: string } | null }) {
+  const doErase = async () => {
+    await eraseAll();
+    toast(copy.settings.toasts.erased);
+  };
+  const doDelete = async () => {
+    try {
+      const response = await fetch("/api/account/delete", { method: "POST" });
+      if (!response.ok) throw new Error(`delete ${response.status}`);
+    } catch {
+      toast(copy.settings.account.deleteAccount.failed);
+      return;
+    }
+    await releaseBinding().catch(() => {});
+    await authClient.signOut().catch(() => {});
+    toast(copy.settings.account.deleteAccount.done);
+  };
+
+  return (
+    <section aria-label={copy.settings.danger.heading}>
+      <div className="rounded-2xl border border-ember/45 p-5 sm:p-6">
+        <h2 className="voice-label text-ember">{copy.settings.danger.heading}</h2>
+        <div className="mt-5 space-y-6">
+          <DangerAction
+            title={copy.settings.danger.eraseTitle}
+            description={
+              user
+                ? copy.settings.danger.eraseDescSynced
+                : copy.settings.danger.eraseDesc
+            }
+            hold={copy.settings.danger.eraseHold}
+            onComplete={doErase}
+          />
+          {user && (
+            <DangerAction
+              title={copy.settings.danger.deleteTitle}
+              description={copy.settings.danger.deleteDesc}
+              hold={copy.settings.danger.deleteHold}
+              onComplete={doDelete}
+            />
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** One fenced destructive action: what it does, and a held confirm. */
+function DangerAction({
+  title,
+  description,
+  hold,
+  onComplete,
+}: {
+  title: string;
+  description: string;
+  hold: string;
+  onComplete: () => void | Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="max-w-[42ch]">
+        <p className="font-serif text-[0.98rem] text-ink">{title}</p>
+        <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
+          {description}
+        </p>
+      </div>
+      <HoldToErase label={hold} onComplete={() => void onComplete()} />
+    </div>
+  );
+}
+
+/**
+ * The sync trust lines. One quiet sentence for state, and beneath it
+ * the integrity count — device vs server — in the data voice. When
+ * the two disagree beyond what's still in flight, a reconcile action
+ * appears (rewind the cursor, re-walk the feed; always safe).
+ */
+function SyncLines() {
+  const sync = useSyncStatus();
+
+  let line: string;
+  if (sync.locked) line = copy.settings.sync.locked;
+  else if (sync.phase === "offline") line = copy.settings.sync.offline;
+  else if (sync.phase === "error") line = copy.settings.sync.error;
+  else if (sync.phase === "syncing") line = copy.settings.sync.syncing;
+  else if (sync.pendingCount > 0)
+    line = copy.settings.sync.pending(sync.pendingCount);
+  else if (sync.lastSyncedAt === null) line = copy.settings.sync.neverSynced;
+  else
+    line = copy.settings.sync.syncedAt(
+      format(
+        sync.lastSyncedAt,
+        isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
+      ),
+    );
+
+  const outOfStep =
+    sync.localCount !== null &&
+    sync.serverCount !== null &&
+    Math.abs(sync.localCount - sync.serverCount) > sync.pendingCount;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <p className="voice-prose text-[0.9rem] text-ink-soft">{line}</p>
+      {sync.skewed && (
+        <p className="voice-prose text-[0.9rem] text-ink-faint">
+          {copy.settings.sync.skewed}
+        </p>
+      )}
+      {sync.localCount !== null && sync.serverCount !== null && (
+        <p className="voice-data text-ink-faint">
+          {copy.settings.sync.counts(
+            sync.localCount.toLocaleString(),
+            sync.serverCount.toLocaleString(),
+          )}
+        </p>
+      )}
+      {outOfStep && (
+        <p className="voice-prose text-[0.9rem] text-ember">
+          {copy.settings.sync.outOfStep}{" "}
+          <button
+            type="button"
+            onClick={() => void reconcile()}
+            className="pressable rounded-[3px] underline decoration-ember/40 underline-offset-2 hover:decoration-ember"
+          >
+            {copy.settings.sync.reconcile}
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One quiet data-voice line on device storage: persistent or
+ * best-effort, and the room left. Best-effort earns a hint — eviction
+ * is the one silent loss the device itself can inflict.
+ */
+function StorageLine({ signedIn }: { signedIn: boolean }) {
+  const storage = useStorageHealth();
+  if (storage.usageBytes === null || storage.quotaBytes === null) return null;
+  const line =
+    storage.persisted === true
+      ? copy.settings.data.storagePersistent(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        )
+      : copy.settings.data.storageBestEffort(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        );
+  return (
+    <div className="mt-4 space-y-1">
+      <p className="voice-data text-ink-faint">{line}</p>
+      {storage.persisted !== true && !signedIn && (
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+          {copy.settings.data.storageEvictionHint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Feather-style eye / eye-off, in the account menu's glyph language. */
+function EyeToggle({
+  shown,
+  onToggle,
+}: {
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      // pointer-down + preventDefault so tapping the eye never steals focus
+      // (and the keyboard) from the field
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onToggle}
+      aria-label={shown ? "Hide passphrase" : "Show passphrase"}
+      aria-pressed={shown}
+      className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 rounded-[5px] p-1.5 text-ink-faint hover:text-ink-soft"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {shown ? (
+          <>
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20C5 20 1 12 1 12a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </>
+        ) : (
+          <>
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+/** Passphrase strength — four bars, ember-weak climbing to green-strong. */
+function StrengthMeter({ score, label }: { score: number; label: string }) {
+  const filled = Math.min(4, Math.max(1, score));
+  const tone =
+    score <= 1
+      ? "--strength-weak"
+      : score === 2
+        ? "--strength-fair"
+        : score === 3
+          ? "--strength-good"
+          : "--strength-strong";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-1.5" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <span
+            key={i}
+            className="h-1 flex-1 rounded-full transition-colors duration-200"
+            style={{
+              backgroundColor: `var(${i < filled ? tone : "--strength-track"})`,
+            }}
+          />
+        ))}
+      </div>
+      <p className="voice-prose text-[0.8rem] text-ink-faint">{label}</p>
+    </div>
+  );
+}
+
+/**
+ * End-to-end encryption. Three states: not yet sealed (offer it),
+ * sealed and this device holds the key (one quiet line), sealed and
+ * locked (the unlock form — sync waits on it, capture never does).
+ * Enrollment shows the recovery code exactly once, with the recovery-
+ * file download; the code is not reconstructable afterward.
+ */
+function EncryptionSection({ email }: { email: string }) {
+  const sync = useSyncStatus();
+  const [enrolled, setEnrolled] = useState<boolean | null>(null);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [pass, setPass] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [secret, setSecret] = useState("");
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [strength, setStrength] = useState<PassphraseStrength | null>(null);
+  const [showPass, setShowPass] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // nudge a focused field above the keyboard, within the now-scrollable
+  // dialog — 'center' keeps it comfortably in view without ever pushing a
+  // field that's already visible out of the way
+  const revealOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
+  };
+
+  useEffect(() => {
+    void refreshEnrollment().then((e) => setEnrolled(e === "unknown" ? null : e));
+    void getBookKey().then((k) => setHasKey(!!k));
+  }, [sync.locked]);
+
+  // arriving from the post-sign-in offer (/welcome → "Set up encryption"):
+  // open the enroll dialog straight away, once we know the account isn't
+  // already sealed. Clean the query so a refresh doesn't reopen it.
+  const [wantSeal] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("seal") === "1",
+  );
+  useEffect(() => {
+    if (wantSeal && enrolled === false) {
+      window.history.replaceState(null, "", "/settings");
+      setEnrollOpen(true);
+    }
+  }, [wantSeal, enrolled]);
+
+  // the things a guesser tries first: the account's email and its local part
+  const guessHints = useMemo(
+    () => [email, email.split("@")[0], "snippets"].filter(Boolean),
+    [email],
+  );
+
+  // quiet live strength read; the dynamic zxcvbn import is memoized so
+  // only the first keystroke pays for it
+  useEffect(() => {
+    if (!pass) {
+      setStrength(null);
+      return;
+    }
+    let alive = true;
+    void checkPassphrase(pass, guessHints).then((s) => {
+      if (alive) setStrength(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [pass, guessHints]);
+
+  const doEnroll = async () => {
+    if (pass.length < 10) {
+      setError(copy.settings.encryption.tooShort);
+      return;
+    }
+    if (pass !== confirm) {
+      setError(copy.settings.encryption.mismatch);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // the passphrase is the weakest link once its wrapped copy rests
+      // on the server — refuse a guessable one rather than seal behind it
+      const graded = await checkPassphrase(pass, guessHints);
+      if (!graded.ok) {
+        setError(copy.settings.encryption.tooWeak);
+        setBusy(false);
+        return;
+      }
+      const code = await enroll(pass);
+      setPass("");
+      setConfirm("");
+      setEnrollOpen(false);
+      setRecoveryCode(code);
+      setEnrolled(true);
+      setHasKey(true);
+      requestSync();
+    } catch {
+      setError(copy.settings.encryption.enrollFailed);
+    }
+    setBusy(false);
+  };
+
+  const doUnlock = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await unlock(secret, recoveryMode ? "recovery" : "passphrase");
+      setSecret("");
+      setHasKey(true);
+      requestSync();
+    } catch {
+      setError(copy.settings.encryption.wrongSecret);
+    }
+    setBusy(false);
+  };
+
+  const downloadKit = () => {
+    if (!recoveryCode) return;
+    const blob = new Blob([recoveryKitText(recoveryCode, email)], {
+      type: "text/plain",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "snippets-recovery-code.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  let body: React.ReactNode;
+  if (enrolled === null) body = null;
+  else if (!enrolled) {
+    body = (
+      <>
+        <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+          {copy.settings.encryption.offLead}
+        </p>
+        <div className="mt-4">
+          <PaperButton onClick={() => setEnrollOpen(true)}>
+            {copy.settings.encryption.turnOn}
+          </PaperButton>
+        </div>
+      </>
+    );
+  } else if (hasKey) {
+    body = (
+      <div className="mt-4">
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+          {copy.settings.encryption.onLead}
+        </p>
+        <div className="mt-4 flex flex-col gap-3">
+          <p className="voice-prose max-w-[40ch] text-[0.9rem] text-ink-faint">
+            {copy.settings.encryption.turnOffHint}
+          </p>
+          <HoldToErase
+            label={copy.settings.encryption.turnOffHold}
+            onComplete={() => {
+              void (async () => {
+                try {
+                  await disableEncryption();
+                  setHasKey(false);
+                  setEnrolled(false);
+                } catch {
+                  setError(copy.settings.encryption.turnOffFailed);
+                }
+              })();
+            }}
+          />
+        </div>
+      </div>
+    );
+  } else {
+    body = (
+      <form
+        className="mt-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void doUnlock();
+        }}
+      >
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+          {copy.settings.encryption.lockedLead}
+        </p>
+        <div className="mt-3 flex max-w-[26rem] items-stretch gap-2">
+          <Input
+            type={recoveryMode ? "text" : "password"}
+            autoComplete="current-password"
+            aria-label={
+              recoveryMode
+                ? copy.settings.encryption.recoveryLabel
+                : copy.settings.encryption.unlockLabel
+            }
+            placeholder={
+              recoveryMode
+                ? copy.settings.encryption.recoveryLabel
+                : copy.settings.encryption.unlockLabel
+            }
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            className="h-10 flex-1 font-serif text-[1rem]"
+          />
+          <PaperButton
+            type="submit"
+            disabled={busy || secret.length === 0}
+            className="inline-flex h-10 shrink-0 items-center justify-center"
+          >
+            {busy
+              ? copy.settings.encryption.unlocking
+              : copy.settings.encryption.unlock}
+          </PaperButton>
+        </div>
+        <button
+          type="button"
+          className="pressable mt-2 rounded-[5px] font-serif text-[0.9rem] text-ink-faint hover:text-ink-soft"
+          onClick={() => {
+            setRecoveryMode((v) => !v);
+            setError(null);
+          }}
+        >
+          {recoveryMode
+            ? copy.settings.encryption.usePassphrase
+            : copy.settings.encryption.useRecovery}
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <section aria-label={copy.settings.encryption.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.encryption.heading}
+      </h2>
+      {body}
+      {error && (
+        <p role="alert" className="voice-prose mt-3 text-[0.9rem] text-ember">
+          {error}
+        </p>
+      )}
+
+      {/* enrollment: choose the passphrase */}
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
         <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="voice-display text-left text-lg">
-              {copy.settings.erase.title}
+              {copy.settings.encryption.enrollTitle}
             </DialogTitle>
             <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
-              {copy.settings.erase.body}
+              {copy.settings.encryption.enrollBody}
             </DialogDescription>
           </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void doEnroll();
+            }}
+          >
+            <label className="voice-label block text-[0.75rem]" htmlFor="e2e-pass">
+              {copy.settings.encryption.passphraseLabel}
+            </label>
+            <div className="relative">
+              <Input
+                id="e2e-pass"
+                type={showPass ? "text" : "password"}
+                autoComplete="new-password"
+                placeholder={copy.settings.encryption.passphrasePlaceholder}
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                onFocus={revealOnFocus}
+                className="h-10 pr-11 font-serif text-[1rem]"
+              />
+              <EyeToggle shown={showPass} onToggle={() => setShowPass((v) => !v)} />
+            </div>
+            {pass.length > 0 && strength && (
+              <StrengthMeter
+                score={strength.score}
+                label={
+                  strength.score >= 4
+                    ? copy.settings.encryption.strengthStrong
+                    : strength.ok
+                      ? copy.settings.encryption.strengthOk
+                      : copy.settings.encryption.strengthWeak
+                }
+              />
+            )}
+            <label className="voice-label block text-[0.75rem]" htmlFor="e2e-confirm">
+              {copy.settings.encryption.passphraseConfirmLabel}
+            </label>
+            <Input
+              id="e2e-confirm"
+              type={showPass ? "text" : "password"}
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              onFocus={revealOnFocus}
+              className="h-10 font-serif text-[1rem]"
+            />
+            {error && (
+              <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+                {error}
+              </p>
+            )}
+            <DialogFooter className="gap-2">
+              <Button
+                variant="ghost"
+                type="button"
+                className="font-serif"
+                onClick={() => setEnrollOpen(false)}
+              >
+                {copy.settings.erase.cancel}
+              </Button>
+              <PaperButton type="submit" disabled={busy}>
+                {busy
+                  ? copy.settings.encryption.enrolling
+                  : copy.settings.encryption.enrollConfirm}
+              </PaperButton>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* the recovery code — shown exactly once */}
+      <Dialog
+        open={recoveryCode !== null}
+        onOpenChange={(open) => {
+          if (!open) setRecoveryCode(null);
+        }}
+      >
+        <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="voice-display text-left text-lg">
+              {copy.settings.encryption.recoveryTitle}
+            </DialogTitle>
+            <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
+              {copy.settings.encryption.recoveryBody}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="voice-data select-all break-all text-center text-[1.05rem] leading-relaxed">
+            {recoveryCode}
+          </p>
+          <p className="voice-prose text-center text-[0.8rem] text-ink-faint">
+            {copy.settings.encryption.recoveryFileNote}
+          </p>
           <DialogFooter className="gap-2">
+            <PaperButton onClick={downloadKit}>
+              {copy.settings.encryption.downloadKit}
+            </PaperButton>
             <Button
               variant="ghost"
               className="font-serif"
-              onClick={() => setEraseOpen(false)}
+              onClick={() => setRecoveryCode(null)}
             >
-              {copy.settings.erase.cancel}
+              {copy.settings.encryption.recoveryDone}
             </Button>
-            <HoldToErase
-              onComplete={async () => {
-                await db.snippets.clear();
-                setEraseOpen(false);
-                toast(copy.settings.toasts.erased);
-              }}
-            />
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </section>
+  );
+}
+
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+/**
+ * The backup section — the standing arrangement with the writer's own
+ * Drive. Connect is a separate, single Google consent (the drive.file
+ * scope only); after that the freshness line carries the trust: when
+ * the last delivery landed, or that deliveries are failing and how to
+ * mend it. Never silent.
+ */
+function BackupSection() {
+  const sync = useSyncStatus();
+  const backup = sync.backup;
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // returning from the Google consent: finalize server-side, then let
+  // the status refresh carry the freshness line
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("drive") !== "connected") return;
+    window.history.replaceState(null, "", "/settings");
+    void (async () => {
+      setConnecting(true);
+      try {
+        const response = await fetch("/api/backup/connect", { method: "POST" });
+        if (response.status === 409) {
+          setError(copy.settings.backup.scopeDeclined);
+          return;
+        }
+        if (!response.ok) {
+          setError(copy.settings.backup.connectFailed);
+          return;
+        }
+        // this device adopts the token (the server forgets it) and runs
+        // the first delivery itself — the freshness line is never blank
+        const adopted = await adoptDriveToken();
+        if (adopted) await deliverBackup();
+      } catch {
+        setError(copy.settings.backup.connectFailed);
+      } finally {
+        setConnecting(false);
+        requestSync();
+      }
+    })();
+  }, []);
+
+  const connect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      await authClient.linkSocial({
+        provider: "google",
+        scopes: [DRIVE_SCOPE],
+        callbackURL: "/settings?drive=connected",
+      });
+      // on success the browser navigates to Google; reaching here quietly
+      // means it didn't
+    } catch {
+      setError(copy.settings.backup.connectFailed);
+    }
+    setConnecting(false);
+  };
+
+  const disconnect = async () => {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/backup/disconnect", { method: "POST" });
+      if (!response.ok) throw new Error(`disconnect ${response.status}`);
+      await forgetDriveTokens(); // this device drops its copy too
+    } catch {
+      setError(copy.settings.backup.disconnectFailed);
+    } finally {
+      setDisconnecting(false);
+      requestSync(); // refresh the ledger line
+    }
+  };
+
+  const deliveredWhen = (iso: string) => {
+    const at = new Date(iso);
+    if (isToday(at)) return format(at, "h:mm a");
+    if (isYesterday(at)) return `yesterday, ${format(at, "h:mm a")}`;
+    return format(at, "MMMM d");
+  };
+
+  const connectButton = (label: string) => (
+    <PaperButton onClick={() => void connect()} disabled={connecting}>
+      {connecting ? copy.settings.backup.connecting : label}
+    </PaperButton>
+  );
+
+  let statusLine: React.ReactNode = null;
+  let action: React.ReactNode = null;
+  if (!backup) {
+    action = connectButton(copy.settings.backup.connect);
+  } else if (backup.state === "active") {
+    statusLine = (
+      <div className="space-y-1">
+        <p className="voice-prose text-[0.9rem] text-ink-soft">
+          {backup.lastSuccessAt
+            ? copy.settings.backup.lastDelivered(
+                deliveredWhen(backup.lastSuccessAt),
+              )
+            : copy.settings.backup.firstOnItsWay}
+        </p>
+        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+          {copy.settings.backup.mirrors}
+        </p>
+      </div>
+    );
+    action = (
+      <PaperButton onClick={() => void disconnect()} disabled={disconnecting}>
+        {disconnecting
+          ? copy.settings.backup.disconnecting
+          : copy.settings.backup.disconnect}
+      </PaperButton>
+    );
+  } else if (backup.state === "error") {
+    // failing but still trying — ember, and offer a reconnect
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ember">
+        {backup.lastSuccessAt
+          ? copy.settings.backup.failingSince(
+              format(new Date(backup.lastSuccessAt), "MMMM d"),
+            )
+          : copy.settings.backup.failingNoSuccess}
+      </p>
+    );
+    action = connectButton(copy.settings.backup.reconnect);
+  } else {
+    // deliberately off (disconnected, or the grant was revoked) — neutral
+    statusLine = (
+      <p className="voice-prose text-[0.9rem] text-ink-soft">
+        {copy.settings.backup.off}
+      </p>
+    );
+    action = connectButton(copy.settings.backup.reconnect);
+  }
+
+  return (
+    <section aria-label={copy.settings.backup.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.backup.heading}
+      </h2>
+      <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+        {copy.settings.backup.lead}
+      </p>
+      <div className="mt-3 space-y-3">
+        {statusLine}
+        {error && (
+          <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+            {error}
+          </p>
+        )}
+        {action && <div>{action}</div>}
+      </div>
+    </section>
   );
 }
 
@@ -312,15 +1040,20 @@ function ThemeSwatch({
             }}
           />
         )}
+        {/* the sheet in miniature, laid out like the today zone: date
+            centred, the composer element centred (its text lines flush
+            left within it), the wax seal centred beneath */}
         <span
-          className="relative h-11 w-14 rounded-[2.5px] p-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.18),0_3px_6px_rgb(0_0_0/0.12)]"
+          className="relative flex h-11 w-14 flex-col items-center justify-center gap-[3px] rounded-[2.5px] p-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.18),0_3px_6px_rgb(0_0_0/0.12)]"
           style={{ background: paper }}
         >
-          <span className="block h-[2.5px] w-7 rounded-full" style={{ background: ink, opacity: 0.85 }} />
-          <span className="mt-1 block h-[2px] w-9 rounded-full" style={{ background: ink, opacity: 0.3 }} />
-          <span className="mt-[3px] block h-[2px] w-8 rounded-full" style={{ background: ink, opacity: 0.3 }} />
+          <span className="block h-[2.5px] w-6 rounded-full" style={{ background: ink, opacity: 0.85 }} />
+          <span className="flex w-9 flex-col items-start gap-[2.5px]">
+            <span className="block h-[2px] w-full rounded-full" style={{ background: ink, opacity: 0.3 }} />
+            <span className="block h-[2px] w-7 rounded-full" style={{ background: ink, opacity: 0.3 }} />
+          </span>
           <span
-            className="mt-1.5 block size-2 rounded-full"
+            className="mt-[1px] block size-2 rounded-full"
             style={{ background: "#2e5685" }}
           />
         </span>
@@ -337,36 +1070,70 @@ function ThemeSwatch({
   );
 }
 
-/** A raised paper button: lit on top, it depresses when pressed. */
-function PaperButton({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
+/**
+ * The account section — sign in, or the signed-in address with the
+ * sync trust lines beneath it: what's waiting, when it last went
+ * through, and the device-vs-server entry counts.
+ */
+function AccountSection() {
+  const router = useRouter();
+  const { user, status } = useSession();
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-[5px] bg-paper-raised px-3.5 py-1.5 font-serif text-[0.92rem] text-ink",
-        "shadow-[inset_0_1px_0_var(--press-highlight),inset_0_-1px_0_rgb(0_0_0/0.05),0_0_0_1px_rgb(var(--shadow-hue)/0.1),0_1px_2px_rgb(var(--shadow-hue)/0.12),0_2px_6px_rgb(var(--shadow-hue)/0.07)]",
-        "transition-[transform,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-out)]",
-        "active:translate-y-px active:scale-[0.98] active:shadow-[inset_0_1px_3px_rgb(0_0_0/0.12),0_0_0_1px_rgb(var(--shadow-hue)/0.1)]",
+    <section aria-label={copy.settings.account.heading}>
+      <h2 className="voice-label border-b border-rule pb-1.5">
+        {copy.settings.account.heading}
+      </h2>
+      {user ? (
+        <div className="mt-4">
+          <p className="font-serif text-[0.98rem]">
+            {copy.settings.account.signedInAs(user.email)}
+          </p>
+          <SyncLines />
+          <div className="mt-4 flex items-center gap-4">
+            <PaperButton onClick={() => void signOut()}>
+              {copy.settings.account.signOut}
+            </PaperButton>
+            <p className="voice-prose text-[0.9rem] text-ink-faint">
+              {copy.settings.account.signOutHint}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+            {copy.settings.account.signedOutLead}
+          </p>
+          <div className="mt-4">
+            <PaperButton
+              onClick={() => router.push("/signin")}
+              disabled={status === "loading"}
+            >
+              {copy.settings.account.signIn}
+            </PaperButton>
+          </div>
+        </div>
       )}
-    >
-      {children}
-    </button>
+    </section>
   );
 }
 
 /**
  * Hold to erase — slow where the writer is deciding, fast where the
  * system responds. The wax fills the button while held; release and
- * it drains back instantly.
+ * it drains back instantly. The label bends to the act (erase, delete);
+ * the physics never does.
  */
-function HoldToErase({ onComplete }: { onComplete: () => void }) {
+/** The deliberate hold: long enough that a destructive act can't be a slip. */
+const HOLD_MS = 10_000;
+
+function HoldToErase({
+  onComplete,
+  label = copy.settings.erase.hold,
+}: {
+  onComplete: () => void;
+  label?: string;
+}) {
   const [holding, setHolding] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -378,7 +1145,7 @@ function HoldToErase({ onComplete }: { onComplete: () => void }) {
       timer.current = null;
       setHolding(false);
       onComplete();
-    }, 1400);
+    }, HOLD_MS);
   };
   const cancel = () => {
     if (timer.current) {
@@ -404,7 +1171,8 @@ function HoldToErase({ onComplete }: { onComplete: () => void }) {
       }}
       onKeyUp={cancel}
       onContextMenu={(e) => e.preventDefault()}
-      className="relative select-none overflow-hidden rounded-[5px] bg-ember px-4 py-2 font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
+      // full-width so the hold fill sweeps past a covering thumb, staying visible
+      className="relative w-full select-none overflow-hidden rounded-[5px] bg-ember px-4 py-2.5 text-center font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
     >
       <span
         aria-hidden="true"
@@ -412,12 +1180,12 @@ function HoldToErase({ onComplete }: { onComplete: () => void }) {
         style={{
           clipPath: holding ? "inset(0 0 0 0)" : "inset(0 100% 0 0)",
           transition: holding
-            ? "clip-path 1.4s linear"
+            ? `clip-path ${HOLD_MS}ms linear`
             : "clip-path 200ms var(--ease-out)",
         }}
       />
       <span className="relative">
-        {holding ? copy.settings.erase.holding : copy.settings.erase.hold}
+        {holding ? copy.settings.erase.holding : label}
       </span>
     </button>
   );

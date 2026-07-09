@@ -16,6 +16,7 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
+  addDays,
   addMonths,
   format,
   isAfter,
@@ -40,11 +41,13 @@ import {
   addSnippet,
   restoreSnippet,
   softDeleteSnippet,
+  StorageWriteError,
 } from "@/lib/db";
-import { enrichSnippet } from "@/lib/enrich";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
+import { renderInline } from "@/lib/inline-markup";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
 import { queryTerms } from "@/lib/search";
@@ -407,7 +410,14 @@ function Calendar() {
   // animation, so the move into the page reads as a skip. Mount only the
   // altitude we land on; warm the rest in once the thread is free (and
   // at once if a zoom needs them sooner).
-  const [warm, setWarm] = useState(false);
+  //
+  // `warm` is a LEVEL, not a flag: the off-screen altitudes mount ONE PER FRAME
+  // (level 1 → month, 2 → entry, 3 → year). Mounting all three in a single
+  // commit was a ~150ms+ main-thread block that, landing right after a fast
+  // reopen's page had settled, blanked it to the bare desk for a beat before it
+  // repainted. Staggered + inside startTransition, no one commit blocks long
+  // enough to drop a frame. A zoom still forces all layers at once (runZoom).
+  const [warm, setWarm] = useState(0);
   const [selected, setSelected] = useState(initialDay);
   /** what the title shows — follows the feeds' scroll */
   const [visibleMonth, setVisibleMonth] = useState(() => {
@@ -561,17 +571,29 @@ function Calendar() {
   // past the dock's ink glide (a ~250ms spring), so their build (the
   // book's rows) lands off the transition and the ink never skips. A
   // fixed beat, not requestIdleCallback: idle can fall mid-animation on
-  // a fast device, which is exactly when we must not mount.
+  // a fast device, which is exactly when we must not mount. Then step the
+  // level up one altitude per frame (not all at once — see `warm` above).
   useEffect(() => {
-    const id = setTimeout(() => setWarm(true), 350);
-    return () => clearTimeout(id);
+    let raf = 0;
+    const id = setTimeout(() => {
+      let n = 1;
+      const bump = () => {
+        startTransition(() => setWarm((w) => Math.max(w, n)));
+        if (n++ < 3) raf = requestAnimationFrame(bump);
+      };
+      bump();
+    }, 350);
+    return () => {
+      clearTimeout(id);
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   /* ── the zoom: one camera move between altitudes ──────────────── */
 
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
     if (zooming.current) return;
-    setWarm(true); // a camera move needs both layers mounted now
+    setWarm(3); // a camera move needs every layer mounted now
     zooming.current = true;
     setZoom({ from, to, anchor });
     setView(to);
@@ -1484,12 +1506,89 @@ function Calendar() {
     }
   };
 
+  // Quick capture (the `c` key): land in today's book and put the pen in the
+  // writer's hand, from wherever the camera is. Polls for the today-zone field
+  // to mount (behind the zoom) and focuses it — a hardware-keyboard gesture,
+  // so no on-screen-keyboard concern.
+  const focusCaptureField = (frames = 90) => {
+    const ta = document.querySelector<HTMLTextAreaElement>("textarea[data-room-center]");
+    const a = document.activeElement;
+    // keep trying until focus actually TAKES: a .focus() during the dive zoom
+    // (the schedule layer still mid-transition / not yet visible) is silently
+    // ignored, so one attempt isn't enough. Only claim focus from nothing (the
+    // body) — never yank it off a field the writer chose in the meantime.
+    if (ta && a !== ta && (a === document.body || a === null)) {
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+    if (frames > 0 && document.activeElement !== ta) {
+      requestAnimationFrame(() => focusCaptureField(frames - 1));
+    }
+  };
+  const quickCapture = () => {
+    const t = dayKey();
+    const cur = viewRef.current;
+    if (cur === "schedule") jumpTo(t, true);
+    else if (cur === "month") pick(t);
+    else if (cur === "entry") { appBack(); setTimeout(() => jumpTo(t, true), 260); }
+    else if (cur === "year") { descendFromYear(); setTimeout(() => pick(t), 300); }
+    focusCaptureField();
+  };
+
+  // Date-grid keyboard navigation (WAI-ARIA date-picker pattern), attached to
+  // the month layer so it hears whichever day button holds focus. Arrows step
+  // a day (←→) or a week (↑↓); Home/End snap to the week's ends; PageUp/Down
+  // step a month; Shift+PageUp/Down step a year. Focus follows to the target
+  // day — stepping the feed first when the target's month isn't yet rendered
+  // (the feed is virtualized), so nav flows across month boundaries seamlessly.
+  const focusDayKey = (key: string, tries = 12) => {
+    const btn = monthLayerRef.current?.querySelector<HTMLButtonElement>(
+      `button[data-day-key="${key}"]`,
+    );
+    if (btn) {
+      if (btn.disabled) return; // future day — nothing to land on
+      btn.tabIndex = 0; // becomes the roving tab stop
+      btn.focus();
+      return;
+    }
+    if (tries <= 0) return;
+    // the target's month isn't rendered — glide the feed to it, then retry
+    monthFeedRef.current?.goTo(startOfMonth(dateFromDayKey(key)), false);
+    requestAnimationFrame(() => focusDayKey(key, tries - 1));
+  };
+  const onDayGridKey = (e: React.KeyboardEvent) => {
+    const el = document.activeElement as HTMLElement | null;
+    const from = el?.getAttribute("data-day-key");
+    if (!from) return; // focus isn't on a day cell
+    const d = dateFromDayKey(from);
+    let target: Date | null = null;
+    switch (e.key) {
+      case "ArrowLeft": target = addDays(d, -1); break;
+      case "ArrowRight": target = addDays(d, 1); break;
+      case "ArrowUp": target = addDays(d, -7); break;
+      case "ArrowDown": target = addDays(d, 7); break;
+      case "Home": target = addDays(d, -((d.getDay() - weekStart + 7) % 7)); break;
+      case "End": target = addDays(d, 6 - ((d.getDay() - weekStart + 7) % 7)); break;
+      case "PageUp": target = addMonths(d, e.shiftKey ? -12 : -1); break;
+      case "PageDown": target = addMonths(d, e.shiftKey ? 12 : 1); break;
+      default: return;
+    }
+    e.preventDefault();
+    e.stopPropagation(); // don't also trigger the stage's PageUp/Down feed step
+    if (isAfter(startOfMonth(target), startOfMonth(today))) return; // no future months
+    if (isAfter(target, today)) target = today; // clamp a future day to today
+    el?.setAttribute("tabindex", "-1"); // hand the roving tab stop to the target
+    focusDayKey(dayKey(target));
+  };
+
   /* ── the header search: a pill that borrows the whole title row ──
      The title slides off left, the buttons off right; Clear hands the
      row back, reversing the same moves. While a query stands, the
      stage shows the book filtered to it. */
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
+  // the `?` keyboard cheat-sheet
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   // the bar IS the glass's circle, grown to the row: its geometry
   // animates between the circle's measured box and the full row
@@ -1570,6 +1669,81 @@ function Calendar() {
       setPillClosing(false);
     }, 200);
   };
+
+  // ── App-wide keyboard shortcuts ─────────────────────────────────────────
+  // A single window listener, reading the latest handlers from a ref so it
+  // subscribes once. Never hijacks typing (fields, the ⌘K command input);
+  // ⌘/Ctrl/Alt combos pass straight through to the browser and the command
+  // menu. Discoverable via `?`. The vocabulary:
+  //   Esc      climb one altitude (entry→book→canvas→glance)
+  //   /        open search        ·  t  jump to today  ·  c/n quick-capture
+  //   j / k    step the feed forward / back (a month, a screen)
+  //   g then m/y/t   go to canvas / glance / today   ·  ?  this cheat sheet
+  const kbRef = useRef({
+    view, searching, shortcutsOpen,
+    appBack, goToday, openYear, goToCanvas, openSearch, closeSearch,
+    quickCapture, stepFeed, setShortcutsOpen,
+  });
+  // refresh the handler snapshot after each commit (never during render); this
+  // deliberately runs every render, so no dependency array
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    kbRef.current = {
+      view, searching, shortcutsOpen,
+      appBack, goToday, openYear, goToCanvas, openSearch, closeSearch,
+      quickCapture, stepFeed, setShortcutsOpen,
+    };
+  });
+  useEffect(() => {
+    const isTyping = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return (
+        !!el &&
+        (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
+      );
+    };
+    let gAt = 0; // when `g` was last pressed, for the go-to prefix
+    const onKey = (e: KeyboardEvent) => {
+      const h = kbRef.current;
+      if (e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K etc. belong to others
+      // the cheat sheet, once open, owns the keys: Esc or ? closes it
+      if (h.shortcutsOpen) {
+        if (e.key === "Escape" || e.key === "?") {
+          e.preventDefault();
+          h.setShortcutsOpen(false);
+        }
+        return;
+      }
+      if (isTyping()) return; // a field is focused — leave every key to it
+      if (e.key === "?") { e.preventDefault(); h.setShortcutsOpen(true); return; }
+      // the go-to prefix: `g` then a target within 1.2s
+      const now = performance.now();
+      if (gAt && now - gAt < 1200) {
+        gAt = 0;
+        if (e.key === "t") { e.preventDefault(); h.goToday(); return; }
+        if (e.key === "m") { e.preventDefault(); h.goToCanvas(); return; }
+        if (e.key === "y") { e.preventDefault(); if (h.view === "month") h.openYear(); return; }
+      }
+      switch (e.key) {
+        case "Escape":
+          if (h.view === "entry" || h.view === "schedule" || h.view === "year") {
+            e.preventDefault();
+            h.appBack();
+          }
+          break;
+        case "/": e.preventDefault(); h.openSearch(); break;
+        case "t": e.preventDefault(); h.goToday(); break;
+        case "c": case "n": e.preventDefault(); h.quickCapture(); break;
+        case "j": e.preventDefault(); h.stepFeed(1); break;
+        case "k": e.preventDefault(); h.stepFeed(-1); break;
+        case "g": gAt = now; break;
+        default: break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   /** a found page opens in the book itself — straight there, from any
       altitude, never through the canvas */
   const jumpFromSearch = (day: string) => {
@@ -1619,7 +1793,26 @@ function Calendar() {
     !searchActive && (view === "entry" || zoom?.from === "entry");
 
   return (
-    <div className="page-settle flex h-full min-h-0 flex-col">
+    // NO page-settle here — the SSR Suspense fallback (CalendarSkeleton) already
+    // wears it and plays the ONE entrance. This root mounts when Suspense swaps
+    // the (already faded-in) skeleton for the real page, and a page-settle here
+    // would restart the keyframe from opacity:0 on that fresh mount — a blank
+    // frame that fades back in, reading as the book flashing out and returning a
+    // beat after it first appeared. The swap is a seamless continuation instead:
+    // the settled skeleton becomes the settled page with no second fade.
+    <div className="flex h-full min-h-0 flex-col">
+      {/* the current altitude, spoken to assistive tech after every zoom/jump */}
+      <p aria-live="polite" className="sr-only">
+        {view === "year"
+          ? `Year ${visibleYear}`
+          : view === "month"
+            ? format(visibleMonth, "MMMM yyyy")
+            : view === "schedule"
+              ? friendlyDay(selected)
+              : "Entry"}
+      </p>
+      {/* the `?` keyboard cheat sheet */}
+      <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book cards'
           ink between blended and flat to test scroll/zoom jank on-device */}
       {perfDebug && (
@@ -1658,6 +1851,7 @@ function Calendar() {
         ) : (
           <button
             type="button"
+            data-cal-title
             onClick={
               view === "month"
                 ? openYear
@@ -1928,6 +2122,7 @@ function Calendar() {
         <div
           ref={monthLayerRef}
           data-layer="month"
+          onKeyDown={onDayGridKey}
           // a swipe begun on the canvas itself (the blank cells and
           // label rows between months, never a day) climbs to the year
           onPointerDown={(e) => armSwipe(e, true)}
@@ -1939,7 +2134,7 @@ function Calendar() {
             (zoom || !showMonthLayer) && "pointer-events-none",
           )}
         >
-          {(view === "month" || warm) && (
+          {(view === "month" || warm >= 1) && (
             <MonthFeed
               handleRef={monthFeedRef}
               active={view === "month" && !zoom}
@@ -1965,7 +2160,7 @@ function Calendar() {
             (zoom || !showYearLayer) && "pointer-events-none",
           )}
         >
-          {(view === "year" || warm) && (
+          {(view === "year" || warm >= 3) && (
             <YearFeed
               handleRef={yearFeedRef}
               active={view === "year" && !zoom}
@@ -1998,7 +2193,7 @@ function Calendar() {
             (zoom || !showScheduleLayer) && "pointer-events-none",
           )}
         >
-          {(view === "schedule" || warm) && (
+          {(view === "schedule" || warm >= 1) && (
             <ScheduleFeed
               handleRef={scheduleFeedRef}
               active={view === "schedule" && !zoom}
@@ -2035,7 +2230,7 @@ function Calendar() {
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
         >
-          {(view === "entry" || warm) && <EntryView snippet={focused} onLetGo={letGo} />}
+          {(view === "entry" || warm >= 2) && <EntryView snippet={focused} onLetGo={letGo} />}
           {/* the leave animation is driven by the zoom effect on the card box */}
         </div>
         {/* the filtered book: while a query stands, the stage shows the
@@ -2823,11 +3018,12 @@ function ScheduleFeedBase({
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {/* until the live query returns, `body` is undefined — hold the today
-            zone (the same skeleton the SSR shell shows, and the view the book
-            almost always opens onto) so the wait reads as a continuous
-            "settling in", never a blank gap that then pops */}
-        {body ?? <TodaySkeleton />}
+        {/* until the live query returns, `body` is undefined — hold a skeleton
+            so the wait reads as a continuous "settling in", never a blank gap
+            that then pops. Landing on today opens onto the compose zone (the
+            book's foot fills the viewport), so hold that; a deep-link into any
+            other day lands among its entries, so hold the ruled book instead. */}
+        {body ?? (selected === todayKey ? <TodaySkeleton /> : <LedgerRows />)}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
@@ -3038,10 +3234,24 @@ function FlowBackfillCapture({
       day,
       source: "typed",
       favorite: 0,
-      enriched: "pending",
       updatedAt: capturedAt,
     });
-    void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).then(enrichSnippet);
+    void addSnippet({ id, text: trimmed, source: "typed", capturedAt })
+      .catch((error: unknown) => {
+        // the keep did not take — withdraw the optimistic card, put the
+        // words back, say why. Never a silent loss.
+        draftStore?.clear(day);
+        setText(trimmed);
+        if (areaRef.current) {
+          areaRef.current.value = trimmed;
+          autosizeArea(areaRef.current);
+        }
+        toast(
+          error instanceof StorageWriteError && error.full
+            ? copy.data.storageFull
+            : copy.data.keepFailed,
+        );
+      });
     setText("");
     if (areaRef.current) {
       areaRef.current.value = "";
@@ -3117,7 +3327,10 @@ function FlowBackfillCapture({
               autosizeArea(e.target);
             }}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              // Enter is a newline — this is prose, not a chat line, and the
+              // wax seal files. ⌘/Ctrl+Enter is the desktop accelerator for
+              // that seal; a mobile return key just breaks the line.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 keep();
               }
@@ -4080,9 +4293,20 @@ function TodayZoneFill({
       const source = voiceUsed.current ? "voice" : "typed";
       draft?.set({
         id, text: t, kind: null, tags: [], capturedAt, day,
-        source, favorite: 0, enriched: "pending", updatedAt: capturedAt,
+        source, favorite: 0, updatedAt: capturedAt,
       });
-      void addSnippet({ id, text: t, source, capturedAt }).then(enrichSnippet);
+      void addSnippet({ id, text: t, source, capturedAt })
+        .catch((error: unknown) => {
+          // the keep did not take — withdraw the optimistic card, put the
+          // words back, say why. Never a silent loss.
+          draft?.clear(day);
+          setText(t);
+          toast(
+            error instanceof StorageWriteError && error.full
+              ? copy.data.storageFull
+              : copy.data.keepFailed,
+          );
+        });
     };
     // freeze the words; hold the seal pressed-down through the lead; dismiss the
     // keyboard and bring the seal fully into view
@@ -4220,7 +4444,12 @@ function TodayZoneFill({
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
+          {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
+              px), so the ruled field and the intro keep the same visual margin
+              from a narrow phone up to the wide desk — the ruled paper and the
+              intro both fill this padded column (w-full), which is what keeps
+              their left/right edges aligned */}
+          <div className="flex flex-1 flex-col items-center gap-4 px-[8%] py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
               seats it 107px under the zone's top. That's 11px more than the
               seal's box clearance below, on purpose: the wax is painted high in
@@ -4232,19 +4461,39 @@ function TodayZoneFill({
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
+          {/* the first-ever introduction: prose on the sheet, retiring itself
+              the instant the writer starts (law 8 — nothing modal near capture).
+              Only on a truly empty book, and only before a keystroke. */}
+          <AnimatePresence>
+            {firstEver && text.trim().length === 0 && (
+              <motion.div
+                key="intro"
+                initial={false}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                className="w-full space-y-3 text-left"
+              >
+                {copy.intro.body.map((para, i) => (
+                  <p
+                    key={i}
+                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                  >
+                    {renderInline(para, `intro-${i}`)}
+                  </p>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
           {/* the flexible half of the field's centring slack (see centerField);
               the entry grows into this, top first, so its foot never moves */}
           <div ref={topSlackRef} className="w-px flex-1" aria-hidden />
 
-          {/* the ruled "paper" — the clickable entry. Its width exactly matches
-              the schedule card's preview text: the row grid indents 2.1rem +
-              0.5rem gap (41.6px) and the card wears 1px borders + p-2.5 (22px),
-              so preview text = scroller − 63.6px; this column sits inside the
-              zone's 1px borders + px-4 (34px), leaving 29.6px to shave. Same
-              width + the same 0.9rem type as the preview ⇒ identical wrapping:
-              words that fill N rules here fill N preview lines there, and six
-              rules is exactly the card's clamp. */}
-          <div className="relative w-[calc(100%-29.6px)] min-w-[14rem]">
+          {/* the ruled "paper" — the clickable entry. It fills the padded
+              column (the wrapper's px-[8%] sets the proportional side margin),
+              so it and the intro share the same left/right edges at every width.
+              (This trades away the old fixed-px width that matched the schedule
+              card's 6-rule wrap exactly — margins-scale-with-the-sheet won.) */}
+          <div className="relative w-full min-w-[14rem]">
             <textarea
               ref={areaRef}
               value={shownText}
@@ -4279,7 +4528,7 @@ function TodayZoneFill({
               }}
               onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
-              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); submit(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } }}
               placeholder={
                 listening
                   ? copy.capture.listeningPlaceholder

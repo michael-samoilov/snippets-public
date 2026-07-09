@@ -463,6 +463,11 @@ const MonthBlock = memo(function MonthBlock({
               whileTap={isFuture ? undefined : "pressed"}
               aria-label={`${format(date, "MMMM d")}${count ? `, ${count} kept` : ""}`}
               aria-pressed={key === selected}
+              // the date grid follows the WAI-ARIA pattern: ONE tab stop (the
+              // selected day), then arrows roam (handled on the month layer).
+              // data-day-key lets that handler find any day across months.
+              data-day-key={key}
+              tabIndex={key === selected ? 0 : -1}
               className={cn(
                 "relative flex aspect-square flex-col items-center justify-center gap-1 border-t border-rule-faint",
                 !isFuture && "transition-colors duration-150 hover:bg-paper-raised",

@@ -212,3 +212,221 @@ instant swap (settled ⇄ dome), never a missing or stuck frame.
 **Touches the rules.** Law 6's sanctioned-marks list names the foot's
 "wax quill CONFIRM-stamp + ember trash"; standing a wax seal there changes
 it — amend `DESIGN.md` and the `snippets-craft` SKILL on ship.
+
+## 5. First-run introduction: the purpose, and the quiet reassurance
+
+> "Intro card to app that: 1) explains purpose (storyworthy etc.)
+> 2) reassures about sync & security"
+
+Accepted 2026-07-07, right after accounts/sync/backup shipped. Two jobs
+in one first impression: say *what this is for* (Homework for Life —
+keep the storyworthy moment before it evaporates) and *why it's safe to
+invest* (yours on this device; signing in keeps a server copy; daily
+delivery to your own Drive; the app's death doesn't take your book).
+
+**Form: not literally a card.** Law 6 bans cards; law 8 bans dialogs
+anywhere near capture. The intent — orientation + reassurance — should
+live *on the sheet* as the first-ever empty state, not float over it as
+a modal. Today that state is already split across two seams: the today
+zone's `placeholderFirstEver` ("Start saving your memories…") and
+`copy.today.empty` ("Your days are fuller than you think…" — the
+purpose half already exists there in miniature). This item grows that
+moment into a proper introduction, then gets out of the way forever.
+
+**Content, in the house voice.** Three short strokes, no more:
+
+1. *Purpose* — extend the `copy.today.empty` register; the About
+   section's Matthew Dicks sentence (`copy.settings.about`) is the
+   source of truth to echo, not duplicate.
+2. *Reassurance* — one sentence, not a security brochure. The register
+   is `signin.lead` ("Your book stays on this device either way…") +
+   the backup section's "Yours even if this app disappears." Link the
+   word, not a button: a quiet underline to `/privacy`.
+3. *The door* — the existing capture affordance IS the call to action;
+   don't add another.
+
+**Retirement.** The first kept entry retires it naturally (the empty
+state ceases to exist). No localStorage "seen" flag unless the intro
+outgrows the empty state; if it ever does, key it
+`snippets:introSeen` and keep dismissal implicit (writing = dismissing),
+never an ✕.
+
+**Kindred case discovered in the field (2026-07-07, the owner hit it):
+the blank-book heart-stop.** A returning writer whose entries live under
+another origin (domain migration) or another sign-in sees an empty book
+with no explanation — indistinguishable from loss. When the book is
+empty AND a signed-in account's server copy is also empty, the intro
+moment may add one gentle line ("Expecting entries? They may live under
+another address or sign-in — Restore from JSON in Settings brings them
+here."). Same surface, same voice, same retirement rule.
+
+**Where.** `src/app/calendar/page.tsx` (today zone empty state),
+`src/lib/copy.ts` (new `intro` group beside `today`), possibly
+`src/components/capture/capture.tsx` if the standalone today page wants
+it too. Screenshot both themes, both widths; the intro must read as ink
+on the sheet, never as chrome.
+
+## 6. 404 and error pages
+
+> "404 / error pages"
+
+Accepted 2026-07-08. The app currently falls to Next's defaults: the
+framework 404 and the bare error boundary ("This page couldn't load" —
+seen in the field during testing, and it reads as a broken foreign
+app, not Snippets). Ship `src/app/not-found.tsx` and
+`src/app/error.tsx` (+ `global-error.tsx` for the shell itself), each
+a quiet page in the house voice on the sheet: what happened, one line;
+the way back ("Back to the book"); no mascots, no illustrations, no
+jokes at the writer's expense. The error page should offer reload
+without dumping a stack trace on the reader. Copy lives in `copy.ts`.
+
+## 7. Empty states — a pass over every "nothing here" moment
+
+> "Custom empty states, if needed." And, from field testing: "how does
+> the app empty state look — if the full prior year is available when a
+> user joins in the middle of the year, that's probably not necessary."
+
+Accepted 2026-07-08, deliberately scoped as an *audit first*: walk
+every surface with an empty or sparse book and decide which need a
+designed state versus which are quietly fine. Known candidates:
+
+- **The calendar's back-catalogue on a young book** (the owner's
+  concrete case): a writer who joins mid-year can page into a full
+  prior year of blank months — dead territory that implies neglect
+  rather than a fresh start. Consider bounding the navigable range at
+  the book's first entry (or the join month), letting history unlock
+  as backfill happens. Decide what the year-at-a-glance shows for
+  months before the book began.
+- Search with no results vs. search on an empty book (today: one
+  "Nothing found." — fine for the former, odd for the latter).
+- "On this day" is already quietly absent when empty (correct — the
+  model to copy).
+- A day view opened on a past day with no entries (the backfill
+  composer may already carry this).
+
+The first-ever intro (#5, shipped) owns the today-zone empty state;
+this item is everything else. Rule of thumb from the constitution:
+gaps stay blank, never scolding — an empty state earns copy only when
+silence would read as breakage.
+
+## 8. E2E: bind the envelope's cleartext fields into the cipher (AAD)
+
+> Adversarial security review, 2026-07-08. (The critical sibling
+> finding — the plaintext-downgrade bug, where the server's enrollment
+> answer, not the local key, chose whether to encrypt — was fixed the
+> same day: `runCycle` now makes the on-device key authoritative.)
+
+AES-256-GCM authenticates each entry's *ciphertext*, but the row's
+identity, `updatedAt`, `deletedAt`, and `payloadFormat` ride *outside*
+the sealed envelope, unsigned (`src/lib/sync-wire.ts`). A tampered body
+fails to open — but a hostile (or buggy) server can still swap one
+sealed entry's ciphertext onto another row, roll a row back to an
+earlier sealed version, or flip `deletedAt` to hide or resurrect an
+entry, all without reading a word. Close it by binding those cleartext
+fields as AES-GCM **additional authenticated data (AAD)** so decryption
+fails if the envelope has been moved or its metadata edited.
+
+Design notes:
+- AAD = a canonical serialization of `{id, updatedAt, deletedAt,
+  payloadFormat}` (exactly the fields sync needs in the clear).
+  `encryptJSON`/`decryptJSON` in `crypto.ts` take it as a parameter;
+  decrypt recomputes it from the wire row and a mismatch throws — surface
+  it as the same "tampered entry" failure that a bad tag already gives.
+- This is a `payloadFormat` bump. Existing format-2 seals carry no AAD,
+  so either add **format 3** for AAD-bound seals and keep format 2
+  decryptable through a migration, or re-seal the whole book on next
+  unlock (`reencryptSweep` already exists for exactly this). **Check
+  whether any live encrypted books exist before choosing** — a re-seal
+  sweep is simplest if the install base is still zero/small.
+- Extend `crypto.test.ts`: a row decrypts under the right AAD and fails
+  under a swapped `id`, a bumped `updatedAt`, or a flipped `deletedAt`.
+- The privacy deep-dive says "a tampered entry fails to open"; once this
+  ships that becomes true of the *envelope* too — tighten the copy to
+  say so (today it slightly overclaims).
+
+## 9. E2E: refuse weak passphrases at enrollment (+ two crypto tidies)
+
+> Adversarial security review, 2026-07-08.
+
+Enrollment gates only on length (`pass.length < 10`,
+`src/app/settings/page.tsx`), so `password12` seals a book. PBKDF2 at
+600k iterations slows a guesser but can't rescue a guessable passphrase
+— it is the weakest link in the whole scheme, and the copy implies
+stronger protection than a weak phrase delivers. Add real strength
+enforcement at the "Seal the book?" dialog: a zxcvbn-style estimator +
+a common-password blocklist, with a **quiet, in-voice** strength read
+(not a coloured nagging meter — laws 6/7) and a floor below which "Seal
+it" won't fire.
+
+Design notes:
+- Dependency call: `@zxcvbn-ts/core` with lazy-loaded dictionaries, or a
+  lighter estimator — load it **only** in the enrollment path, never
+  anywhere near capture (law 8) and never in the main bundle.
+- The read is one line in the house voice ("that phrase is easy to
+  guess — try a longer, stranger one"), not a rainbow bar. The floor is
+  a strength score, not a character count; keep the ten-character
+  minimum as a floor beneath it.
+- Two small hardening tidies to fold in while in `crypto.ts`:
+  (a) `generateRecoveryCode` uses `bytes[i] % 30` — modulo bias over the
+  30-char alphabet; switch to rejection sampling so every symbol is
+  uniform. (b) A comment claims "128 bits"; reconcile it with the true
+  figure (~120). Neither is exploitable, but both should read honestly.
+
+## 10. New-device unlock: guide users when encrypted entries are unreachable
+
+> "If a user has an account & encrypted their entries but signs in on a
+> new device, and doesn't see their old entries, we should add some kind
+> of flow that indicates they need to enter their encryption
+> passphrase/recovery key to see their other entries."
+
+Accepted 2026-07-09. When a user signs in on a fresh device with an
+enrollment already active on their account (entries server-side in
+`payloadFormat: 2`, a locked sync state), the calendar silently shows
+an empty book — no visible explanation that the entries exist but are
+sealed.
+
+**The flow.** Detect locked state at mount (the sync status store
+already tracks it); surface a gentle, sheet-integrated prompt on the
+empty calendar or settings — something in the house voice explaining
+the entries are encrypted and asking for the passphrase or recovery
+code. Reuse or adapt the existing unlock UI from settings (the
+passphrase + recovery-code inputs); on successful unlock, trigger a
+full sync cycle so the entries decrypt and appear. The unlock
+completes the enrollment story without breaking it when devices
+diverge.
+
+**What it touches.** Sync detection (`src/lib/sync.ts`, the `locked`
+state machine), UI surfacing (calendar empty state or settings alert),
+form reuse/adaptation, triggering a re-pull after successful unlock.
+Audit whether the existing unlock path (settings gear → turn on E2E)
+handles this too, or if it's truly device-specific.
+
+**Copy.** One sentence of explanation ("Your entries are encrypted —
+enter your passphrase or recovery code to see them") in the house
+voice; never accusatory, never a scolding "error." Decide where the
+prompt lives: inline on the empty calendar (if the intent is
+reassurance + action); a Settings line (if the intent is optional
+re-unlock); or a gentle alert (if both). Test the copy surfaces
+*before* asking the user to unlock — make it safe to live with the
+locked state a while.
+
+## 11. Status indicators: green icons for active security + sync features
+
+Visual signals for user confidence — a quick scan confirms the features
+the user has turned on are working:
+
+- **Encryption active** — green shield or shield-with-lock icon
+- **Sync active and healthy** — green sync/arrow icon  
+- **Google Drive backup active** — green Google Drive icon
+
+Where they live: likely the header or settings top (needs to be visible
+at a glance without requiring a deep read). The look will be iterated
+on — design for tasteful, quiet signals that don't break the sheet's
+calm. Icon set is already Feather (see `SKILL.md` law 6 sanctioned marks);
+confirm whether shield/sync/Drive glyphs fit or need custom marks. Icon
+placement and styling should follow existing guidance: small, wax-toned
+when inactive/unavailable, green only when the state is actively good.
+
+Open: should these show in the header, settings (account section?), both,
+or as a separate status line? Should they include tooltips or does
+presence alone suffice?

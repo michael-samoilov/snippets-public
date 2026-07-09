@@ -28,6 +28,15 @@ html {
 }
 
 :root {
+  /* the shell's one-screen height. The root layout's pre-paint inline script
+     overrides this with the MEASURED viewport in pixels (visualViewport /
+     innerHeight read correctly from the first script tick, while iOS's CSS
+     viewport — every unit AND fixed-inset geometry — can be stale-tall through
+     a cold navigation's first frames; see AppShell). 100% is only the no-JS
+     fallback: on the fixed shell it resolves against the same (possibly stale)
+     viewport that inset:0 would, i.e. exactly the old behavior. */
+  --app-h: 100%;
+
   /* the date header is the largest size that still keeps the longest
      full date ("Wednesday, September 22, 2020") on one line — it scales
      with the viewport on phones and caps on wider screens */
@@ -64,6 +73,14 @@ html {
   --ember: #993b26;
   --ember-deep: #7a2c1b;
   --gilt: #a87a24;
+
+  /* passphrase strength meter — weak (an ember red) climbing to a
+     paper-friendly green, kin to the retired kind hues */
+  --strength-weak: #b0492f;
+  --strength-fair: #bf8a3a;
+  --strength-good: #8a9a52;
+  --strength-strong: #5e8f57;
+  --strength-track: rgb(36 30 21 / 0.1);
 
   /* ── the six kinds, as muted editorial inks ───────────── */
   --kind-story: #8a5a28;
@@ -150,6 +167,12 @@ html {
   --ember: #c75b40;
   --ember-deep: #a44733;
   --gilt: #c99c45;
+
+  --strength-weak: #c75b40;
+  --strength-fair: #cba24e;
+  --strength-good: #a2b16b;
+  --strength-strong: #7bb47a;
+  --strength-track: rgb(234 225 205 / 0.12);
 
   --kind-story: #c49a5c;
   --kind-joke: #cfa44a;

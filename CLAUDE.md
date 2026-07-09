@@ -3,7 +3,7 @@
 # Snippets — working in this repo
 
 A local-first PWA commonplace book ("Homework for Life"): frictionless
-voice/typed capture, quiet Claude-powered filing, calendar review.
+voice/typed capture, calendar review.
 **Before touching any UI, styling, copy, or animation, use the
 `snippets-craft` skill** (`.claude/skills/snippets-craft/`) — it is the
 design constitution. `DESIGN.md` has the full rationale and tokens.
@@ -57,12 +57,11 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   `GET /api/scribe-token` and `GET /api/transcribe`. Every failure
   surfaces a typed reason (`SpeechFailure`) turned into specific copy
   from `copy.capture.voiceFailures`.
-- **Enrichment:** `src/app/api/enrich/route.ts` (Claude Haiku via
-  `@anthropic-ai/sdk`, structured output with `zodOutputFormat`,
-  model overridable via `ENRICH_MODEL`). Client orchestration +
-  heuristics fallback in `src/lib/enrich.ts`. It must stay best-effort:
-  no key → 503 → chips; `enriched: "manual"` is never overwritten.
-  When changing this code, consult the `claude-api` skill first.
+- **Enrichment (removed 2026-07):** automatic filing — Claude-generated
+  title/kind/tags — has been fully retired. There is no `/api/enrich`
+  route, no `enrich.ts`, and no `enriched` field; the `kind`/`tags`
+  fields survive on the model (unused, kept for possible future
+  tagging). Entries are their words alone.
 - **UI primitives:** `src/components/ui/*` are vendored shadcn sources
   (the registry domain is blocked in some sandboxes; they're ours now
   and intentionally restyled — overlay tint, input focus, etc.). Edit
@@ -74,6 +73,44 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   `public/textures`. The wax-wash lab's aurora/neuro candidates sit on
   a small hand-rolled WebGL mount in
   `src/app/(dev)/lab/wax-wash/shader-box.tsx`.
+- **Accounts + sync (optional):** Better Auth (Google + email OTP via
+  Resend) on Neon Postgres/Drizzle — schema in `src/server/db/schema.ts`,
+  SQL migrations in `drizzle/` (`pnpm db:generate` / `db:migrate`).
+  Absent `DATABASE_URL`/`BETTER_AUTH_SECRET`, auth routes 503 and the
+  app stays device-only. Sync is a custom pull/push protocol
+  (`src/app/api/sync/*`, client engine `src/lib/sync.ts`): per-row LWW
+  with ONE rule shared client/server (`src/lib/merge.ts` — unit-tested,
+  `pnpm test`; newer `updatedAt` wins, ties are no-ops; the server's
+  verdict is final). Dexie v2 adds an indexed `_dirty` flag; every write in
+  `db.ts` stamps it (db.ts stays the single write choke point — never
+  write around it); v3 adds a `meta` table (book key, Drive tokens).
+  Tombstones live forever server-side; client purge only drops
+  server-acknowledged ones. Erase-all on a synced book soft-deletes
+  (propagates) — never `clear()`.
+- **End-to-end encryption (opt-in):** `payloadFormat: 2` seals entry
+  payloads with AES-GCM under a per-user book key
+  (`src/lib/crypto.ts`, unit-tested; state machine in `src/lib/e2e.ts`).
+  The key is wrapped under the passphrase AND a recovery code; only
+  the wrapped envelopes rest server-side (`/api/keys` — PUT once,
+  never replaceable, that's deliberate). On-device the key is a
+  NON-extractable CryptoKey in the meta table. Enrolled + no key =
+  the `locked` sync state: sync pauses loudly, capture never does.
+  Decrypt/encrypt OUTSIDE Dexie transactions (foreign awaits kill
+  them). Manual-sticky merge degrades to client-only for sealed rows.
+- **Drive backup (device-delivered):** the writer's device renders
+  (keep `src/lib/render-book.ts` the single renderer — the JSON stays
+  bit-compatible with Restore from JSON) and uploads to the visible
+  Drive folder itself (`src/lib/backup-client.ts` + `drive-client.ts`),
+  after each settled sync. The server keeps NO Drive tokens: the
+  device adopts the refresh token once (`/api/backup/adopt` — the
+  server then forgets it) and exchanges it statelessly
+  (`/api/backup/refresh`). The device reports deliveries
+  (`/api/backup/delivered`); the daily cron (`CRON_SECRET`,
+  vercel.json) is a watchdog only — stale ledger + moving book →
+  one email per silence — plus the tombstone scrubber. Google OAuth
+  app must be *published to Production* or refresh tokens die in
+  7 days. Plaintext Drive files are the key-loss safety net; never
+  encrypt them.
 - **PWA:** `src/app/manifest.ts`, hand-rolled `public/sw.js`
   (registered in `src/components/providers.tsx`, production only).
   Bump `VERSION` in `sw.js` when changing caching behavior.
@@ -102,6 +139,6 @@ Gotchas learned the hard way:
 
 ## Deploy
 
-Any Node host (Vercel works as-is). `ANTHROPIC_API_KEY` enables filing;
-without it everything still works. Static-export hosting also works —
-the enrich route 404s and the client falls back gracefully.
+Any Node host (Vercel works as-is). Sync/backup need
+`DATABASE_URL`/`BETTER_AUTH_SECRET` (and the Google/Resend keys);
+without them the app stays whole and device-only.

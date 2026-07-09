@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
-import { addSnippet } from "@/lib/db";
-import { enrichSnippet } from "@/lib/enrich";
+import { addSnippet, StorageWriteError } from "@/lib/db";
 import { promptForDate } from "@/lib/kinds";
 import {
   isIOSStandalone,
@@ -115,12 +114,26 @@ export function Capture() {
     if (stampTimer.current) clearTimeout(stampTimer.current);
     stampTimer.current = setTimeout(() => setStampVisible(false), 1300);
 
-    const snippet = await addSnippet({
-      text: trimmed,
-      source: voiceUsed ? "voice" : "typed",
-    });
-    setVoiceUsed(false);
-    void enrichSnippet(snippet);
+    try {
+      await addSnippet({
+        text: trimmed,
+        source: voiceUsed ? "voice" : "typed",
+      });
+      setVoiceUsed(false);
+    } catch (error) {
+      // the keep did not take — un-stamp, put the words back, say why
+      setStampVisible(false);
+      setText(trimmed);
+      if (el) {
+        el.value = trimmed;
+        autosize(el);
+      }
+      toast(
+        error instanceof StorageWriteError && error.full
+          ? copy.data.storageFull
+          : copy.data.keepFailed,
+      );
+    }
   }, [text, listening, transcribing, voiceUsed]);
 
   const hasText = text.trim().length > 0;
@@ -178,7 +191,10 @@ export function Capture() {
             autosize(e.target);
           }}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            // Enter is a newline — this is prose, not a chat line, and the
+            // wax seal files. ⌘/Ctrl+Enter is the desktop accelerator for
+            // that seal; a mobile return key just breaks the line.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               void keep();
             }

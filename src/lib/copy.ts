@@ -28,7 +28,7 @@ export const copy = {
     name: "Snippets",
     titleTemplate: "%s · Snippets",
     description:
-      "A pocket commonplace book. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
+      "A pocket notebook. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
   },
 
   /** primary navigation — the desktop links and the mobile dock */
@@ -55,9 +55,26 @@ export const copy = {
       "Your days are fuller than you think. Catch one true moment before it evaporates — a line someone said, a small scene, a joke that landed. Two sentences is plenty.",
   },
 
+  /**
+   * The first-ever introduction — shown on the today zone only before
+   * anything has been kept, and it retires itself the moment the writer
+   * starts (it's prose on the sheet, never a card or a dialog). Two
+   * jobs: what this is for, and why it's safe to invest in. Workshop
+   * the paragraphs here; they render as-is.
+   */
+  intro: {
+    body: [
+      "Snippets is an app to capture your daily moments.",
+      "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
+      "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
+      "About this app: Everything is stored on this device by default. If you make an account, you can access your entries across devices. You can then connect your Google Drive to sync your entries off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption — then no one but you, including us, can read what you keep.",
+      "How you remember your days is how you remember your life.",
+    ] as const,
+  },
+
   /** capture — the day's composer and the voice seal */
   capture: {
-    sectionLabel: "Capture a snippet",
+    sectionLabel: "Capture an entry",
     keep: "Keep",
     /**
      * The day's rotating questions, in the spirit of Homework for Life.
@@ -95,7 +112,7 @@ export const copy = {
       "this browser doesn’t offer voice capture — Chrome, Safari, or Edge do; writing works everywhere",
     /** the wax seal's accessible name, by state */
     seal: {
-      speak: "Speak a snippet",
+      speak: "Speak an entry",
       stop: "Stop listening",
       busy: "Setting your words",
     },
@@ -114,7 +131,7 @@ export const copy = {
       denied: {
         title: "The microphone was declined.",
         description:
-          "Re-allow it in your browser’s site settings to speak your snippets.",
+          "Re-allow it in your browser’s site settings to speak your entries.",
       },
       "no-mic": {
         title: "No microphone found.",
@@ -227,14 +244,42 @@ export const copy = {
   /** the ⌘K command menu */
   commandMenu: {
     title: "Command menu",
-    description: "Search the book or jump somewhere",
+    description: "Search your entries or jump somewhere",
     empty: "Nothing found.",
-    inTheBook: "In the book",
+    inTheBook: "In your entries",
     goTo: "Go to",
     do: "Do",
     switchTo: (themeName: string) => `Switch to ${themeName}`,
     exportJSON: "Export as JSON",
     exportMarkdown: "Export as Markdown",
+  },
+
+  /** the `?` keyboard cheat sheet */
+  shortcuts: {
+    title: "Keyboard",
+    groups: {
+      move: "Move around",
+      write: "Write",
+      grid: "In the calendar",
+      global: "Anywhere",
+    },
+    back: "Back a level",
+    search: "Search your entries",
+    today: "Go to today",
+    step: "Step through time",
+    goCanvas: "To the calendar",
+    goGlance: "To the year",
+    capture: "Start writing today",
+    edit: "Rewrite the open entry",
+    file: "File the entry",
+    newline: "New line",
+    dayStep: "Move a day",
+    weekStep: "Move a week",
+    monthStep: "Move a month",
+    yearStep: "Move a year",
+    openDay: "Open the day",
+    command: "Command menu",
+    thisSheet: "This sheet",
   },
 
   /** theme names (settings swatches + the command menu's switch) */
@@ -255,14 +300,162 @@ export const copy = {
   /** the account mark and its menu */
   account: {
     label: "Account",
-    syncSoon: "Sign in to sync across devices — soon",
-    settings: "Settings…",
+    signIn: "Sign in to sync across devices",
+    settings: "Settings",
+    privacy: "Privacy policy",
+    signOut: "Sign out",
+  },
+
+  /** the sign-in page */
+  signin: {
+    title: "Sign in",
+    back: "Back to your entries",
+    lead:
+      "Your entries stay on this device either way — signing in keeps a copy on the server and lets another device carry them too.",
+    emailLabel: "Email",
+    emailPlaceholder: "you@example.com",
+    sendCode: "Send a code",
+    sending: "Sending…",
+    /** after the code goes out */
+    codeSent: (email: string) => `A six-digit code is on its way to ${email}.`,
+    codeLabel: "The six-digit code",
+    verify: "Sign in",
+    verifying: "A moment…",
+    differentEmail: "Use a different address",
+    /** the rule between the email flow and Google */
+    or: "or",
+    google: "Continue with Google",
+    errors: {
+      invalidEmail: "That doesn’t look like an address.",
+      sendFailed: "The code couldn’t be sent. Try again in a moment.",
+      badCode: "That code didn’t match. Codes last ten minutes.",
+      notConfigured: "Sign-in isn’t switched on for this install.",
+      googleFailed: "Google didn’t complete the sign-in. Try again.",
+    },
+  },
+
+  /**
+   * The one-time offer shown just after signing in: now that a copy of
+   * your entries rests on the server, this is the honest moment to offer
+   * to encrypt them. Never required — "Not now" leaves it exactly where
+   * it is, in Settings, and the offer doesn't return on this device.
+   */
+  welcome: {
+    title: "Encrypt your entries?",
+    body: "Your entries now keep a copy on our server, so you can reach them from another device. If you like, you can encrypt them — with a key only your devices hold, so no one else can read them, us included. It takes a minute, and you can always turn it on later in Settings.",
+    seal: "Set up encryption",
+    later: "Not now",
   },
 
   /** the Settings page */
   settings: {
     title: "Settings",
-    back: "Back to the book",
+    back: "Back to your entries",
+    account: {
+      heading: "Account",
+      signedOutLead:
+        "Sign in and your entries keep a copy on the server — carried to any device you sign in on.",
+      signIn: "Sign in",
+      signedInAs: (email: string) => `Signed in as ${email}.`,
+      signOut: "Sign out",
+      signOutHint: "Your entries stay on this device.",
+      deleteAccount: {
+        trigger: "Delete account…",
+        title: "Delete your account?",
+        body:
+          "This removes your account and everything it keeps on the server — your synced entries, your sign-in, the Google Drive connection — immediately and permanently. The entries on this device stay, and backups already delivered to your Drive remain yours. Hold the button down to be sure.",
+        hold: "Hold to delete",
+        done: "Your account is gone. This device keeps its copy.",
+        failed: "The account couldn’t be deleted. Try again in a moment.",
+      },
+    },
+    sync: {
+      syncing: "Syncing…",
+      syncedAt: (time: string) => `Synced ${time}.`,
+      neverSynced: "Waiting for the first sync…",
+      pending: (n: number) =>
+        `${n} ${n === 1 ? "entry" : "entries"} waiting to sync.`,
+      offline: "Offline — changes will sync when you’re back.",
+      error: "Sync hit a snag — retrying.",
+      skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
+      /** the tiny mono integrity line, e.g. "1,204 locally on this device · 1,204 on the server" */
+      counts: (device: string, server: string) =>
+        `${device} locally on this device · ${server} on the server`,
+      outOfStep: "The counts disagree.",
+      reconcile: "Reconcile",
+      locked: "Your entries are end-to-end encrypted — unlock below to sync.",
+    },
+    encryption: {
+      heading: "Encryption",
+      offLead:
+        "Turn on end-to-end encryption and your entries are encrypted with a key only your devices hold — unreadable on the server, by anyone, including us. Your Drive backups stay readable; they’re yours.",
+      turnOn: "Turn on end-to-end encryption",
+      onLead: "End-to-end encryption is on. Only your devices hold the key.",
+      turnOff: "Turn off encryption",
+      turnOffHold: "Hold to turn off",
+      turnOffHint:
+        "Every entry — including ones written while encrypted — returns to standard server-side encryption, readable by the service again. This device must be unlocked to do it.",
+      turningOff: "Turning off…",
+      turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
+      lockedLead:
+        "This account is end-to-end encrypted, and this device doesn’t hold the key yet.",
+      passphraseLabel: "Choose a passphrase",
+      passphraseConfirmLabel: "Once more",
+      passphrasePlaceholder: "a phrase only you would know",
+      unlockLabel: "Your passphrase",
+      unlock: "Unlock",
+      unlocking: "A moment…",
+      useRecovery: "Use my recovery code instead",
+      usePassphrase: "Use my passphrase instead",
+      recoveryLabel: "Your recovery code",
+      enrollTitle: "Encrypt your entries?",
+      enrollBody:
+        "Your entries — including everything you’ve already written — will be encrypted with a key only your devices hold. If you forget the passphrase, the recovery code — shown once, next — is the only other way in. Your Google Drive backups stay readable either way, so even a lost key never costs you the words.",
+      enrollConfirm: "Encrypt",
+      enrolling: "Encrypting…",
+      tooShort: "A passphrase needs at least ten characters.",
+      tooWeak:
+        "That one is still easy to guess — a longer phrase, or a few unexpected words together, is far harder to crack.",
+      // the quiet live read beneath the field, by strength
+      strengthWeak: "Still easy to guess.",
+      strengthOk: "Strong enough.",
+      strengthStrong: "Very strong.",
+      mismatch: "Those two didn’t match.",
+      wrongSecret: "That didn’t open it. Codes and phrases are exact.",
+      enrollFailed: "Your entries couldn’t be encrypted just now. Try again in a moment.",
+      recoveryTitle: "Your recovery code",
+      recoveryBody:
+        "Shown exactly once. If you forget your passphrase, this code is the only other key — save it somewhere safe.",
+      downloadKit: "Download recovery file",
+      recoveryFileNote:
+        "Downloading saves a plain-text file holding your account email and this recovery code — keep it somewhere private.",
+      recoveryDone: "I’ve saved it",
+    },
+    backup: {
+      heading: "Backup",
+      lead:
+        "A copy of your entries, delivered from your own device to a Snippets folder in your own Google Drive as you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
+      connect: "Connect Google Drive",
+      connecting: "Connecting…",
+      /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
+      lastDelivered: (when: string) => `Last delivered to your Drive: ${when}.`,
+      firstOnItsWay: "The first delivery is on its way…",
+      /** reassurance: the folder is a one-way mirror, safe to touch */
+      mirrors:
+        "That folder only mirrors your entries — delete or change anything in it and the next delivery sets it right again.",
+      /** e.g. "Backups haven’t gone through since June 30." */
+      failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
+      failingNoSuccess: "Backups haven’t gone through yet.",
+      reconnect: "Reconnect Google Drive",
+      disconnect: "Disconnect",
+      disconnecting: "Disconnecting…",
+      /** deliberate off-state, distinct from a failure */
+      off: "Backups are off. Reconnect whenever you like — your Drive files stay put.",
+      scopeDeclined:
+        "Google didn’t grant the Drive permission — try again and leave the box ticked.",
+      connectFailed: "Drive couldn’t be connected. Try again in a moment.",
+      disconnectFailed: "Couldn’t disconnect just now. Try again in a moment.",
+    },
     appearance: {
       heading: "Appearance",
       /** the theme radiogroup's accessible name */
@@ -282,6 +475,19 @@ export const copy = {
       autoHint:
         "New entries are quietly filed by Claude — a title, a kind, tags — kept in the data to make search smarter, never shown on the page. Needs an API key on the server. Your words stay on this device either way — only the entry text is sent for filing.",
     },
+    danger: {
+      heading: "Danger zone",
+      eraseTitle: "Let everything go",
+      eraseDesc:
+        "Erase every entry on this device, permanently. Export a copy first if you might want one.",
+      eraseDescSynced:
+        "Erase every entry — here, on the server, and on every device signed in to this account — permanently. Export a copy first if you might want one.",
+      eraseHold: "Hold to erase",
+      deleteTitle: "Delete account",
+      deleteDesc:
+        "Remove your account and everything it keeps on the server — your sign-in, synced entries, and the Google Drive connection. This device keeps its copy.",
+      deleteHold: "Hold to delete",
+    },
     data: {
       heading: "Your data",
       lead:
@@ -290,6 +496,14 @@ export const copy = {
       countSoFar: (n: number) =>
         `${n} ${n === 1 ? "entry" : "entries"} so far.`,
       takeCopy: "Take a copy whenever you like.",
+      /** the storage-health line, e.g. "persistent · using 4 MB of 60 GB" */
+      storagePersistent: (used: string, quota: string) =>
+        `storage: persistent · using ${used} of ${quota}`,
+      storageBestEffort: (used: string, quota: string) =>
+        `storage: best-effort · using ${used} of ${quota}`,
+      /** shown under a best-effort line — why it matters, what helps */
+      storageEvictionHint:
+        "This browser may let go of local data under pressure — signing in keeps a copy on the server.",
       exportJSON: "Export JSON",
       exportMarkdown: "Export Markdown",
       restore: "Restore from JSON…",
@@ -298,7 +512,7 @@ export const copy = {
     about: {
       heading: "About",
       // a paragraph with the book title in italics — rendered in three parts
-      lead: "Snippets is a pocket commonplace book, made in the spirit of Matthew Dicks’ ",
+      lead: "Snippets is a pocket notebook, made in the spirit of Matthew Dicks’ ",
       workTitle: "Homework for Life",
       rest: ": at the end of each day, keep the most storyworthy thing that happened. Jokes, quotes, and stray phrases are welcome too. Good lines shouldn’t go to waste.",
     },
@@ -306,6 +520,8 @@ export const copy = {
       title: "Let everything go?",
       body:
         "This erases every entry on this device, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
+      bodySynced:
+        "This erases every entry — here, on the server, and on every device signed in to this account, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
       cancel: "Keep everything",
       hold: "Hold to erase",
       holding: "Hold…",
@@ -324,6 +540,9 @@ export const copy = {
     noEntriesInFile: "No entries found in that file.",
     /** the inline composer's catch-all when a keep fails */
     keepFailed: "That didn’t take. Try again.",
+    /** the loud, specific case: the device is out of room */
+    storageFull:
+      "This device’s storage is full — that entry was not saved. Your words are still in the composer; clear some space and keep it again.",
   },
 } as const;
 

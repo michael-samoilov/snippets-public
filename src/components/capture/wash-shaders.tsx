@@ -13,7 +13,7 @@
    (https://github.com/paper-design/shaders, Apache-2.0), vendored per
    house style rather than installed, and re-tinted to the wash ink. */
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { PulsingBorder } from "@/vendor/paper-shaders/react/shaders/pulsing-border";
 
 /* the wash ink: oklab keeps the blue alive at low alpha (srgb dulls it).
@@ -307,6 +307,123 @@ export function WashPulsingBorder({ o }: { o: PulseOpts }) {
           style={{ width: "100%", height: "100%" }}
         />
       )}
+    </div>
+  );
+}
+
+/* ---- border beam: a courier of light on the frame ----------------------
+   Hand-rolled from the technique in jakubantalik's border-beam
+   (beam.jakubantalik.com, MIT) — no dependency, no canvas, one ink.
+   The original: a conic comet arc spun by an animatable @property angle,
+   masked to the border ring; an inner glow rides along behind it; a
+   blurred copy of the ring is the bloom. Theirs cycles a rainbow — ours
+   keeps the single wash ink (wax is semantic) and the comet's head/tail
+   shading is drawn straight into the conic stops instead of a second
+   arc mask. All three layers inherit one angle from the wrapper, so
+   they can never drift apart.
+   Like ShaderBox, this does NOT gate on reduced motion itself — the lab
+   judges motion; production must swap to the static wash first (browsers
+   without @property support get the same static arc for free: the spin
+   keyframe just never interpolates). */
+
+const BEAM_CSS = `
+@property --wash-beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: true;
+}
+@keyframes wash-beam-spin { to { --wash-beam-angle: 360deg; } }
+.wash-beam-spin { animation: wash-beam-spin 6.5s linear infinite; }
+`;
+
+/* one comet: tail fades in over the arc, head burns brightest at the
+   leading edge, then drops off a cliff — the conic wraps at 100% so the
+   dark remainder of the turn is the night between laps */
+const beamArc = (peak: number, arc: number, offsetDeg = 0) => {
+  const tail = (1 - arc) * 100;
+  const at = (f: number) => `${(tail + arc * 100 * f).toFixed(2)}%`;
+  return `conic-gradient(from calc(var(--wash-beam-angle) + ${offsetDeg}deg),
+    transparent 0%, transparent ${at(0)},
+    ${WASH(peak * 0.05)} ${at(0.28)},
+    ${WASH(peak * 0.18)} ${at(0.55)},
+    ${WASH(peak * 0.55)} ${at(0.8)},
+    ${WASH(peak)} ${at(0.94)},
+    ${WASH(peak * 0.3)} ${at(0.99)},
+    transparent 100%)`;
+};
+
+/* `heads` couriers spaced evenly around the turn */
+const beamArcs = (peak: number, arc: number, heads: number) =>
+  Array.from({ length: heads }, (_, i) =>
+    beamArc(peak, arc, (360 / heads) * i),
+  ).join(", ");
+
+export const BEAM_DEFAULTS = {
+  mult: 1, // pigment
+  lap: 6.5, // seconds per revolution
+  arc: 0.3, // comet length, as a fraction of the turn
+  stroke: 2, // ring thickness, css px
+  glow: 0.5, // inner-seep opacity
+  reach: 30, // how far the seep reaches inward, css px
+  bloom: 0.55, // blurred-halo opacity
+  heads: 1, // couriers on the frame
+};
+export type BeamOpts = typeof BEAM_DEFAULTS;
+
+export function WashBorderBeam({ o, corner = 16 }: { o: BeamOpts; corner?: number }) {
+  const heads = Math.max(1, Math.round(o.heads));
+  /* the stroke/bloom live on the border ring: pad by the stroke width,
+     then punch the content-box out of the mask */
+  const ring = (pad: number): CSSProperties => ({
+    position: "absolute",
+    inset: 0,
+    padding: pad,
+    borderRadius: Math.max(0, corner - pad),
+    clipPath: `inset(0 round ${corner}px)`,
+    WebkitMask:
+      "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+    WebkitMaskComposite: "xor",
+    mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+    maskComposite: "exclude",
+  });
+  /* the glow is confined to a band just inside the frame — the union of
+     four edge fades, so it seeps inward only where the comet passes */
+  const seep = [
+    `linear-gradient(white, transparent ${o.reach}px, transparent calc(100% - ${o.reach}px), white)`,
+    `linear-gradient(to right, white, transparent ${o.reach}px, transparent calc(100% - ${o.reach}px), white)`,
+  ].join(", ");
+  return (
+    <div
+      aria-hidden
+      className="wash-beam-spin pointer-events-none absolute inset-0"
+      style={{ animationDuration: `${o.lap}s` }}
+    >
+      <style>{BEAM_CSS}</style>
+      {/* inner glow, under the stroke: a wider, fainter comet */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          clipPath: `inset(0 round ${corner}px)`,
+          background: beamArcs(15 * o.mult, Math.min(o.arc * 1.6, 0.85), heads),
+          opacity: o.glow,
+          WebkitMaskImage: seep,
+          maskImage: seep,
+          WebkitMaskComposite: "source-over",
+          maskComposite: "add",
+        }}
+      />
+      {/* the stroke itself */}
+      <div style={{ ...ring(o.stroke), background: beamArcs(46 * o.mult, o.arc, heads) }} />
+      {/* bloom: the same ring, blurred into a halo */}
+      <div
+        style={{
+          ...ring(o.stroke),
+          background: beamArcs(34 * o.mult, o.arc * 0.85, heads),
+          filter: "blur(6px)",
+          opacity: o.bloom,
+        }}
+      />
     </div>
   );
 }

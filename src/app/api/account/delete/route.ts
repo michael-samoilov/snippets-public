@@ -1,0 +1,74 @@
+/**
+ * Account deletion — the real thing, not a soft promise. Deleting the
+ * user row cascades through every table that references it (sessions,
+ * OAuth accounts, synced snippets and their tombstones, the backup
+ * ledger), so "removed entirely" in the privacy page is literally
+ * true, immediately.
+ *
+ * Order matters: revoke the Google grant first (so no orphaned token
+ * lingers on the user's Google security page), capture the sign-out's
+ * cookie-clearing headers second, delete last. Device copies are
+ * untouched — they belong to the writer, and the client returns the
+ * book to local-only on its own.
+ */
+import { eq, and } from "drizzle-orm";
+import { serverDb, schema } from "@/server/db";
+import { auth, getSession } from "@/server/auth";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  if (!serverDb || !auth)
+    return Response.json(
+      { error: "accounts are not configured" },
+      { status: 503 },
+    );
+  const session = await getSession(request.headers);
+  if (!session)
+    return Response.json({ error: "signed out" }, { status: 401 });
+  const userId = session.user.id;
+
+  // best-effort: hand Google back its grant so the connection doesn't
+  // outlive the account in the user's Google security settings
+  try {
+    const accounts = await serverDb
+      .select({
+        refreshToken: schema.account.refreshToken,
+        accessToken: schema.account.accessToken,
+      })
+      .from(schema.account)
+      .where(
+        and(
+          eq(schema.account.userId, userId),
+          eq(schema.account.providerId, "google"),
+        ),
+      );
+    await Promise.allSettled(
+      accounts
+        .map((a) => a.refreshToken ?? a.accessToken)
+        .filter((token): token is string => !!token)
+        .map((token) =>
+          fetch("https://oauth2.googleapis.com/revoke", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: `token=${encodeURIComponent(token)}`,
+          }),
+        ),
+    );
+  } catch {
+    // revocation is a courtesy; deletion proceeds regardless
+  }
+
+  // sign out first so the response can clear the session cookies
+  const signOutResponse = await auth.api
+    .signOut({ headers: request.headers, asResponse: true })
+    .catch(() => null);
+
+  // the deletion itself — one row; the schema's cascades do the rest
+  await serverDb.delete(schema.user).where(eq(schema.user.id, userId));
+
+  const response = Response.json({ ok: true });
+  const setCookie = signOutResponse?.headers.get("set-cookie");
+  if (setCookie) response.headers.set("set-cookie", setCookie);
+  return response;
+}
