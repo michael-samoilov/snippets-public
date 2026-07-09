@@ -409,3 +409,24 @@ reassurance + action); a Settings line (if the intent is optional
 re-unlock); or a gentle alert (if both). Test the copy surfaces
 *before* asking the user to unlock — make it safe to live with the
 locked state a while.
+
+## 11. Status indicators: green icons for active security + sync features
+
+Visual signals for user confidence — a quick scan confirms the features
+the user has turned on are working:
+
+- **Encryption active** — green shield or shield-with-lock icon
+- **Sync active and healthy** — green sync/arrow icon  
+- **Google Drive backup active** — green Google Drive icon
+
+Where they live: likely the header or settings top (needs to be visible
+at a glance without requiring a deep read). The look will be iterated
+on — design for tasteful, quiet signals that don't break the sheet's
+calm. Icon set is already Feather (see `SKILL.md` law 6 sanctioned marks);
+confirm whether shield/sync/Drive glyphs fit or need custom marks. Icon
+placement and styling should follow existing guidance: small, wax-toned
+when inactive/unavailable, green only when the state is actively good.
+
+Open: should these show in the header, settings (account section?), both,
+or as a separate status line? Should they include tooltips or does
+presence alone suffice?
