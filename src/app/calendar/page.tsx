@@ -410,7 +410,14 @@ function Calendar() {
   // animation, so the move into the page reads as a skip. Mount only the
   // altitude we land on; warm the rest in once the thread is free (and
   // at once if a zoom needs them sooner).
-  const [warm, setWarm] = useState(false);
+  //
+  // `warm` is a LEVEL, not a flag: the off-screen altitudes mount ONE PER FRAME
+  // (level 1 → month, 2 → entry, 3 → year). Mounting all three in a single
+  // commit was a ~150ms+ main-thread block that, landing right after a fast
+  // reopen's page had settled, blanked it to the bare desk for a beat before it
+  // repainted. Staggered + inside startTransition, no one commit blocks long
+  // enough to drop a frame. A zoom still forces all layers at once (runZoom).
+  const [warm, setWarm] = useState(0);
   const [selected, setSelected] = useState(initialDay);
   /** what the title shows — follows the feeds' scroll */
   const [visibleMonth, setVisibleMonth] = useState(() => {
@@ -564,17 +571,29 @@ function Calendar() {
   // past the dock's ink glide (a ~250ms spring), so their build (the
   // book's rows) lands off the transition and the ink never skips. A
   // fixed beat, not requestIdleCallback: idle can fall mid-animation on
-  // a fast device, which is exactly when we must not mount.
+  // a fast device, which is exactly when we must not mount. Then step the
+  // level up one altitude per frame (not all at once — see `warm` above).
   useEffect(() => {
-    const id = setTimeout(() => setWarm(true), 350);
-    return () => clearTimeout(id);
+    let raf = 0;
+    const id = setTimeout(() => {
+      let n = 1;
+      const bump = () => {
+        startTransition(() => setWarm((w) => Math.max(w, n)));
+        if (n++ < 3) raf = requestAnimationFrame(bump);
+      };
+      bump();
+    }, 350);
+    return () => {
+      clearTimeout(id);
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   /* ── the zoom: one camera move between altitudes ──────────────── */
 
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
     if (zooming.current) return;
-    setWarm(true); // a camera move needs both layers mounted now
+    setWarm(3); // a camera move needs every layer mounted now
     zooming.current = true;
     setZoom({ from, to, anchor });
     setView(to);
@@ -2115,7 +2134,7 @@ function Calendar() {
             (zoom || !showMonthLayer) && "pointer-events-none",
           )}
         >
-          {(view === "month" || warm) && (
+          {(view === "month" || warm >= 1) && (
             <MonthFeed
               handleRef={monthFeedRef}
               active={view === "month" && !zoom}
@@ -2141,7 +2160,7 @@ function Calendar() {
             (zoom || !showYearLayer) && "pointer-events-none",
           )}
         >
-          {(view === "year" || warm) && (
+          {(view === "year" || warm >= 3) && (
             <YearFeed
               handleRef={yearFeedRef}
               active={view === "year" && !zoom}
@@ -2174,7 +2193,7 @@ function Calendar() {
             (zoom || !showScheduleLayer) && "pointer-events-none",
           )}
         >
-          {(view === "schedule" || warm) && (
+          {(view === "schedule" || warm >= 1) && (
             <ScheduleFeed
               handleRef={scheduleFeedRef}
               active={view === "schedule" && !zoom}
@@ -2211,7 +2230,7 @@ function Calendar() {
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
         >
-          {(view === "entry" || warm) && <EntryView snippet={focused} onLetGo={letGo} />}
+          {(view === "entry" || warm >= 2) && <EntryView snippet={focused} onLetGo={letGo} />}
           {/* the leave animation is driven by the zoom effect on the card box */}
         </div>
         {/* the filtered book: while a query stands, the stage shows the
