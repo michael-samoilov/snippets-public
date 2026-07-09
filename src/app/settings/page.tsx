@@ -252,16 +252,14 @@ function DangerAction({
   onComplete: () => void | Promise<void>;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <div className="flex flex-col gap-3">
       <div className="max-w-[42ch]">
         <p className="font-serif text-[0.98rem] text-ink">{title}</p>
         <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
           {description}
         </p>
       </div>
-      <div className="shrink-0">
-        <HoldToErase label={hold} onComplete={() => void onComplete()} />
-      </div>
+      <HoldToErase label={hold} onComplete={() => void onComplete()} />
     </div>
   );
 }
@@ -503,26 +501,24 @@ function EncryptionSection({ email }: { email: string }) {
         <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
           {copy.settings.encryption.onLead}
         </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="mt-4 flex flex-col gap-3">
           <p className="voice-prose max-w-[40ch] text-[0.9rem] text-ink-faint">
             {copy.settings.encryption.turnOffHint}
           </p>
-          <div className="shrink-0">
-            <HoldToErase
-              label={copy.settings.encryption.turnOffHold}
-              onComplete={() => {
-                void (async () => {
-                  try {
-                    await disableEncryption();
-                    setHasKey(false);
-                    setEnrolled(false);
-                  } catch {
-                    setError(copy.settings.encryption.turnOffFailed);
-                  }
-                })();
-              }}
-            />
-          </div>
+          <HoldToErase
+            label={copy.settings.encryption.turnOffHold}
+            onComplete={() => {
+              void (async () => {
+                try {
+                  await disableEncryption();
+                  setHasKey(false);
+                  setEnrolled(false);
+                } catch {
+                  setError(copy.settings.encryption.turnOffFailed);
+                }
+              })();
+            }}
+          />
         </div>
       </div>
     );
@@ -1080,7 +1076,8 @@ function HoldToErase({
       }}
       onKeyUp={cancel}
       onContextMenu={(e) => e.preventDefault()}
-      className="relative select-none overflow-hidden rounded-[5px] bg-ember px-4 py-2 font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
+      // full-width so the hold fill sweeps past a covering thumb, staying visible
+      className="relative w-full select-none overflow-hidden rounded-[5px] bg-ember px-4 py-2.5 text-center font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
     >
       <span
         aria-hidden="true"
