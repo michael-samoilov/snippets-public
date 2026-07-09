@@ -687,6 +687,9 @@ function EncryptionSection({ email }: { email: string }) {
           <p className="voice-data select-all break-all text-center text-[1.05rem] leading-relaxed">
             {recoveryCode}
           </p>
+          <p className="voice-prose text-center text-[0.8rem] text-ink-faint">
+            {copy.settings.encryption.recoveryFileNote}
+          </p>
           <DialogFooter className="gap-2">
             <PaperButton onClick={downloadKit}>
               {copy.settings.encryption.downloadKit}
