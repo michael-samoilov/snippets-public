@@ -17,7 +17,7 @@
 import { chromium } from "playwright";
 import sharp from "sharp";
 import { spawn } from "node:child_process";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 
 const PORT = process.env.BAKE_PORT || "3111";
@@ -52,15 +52,19 @@ async function main() {
   const browser = await chromium.launch(
     process.env.PW_CHROME ? { executablePath: process.env.PW_CHROME } : {},
   );
-  const page = await browser.newPage({ deviceScaleFactor: 2 });
+  const page = await browser.newPage({ deviceScaleFactor: 3 }); // hi-res master
   await page.goto(ROUTE, { waitUntil: "load", timeout: 60000 });
   await page.waitForFunction(
     () => {
       const c = document.querySelector("#icon-bake canvas");
       if (!c) return false;
-      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      // sample a small centre region only — the master is huge, a full read is slow
+      const s = Math.min(240, c.width);
+      const d = c
+        .getContext("2d")
+        .getImageData((c.width - s) / 2, (c.height - s) / 2, s, s).data;
       let n = 0;
-      for (let i = 3; i < d.length; i += 4) if (d[i] > 10 && ++n > 800) return true;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 10 && ++n > 300) return true;
       return false;
     },
     { timeout: 30000 },
@@ -73,6 +77,40 @@ async function main() {
   // the seal master, at full canvas resolution (NOT trimmed — the studio composes
   // from the whole canvas too, so fill/centre mean the same in both)
   const master = Buffer.from(dataUrl.split(",")[1], "base64");
+
+  // AUTOMATIC OPTICAL BALANCE — identical to /lab/icon-studio: the optical anchor
+  // is the centroid of the opaque wax (soft shadow excluded) blended halfway to
+  // the bounding-box centre; per variant we place that anchor at the frame centre,
+  // which depends on fill. Computed on a small downsample (normalised → resolution
+  // independent). This overwrites the spec's cx/cy so pnpm icons self-balances and
+  // matches the studio; the balanced values are written back for the record.
+  const { data, info } = await sharp(master)
+    .resize(400, 400, { fit: "fill" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let minx = info.width, miny = info.height, maxx = 0, maxy = 0, sx = 0, sy = 0, np = 0;
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      if (data[(y * info.width + x) * info.channels + info.channels - 1] > 180) {
+        if (x < minx) minx = x;
+        if (x > maxx) maxx = x;
+        if (y < miny) miny = y;
+        if (y > maxy) maxy = y;
+        sx += x;
+        sy += y;
+        np++;
+      }
+    }
+  }
+  const anchor = np
+    ? { x: ((minx + maxx) / 2 + sx / np) / 2 / info.width, y: ((miny + maxy) / 2 + sy / np) / 2 / info.height }
+    : { x: 0.5, y: 0.5 };
+  const clamp46 = (n) => Math.max(0.4, Math.min(0.6, +n.toFixed(3)));
+  for (const v of spec.variants) {
+    v.cx = clamp46(0.5 - (anchor.x - 0.5) * v.fill);
+    v.cy = clamp46(0.5 - (anchor.y - 0.5) * v.fill);
+  }
 
   await mkdir("public/icons", { recursive: true });
   for (const v of spec.variants) {
@@ -100,8 +138,14 @@ async function main() {
       .composite([{ input: piece, left: dstX, top: dstY }])
       .png()
       .toFile(v.file);
-    console.log("wrote", v.file);
+    console.log("wrote", v.file, `(centre ${v.cx}, ${v.cy})`);
   }
+
+  // persist the balanced centres so the spec on disk reflects what was baked
+  await writeFile(
+    new URL("../src/lib/icon-seal.json", import.meta.url),
+    JSON.stringify(spec, null, 2) + "\n",
+  );
 }
 
 try {
