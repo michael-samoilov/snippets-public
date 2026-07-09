@@ -4,7 +4,7 @@
    old try/catch, the respondWith promise rejected, and Safari showed "This
    page couldn't load" for every visit — surviving reloads and redeploys.
    Every cache operation is now best-effort; the network answer stands alone. */
-const VERSION = "snippets-v8";
+const VERSION = "snippets-v9";
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {
@@ -29,6 +29,20 @@ self.addEventListener("activate", (event) => {
         await Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)));
       } catch {
         /* stale caches linger; the app still runs */
+      }
+      // Clean up any cached redirect responses in the current version — they will
+      // crash Safari when offline. Delete them and let the shell handle offline routing.
+      try {
+        const cache = await caches.open(VERSION);
+        const keys = await cache.keys();
+        for (const request of keys) {
+          const response = await cache.match(request);
+          if (response && response.status >= 300 && response.status < 400) {
+            await cache.delete(request);
+          }
+        }
+      } catch {
+        /* cleanup best-effort */
       }
       await self.clients.claim();
     })(),
@@ -85,12 +99,17 @@ self.addEventListener("fetch", (event) => {
         } catch {
           try {
             const cache = await caches.open(VERSION);
-            // Offline: try the exact path first, then fall back to shell so the SPA can route.
-            return (
-              (await cache.match(key)) ??
-              (await cache.match(SHELL_URL)) ??
-              new Response("Offline", { status: 503, statusText: "Offline" })
-            );
+            // Offline: try exact path, but only if it's NOT a redirect (which Safari rejects).
+            const cached = await cache.match(key);
+            if (cached && cached.status >= 200 && cached.status < 300) {
+              return cached;
+            }
+            // Redirect or missing; fall back to shell so the SPA can route.
+            const shell = await cache.match(SHELL_URL);
+            if (shell && shell.status >= 200 && shell.status < 300) {
+              return shell;
+            }
+            return new Response("Offline", { status: 503, statusText: "Offline" });
           } catch {
             return new Response("Offline", { status: 503, statusText: "Offline" });
           }
