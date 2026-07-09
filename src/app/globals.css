@@ -74,6 +74,14 @@ html {
   --ember-deep: #7a2c1b;
   --gilt: #a87a24;
 
+  /* passphrase strength meter — weak (an ember red) climbing to a
+     paper-friendly green, kin to the retired kind hues */
+  --strength-weak: #b0492f;
+  --strength-fair: #bf8a3a;
+  --strength-good: #8a9a52;
+  --strength-strong: #5e8f57;
+  --strength-track: rgb(36 30 21 / 0.1);
+
   /* ── the six kinds, as muted editorial inks ───────────── */
   --kind-story: #8a5a28;
   --kind-joke: #a16812;
@@ -159,6 +167,12 @@ html {
   --ember: #c75b40;
   --ember-deep: #a44733;
   --gilt: #c99c45;
+
+  --strength-weak: #c75b40;
+  --strength-fair: #cba24e;
+  --strength-good: #a2b16b;
+  --strength-strong: #7bb47a;
+  --strength-track: rgb(234 225 205 / 0.12);
 
   --kind-story: #c49a5c;
   --kind-joke: #cfa44a;

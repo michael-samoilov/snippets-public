@@ -59,13 +59,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    it holds words — + an ember trash — destructive red, NOT wax), the account glyph,
    the account menu's stroke glyphs (gear · shield · door · person —
    Feather set, 1.8/24 ≡ the app's 1.5/20 line, ink-faint, menu rows
-   ONLY), and the Google "G" on the sign-in button (owner-approved,
-   4-hue, that one button only) — nothing
+   ONLY), the Google "G" on the sign-in button (owner-approved,
+   4-hue, that one button only), and the passphrase field's eye /
+   eye-off toggle (same Feather set, encryption enrollment/unlock ONLY)
+   — nothing
    else. Wax (a sealing-wax BLUE) is
    semantic (recording, rule, today) and never destructive — the ember
    red (`--ember`) is destructive's alone; the marker yellow
    (`--marker`) belongs to found words in search, nothing else;
-   gilt = favorites only. Text on the sheet is real ink:
+   gilt = favorites only. One owner-approved off-palette exception: the
+   passphrase strength meter ramps ember→green (`--strength-weak` …
+   `--strength-strong`), the app's only green, that meter alone. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
    mode.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,

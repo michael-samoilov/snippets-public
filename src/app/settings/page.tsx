@@ -356,6 +356,81 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
   );
 }
 
+/** Feather-style eye / eye-off, in the account menu's glyph language. */
+function EyeToggle({
+  shown,
+  onToggle,
+}: {
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      // pointer-down + preventDefault so tapping the eye never steals focus
+      // (and the keyboard) from the field
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onToggle}
+      aria-label={shown ? "Hide passphrase" : "Show passphrase"}
+      aria-pressed={shown}
+      className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 rounded-[5px] p-1.5 text-ink-faint hover:text-ink-soft"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {shown ? (
+          <>
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20C5 20 1 12 1 12a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </>
+        ) : (
+          <>
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+/** Passphrase strength — four bars, ember-weak climbing to green-strong. */
+function StrengthMeter({ score, label }: { score: number; label: string }) {
+  const filled = Math.min(4, Math.max(1, score));
+  const tone =
+    score <= 1
+      ? "--strength-weak"
+      : score === 2
+        ? "--strength-fair"
+        : score === 3
+          ? "--strength-good"
+          : "--strength-strong";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-1.5" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <span
+            key={i}
+            className="h-1 flex-1 rounded-full transition-colors duration-200"
+            style={{
+              backgroundColor: `var(${i < filled ? tone : "--strength-track"})`,
+            }}
+          />
+        ))}
+      </div>
+      <p className="voice-prose text-[0.8rem] text-ink-faint">{label}</p>
+    </div>
+  );
+}
+
 /**
  * End-to-end encryption. Three states: not yet sealed (offer it),
  * sealed and this device holds the key (one quiet line), sealed and
@@ -374,8 +449,17 @@ function EncryptionSection({ email }: { email: string }) {
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [strength, setStrength] = useState<PassphraseStrength | null>(null);
+  const [showPass, setShowPass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // nudge a focused field above the keyboard, within the now-scrollable
+  // dialog — 'center' keeps it comfortably in view without ever pushing a
+  // field that's already visible out of the way
+  const revealOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
+  };
 
   useEffect(() => {
     void refreshEnrollment().then((e) => setEnrolled(e === "unknown" ? null : e));
@@ -611,33 +695,41 @@ function EncryptionSection({ email }: { email: string }) {
             <label className="voice-label block text-[0.75rem]" htmlFor="e2e-pass">
               {copy.settings.encryption.passphraseLabel}
             </label>
-            <Input
-              id="e2e-pass"
-              type="password"
-              autoComplete="new-password"
-              placeholder={copy.settings.encryption.passphrasePlaceholder}
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              className="h-10 font-serif text-[1rem]"
-            />
+            <div className="relative">
+              <Input
+                id="e2e-pass"
+                type={showPass ? "text" : "password"}
+                autoComplete="new-password"
+                placeholder={copy.settings.encryption.passphrasePlaceholder}
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                onFocus={revealOnFocus}
+                className="h-10 pr-11 font-serif text-[1rem]"
+              />
+              <EyeToggle shown={showPass} onToggle={() => setShowPass((v) => !v)} />
+            </div>
             {pass.length > 0 && strength && (
-              <p className="voice-prose text-[0.85rem] text-ink-faint">
-                {strength.score >= 4
-                  ? copy.settings.encryption.strengthStrong
-                  : strength.ok
-                    ? copy.settings.encryption.strengthOk
-                    : copy.settings.encryption.strengthWeak}
-              </p>
+              <StrengthMeter
+                score={strength.score}
+                label={
+                  strength.score >= 4
+                    ? copy.settings.encryption.strengthStrong
+                    : strength.ok
+                      ? copy.settings.encryption.strengthOk
+                      : copy.settings.encryption.strengthWeak
+                }
+              />
             )}
             <label className="voice-label block text-[0.75rem]" htmlFor="e2e-confirm">
               {copy.settings.encryption.passphraseConfirmLabel}
             </label>
             <Input
               id="e2e-confirm"
-              type="password"
+              type={showPass ? "text" : "password"}
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
+              onFocus={revealOnFocus}
               className="h-10 font-serif text-[1rem]"
             />
             {error && (
