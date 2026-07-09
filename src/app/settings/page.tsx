@@ -362,8 +362,8 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
  * End-to-end encryption. Three states: not yet sealed (offer it),
  * sealed and this device holds the key (one quiet line), sealed and
  * locked (the unlock form — sync waits on it, capture never does).
- * Enrollment shows the recovery code exactly once, with the kit
- * download; the code is not reconstructable afterward.
+ * Enrollment shows the recovery code exactly once, with the recovery-
+ * file download; the code is not reconstructable afterward.
  */
 function EncryptionSection({ email }: { email: string }) {
   const sync = useSyncStatus();
@@ -477,7 +477,7 @@ function EncryptionSection({ email }: { email: string }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "snippets-recovery-kit.txt";
+    a.download = "snippets-recovery-code.txt";
     a.click();
     URL.revokeObjectURL(url);
   };

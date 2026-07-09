@@ -425,8 +425,8 @@ export const copy = {
       enrollFailed: "Your entries couldn’t be encrypted just now. Try again in a moment.",
       recoveryTitle: "Your recovery code",
       recoveryBody:
-        "Shown exactly once. If you forget your passphrase, this code is the only other key — save the kit somewhere safe.",
-      downloadKit: "Download the kit",
+        "Shown exactly once. If you forget your passphrase, this code is the only other key — save it somewhere safe.",
+      downloadKit: "Download recovery file",
       recoveryDone: "I’ve saved it",
     },
     backup: {

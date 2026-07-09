@@ -55,7 +55,7 @@ export async function getBookKey(): Promise<CryptoKey | undefined> {
  * stores only the sealed envelopes server-side, keeps the
  * non-extractable key on this device, and sweeps the whole book for
  * re-encrypted upload. Returns the recovery code — show it ONCE and
- * offer the kit download; it is never reconstructable.
+ * offer the recovery-file download; it is never reconstructable.
  */
 export async function enroll(passphrase: string): Promise<string> {
   const bookKey = await generateBookKey();
@@ -112,10 +112,10 @@ export async function deleteServerKeys(): Promise<void> {
     throw new Error(`keys delete ${response.status}`);
 }
 
-/** The downloadable recovery kit, in plain text. */
+/** The downloadable recovery file, in plain text. */
 export function recoveryKitText(recoveryCode: string, email: string): string {
   return [
-    "Snippets — recovery kit",
+    "Snippets — recovery code",
     "",
     `Account: ${email}`,
     `Recovery code: ${recoveryCode}`,
