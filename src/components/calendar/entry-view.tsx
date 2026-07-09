@@ -237,8 +237,10 @@ function EntryBody({
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") stopEdit();
-            // Enter saves, Shift+Enter is a newline (the chat-compose idiom)
-            else if (e.key === "Enter" && !e.shiftKey) {
+            // Enter is a newline — this is prose, not a chat line. The edit
+            // commits on blur (tap away) or via the confirm stamp; ⌘/Ctrl+Enter
+            // is the desktop accelerator. A mobile return key just breaks the line.
+            else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               stopEdit();
             }
