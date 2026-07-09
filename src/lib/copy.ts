@@ -427,6 +427,8 @@ export const copy = {
       recoveryBody:
         "Shown exactly once. If you forget your passphrase, this code is the only other key — save it somewhere safe.",
       downloadKit: "Download recovery file",
+      recoveryFileNote:
+        "Downloading saves a plain-text file holding your account email and this recovery code — keep it somewhere private.",
       recoveryDone: "I’ve saved it",
     },
     backup: {
