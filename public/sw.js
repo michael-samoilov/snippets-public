@@ -1,22 +1,42 @@
-/* Snippets service worker — app shell offline, data lives in IndexedDB.
-   Hardened so the CACHE LAYER CAN NEVER FAIL A NAVIGATION: on iOS a wedged
-   CacheStorage (quota-full or corrupt) made `caches.open` reject OUTSIDE the
-   old try/catch, the respondWith promise rejected, and Safari showed "This
-   page couldn't load" for every visit — surviving reloads and redeploys.
-   Every cache operation is now best-effort; the network answer stands alone. */
-const VERSION = "snippets-v11";
-// "/" redirects to "/calendar", so cache the actual landing page
+/* Snippets service worker — every visited page usable offline, data in IndexedDB.
+
+   Two hard-won invariants, both about Safari/WebKit:
+
+   1. THE CACHE LAYER CAN NEVER FAIL A NAVIGATION. On iOS a wedged CacheStorage
+      (quota-full or corrupt) made `caches.open` reject OUTSIDE the old try/catch,
+      the respondWith promise rejected, and Safari showed "This page couldn't
+      load" for every visit — surviving reloads and redeploys. Every cache
+      operation is best-effort; the network answer always stands alone.
+
+   2. NEVER SERVE A REDIRECTED RESPONSE FOR A NAVIGATION. WebKit rejects it with
+      "Response served by service worker has redirections" and shows a blank
+      error page. `/` redirects to `/calendar`, so a redirected response could
+      otherwise land in the cache (bare-domain visit) and poison offline loads.
+      We refuse to cache any redirected response, so one can never be served. */
+const VERSION = "snippets-v13";
+// The app's real entry (start_url). Its own document is a clean 200 — used as the
+// offline fallback for any route we haven't cached yet.
 const SHELL_URL = "/calendar";
+
+// Cache a navigation response only when it's a plain 200 that did NOT go through
+// a redirect — a redirected response poisons WebKit (invariant 2 above).
+async function cacheNavigation(pathname, response) {
+  if (response.redirected) return;
+  if (response.status < 200 || response.status >= 300) return;
+  try {
+    const cache = await caches.open(VERSION);
+    await cache.put(pathname, response.clone());
+  } catch {
+    /* couldn't cache; the live response is what matters */
+  }
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       try {
-        const cache = await caches.open(VERSION);
         const response = await fetch(SHELL_URL);
-        if (response.ok) {
-          await cache.put(SHELL_URL, response);
-        }
+        await cacheNavigation(SHELL_URL, response);
       } catch {
         /* no offline shell this round — installing still must succeed */
       }
@@ -47,36 +67,29 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
 
-  // Navigations: network-FIRST, cache as offline fallback. The document must be
-  // current, because it names the hashed JS chunks to load — a stale document
-  // references chunks that no longer exist and the app can't hydrate. Cache
-  // entries are keyed by PATHNAME (search stripped): the calendar's dated URLs
-  // (?d=2026-07-02, one per day ever visited) were each cached in full, growing
-  // the cache without bound — one entry per path is the whole shell.
+  // Navigations: network-FIRST, per-route cache as the offline copy. The live
+  // document must win when online, because it names the hashed JS chunks to load
+  // — a stale document references chunks that no longer exist and can't hydrate.
+  // Each route is cached under its own PATHNAME (query stripped, so the calendar's
+  // dated URLs — ?d=2026-07-02, one per day ever visited — collapse to a single
+  // /calendar entry). Offline, we serve that route's own cached document, so
+  // /settings shows settings, not the calendar shell.
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
         try {
-          // Online: always fetch fresh from network for navigations.
           const response = await fetch(request);
-          // Cache successful responses only (2xx/3xx redirects to 2xx).
-          if (response.status >= 200 && response.status < 300) {
-            try {
-              const cache = await caches.open(VERSION);
-              await cache.put(url.pathname, response.clone());
-            } catch {
-              /* couldn't cache */
-            }
-          }
+          await cacheNavigation(url.pathname, response);
           return response;
         } catch {
-          // Offline: serve the shell so the SPA can route client-side to any path.
+          // Offline: this exact route if we have it, else the shell so the app
+          // still opens (its client router then handles wherever the URL points).
           try {
             const cache = await caches.open(VERSION);
+            const cached = await cache.match(url.pathname);
+            if (cached) return cached;
             const shell = await cache.match(SHELL_URL);
-            if (shell && shell.status >= 200 && shell.status < 300) {
-              return shell;
-            }
+            if (shell) return shell;
           } catch {
             /* cache unavailable */
           }
