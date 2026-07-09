@@ -88,6 +88,12 @@ function EntryBody({
   // for a few frames), then measure once — same +1 threshold the foot fade
   // uses, so a short entry that fits gets neither the small text nor the fade.
   const [compact, setCompact] = useState(false);
+  // the text the standing verdict was measured for. A verdict is only valid
+  // for its own words: an edit cycle that comes back with the text unchanged
+  // must NOT re-measure — the entry is already rendered at the compact size,
+  // where "fits" says nothing about full prose, and re-measuring flashed the
+  // large text for a frame before the observer re-latched it small.
+  const measuredFor = useRef<string | null>(null);
   useEffect(() => {
     if (editing) return;
     const el = contentRef.current;
@@ -106,7 +112,14 @@ function EntryBody({
         last = h;
       }
       if (stable >= 3 || frames > 90) {
-        setCompact(el.scrollHeight > el.clientHeight + 1);
+        if (measuredFor.current !== snippet.text) {
+          measuredFor.current = snippet.text;
+          // measured at whatever size is rendered. Overflowing while compact
+          // still means compact (never a trip through prose); only a text
+          // that fits at the small size gets to try full prose again, and
+          // the observer below re-latches it if prose turns out too big.
+          setCompact(el.scrollHeight > el.clientHeight + 1);
+        }
         // …and stay live afterwards. The one-shot alone missed real
         // overflow: a save flips `editing` back before the live query
         // delivers the longer text, and a late font load re-wraps the
@@ -114,7 +127,7 @@ function EntryBody({
         // fade (which tracks live) showed more below. One-way only: at
         // the compact size, "fits" says nothing about whether full prose
         // would fit, so the observer never un-compacts — a fresh
-        // measure (new text / edit cycle) is what resets it.
+        // measure (new text) is what resets it.
         ro = new ResizeObserver(() => {
           if (el.scrollHeight > el.clientHeight + 1) setCompact(true);
         });
