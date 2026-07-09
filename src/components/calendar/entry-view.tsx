@@ -143,11 +143,24 @@ function EntryBody({
       ro?.disconnect();
     };
   }, [snippet.text, editing]);
+  // belt to stopEdit's braces: whatever path ends an edit, the hidden field
+  // must never keep its autosize height (see stopEdit). Layout effect, so a
+  // straggler is shed before the exited state can paint with phantom overflow.
+  useLayoutEffect(() => {
+    if (!editing && areaRef.current) areaRef.current.style.height = "";
+  }, [editing]);
   // the foot terminus shows while more words lie below, and clears at the last
   // line (or if they all fit). compact is a dep because shrinking the font
   // changes the scroll height WITHOUT resizing the scroller, which the
-  // ResizeObserver alone misses — leaving the terminus lit at the very bottom.
-  const edges = useScrollEdges(contentRef, [editing, draft, compact]);
+  // ResizeObserver alone misses — leaving the terminus lit at the very bottom;
+  // snippet.text is one because a save flips `editing` back BEFORE the live
+  // query delivers the new words, whose re-render changes the scroll height
+  // with no other dep moving. liveHeight, because this scroller holds a single
+  // entry (the read is cheap) and its content can re-wrap without any dep
+  // firing at all (a late font load) — stale height left the foot lit at the
+  // very bottom. All refreshes run in the hook's layout effect: settled
+  // before the frame paints, never as a visible correction after it.
+  const edges = useScrollEdges(contentRef, [editing, draft, compact, snippet.text], true);
 
   const save = async () => {
     const trimmed = draft.trim();
@@ -180,6 +193,13 @@ function EntryBody({
   };
   const stopEdit = () => {
     void save();
+    // shed the autosize height NOW, synchronously, before the exit ever
+    // paints: the field stays mounted (hidden, absolute) and an inline
+    // height would beat its h-px class — a tall invisible box inside the
+    // relative scroller adds phantom scrollable overflow below the words
+    // (blank space to scroll into, and a foot hairline that never clears
+    // because there really is "more" — of nothing — below the fold).
+    if (areaRef.current) areaRef.current.style.height = "";
     setEditing(false);
     areaRef.current?.blur(); // confirming is dismissing the keyboard
   };
