@@ -1,21 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Gate the lab tooling to non-production. The `/lab/*` pages (icon studio, stamp,
- * wordmark, texture, wax-wash) and their dev-only `/api/lab/*` writers are for
- * BUILDING the app, not for visitors — so they stay reachable on local dev and on
- * preview deploys (unguessable per-branch URLs; add Vercel password protection for
- * more), but 404 on the production domain. Defence in depth: the bake API already
- * refuses to write unless NODE_ENV is development, and a deployed FS is read-only
- * regardless — this also hides the pages from the public site.
+ * Keep dev-only surfaces off the production domain. On preview deploys and local
+ * dev everything works as normal; only the PRODUCTION domain is locked down.
+ *
+ *  - `/lab/*` + `/api/lab/*` — the build-time tooling (icon studio, stamp,
+ *    skeleton gallery, the dev bake writer) 404s. (Defence in depth: the bake API
+ *    also refuses to write unless NODE_ENV is development, and a deployed FS is
+ *    read-only.)
+ *  - `?skeldebug` on the calendar — the page-load skeletons are held on screen for
+ *    inspection; that's a dev state, not something a visitor should land in, so the
+ *    param is stripped (redirect to the clean URL) in production.
  */
-export function proxy() {
-  if (process.env.VERCEL_ENV === "production") {
+export function proxy(req: NextRequest) {
+  if (process.env.VERCEL_ENV !== "production") return NextResponse.next();
+
+  const { pathname, searchParams } = req.nextUrl;
+
+  if (pathname === "/lab" || pathname.startsWith("/lab/") || pathname.startsWith("/api/lab/")) {
     return new NextResponse("Not found", { status: 404 });
   }
+
+  if (searchParams.has("skeldebug")) {
+    const url = req.nextUrl.clone();
+    url.searchParams.delete("skeldebug");
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/lab", "/lab/:path*", "/api/lab/:path*"],
+  matcher: ["/lab", "/lab/:path*", "/api/lab/:path*", "/calendar"],
 };
