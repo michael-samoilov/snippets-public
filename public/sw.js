@@ -14,11 +14,15 @@ self.addEventListener("install", (event) => {
         const cache = await caches.open(VERSION);
         // Try to cache the shell, following any redirects to get the final page.
         const response = await fetch(SHELL_URL, { redirect: "follow" });
+        console.log(`[SW install] Fetched ${SHELL_URL}: status=${response.status}, ok=${response.ok}, type=${response.type}`);
         if (response.ok) {
           await cache.put(SHELL_URL, response);
+          console.log(`[SW install] Cached shell ${SHELL_URL}`);
+        } else {
+          console.log(`[SW install] Not caching shell — status ${response.status} is not ok`);
         }
-      } catch {
-        /* no offline shell this round — installing still must succeed */
+      } catch (e) {
+        console.log(`[SW install] Error caching shell:`, e.message);
       }
       await self.skipWaiting();
     })(),
@@ -69,18 +73,28 @@ self.addEventListener("fetch", (event) => {
             }
           }
           return response;
-        } catch {
+        } catch (fetchErr) {
           // Offline: serve the shell so the SPA can route client-side to any path.
           // The shell "/" is fully hydrated and can navigate within itself without network.
+          console.log(`[SW navigate] Offline for ${url.pathname}:`, fetchErr.message);
           try {
             const cache = await caches.open(VERSION);
             const shell = await cache.match(SHELL_URL);
-            if (shell && shell.status >= 200 && shell.status < 300) {
-              return shell;
+            if (shell) {
+              console.log(`[SW navigate] Found cached shell: status=${shell.status}, type=${shell.type}, ok=${shell.ok}`);
+              if (shell.status >= 200 && shell.status < 300) {
+                console.log(`[SW navigate] Serving cached shell for ${url.pathname}`);
+                return shell;
+              } else {
+                console.log(`[SW navigate] Cached shell has status ${shell.status}, not serving`);
+              }
+            } else {
+              console.log(`[SW navigate] No cached shell found`);
             }
-          } catch {
-            /* cache unavailable */
+          } catch (cacheErr) {
+            console.log(`[SW navigate] Cache error:`, cacheErr.message);
           }
+          console.log(`[SW navigate] Returning 503 Offline for ${url.pathname}`);
           return new Response("Offline", { status: 503, statusText: "Offline" });
         }
       })(),
