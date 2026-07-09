@@ -4,7 +4,7 @@
    old try/catch, the respondWith promise rejected, and Safari showed "This
    page couldn't load" for every visit — surviving reloads and redeploys.
    Every cache operation is now best-effort; the network answer stands alone. */
-const VERSION = "snippets-v6";
+const VERSION = "snippets-v7";
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {
@@ -57,7 +57,11 @@ self.addEventListener("fetch", (event) => {
           const network = await fetch(request);
           try {
             const cache = await caches.open(VERSION);
-            await cache.put(key, network.clone());
+            // Only cache successful responses, not redirects — Safari rejects
+            // cached redirects in offline mode.
+            if (network.status >= 200 && network.status < 300) {
+              await cache.put(key, network.clone());
+            }
           } catch {
             /* couldn't cache; the live response is what matters */
           }
