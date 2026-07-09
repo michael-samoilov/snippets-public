@@ -4,7 +4,7 @@
    old try/catch, the respondWith promise rejected, and Safari showed "This
    page couldn't load" for every visit — surviving reloads and redeploys.
    Every cache operation is now best-effort; the network answer stands alone. */
-const VERSION = "snippets-v7";
+const VERSION = "snippets-v8";
 const SHELL_URL = "/";
 
 self.addEventListener("install", (event) => {
@@ -54,21 +54,38 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         const key = url.pathname;
         try {
-          const network = await fetch(request);
-          try {
-            const cache = await caches.open(VERSION);
-            // Only cache successful responses, not redirects — Safari rejects
-            // cached redirects in offline mode.
-            if (network.status >= 200 && network.status < 300) {
-              await cache.put(key, network.clone());
+          // Fetch with manual redirect handling so we never cache a redirect.
+          const network = await fetch(request, { redirect: "manual" });
+          // If it's a redirect, don't cache it — fetch the final destination instead.
+          if (network.status >= 300 && network.status < 400) {
+            const location = network.headers.get("Location");
+            if (location) {
+              const finalResponse = await fetch(new Request(location, { redirect: "manual" }));
+              try {
+                const cache = await caches.open(VERSION);
+                if (finalResponse.status >= 200 && finalResponse.status < 300) {
+                  await cache.put(key, finalResponse.clone());
+                }
+              } catch {
+                /* couldn't cache */
+              }
+              return finalResponse;
             }
-          } catch {
-            /* couldn't cache; the live response is what matters */
+          }
+          // Not a redirect; cache if successful.
+          if (network.status >= 200 && network.status < 300) {
+            try {
+              const cache = await caches.open(VERSION);
+              await cache.put(key, network.clone());
+            } catch {
+              /* couldn't cache */
+            }
           }
           return network;
         } catch {
           try {
             const cache = await caches.open(VERSION);
+            // Offline: try the exact path first, then fall back to shell so the SPA can route.
             return (
               (await cache.match(key)) ??
               (await cache.match(SHELL_URL)) ??
