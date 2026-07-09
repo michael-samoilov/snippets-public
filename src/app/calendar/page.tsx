@@ -1801,8 +1801,12 @@ function Calendar() {
     // beat after it first appeared. The swap is a seamless continuation instead:
     // the settled skeleton becomes the settled page with no second fade.
     <div className="flex h-full min-h-0 flex-col">
-      {/* the current altitude, spoken to assistive tech after every zoom/jump */}
-      <p aria-live="polite" className="sr-only">
+      {/* the current altitude, spoken to assistive tech after every zoom/jump.
+          An h1 (not a p): the visible title is a click-to-climb BUTTON, not a
+          heading, so without this the whole app had no h1 at all — nothing
+          for VoiceOver's heading rotor to land on. sr-only, so no visual
+          change; doubling as the live region costs nothing extra. */}
+      <h1 aria-live="polite" className="sr-only">
         {view === "year"
           ? `Year ${visibleYear}`
           : view === "month"
@@ -1810,7 +1814,7 @@ function Calendar() {
             : view === "schedule"
               ? friendlyDay(selected)
               : "Entry"}
-      </p>
+      </h1>
       {/* the `?` keyboard cheat sheet */}
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book cards'
@@ -3327,10 +3331,8 @@ function FlowBackfillCapture({
               autosizeArea(e.target);
             }}
             onKeyDown={(e) => {
-              // Enter is a newline — this is prose, not a chat line, and the
-              // wax seal files. ⌘/Ctrl+Enter is the desktop accelerator for
-              // that seal; a mobile return key just breaks the line.
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              // Enter files, Shift+Enter is a newline (the chat-compose idiom)
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 keep();
               }
@@ -4528,7 +4530,7 @@ function TodayZoneFill({
               }}
               onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
-              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
               placeholder={
                 listening
                   ? copy.capture.listeningPlaceholder
@@ -4669,7 +4671,13 @@ function TodayZoneFill({
                 initial={{ x: "70%", opacity: 0 }}
                 animate={{ x: "0%", opacity: 1 }}
                 exit={{ x: "-70%", opacity: 0 }}
-                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                // slower than the usual ≤260ms UI ceiling on purpose: this is
+                // the ONE moment the seal's identity changes from mic to
+                // quill, seen once per entry — a snappy 200ms swap read as a
+                // flicker and writers didn't register the button had changed
+                // (so they kept hunting for how to submit). The extra beat
+                // makes the slide itself legible as "the mic became a quill".
+                transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
               >
                 <CanvasSeal
                   playKey={playKey}

@@ -191,10 +191,8 @@ export function Capture() {
             autosize(e.target);
           }}
           onKeyDown={(e) => {
-            // Enter is a newline — this is prose, not a chat line, and the
-            // wax seal files. ⌘/Ctrl+Enter is the desktop accelerator for
-            // that seal; a mobile return key just breaks the line.
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            // Enter files, Shift+Enter is a newline (the chat-compose idiom)
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void keep();
             }
