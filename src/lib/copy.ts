@@ -378,9 +378,9 @@ export const copy = {
       offline: "Offline — changes will sync when you’re back.",
       error: "Sync hit a snag — retrying.",
       skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
-      /** the tiny mono integrity line, e.g. "1,204 here · 1,204 on the server" */
+      /** the tiny mono integrity line, e.g. "1,204 locally on this device · 1,204 on the server" */
       counts: (device: string, server: string) =>
-        `${device} here · ${server} on the server`,
+        `${device} locally on this device · ${server} on the server`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
       locked: "Your entries are end-to-end encrypted — unlock below to sync.",
