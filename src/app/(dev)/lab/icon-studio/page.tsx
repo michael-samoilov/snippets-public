@@ -13,6 +13,34 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { ICON_SEAL, lobeCount, type IconSealSpec, type IconVariant } from "@/lib/seal-spec";
 
+// hex ⇄ HSL, so the tint can be tuned by hue / saturation / lightness (the wax
+// reads unsaturated as raw hex; a saturation slider is the intuitive control).
+function hexToHsl(hex: string) {
+  const m = hex.replace("#", "");
+  const r = parseInt(m.slice(0, 2), 16) / 255,
+    g = parseInt(m.slice(2, 4), 16) / 255,
+    b = parseInt(m.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+function hslToHex(h: number, s: number, l: number) {
+  s /= 100;
+  l /= 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  const to = (x: number) => Math.round(255 * x).toString(16).padStart(2, "0");
+  return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
+}
+
 export default function IconStudio() {
   const [spec, setSpec] = useState<IconSealSpec>(() => structuredClone(ICON_SEAL));
   const [status, setStatus] = useState("");
@@ -91,8 +119,6 @@ export default function IconStudio() {
   }, [spec, composeInto]);
 
   const patch = (p: Partial<IconSealSpec>) => setSpec((s) => ({ ...s, ...p }));
-  const patchTint = (k: keyof IconSealSpec["tint"], val: string) =>
-    setSpec((s) => ({ ...s, tint: { ...s.tint, [k]: val } }));
   const patchVar = (key: string, p: Partial<IconVariant>) =>
     setSpec((s) => ({ ...s, variants: s.variants.map((v) => (v.key === key ? { ...v, ...p } : v)) }));
 
@@ -100,6 +126,36 @@ export default function IconStudio() {
     let k = spec.seed;
     for (let i = 0; i < 200; i++) { k += dir; if (k > 0 && lobeCount(k) === 5) break; }
     patch({ seed: k });
+  };
+
+  // the wax as H/S/L; moving one slider re-derives the whole tint (wax + a
+  // lighter specular `bright` + a much darker `shadow`) so it stays coherent.
+  const waxHsl = hexToHsl(spec.tint.wax);
+  const setWax = (p: { h?: number; s?: number; l?: number }) => {
+    const h = p.h ?? waxHsl.h, s = p.s ?? waxHsl.s, l = p.l ?? waxHsl.l;
+    setSpec((sp) => ({
+      ...sp,
+      tint: {
+        wax: hslToHex(h, s, l),
+        bright: hslToHex(h, Math.max(0, s - 4), Math.min(100, l + 11)),
+        shadow: hslToHex(h, Math.min(100, s + 16), Math.max(0, Math.round(l * 0.3))),
+      },
+    }));
+  };
+
+  // seed candidates — pin seeds you like and hop between them; persisted locally
+  const [cands, setCands] = useState<number[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("iconSeedCands");
+      // deferred (not synchronous in the effect body) — runs post-hydration, so
+      // no server/client mismatch on the pinned row
+      if (raw) queueMicrotask(() => setCands(JSON.parse(raw)));
+    } catch { /* none saved */ }
+  }, []);
+  const saveCands = (next: number[]) => {
+    setCands(next);
+    try { localStorage.setItem("iconSeedCands", JSON.stringify(next)); } catch { /* private mode */ }
   };
 
   // ── automatic optical balancing ───────────────────────────────────
@@ -223,6 +279,7 @@ export default function IconStudio() {
   const box: React.CSSProperties = { border: "1px solid #8884", borderRadius: 8, padding: 10 };
   const row: React.CSSProperties = { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, margin: "4px 0", fontSize: 13 };
   const rng: React.CSSProperties = { flex: "1 1 90px", minWidth: 80, maxWidth: 220 };
+  const btn: React.CSSProperties = { fontFamily: "inherit", fontSize: 15, padding: "8px 12px", borderRadius: 6, border: "1px solid #8886", background: "#fdf9ef", cursor: "pointer", minWidth: 40 };
 
   return (
     // fixed full-viewport surface with its OWN scroll — the studio is a full-page
@@ -280,19 +337,42 @@ export default function IconStudio() {
               />
             </div>
           </div>
-          <div style={row}>
-            <button onClick={() => patch({ seed: Math.max(1, spec.seed - 1) })}>◀</button>
-            <span>seed {spec.seed}</span>
-            <button onClick={() => patch({ seed: spec.seed + 1 })}>▶</button>
+          <div style={{ ...row, gap: 6 }}>
+            <button style={btn} onClick={() => patch({ seed: Math.max(1, spec.seed - 1) })}>◀</button>
+            <span>seed</span>
+            <input
+              type="number"
+              min={1}
+              value={spec.seed}
+              onChange={(e) => patch({ seed: Math.max(1, Math.floor(+e.target.value) || 1) })}
+              style={{ width: 66, fontFamily: "inherit", fontSize: 15, padding: "7px 6px", textAlign: "center", borderRadius: 6, border: "1px solid #8886" }}
+            />
+            <button style={btn} onClick={() => patch({ seed: spec.seed + 1 })}>▶</button>
             <b style={{ color: N === 5 ? "#1e7a3f" : "#a05a1e" }}>{N} lobes</b>
-            <button onClick={() => nextFiveLobe(1)}>next 5-lobe ▶</button>
-            <button onClick={() => nextFiveLobe(-1)}>◀</button>
           </div>
+          <div style={{ ...row, gap: 6 }}>
+            <button style={btn} onClick={() => nextFiveLobe(-1)}>◀ 5-lobe</button>
+            <button style={btn} onClick={() => nextFiveLobe(1)}>5-lobe ▶</button>
+            <button style={btn} onClick={() => { if (!cands.includes(spec.seed)) saveCands([...cands, spec.seed]); }}>☆ pin {spec.seed}</button>
+          </div>
+          {cands.length > 0 && (
+            <div style={{ ...row, gap: 6 }}>
+              <span style={{ color: "#6f6553", fontSize: 12 }}>pinned</span>
+              {cands.map((n) => (
+                <span key={n} style={{ display: "inline-flex", alignItems: "center", border: n === spec.seed ? "2px solid #1e3a5f" : "1px solid #8886", borderRadius: 6, overflow: "hidden" }}>
+                  <button style={{ ...btn, border: "none", borderRadius: 0, background: n === spec.seed ? "#dfeaf6" : "#fdf9ef", fontWeight: n === spec.seed ? 700 : 400 }} onClick={() => patch({ seed: n })}>{n}</button>
+                  <button style={{ ...btn, border: "none", borderRadius: 0, background: "transparent", padding: "8px 8px", color: "#993b26", minWidth: 0 }} onClick={() => saveCands(cands.filter((x) => x !== n))} title="remove">×</button>
+                </span>
+              ))}
+            </div>
+          )}
           <div style={row}>puck<input style={rng} type="range" min={0} max={1.5} step={0.05} value={spec.puck} onChange={(e) => patch({ puck: +e.target.value })} />{spec.puck.toFixed(2)}</div>
           <div style={row}>glyph<input style={rng} type="range" min={0.3} max={0.6} step={0.01} value={spec.glyphScale} onChange={(e) => patch({ glyphScale: +e.target.value })} />{spec.glyphScale.toFixed(2)}</div>
-          <div style={row}>wax<input type="color" value={spec.tint.wax} onChange={(e) => patchTint("wax", e.target.value)} />{spec.tint.wax}</div>
-          <div style={row}>bright<input type="color" value={spec.tint.bright} onChange={(e) => patchTint("bright", e.target.value)} /></div>
-          <div style={row}>shadow<input type="color" value={spec.tint.shadow} onChange={(e) => patchTint("shadow", e.target.value)} /></div>
+          <div style={{ ...row, marginTop: 8, fontWeight: 700 }}>navy tint</div>
+          <div style={row}>hue<input style={rng} type="range" min={180} max={260} step={1} value={waxHsl.h} onChange={(e) => setWax({ h: +e.target.value })} />{waxHsl.h}°</div>
+          <div style={row}>saturation<input style={rng} type="range" min={0} max={100} step={1} value={waxHsl.s} onChange={(e) => setWax({ s: +e.target.value })} />{waxHsl.s}%</div>
+          <div style={row}>lightness<input style={rng} type="range" min={5} max={55} step={1} value={waxHsl.l} onChange={(e) => setWax({ l: +e.target.value })} />{waxHsl.l}%</div>
+          <div style={row}>wax<span style={{ display: "inline-block", width: 34, height: 18, background: spec.tint.wax, border: "1px solid #0004", borderRadius: 3 }} />{spec.tint.wax}</div>
           <div style={row}>S ink<input type="color" value={spec.glyphColor} onChange={(e) => patch({ glyphColor: e.target.value })} /></div>
           <label style={{ ...row, cursor: "pointer" }}>
             <input type="checkbox" checked={autoBal} onChange={(e) => setAutoBal(e.target.checked)} />
