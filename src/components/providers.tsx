@@ -10,6 +10,7 @@ import { startSync } from "@/lib/sync";
 import { useSession } from "@/lib/auth";
 import { KeptDraftContext, type KeptDraftStore } from "@/lib/kept-draft";
 import { useZoomRelief } from "@/hooks/use-zoom-relief";
+import { DebugOverlay } from "@/components/debug-overlay";
 import type { Snippet } from "@/lib/types";
 
 /** Sync follows the session: signed in → the engine runs; out → it rests. */
@@ -65,6 +66,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <KeptDraftContext.Provider value={draftStore}>
           <SyncManager />
           {children}
+          <DebugOverlay />
         </KeptDraftContext.Provider>
       </MotionConfig>
       <Toaster
