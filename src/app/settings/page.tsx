@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import { useTheme } from "next-themes";
 import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
@@ -42,12 +50,124 @@ import { PageBackHeader } from "@/components/page-back-header";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
+const TABS = [
+  { id: "appearance", label: copy.settings.tabs.appearance },
+  { id: "account", label: copy.settings.tabs.account },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+// The open panel lives in the URL (?tab=account) so a link lands on it and
+// a reload keeps it. Read it through useSyncExternalStore — the server and
+// first paint show the default, the client adopts the query with no
+// hydration flash, and back/forward just work. replaceState is silent, so a
+// tap dispatches a custom event to nudge the store.
+const TAB_EVENT = "settings:tab";
+
+function readTab(): TabId {
+  return new URLSearchParams(window.location.search).get("tab") === "account"
+    ? "account"
+    : "appearance";
+}
+
+function subscribeTab(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  window.addEventListener(TAB_EVENT, onChange);
+  return () => {
+    window.removeEventListener("popstate", onChange);
+    window.removeEventListener(TAB_EVENT, onChange);
+  };
+}
+
+function selectTab(id: TabId) {
+  const url = new URL(window.location.href);
+  if (id === "appearance") url.searchParams.delete("tab");
+  else url.searchParams.set("tab", id);
+  window.history.replaceState(null, "", url);
+  window.dispatchEvent(new Event(TAB_EVENT));
+}
+
+/**
+ * Two quiet sections, small-caps, over the same hairline the headings
+ * use — the active one carries a wax underline that magic-moves between
+ * them. Arrow keys walk the row (roving tabindex); the URL remembers
+ * which panel is open so a link can land on either.
+ */
+function SettingsTabs({
+  tab,
+  onSelect,
+}: {
+  tab: TabId;
+  onSelect: (id: TabId) => void;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const onKeyDown = (event: ReactKeyboardEvent, index: number) => {
+    let next = -1;
+    if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
+    else if (event.key === "ArrowLeft")
+      next = (index - 1 + TABS.length) % TABS.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = TABS.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    onSelect(TABS[next].id);
+    refs.current[next]?.focus();
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label={copy.settings.tabs.label}
+      className="mb-9 flex gap-1 border-b border-rule"
+    >
+      {TABS.map((t, index) => {
+        const active = t.id === tab;
+        return (
+          <button
+            key={t.id}
+            ref={(el) => {
+              refs.current[index] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`settings-tab-${t.id}`}
+            aria-selected={active}
+            aria-controls={`settings-panel-${t.id}`}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onSelect(t.id)}
+            onKeyDown={(e) => onKeyDown(e, index)}
+            className={cn(
+              "voice-label pressable relative -mb-px rounded-t-[5px] px-3 py-2 text-[0.82rem]",
+              active ? "text-wax" : "text-ink-soft hover:text-ink",
+            )}
+          >
+            {t.label}
+            {active && (
+              <motion.span
+                aria-hidden="true"
+                layoutId="settings-tab-underline"
+                className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-wax"
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
   const stats = useStats();
   const { user } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
+  const tab = useSyncExternalStore<TabId>(
+    subscribeTab,
+    readTab,
+    () => "appearance",
+  );
   // theme is unknowable server-side; render the swatches neutral until hydrated
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -68,13 +188,17 @@ export default function SettingsPage() {
 
   return (
     <PageBackHeader title={copy.settings.title}>
-      <div className="space-y-10">
-        <AccountSection />
-        {user && <EncryptionSection email={user.email} />}
-        {user && <BackupSection />}
+      <SettingsTabs tab={tab} onSelect={selectTab} />
 
-        <section aria-label={copy.settings.appearance.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.heading}</h2>
+      {tab === "appearance" ? (
+        <div
+          role="tabpanel"
+          id="settings-panel-appearance"
+          aria-labelledby="settings-tab-appearance"
+          className="space-y-10"
+        >
+        <section aria-label={copy.settings.appearance.themeLabel}>
+          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.themeLabel}</h2>
           <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label={copy.settings.appearance.themeLabel}>
             <ThemeSwatch
               label={copy.themes.paper}
@@ -114,6 +238,17 @@ export default function SettingsPage() {
             />
           </div>
         </section>
+        </div>
+      ) : (
+        <div
+          role="tabpanel"
+          id="settings-panel-account"
+          aria-labelledby="settings-tab-account"
+          className="space-y-10"
+        >
+        <AccountSection />
+        {user && <EncryptionSection email={user.email} />}
+        {user && <BackupSection />}
 
         <section aria-label={copy.settings.data.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.data.heading}</h2>
@@ -150,7 +285,8 @@ export default function SettingsPage() {
         </section>
 
         <DangerZone user={user} />
-      </div>
+        </div>
+      )}
     </PageBackHeader>
   );
 }
