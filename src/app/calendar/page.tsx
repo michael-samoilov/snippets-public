@@ -3376,7 +3376,7 @@ function FlowBackfillCapture({
     // also the composer's bloom target (PressGlow grow="parent"): the card's
     // own transform belongs to the press dip, so the light lifts this
     // wrapper instead - the dip sinks the card within a gently risen block
-    <div className={cn("relative transition-transform duration-[420ms] ease-[var(--ease-out)]", follows && "mt-1")}>
+    <div className={cn("relative transition-transform duration-[600ms] ease-[var(--ease-bloom)]", follows && "mt-1")}>
       {/* the composer — present at rest and after a keep, GONE during the press
           so today shows only the stamp. Its return wipes in from the left as a
           single already-laid-out line (clip-path reveal — no re-wrapping), slow
@@ -4467,7 +4467,7 @@ function TodayZoneFill({
   // transform rides the same transition (slower, per the glow's bloom):
   // the press glow writes scale onto this box but never its transition
   const frame = cn(
-    "border transition-[border-color,transform] [transition-duration:240ms,420ms] ease-[var(--ease-out)]",
+    "border transition-[border-color,transform] [transition-duration:240ms,600ms] [transition-timing-function:var(--ease-out),var(--ease-bloom)]",
     listening ? "border-wax/70" : "border-wax/45",
   );
 

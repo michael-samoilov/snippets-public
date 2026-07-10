@@ -33,7 +33,7 @@ function EntryViewBase({
     // max-h: the card's max-h-full needs a DEFINITE height above it to cap
     // a long entry (a shrink-wrapped wrapper would resolve it to none and
     // let the card overflow the stage)
-    <div className="flex h-full min-h-0 flex-col transition-transform duration-[420ms] ease-[var(--ease-out)]">
+    <div className="flex h-full min-h-0 flex-col transition-transform duration-[600ms] ease-[var(--ease-bloom)]">
     {/* max-h, not h: a short entry's card reaches only as far as its
         words; only a long one fills the stage and scrolls inside, with
         the card's own bottom rule marking where the scroll terminates */}
