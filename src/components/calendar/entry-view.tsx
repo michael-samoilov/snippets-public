@@ -3,6 +3,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
+import { PressGlow } from "@/components/capture/press-glow";
 import { useContainedField } from "@/hooks/use-contained-field";
 import { updateSnippet } from "@/lib/db";
 import { copy } from "@/lib/copy";
@@ -34,6 +35,9 @@ function EntryViewBase({
       className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
       style={{ transformOrigin: "0 0" }}
     >
+      {/* light pools under a press on the words (the rewrite affordance made
+          visible). No grow: the open/close zoom owns this card's transform */}
+      <PressGlow />
       {snippet ? (
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (

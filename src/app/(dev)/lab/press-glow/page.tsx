@@ -31,8 +31,6 @@ import { useTheme } from "next-themes";
 
 /* ── the glow surface ──────────────────────────────────────────────── */
 
-type LitFn = (src: "pointer" | "touch") => void;
-
 interface GlowOpts {
   ink: "candle" | "wax";
   /** peak strength while the finger is down, 0..1 */
@@ -116,14 +114,13 @@ const liftStyle = (L: number): React.CSSProperties => ({
   borderColor: liftBorder(L),
 });
 
-/* the inks. Candle is per-theme (see the <style> block on the lab root):
-   in Paper it's pure white — light must genuinely WHITEN the
-   sheet, pushing cream toward paper-white (a gold-only tint read as colour,
-   not luminance; and the ink sits under the words, so the text stays dark
-   while the page brightens); in Lamplight it's the warm gold that already
-   reads as a candle. The pair is the shape a future --glow token would
-   take (deliberately not --marker/--gilt, which are spoken for). Wax mixes
-   harder than the wash does: a press is a moment, not an ambience. */
+/* the inks. Candle is the per-theme --glow-ink token (globals.css — the
+   production glow shares it): in Paper it's pure white — light must
+   genuinely WHITEN the sheet, pushing cream toward paper-white (a gold-only
+   tint read as colour, not luminance; and the ink sits under the words, so
+   the text stays dark while the page brightens); in Lamplight it's the warm
+   gold that already reads as a candle. Wax mixes harder than the wash does:
+   a press is a moment, not an ambience. */
 const inkColor = (o: GlowOpts, a: number) =>
   o.ink === "candle"
     ? `color-mix(in srgb, var(--glow-ink) ${Math.round(a * 100)}%, transparent)`
@@ -145,7 +142,6 @@ function GlowSurface({
   className,
   style,
   back,
-  onLit,
   children,
 }: {
   opts: GlowOpts;
@@ -154,8 +150,6 @@ function GlowSurface({
   /** the surface's own paint (an opaque card background), rendered UNDER
       the glow — light pools on the paper, the words sit on the light */
   back?: React.ReactNode;
-  /** which event path lit the glow — the lab's mid-scroll-grab verifier */
-  onLit?: (src: "pointer" | "touch") => void;
   children: React.ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -163,10 +157,6 @@ function GlowSurface({
   const coreRef = useRef<HTMLDivElement>(null);
   const ambientRef = useRef<HTMLDivElement>(null);
   const o = useRef(opts);
-  const litRef = useRef(onLit);
-  useEffect(() => {
-    litRef.current = onLit;
-  });
   useEffect(() => {
     o.current = opts;
     // live-retune the visual bits that aren't per-frame
@@ -247,36 +237,6 @@ function GlowSurface({
       place();
       level();
       scale();
-      litRef.current?.("pointer");
-    };
-    /* the mid-scroll grab: a touch that lands while the page is decelerating
-       is claimed as the scroll brake — the browser may deliver the raw touch
-       yet withhold every pointer event. Pointerdown precedes touchstart for
-       a normal press, so a touchstart arriving with no press underway means
-       the pointer path was suppressed: light through the ride machinery,
-       which already runs on touches alone. Whether iOS actually delivers
-       this touch mid-inertia is what the lab's lit-by counter verifies. */
-    const onTouchStart = (e: TouchEvent) => {
-      if (down || riding) return;
-      const t = e.touches[0];
-      if (!t) return;
-      riding = true;
-      touchLive = true;
-      const r = host.getBoundingClientRect();
-      tx = t.clientX - r.left;
-      ty = t.clientY - r.top;
-      x = tx;
-      y = ty;
-      place();
-      level();
-      scale();
-      window.addEventListener("scroll", onScrollRide, true);
-      host.addEventListener("touchmove", onRideMove, { passive: true });
-      host.addEventListener("touchend", onRideEnd);
-      host.addEventListener("touchcancel", onRideEnd);
-      clearTimeout(settle);
-      settle = window.setTimeout(settleRide, 700);
-      litRef.current?.("touch");
     };
     const onMove = (e: PointerEvent) => {
       if (!down && !(focused && o.current.rest > 0)) return;
@@ -353,7 +313,6 @@ function GlowSurface({
     host.addEventListener("pointerup", onUp);
     host.addEventListener("pointercancel", onCancel);
     host.addEventListener("pointerleave", onUp);
-    host.addEventListener("touchstart", onTouchStart, { passive: true });
     host.addEventListener("focusin", onFocusIn);
     host.addEventListener("focusout", onFocusOut);
     return () => {
@@ -368,7 +327,6 @@ function GlowSurface({
       host.removeEventListener("pointerup", onUp);
       host.removeEventListener("pointercancel", onCancel);
       host.removeEventListener("pointerleave", onUp);
-      host.removeEventListener("touchstart", onTouchStart);
       host.removeEventListener("focusin", onFocusIn);
       host.removeEventListener("focusout", onFocusOut);
     };
@@ -417,9 +375,9 @@ function GlowSurface({
 const RULES =
   "repeating-linear-gradient(to bottom, transparent 0, transparent 19px, var(--rule-faint) 19px, var(--rule-faint) 20px)";
 
-function TodayBench({ opts, onLit }: { opts: GlowOpts; onLit?: LitFn }) {
+function TodayBench({ opts }: { opts: GlowOpts }) {
   return (
-    <GlowSurface opts={opts} onLit={onLit} className="h-[430px] w-[300px] rounded-2xl border border-wax/45">
+    <GlowSurface opts={opts} className="h-[430px] w-[300px] rounded-2xl border border-wax/45">
       <div className="flex h-full flex-col items-center px-4 py-6 text-center">
         <div className="mt-10 leading-none">
           <p className="voice-label text-[0.72rem] text-ink-faint">Thursday</p>
@@ -447,7 +405,7 @@ function TodayBench({ opts, onLit }: { opts: GlowOpts; onLit?: LitFn }) {
   );
 }
 
-function AddCardBench({ opts, editing, onLit }: { opts: GlowOpts; editing: boolean; onLit?: LitFn }) {
+function AddCardBench({ opts, editing }: { opts: GlowOpts; editing: boolean }) {
   const [text, setText] = useState(
     editing ? "Lunch with Celine's parents. Logan beforehand texts: “Good luck at brunch mish”" : "",
   );
@@ -455,7 +413,6 @@ function AddCardBench({ opts, editing, onLit }: { opts: GlowOpts; editing: boole
     <div className="w-[300px]">
       <GlowSurface
         opts={opts}
-        onLit={onLit}
         className="rounded-[6px]"
         back={
           text ? (
@@ -490,14 +447,13 @@ function AddCardBench({ opts, editing, onLit }: { opts: GlowOpts; editing: boole
   );
 }
 
-function EntryBench({ opts, onLit }: { opts: GlowOpts; onLit?: LitFn }) {
+function EntryBench({ opts }: { opts: GlowOpts }) {
   const [text, setText] = useState(
     "On the bus home at around 6PM, a man got on with a cello case nearly as tall as he was and looked for a spot a few seats away from me, then asked to stand in the aisle for two more stops.",
   );
   return (
     <GlowSurface
       opts={opts}
-      onLit={onLit}
       className="w-[300px] rounded-[10px] border border-rule-faint bg-paper"
       style={liftStyle(opts.lift)}
     >
@@ -561,17 +517,6 @@ export default function PressGlowLab() {
   const [opts, setOpts] = useState<GlowOpts>(GLOW_DEFAULTS);
   const { resolvedTheme, setTheme } = useTheme();
 
-  /* the mid-scroll-grab verifier: counts which event path lit each glow.
-     Normal presses arrive as "pointer"; "touch" means the pointer path was
-     withheld and the touchstart fallback caught it — a grab mid-inertia */
-  const [lit, setLit] = useState({ last: "—", pointer: 0, touch: 0 });
-  const onLit: LitFn = (src) =>
-    setLit((l) => ({
-      last: src,
-      pointer: l.pointer + (src === "pointer" ? 1 : 0),
-      touch: l.touch + (src === "touch" ? 1 : 0),
-    }));
-
   /* every theme flip brings back that theme's own recipe — the dials are
      per-theme tunings, not one shared draft (owner's call: tweaks don't
      carry across; reset to compare the stock recipes any time).
@@ -587,18 +532,14 @@ export default function PressGlowLab() {
   }, [resolvedTheme]);
 
   const benches: { key: string; label: string; note: string; node: React.ReactNode }[] = [
-    { key: "today", label: "today zone", note: "light pooling on the open page", node: <TodayBench opts={opts} onLit={onLit} /> },
-    { key: "add-rest", label: "add something · at rest", note: "the initial press, before the keyboard", node: <AddCardBench opts={opts} editing={false} onLit={onLit} /> },
-    { key: "add-edit", label: "add something · editing", note: "mid-entry, caret drags included", node: <AddCardBench opts={opts} editing onLit={onLit} /> },
-    { key: "entry", label: "entry view · rewriting", note: "an opened entry, words as the field", node: <EntryBench opts={opts} onLit={onLit} /> },
+    { key: "today", label: "today zone", note: "light pooling on the open page", node: <TodayBench opts={opts} /> },
+    { key: "add-rest", label: "add something · at rest", note: "the initial press, before the keyboard", node: <AddCardBench opts={opts} editing={false} /> },
+    { key: "add-edit", label: "add something · editing", note: "mid-entry, caret drags included", node: <AddCardBench opts={opts} editing /> },
+    { key: "entry", label: "entry view · rewriting", note: "an opened entry, words as the field", node: <EntryBench opts={opts} /> },
   ];
 
   return (
     <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-4 sm:p-8" data-glow-lab>
-      <style>{`
-        [data-glow-lab] { --glow-ink: rgb(255 255 255); }
-        .dark [data-glow-lab] { --glow-ink: rgb(255 228 160 / 0.6); }
-      `}</style>
       <header className="mb-6 flex items-center gap-4">
         <h1 className="voice-display text-[1.4rem] text-ink">press glow</h1>
       </header>
@@ -607,10 +548,6 @@ export default function PressGlowLab() {
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
           touch any surface and drag — the light follows; one dial column drives all four.
           vertical drags scroll the page: the light follows the finger through the scroll and leaves when it lifts
-        </p>
-        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
-          lit by {lit.last} — pointer ×{lit.pointer} · touch ×{lit.touch}
-          <span className="block">flick the page, then grab a card mid-glide: if the light comes and “touch” climbs, the mid-scroll grab works</span>
         </p>
         <div className="mb-8 flex w-[300px] flex-col gap-2.5 sm:w-72">
           <div className="flex items-center gap-2">

@@ -107,6 +107,11 @@ html {
     0 24px 48px -12px rgb(var(--shadow-hue) / 0.14);
   --press-highlight: rgb(255 255 255 / 0.4);
 
+  /* the press glow's candle (src/components/capture/press-glow.tsx): light
+     pooling under a finger on a writing surface. Paper's is pure white —
+     the light must genuinely whiten the cream, and the words sit above it */
+  --glow-ink: rgb(255 255 255);
+
   /* the light that passes over a loading placeholder — a warm sheen, not a
      grey shimmer (see .skeleton-shimmer) */
   --skeleton-sheen: rgb(255 253 247 / 0.55);
@@ -194,6 +199,9 @@ html {
     0 4px 10px rgb(0 0 0 / 0.5),
     0 16px 40px -8px rgb(0 0 0 / 0.6);
   --press-highlight: rgb(255 240 210 / 0.24);
+  /* Lamplight's candle is warm gold — it carries at low strength on the dark
+     ground, where white would read as a searchlight */
+  --glow-ink: rgb(255 228 160 / 0.6);
   --skeleton-sheen: rgb(255 240 210 / 0.12);
 
   --accent: rgb(234 225 205 / 0.07);

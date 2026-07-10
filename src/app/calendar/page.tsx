@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { ulid } from "ulidx";
 import { WaxStamp as CanvasSeal, type SealControl } from "@/components/capture/wax-stamp";
 import { RecordingWash } from "@/components/capture/wash-shaders";
+import { PressGlow } from "@/components/capture/press-glow";
 import { KEEP_BEATS, useKeepSequence } from "@/components/schedule/keep-sequence";
 import { useKeptDraft } from "@/lib/kept-draft";
 import {
@@ -3376,6 +3377,9 @@ function FlowBackfillCapture({
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />
+          {/* light under the finger, above the card's paint, under its words.
+              No grow: this card's transform belongs to the press dip */}
+          <PressGlow className="rounded-[6px]" />
           <textarea
             ref={areaRef}
             value={text}
@@ -4390,9 +4394,11 @@ function TodayZoneFill({
   };
 
   // the zone's hairline blue outline (wax = recording) — it deepens while
-  // the microphone is on, anchoring the wash to the frame it seeps from
+  // the microphone is on, anchoring the wash to the frame it seeps from.
+  // transform rides the same transition (slower, per the glow's bloom):
+  // the press glow writes scale onto this box but never its transition
   const frame = cn(
-    "border transition-[border-color] duration-[240ms] ease-[var(--ease-out)]",
+    "border transition-[border-color,transform] [transition-duration:240ms,420ms] ease-[var(--ease-out)]",
     listening ? "border-wax/70" : "border-wax/45",
   );
 
@@ -4502,12 +4508,16 @@ function TodayZoneFill({
               </motion.div>
             )}
           </AnimatePresence>
+          {/* the press glow — light pools under a touch anywhere on the
+              paper and follows the finger; above the wash, under the words */}
+          <PressGlow grow />
           {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
               px), so the ruled field and the intro keep the same visual margin
               from a narrow phone up to the wide desk — the ruled paper and the
               intro both fill this padded column (w-full), which is what keeps
-              their left/right edges aligned */}
-          <div className="flex flex-1 flex-col items-center gap-4 px-[8%] py-6 text-center">
+              their left/right edges aligned. `relative`: the words are ink ON
+              the glow's light, so the column paints after it */}
+          <div className="relative flex flex-1 flex-col items-center gap-4 px-[8%] py-6 text-center">
           {/* today's date, in the Today-page voice — mt-[83px] + py-6 (24px)
               seats it 107px under the zone's top. That's 11px more than the
               seal's box clearance below, on purpose: the wax is painted high in
