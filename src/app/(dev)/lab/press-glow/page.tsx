@@ -184,6 +184,9 @@ function GlowSurface({
     let raf = 0;
     let down = false;
     let focused = false;
+    // the scroll took the pointer, the glow rides the moving card
+    let riding = false;
+    let settle = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
 
@@ -202,10 +205,10 @@ function GlowSurface({
       if (!raf) raf = requestAnimationFrame(step);
     };
     const level = () => {
-      glow.style.opacity = down ? "1" : focused ? String(o.current.rest) : "0";
+      glow.style.opacity = down || riding ? "1" : focused ? String(o.current.rest) : "0";
     };
     const scale = () => {
-      if (down || focused) {
+      if (down || focused || riding) {
         // normalize the bloom: the dial's value is calibrated on the today
         // zone (~525px diagonal); smaller surfaces scale proportionally MORE
         // so every card visibly grows by the same few pixels — a uniform
@@ -224,6 +227,10 @@ function GlowSurface({
       ty = e.clientY - r.top;
     };
     const onDown = (e: PointerEvent) => {
+      // a new press takes over from any ride still settling
+      riding = false;
+      clearTimeout(settle);
+      window.removeEventListener("scroll", onScrollRide, true);
       down = true;
       local(e);
       // first light lands where the finger did — no glide-in from a stale spot
@@ -242,21 +249,47 @@ function GlowSurface({
       level();
       scale();
     };
+    /* when a drag turns into a page scroll, the browser claims the gesture
+       with a pointercancel and delivers no more pointer events. But in a
+       1:1 drag-scroll the finger and the content move together, so the glow,
+       pinned card-local, keeps tracking the finger on its own — the light
+       rides the card. It slips away once the page settles (or promptly if no
+       scroll actually follows the cancel). */
+    const settleRide = () => {
+      riding = false;
+      window.removeEventListener("scroll", onScrollRide, true);
+      level();
+      scale();
+    };
+    const onScrollRide = () => {
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 220);
+    };
+    const onCancel = () => {
+      if (!down) return;
+      down = false;
+      riding = true;
+      window.addEventListener("scroll", onScrollRide, true);
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 340);
+    };
     const onFocusIn = () => { focused = true; level(); scale(); };
     const onFocusOut = () => { focused = false; level(); scale(); };
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerup", onUp);
-    host.addEventListener("pointercancel", onUp);
+    host.addEventListener("pointercancel", onCancel);
     host.addEventListener("pointerleave", onUp);
     host.addEventListener("focusin", onFocusIn);
     host.addEventListener("focusout", onFocusOut);
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(settle);
+      window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerup", onUp);
-      host.removeEventListener("pointercancel", onUp);
+      host.removeEventListener("pointercancel", onCancel);
       host.removeEventListener("pointerleave", onUp);
       host.removeEventListener("focusin", onFocusIn);
       host.removeEventListener("focusout", onFocusOut);
@@ -266,11 +299,12 @@ function GlowSurface({
   return (
     <div
       ref={hostRef}
-      // touch-action none: on a phone, a finger dragged across the surface
-      // must paint the glow — without this the browser claims the gesture
-      // for page scrolling and a pointercancel snuffs the light mid-stroke.
-      // The page still scrolls from the margins between benches.
-      style={{ touchAction: "none", ...style }}
+      // pan-y: sideways strokes belong to the glow, vertical drags may
+      // become a page scroll — when the browser takes one (pointercancel),
+      // the ride logic above keeps the light on the card until it settles.
+      // (touch-action: none was tried; iOS scrolled anyway AND snuffed the
+      // light, the worst of both)
+      style={{ touchAction: "pan-y", ...style }}
       className={`relative transition-transform duration-[420ms] ease-[var(--ease-out)] ${className ?? ""}`}
     >
       {back}
@@ -447,18 +481,16 @@ export default function PressGlowLab() {
   const [opts, setOpts] = useState<GlowOpts>(GLOW_DEFAULTS);
   const { resolvedTheme, setTheme } = useTheme();
 
-  /* seed the dials with the theme's recipe when the theme resolves or flips —
-     but only while they still sit at a stock recipe (reference check: every
-     dial change spreads a fresh object), so mid-tweak comparisons survive.
+  /* every theme flip brings back that theme's own recipe — the dials are
+     per-theme tunings, not one shared draft (owner's call: tweaks don't
+     carry across; reset to compare the stock recipes any time).
      Deferred a frame so it lands after hydration: the server always renders
      the Paper recipe, and swapping during the hydration pass mismatches it */
   const [ready, setReady] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       setReady(true);
-      setOpts((prev) =>
-        prev === GLOW_DEFAULTS || prev === GLOW_DEFAULTS_DARK ? defaultsFor(resolvedTheme) : prev,
-      );
+      setOpts(defaultsFor(resolvedTheme));
     });
     return () => cancelAnimationFrame(id);
   }, [resolvedTheme]);
@@ -483,7 +515,7 @@ export default function PressGlowLab() {
         <h2 className="voice-label text-[0.78rem] text-ink-soft">the desk</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
           touch any surface and drag — the light follows; one dial column drives all four.
-          on a phone the surfaces own their touches, so scroll the page from the space between them
+          vertical drags scroll the page: the light rides the card and slips away once it settles
         </p>
         <div className="mb-8 flex w-[300px] flex-col gap-2.5 sm:w-72">
           <div className="flex items-center gap-2">
