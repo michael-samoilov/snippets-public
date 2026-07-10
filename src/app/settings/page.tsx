@@ -195,11 +195,14 @@ function ShieldGlyph() {
     </svg>
   );
 }
+// Feather's refresh-cw — two opposing arrows closing a circle, the classic
+// sync mark (the single-arrow rotate-cw read as a generic "refresh")
 function SyncGlyph() {
   return (
     <svg {...stripIcon}>
       <polyline points="23 4 23 10 17 10" />
-      <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
     </svg>
   );
 }
