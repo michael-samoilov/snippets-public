@@ -192,6 +192,24 @@ export const copy = {
     /** the wax button's accessible name, by whether words are present */
     keepEntry: "Keep today's entry",
     speakEntry: "Speak today's entry",
+    /**
+     * The locked letter — a returning writer on a new device that doesn't
+     * hold the encryption key. Their entries wait sealed on the server, so
+     * without a word of explanation the calendar reads as an empty book
+     * (or worse, greets them like a newcomer). Recognition first, never a
+     * scolding; like the intro it retires the moment the writer starts —
+     * it must stay safe to live with the locked state a while.
+     */
+    locked: {
+      /** count: the server's entry count, when known and none of it is already visible here */
+      body: (count: number | null) => [
+        count && count > 1
+          ? `Welcome back. The ${count.toLocaleString()} entries you’ve kept are end-to-end encrypted, and this device doesn’t hold the key yet — so they aren’t showing here.`
+          : "Welcome back. Your entries are end-to-end encrypted, and this device doesn’t hold the key yet — so they aren’t showing here.",
+        "Enter your passphrase — or your recovery code — and everything fills back in. Anything new you write stays safe on this device in the meantime.",
+      ],
+      action: "Unlock in Settings",
+    },
   },
 
   /** the inline composer that backfills a past — or reopened — day */

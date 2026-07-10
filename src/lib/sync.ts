@@ -207,6 +207,12 @@ async function runCycle(): Promise<void> {
         throw new Error("enrollment unconfirmed — refusing a plaintext push");
       if (enrolled) {
         setStatus({ phase: "idle", locked: true });
+        // the calendar's locked letter says how much waits behind the
+        // lock — the status endpoint needs no key, so the counts are
+        // safe to fetch even though the book itself must not move
+        try {
+          await refreshCounts();
+        } catch {}
         return;
       }
       setStatus({ locked: false });
@@ -222,8 +228,11 @@ async function runCycle(): Promise<void> {
     void maybeDeliverBackup(status.backup);
   } catch (error) {
     if (error instanceof SignedOut) {
-      // session gone (expired, signed out elsewhere) — not an error state
-      setStatus({ phase: "idle" });
+      // session gone (expired, signed out elsewhere) — not an error state.
+      // locked is a claim about the signed-in account; without a session
+      // it can't be verified, and the surfaces it drives (the calendar's
+      // locked letter, the Settings unlock form) have nowhere to lead
+      setStatus({ phase: "idle", locked: false });
       return;
     }
     if (error instanceof LockedError) {
@@ -438,6 +447,7 @@ export async function releaseBinding(): Promise<void> {
     serverCount: null,
     backup: null,
     skewed: false,
+    locked: false,
   });
 }
 
