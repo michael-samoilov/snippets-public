@@ -165,7 +165,7 @@ function Strip({
         mono={sync === "good"}
         sub={
           sync === "good"
-            ? "3:12 pm · 1,204 carried"
+            ? "3:12 pm · 1,204 locally on this device · 1,204 on the server"
             : sync === "attention"
               ? "Retrying — your entries are safe on this device."
               : "Sign in to carry entries across devices."
@@ -178,7 +178,7 @@ function Strip({
         mono={backup === "good"}
         sub={
           backup === "good"
-            ? "Delivered to your Drive · today, 6:12 am"
+            ? "Sent to your Drive · today, 6:12 am"
             : "Connect Google Drive for a readable copy."
         }
       />

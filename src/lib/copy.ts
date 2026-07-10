@@ -391,8 +391,9 @@ export const copy = {
       lockedSub: "This device holds no key yet — unlock below to read.",
       notEncrypted: "Not encrypted",
       synced: "Synced",
-      syncedSub: (when: string, count: string | null) =>
-        count ? `${when} · ${count} carried` : when,
+      /** time, then the device/server integrity counts — one line, no repeat below */
+      syncedSub: (when: string, counts: string | null) =>
+        counts ? `${when} · ${counts}` : when,
       syncing: "Syncing",
       syncingSub: "Carrying your latest entries…",
       syncWaitingSub: "Waiting for the first sync…",
@@ -403,7 +404,8 @@ export const copy = {
       offline: "Offline",
       offlineSub: "Changes will sync when you’re back.",
       backedUp: "Backed up",
-      backedUpSub: (when: string) => `Delivered to your Drive · ${when}`,
+      /** short verb so the line doesn't wrap */
+      backedUpSub: (when: string) => `Sent to your Drive · ${when}`,
       backupFirstSub: "The first delivery is on its way…",
       backupFailing: "Backup failing",
       backupOff: "Backup off",
@@ -511,6 +513,10 @@ export const copy = {
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
       reconnect: "Reconnect Google Drive",
+      /** the danger-zone-style title + description that head the disconnect button */
+      disconnectTitle: "Disconnect Google Drive",
+      disconnectDesc:
+        "Backups stop. The files already in your Drive stay where they are.",
       disconnect: "Disconnect",
       disconnecting: "Disconnecting…",
       /** deliberate off-state, distinct from a failure */

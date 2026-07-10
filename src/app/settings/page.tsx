@@ -241,6 +241,7 @@ function ProtRow({
 // offline is expected, never red.
 function syncRow(
   sync: ReturnType<typeof useSyncStatus>,
+  online: boolean,
 ): { word: string; sub: string; state: ProtState } {
   const c = copy.settings.protection;
   if (sync.locked)
@@ -257,8 +258,16 @@ function syncRow(
     sync.lastSyncedAt,
     isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
   );
-  const count = sync.localCount !== null ? sync.localCount.toLocaleString() : null;
-  return { word: c.synced, sub: c.syncedSub(when, count), state: "good" };
+  // the device/server integrity counts, folded into this one readout line
+  let counts: string | null = null;
+  if (sync.localCount !== null) {
+    const device = sync.localCount.toLocaleString();
+    if (!online) counts = copy.settings.sync.countsOffline(device);
+    else if (sync.serverCount !== null)
+      counts = copy.settings.sync.counts(device, sync.serverCount.toLocaleString());
+    else counts = copy.settings.account.deviceCount(device, sync.localCount === 1);
+  }
+  return { word: c.synced, sub: c.syncedSub(when, counts), state: "good" };
 }
 
 export default function SettingsPage() {
@@ -490,28 +499,16 @@ function SyncLines() {
     sync.serverCount !== null &&
     Math.abs(sync.localCount - sync.serverCount) > sync.pendingCount;
 
-  // The integrity line: device count always (once known), and the second clause
-  // is the server count when we're online and have it, or "you're offline" when
-  // the network is down — the cached page decides this itself, no server needed.
-  let countLine: string | null = null;
-  if (sync.localCount !== null) {
-    const device = sync.localCount.toLocaleString();
-    if (!online) countLine = copy.settings.sync.countsOffline(device);
-    else if (sync.serverCount !== null)
-      countLine = copy.settings.sync.counts(device, sync.serverCount.toLocaleString());
-    else
-      countLine = copy.settings.account.deviceCount(device, sync.localCount === 1);
-  }
-
   return (
     <div className="mt-3 space-y-1.5">
-      <ProtRow glyph={<SyncGlyph />} {...syncRow(sync)} />
+      {/* the integrity counts (device · server) now ride the Synced readout
+          line itself, so there's no separate count line beneath */}
+      <ProtRow glyph={<SyncGlyph />} {...syncRow(sync, online)} />
       {sync.skewed && (
         <p className="voice-prose text-[0.9rem] text-ink-faint">
           {copy.settings.sync.skewed}
         </p>
       )}
-      {countLine && <p className="voice-data text-ink-faint">{countLine}</p>}
       {outOfStep && (
         <p className="voice-prose text-[0.9rem] text-ember">
           {copy.settings.sync.outOfStep}{" "}
@@ -816,9 +813,14 @@ function EncryptionSection({ email }: { email: string }) {
           state="good"
         />
         <div className="mt-4 flex flex-col gap-3">
-          <p className="voice-prose max-w-[40ch] text-[0.9rem] text-ink-faint">
-            {copy.settings.encryption.turnOffHint}
-          </p>
+          <div className="max-w-[42ch]">
+            <p className="font-serif text-[0.98rem] text-ink">
+              {copy.settings.encryption.turnOff}
+            </p>
+            <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
+              {copy.settings.encryption.turnOffHint}
+            </p>
+          </div>
           <HoldToErase
             label={copy.settings.encryption.turnOffHold}
             onComplete={() => {
@@ -1167,11 +1169,21 @@ function BackupSection() {
       </div>
     );
     action = (
-      <PaperButton onClick={() => void disconnect()} disabled={disconnecting}>
-        {disconnecting
-          ? copy.settings.backup.disconnecting
-          : copy.settings.backup.disconnect}
-      </PaperButton>
+      <div className="flex flex-col gap-3">
+        <div className="max-w-[42ch]">
+          <p className="font-serif text-[0.98rem] text-ink">
+            {copy.settings.backup.disconnectTitle}
+          </p>
+          <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
+            {copy.settings.backup.disconnectDesc}
+          </p>
+        </div>
+        <PaperButton onClick={() => void disconnect()} disabled={disconnecting}>
+          {disconnecting
+            ? copy.settings.backup.disconnecting
+            : copy.settings.backup.disconnect}
+        </PaperButton>
+      </div>
     );
   }
 
