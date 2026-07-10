@@ -109,7 +109,6 @@ function Row({
   word,
   state,
   sub,
-  mono,
 }: {
   mark: React.ReactNode;
   word: string;
@@ -121,11 +120,7 @@ function Row({
     <div className="grid grid-cols-[1.25rem_1fr] items-center gap-x-3 gap-y-1">
       <span className={`flex justify-center ${tone[state]}`}>{mark}</span>
       <span className={`voice-label text-[0.8rem] ${tone[state]}`}>{word}</span>
-      <p
-        className={`col-start-2 ${
-          mono ? "voice-data" : "voice-prose text-[0.9rem]"
-        } text-ink-soft`}
-      >
+      <p className="col-start-2 voice-data text-ink-soft">
         {sub}
       </p>
     </div>
@@ -157,7 +152,7 @@ function Strip({
         word={enc === "good" ? "Encrypted" : "Not encrypted"}
         sub={
           enc === "good"
-            ? "Only your devices hold the key."
+            ? "Even we can’t see your entries — only your devices hold the key."
             : "Turn on to seal entries end-to-end."
         }
       />
