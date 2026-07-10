@@ -112,22 +112,22 @@ html {
      the light must genuinely whiten the cream, and the words sit above it */
   --glow-ink: rgb(255 255 255);
 
-  /* the card's seat on the desk (the lab's lift, fixed at 0.25): a wider,
-     softer drop than the old printed-flat 1px — the border hands a quarter
-     of the separation over to the light. Built from themed vars, so one
-     definition serves both themes */
+  /* the card's seat on the desk (the lab's lift, fixed at 0.10): a touch
+     wider and softer than the old printed-flat 1px — the border hands a
+     tenth of the separation over to the light. Built from themed vars, so
+     one definition serves both themes */
   --card-seat:
     inset 0 1px 0 var(--press-highlight),
-    0 4.5px 13px rgb(var(--shadow-hue) / 0.07),
-    0 1.5px 4.5px rgb(var(--shadow-hue) / 0.053);
-  --card-seat-border: color-mix(in srgb, var(--rule-faint) 75%, transparent);
+    0 3px 8.8px rgb(var(--shadow-hue) / 0.058),
+    0 1.2px 3.6px rgb(var(--shadow-hue) / 0.045);
+  --card-seat-border: color-mix(in srgb, var(--rule-faint) 90%, transparent);
   /* the ghost composer's seat: its fade mask clips anything outside the
      border box (outer box-shadows never render) and filter runs before
      mask, so the seat is a drop-shadow on an unmasked PARENT of the masked
      face — dissolving with the ghost. Blur ≈ box-shadow blur / 2 */
   --card-seat-drop:
-    drop-shadow(0 4.5px 6.5px rgb(var(--shadow-hue) / 0.07))
-    drop-shadow(0 1.5px 2.25px rgb(var(--shadow-hue) / 0.053));
+    drop-shadow(0 3px 4.4px rgb(var(--shadow-hue) / 0.058))
+    drop-shadow(0 1.2px 1.8px rgb(var(--shadow-hue) / 0.045));
 
   /* the light that passes over a loading placeholder — a warm sheen, not a
      grey shimmer (see .skeleton-shimmer) */

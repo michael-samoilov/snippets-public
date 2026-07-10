@@ -71,7 +71,7 @@ export const GLOW_DEFAULTS: GlowOpts = {
   lag: 0.55,
   grow: 1.016,
   rest: 0,
-  lift: 0.25,
+  lift: 0.1,
 };
 
 export const GLOW_DEFAULTS_DARK: GlowOpts = {
@@ -84,7 +84,7 @@ export const GLOW_DEFAULTS_DARK: GlowOpts = {
   lag: 0.65,
   grow: 1.016,
   rest: 0,
-  lift: 0.25,
+  lift: 0.1,
 };
 
 const defaultsFor = (theme: string | undefined) =>
