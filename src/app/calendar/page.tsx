@@ -2144,7 +2144,11 @@ function Calendar() {
           // every feed now carries its own scroll terminus (the standard
           // foot hairline), so the frame's own line is retired — the
           // border stays transparent to hold the 1px the layout expects
-          "relative min-h-0 flex-1 overflow-hidden border-b border-transparent",
+          // -mx-2: the stage borrows the shell's 8px bleed lane (main is
+          // already -mx-2/px-2, overflow hidden) so the today zone's press
+          // bloom and the cards' seat shadows have room before the clip;
+          // every layer below pads the 8px back, so nothing lays out wider
+          "relative -mx-2 min-h-0 flex-1 overflow-hidden border-b border-transparent",
         )}
         onKeyDown={(e) => {
           if (e.key === "PageUp") {
@@ -2166,7 +2170,7 @@ function Calendar() {
           onPointerUp={(e) => settleSwipe(e, openYear)}
           onPointerCancel={() => (swipe.current = null)}
           className={cn(
-            "absolute inset-0 [touch-action:pan-y]",
+            "absolute inset-0 px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
             (zoom || !showMonthLayer) && "pointer-events-none",
           )}
@@ -2225,7 +2229,7 @@ function Calendar() {
           onPointerUp={(e) => settleSwipe(e, closeSchedule)}
           onPointerCancel={() => (swipe.current = null)}
           className={cn(
-            "absolute inset-0 [touch-action:pan-y]",
+            "absolute inset-0 px-2 [touch-action:pan-y]",
             !showScheduleLayer && "invisible",
             (zoom || !showScheduleLayer) && "pointer-events-none",
           )}
@@ -2262,7 +2266,7 @@ function Calendar() {
           className={cn(
             // pt-2 mirrors the schedule card's gap below its date rule,
             // so the expanded card keeps that same breath under the title
-            "absolute inset-0 pt-2 [touch-action:pan-y]",
+            "absolute inset-0 px-2 pt-2 [touch-action:pan-y]",
             !showEntryLayer && "invisible",
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
@@ -2278,7 +2282,7 @@ function Calendar() {
           <div
             ref={searchScrollRef}
             data-layer="search"
-            className="absolute inset-0 overflow-y-auto overscroll-contain [scrollbar-width:none]"
+            className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain px-2 [scrollbar-width:none]"
             tabIndex={-1}
           >
             {searchGroups.length === 0 ? (
@@ -3080,7 +3084,13 @@ function ScheduleFeedBase({
         // book — there the dates must stay sticky so the focused day's number holds
         // its pinned slot instead of jumping to its section top.
         data-dive-freeze={diveFreeze || undefined}
-        className="relative h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
+        // overflow-x hidden: the book never scrolls sideways. With only
+        // overflow-y set, the x-axis COMPUTES to auto (spec), and the today
+        // zone's press bloom — a couple of px of transform ink past the
+        // content edge — was enough for iOS to unlock the whole horizontal
+        // pan axis and rubber-band the page sideways. The bloom itself has
+        // ~14px of gutter to swell into, so nothing visibly clips.
+        className="relative -mx-2 h-full overflow-y-auto overflow-x-hidden overscroll-contain px-2 [overflow-anchor:none]"
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
