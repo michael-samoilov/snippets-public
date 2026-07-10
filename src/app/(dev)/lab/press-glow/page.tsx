@@ -173,6 +173,11 @@ function GlowSurface({
   return (
     <div
       ref={hostRef}
+      // touch-action none: on a phone, a finger dragged across the surface
+      // must paint the glow — without this the browser claims the gesture
+      // for page scrolling and a pointercancel snuffs the light mid-stroke.
+      // The page still scrolls from the margins between benches.
+      style={{ touchAction: "none" }}
       className={`relative transition-transform duration-[240ms] ease-[var(--ease-out)] ${className ?? ""}`}
     >
       {back}
@@ -338,7 +343,8 @@ export default function PressGlowLab() {
       <section className="mb-10">
         <h2 className="voice-label text-[0.78rem] text-ink-soft">the desk</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
-          touch any surface and drag — the light follows; one dial column drives all four
+          touch any surface and drag — the light follows; one dial column drives all four.
+          on a phone the surfaces own their touches, so scroll the page from the space between them
         </p>
         <div className="mb-8 flex w-[300px] flex-col gap-2.5 sm:w-72">
           <div className="flex items-center gap-2">
