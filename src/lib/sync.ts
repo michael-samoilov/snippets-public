@@ -35,6 +35,7 @@ import {
 import {
   fromWireRow,
   toWireChange,
+  KeyMismatchError,
   LockedError,
   type BackupStatusSummary,
   type PullResponse,
@@ -55,7 +56,7 @@ const MAX_BATCHES_PER_CYCLE = 50;
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 export interface SyncStatus {
-  phase: "idle" | "syncing" | "offline" | "error";
+  phase: "idle" | "syncing" | "offline" | "error" | "signedOut";
   lastSyncedAt: number | null;
   pendingCount: number;
   localCount: number | null;
@@ -228,14 +229,25 @@ async function runCycle(): Promise<void> {
     void maybeDeliverBackup(status.backup);
   } catch (error) {
     if (error instanceof SignedOut) {
-      // session gone (expired, signed out elsewhere) — not an error state.
-      // locked is a claim about the signed-in account; without a session
-      // it can't be verified, and the surfaces it drives (the calendar's
-      // locked letter, the Settings unlock form) have nowhere to lead
-      setStatus({ phase: "idle", locked: false });
+      // session gone (expired, signed out elsewhere) — say so, or pending
+      // writes would pile up under an unexplained count. locked is a claim
+      // about the signed-in account; without a session it can't be verified,
+      // and the surfaces it drives (the calendar's locked letter, the
+      // Settings unlock form) have nowhere to lead — so it clears here
+      setStatus({ phase: "signedOut", locked: false });
       return;
     }
     if (error instanceof LockedError) {
+      setStatus({ phase: "idle", locked: true });
+      return;
+    }
+    if (error instanceof KeyMismatchError) {
+      // this device's key no longer opens the account (encryption was
+      // turned off and back on elsewhere). The key here only guards the
+      // wire — local entries are stored plainly — so dropping it is safe,
+      // and it turns a permanent "retrying…" wedge into the locked state,
+      // whose unlock form takes the CURRENT passphrase.
+      await clearLocalKey().catch(() => {});
       setStatus({ phase: "idle", locked: true });
       return;
     }

@@ -76,8 +76,8 @@ export async function GET(request: Request) {
       text: [
         `Your book has new entries, but nothing has been delivered to your Google Drive since ${since}.`,
         "",
-        "Deliveries happen from your own device — just open Snippets anywhere you're signed in and the copy refreshes itself.",
-        "If it keeps not going through, Settings → Backup will say why.",
+        "Deliveries run from the device where you connected Google Drive — open Snippets there and the copy refreshes itself.",
+        "If that device is gone, open Settings → Backup on the device you use now and reconnect; deliveries move with it.",
       ].join("\n"),
     }).catch(() => {});
     await serverDb

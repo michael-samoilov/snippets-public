@@ -33,16 +33,42 @@ interface FileIds {
 }
 
 let delivering = false;
-let adoptTried = false;
+let adoptSettled = false;
 
-/** Adopt the refresh token minted by the connect consent; the server forgets it. */
-export async function adoptDriveToken(): Promise<boolean> {
+/**
+ * Adopt the refresh token minted by the connect consent; the server
+ * forgets it. Tri-state on purpose: "none" is the server's definitive
+ * "another device already adopted it" (a 404), which is worth
+ * remembering for the session; "transient" is a network/server hiccup
+ * that must NOT latch, or one blip would stop this device delivering
+ * until the next full page load.
+ */
+export async function adoptDriveToken(): Promise<
+  "adopted" | "none" | "transient"
+> {
   const response = await fetch("/api/backup/adopt", { method: "POST" });
-  if (!response.ok) return false;
+  if (response.status === 404) return "none";
+  if (!response.ok) return "transient";
   const data = (await response.json()) as { refreshToken: string };
   await setMeta(REFRESH_TOKEN_META, data.refreshToken);
   await deleteMeta(ACCESS_TOKEN_META);
-  return true;
+  return "adopted";
+}
+
+/**
+ * Tell the ledger a delivery failed, so every device's Settings can
+ * say so (and the watchdog email has company). Content-free: only an
+ * error message travels. Best-effort — a failure to report a failure
+ * just leaves the ledger stale, which the staleness check still catches.
+ */
+async function reportBackupFailure(error: unknown): Promise<void> {
+  const message =
+    error instanceof Error ? error.message : String(error ?? "unknown");
+  await fetch("/api/backup/failed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ error: message.slice(0, 500) }),
+  }).catch(() => {});
 }
 
 export async function hasDriveToken(): Promise<boolean> {
@@ -143,9 +169,15 @@ export async function maybeDeliverBackup(
     // one) adopts the server-held token once; if the server has none to
     // give — already adopted on another device — this device just won't
     // deliver, which is fine, one delivering device is enough
-    if (adoptTried) return;
-    adoptTried = true;
-    if (!(await adoptDriveToken().catch(() => false))) return;
+    if (adoptSettled) return;
+    const adoption = await adoptDriveToken().catch(
+      () => "transient" as const,
+    );
+    if (adoption === "none") {
+      adoptSettled = true; // definitive — stop asking this session
+      return;
+    }
+    if (adoption !== "adopted") return; // transient — ask again next cycle
   }
 
   const last = (await getMeta<number>(LAST_DELIVERY_META)) ?? 0;
@@ -154,8 +186,10 @@ export async function maybeDeliverBackup(
   delivering = true;
   try {
     await deliverBackup();
-  } catch {
-    // the ledger stays stale; Settings and the watchdog carry the news
+  } catch (error) {
+    // the ledger hears about it, so Settings (on every device) can say
+    // "Backups haven't gone through since…" instead of a stale calm line
+    void reportBackupFailure(error);
   } finally {
     delivering = false;
   }

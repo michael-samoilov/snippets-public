@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   fromWireRow,
   toWireChange,
+  KeyMismatchError,
   LockedError,
   PAYLOAD_FORMAT_PLAIN,
   PAYLOAD_FORMAT_SEALED,
@@ -74,12 +75,16 @@ describe("wire codec — sealed (format 2)", () => {
     await expect(fromWireRow(row)).rejects.toBeInstanceOf(LockedError);
   });
 
-  it("the wrong key fails closed, not garbled", async () => {
+  it("the wrong key fails as KeyMismatchError — the re-enrolled-elsewhere signal", async () => {
+    // the exact situation of the stale-key trap: the account was
+    // re-sealed under a new key (encryption off → on elsewhere), and
+    // this device still holds the old one. The engine must see a typed
+    // "unlock again" — never a generic error it would retry forever.
     const a = await generateBookKey();
     const b = await generateBookKey();
     const s = snippet();
     const row = rowFromChange(s.id, await toWireChange(s, a));
-    await expect(fromWireRow(row, b)).rejects.toBeTruthy();
+    await expect(fromWireRow(row, b)).rejects.toBeInstanceOf(KeyMismatchError);
   });
 });
 

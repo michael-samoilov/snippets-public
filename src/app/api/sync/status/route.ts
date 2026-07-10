@@ -48,6 +48,10 @@ export async function GET(request: Request) {
           state: backup.state as "active" | "disconnected" | "error",
           lastSuccessAt: backup.lastSuccessAt?.toISOString() ?? null,
           consecutiveFailures: backup.consecutiveFailures,
+          // the book has entries the ledger hasn't seen delivered — the
+          // client pairs this with staleness to show "failing" even when
+          // the delivering device vanished and can't report anything
+          behind: Number(counts?.maxSeq ?? 0) > backup.lastBackedUpSeq,
         }
       : null,
   };
