@@ -81,15 +81,17 @@ const liftStyle = (L: number): React.CSSProperties => ({
   borderColor: `color-mix(in srgb, var(--rule-faint) ${Math.round((1 - L) * 100)}%, transparent)`,
 });
 
-/* the inks. Candle is a WARM light, not a white one: white over cream paper
-   has nowhere brighter to go (it vanished in Paper mode), but warmth is a hue
-   shift and reads on both papers — golden pool on cream, lamplight in the
-   dark. The tone is a lab candidate for a future --glow token (deliberately
-   not --marker/--gilt, which are spoken for). Wax mixes harder than the wash
-   does for the same reason: a press is a moment, not an ambience. */
+/* the inks. Candle is per-theme (see the <style> block on the lab root):
+   in Paper it's pure white — light must genuinely WHITEN the
+   sheet, pushing cream toward paper-white (a gold-only tint read as colour,
+   not luminance; and the ink sits under the words, so the text stays dark
+   while the page brightens); in Lamplight it's the warm gold that already
+   reads as a candle. The pair is the shape a future --glow token would
+   take (deliberately not --marker/--gilt, which are spoken for). Wax mixes
+   harder than the wash does: a press is a moment, not an ambience. */
 const inkColor = (o: GlowOpts, a: number) =>
   o.ink === "candle"
-    ? `color-mix(in srgb, rgb(255 226 150 / 0.6) ${Math.round(a * 100)}%, transparent)`
+    ? `color-mix(in srgb, var(--glow-ink) ${Math.round(a * 100)}%, transparent)`
     : `color-mix(in oklab, var(--wax) ${Math.round(a * 52)}%, transparent)`;
 
 const coreGradient = (o: GlowOpts) =>
@@ -410,6 +412,10 @@ export default function PressGlowLab() {
 
   return (
     <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-4 sm:p-8" data-glow-lab>
+      <style>{`
+        [data-glow-lab] { --glow-ink: rgb(255 255 255); }
+        .dark [data-glow-lab] { --glow-ink: rgb(255 228 160 / 0.6); }
+      `}</style>
       <header className="mb-6 flex items-center gap-4">
         <h1 className="voice-display text-[1.4rem] text-ink">press glow</h1>
       </header>
