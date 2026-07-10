@@ -233,15 +233,24 @@ function LedgerRows() {
   );
 }
 
-type SkeletonView = "today" | "schedule" | "month" | "year" | "entry" | "welcome";
+type SkeletonView =
+  | "auto"
+  | "today"
+  | "schedule"
+  | "month"
+  | "year"
+  | "entry"
+  | "welcome";
 
 // A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
 // the frame shows the instant the HTML lands instead of a blank sheet. The
-// static shell defaults to the today zone — the book's home, and the view the
-// app opens onto far more often than any other. A deep-link into the year
-// glance or month grid picks up its own skeleton once the feed mounts (the
-// dynamic-import loading state above), and ?skeldebug can hold any of them.
-function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
+// static shell defaults to "auto" — the today zone AND the welcome intro, one
+// hidden, with a pre-paint script (layout.tsx → data-first-run) picking the
+// empty-book welcome before the first frame so it never flashes the today shell.
+// A deep-link into the year glance or month grid picks up its own skeleton once
+// the feed mounts (the dynamic-import loading state above), and ?skeldebug can
+// hold any single one.
+function CalendarSkeleton({ view = "auto" }: { view?: SkeletonView }) {
   return (
     <div className="page-settle flex h-full min-h-0 flex-col" aria-hidden="true">
       <div className="sticky top-0 z-30">
@@ -311,8 +320,19 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
           <EntrySkeleton />
         ) : view === "welcome" ? (
           <WelcomeSkeleton />
-        ) : (
+        ) : view === "today" ? (
           <TodaySkeleton />
+        ) : (
+          // auto (the SSR fallback): carry both bodies and let the pre-paint
+          // data-first-run flag pick the empty-book welcome, else the today zone
+          <>
+            <div className="skeleton-filled-only h-full">
+              <TodaySkeleton />
+            </div>
+            <div className="skeleton-empty-only h-full">
+              <WelcomeSkeleton />
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -322,8 +342,9 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
 // Dev-only: ?skeldebug holds a pageload skeleton on screen so its look can be
 // inspected and tuned (it normally flashes by in the Suspense gap). Add a value
 // to choose the view — ?skeldebug=today (default) / schedule / month / year /
-// entry. The real skeleton verbatim, plus a quiet pill — same recipe as the
-// perf A/B pill — so it's clear you're parked in the held view, not stuck loading.
+// entry / welcome / auto (the real fallback, which lets the data-first-run flag
+// pick). A quiet pill — same recipe as the perf A/B pill — so it's clear you're
+// parked in the held view, not stuck loading.
 function SkeletonDebug() {
   const held = useSearchParams().get("skeldebug");
   const view: SkeletonView =
@@ -331,7 +352,8 @@ function SkeletonDebug() {
     held === "month" ||
     held === "schedule" ||
     held === "entry" ||
-    held === "welcome"
+    held === "welcome" ||
+    held === "auto"
       ? held
       : "today";
   return (

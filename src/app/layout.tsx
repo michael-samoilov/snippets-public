@@ -83,6 +83,14 @@ export const metadata: Metadata = {
 // instead), and skips mid-pinch so zooming never reflows the desk.
 const APP_HEIGHT_SCRIPT = `(function(){var d=document.documentElement,vv=window.visualViewport,last=-1;function apply(){var a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))return;if(vv&&vv.scale>1.01)return;var h=Math.round((vv&&vv.height)||window.innerHeight);if(!h||Math.abs(h-last)<1)return;last=h;d.style.setProperty("--app-h",h+"px")}apply();addEventListener("resize",apply);addEventListener("orientationchange",apply);addEventListener("pageshow",apply);if(vv)vv.addEventListener("resize",apply)})()`;
 
+// Before the first paint, flag an empty book so the calendar's static skeleton
+// can open onto the welcome intro instead of the today zone (it carries both;
+// CSS keyed on this attribute picks one — see globals.css .skeleton-empty-only).
+// Without it the returning empty-book user gets a today-shell flash before the
+// in-feed swap. Reads the same key db.ts's write stamps (BOOK_EMPTY_KEY), and
+// only for a plain today landing (no entry/year/past-day deep-link).
+const FIRST_RUN_SCRIPT = `(function(){try{if(location.pathname!=="/calendar")return;if(localStorage.getItem("snippets:book-empty")!=="1")return;var p=new URLSearchParams(location.search);if(p.has("e")||p.has("y"))return;var t=new Date(),k=t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0"),d=p.get("d");if(d&&d!==k)return;document.documentElement.setAttribute("data-first-run","")}catch(e){}})()`;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -110,6 +118,7 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <script dangerouslySetInnerHTML={{ __html: APP_HEIGHT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: FIRST_RUN_SCRIPT }} />
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>
