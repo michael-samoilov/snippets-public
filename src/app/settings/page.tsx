@@ -365,7 +365,7 @@ export default function SettingsPage() {
 
         <section aria-label={copy.settings.data.heading}>
           <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.data.heading}</h2>
-          <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+          <p className="voice-prose mt-4 text-[0.9rem] text-ink-soft">
             {copy.settings.data.lead}
             {stats && stats.total > 0 && (
               <> {copy.settings.data.countSoFar(stats.total)}</>
@@ -471,7 +471,7 @@ function DangerAction({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="max-w-[42ch]">
+      <div>
         <p className="font-serif text-[0.98rem] text-ink">{title}</p>
         <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
           {description}
@@ -547,7 +547,7 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
     <div className="mt-4 space-y-1">
       <p className="voice-data text-ink-faint">{line}</p>
       {storage.persisted !== true && !signedIn && (
-        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+        <p className="voice-prose text-[0.9rem] text-ink-faint">
           {copy.settings.data.storageEvictionHint}
         </p>
       )}
@@ -793,7 +793,7 @@ function EncryptionSection({ email }: { email: string }) {
             state="off"
           />
         </div>
-        <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+        <p className="voice-prose mt-4 text-[0.9rem] text-ink-soft">
           {copy.settings.encryption.offLead}
         </p>
         <div className="mt-4">
@@ -813,7 +813,7 @@ function EncryptionSection({ email }: { email: string }) {
           state="good"
         />
         <div className="mt-4 flex flex-col gap-3">
-          <div className="max-w-[42ch]">
+          <div>
             <p className="font-serif text-[0.98rem] text-ink">
               {copy.settings.encryption.turnOff}
             </p>
@@ -1163,14 +1163,14 @@ function BackupSection() {
           }
           state="good"
         />
-        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+        <p className="voice-prose text-[0.9rem] text-ink-faint">
           {copy.settings.backup.mirrors}
         </p>
       </div>
     );
     action = (
       <div className="flex flex-col gap-3">
-        <div className="max-w-[42ch]">
+        <div>
           <p className="font-serif text-[0.98rem] text-ink">
             {copy.settings.backup.disconnectTitle}
           </p>
@@ -1192,7 +1192,7 @@ function BackupSection() {
       <h2 className="voice-label border-b border-rule pb-1.5">
         {copy.settings.backup.heading}
       </h2>
-      <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
+      <p className="voice-prose mt-4 text-[0.9rem] text-ink-soft">
         {copy.settings.backup.lead}
       </p>
       <div className="mt-3 space-y-3">
@@ -1352,7 +1352,7 @@ function AccountSection() {
         </div>
       ) : (
         <div className="mt-4">
-          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+          <p className="voice-prose text-[0.9rem] text-ink-soft">
             {copy.settings.account.signedOutLead}
           </p>
           <div className="mt-4">

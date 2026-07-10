@@ -67,7 +67,7 @@ function TocSubLink({
 export default function PrivacyPage() {
   return (
     <PageBackHeader title="Privacy">
-      <div className="max-w-[52ch] space-y-8">
+      <div className="space-y-8">
         <p className="voice-data text-ink-faint">
           last updated {LAST_UPDATED.toLowerCase()}
         </p>
