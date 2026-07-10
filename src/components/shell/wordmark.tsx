@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
+import { ICON_SEAL } from "@/lib/seal-spec";
 import { copy } from "@/lib/copy";
 
 /* The masthead wordmark: a pressed wax seal stamped with the letter "S" (it
@@ -36,7 +37,10 @@ export function Wordmark() {
   const [fontPx, setFontPx] = useState(20.8);
   const [mounted, setMounted] = useState(false);
   const [settled, setSettled] = useState(false);
-  const [playKey, setPlayKey] = useState(1);
+  // the resting shape is the canonical seal (same seed the app icon bakes), so
+  // the masthead and the home-screen icon wear one silhouette. A tap still
+  // reshuffles as before; the colours stay the per-theme blues below.
+  const [playKey, setPlayKey] = useState(ICON_SEAL.seed);
 
   const armSettle = () => {
     clearTimeout(timer.current);

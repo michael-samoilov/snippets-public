@@ -352,6 +352,13 @@ export const copy = {
   settings: {
     title: "Settings",
     back: "Back to your entries",
+    /** the two top-level sections of the page */
+    tabs: {
+      /** the tablist's accessible name */
+      label: "Settings sections",
+      appearance: "Appearance",
+      account: "Account",
+    },
     account: {
       heading: "Account",
       signedOutLead:
