@@ -523,9 +523,11 @@ export const copy = {
       /** reassurance: the folder is a one-way mirror, safe to touch */
       mirrors:
         "That folder only mirrors your entries — delete or change anything in it and the next delivery sets it right again.",
-      /** shown when the account is connected but the Drive token lives on another device */
+      /** shown when the account is connected but the Drive grant lives on another device */
       deliversElsewhere:
-        "Deliveries run from the device where Google Drive was connected — open Snippets there now and then to keep the copy fresh.",
+        "Right now, deliveries run from the device where Google Drive was connected. Add this device and it delivers too — whichever you write on, the copy stays fresh.",
+      /** the one-tap per-device grant; reuses the same Google consent */
+      connectHere: "Back up from this device too",
       /** e.g. "Backups haven’t gone through since June 30." */
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
