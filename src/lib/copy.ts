@@ -464,8 +464,12 @@ export const copy = {
       onLead: "End-to-end encryption is on. Only your devices hold the key.",
       turnOff: "Turn off encryption",
       turnOffHold: "Hold to turn off",
+      // no "must be unlocked" caveat: the turn-off control only renders on a
+      // device that already holds the key, so the precondition can never be
+      // read anywhere it isn't already met (and "unlocked" read as the phone's
+      // own lock screen anyway)
       turnOffHint:
-        "Every entry — including ones written while encrypted — returns to standard server-side encryption, readable by the service again. This device must be unlocked to do it.",
+        "Every entry — including ones written while encrypted — returns to standard server-side encryption, readable by the service again.",
       turningOff: "Turning off…",
       turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
       lockedLead:

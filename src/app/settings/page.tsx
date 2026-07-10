@@ -374,15 +374,17 @@ export default function SettingsPage() {
             )}{" "}
             {copy.settings.data.takeCopy}
           </p>
+          {/* JSON and its restore sit together — they're the same round-trip
+              archive; Markdown (the read-elsewhere copy) trails */}
           <div className="mt-4 flex flex-wrap gap-2">
             <PaperButton onClick={() => void exportJSON()}>
               {copy.settings.data.exportJSON}
             </PaperButton>
-            <PaperButton onClick={() => void exportMarkdown()}>
-              {copy.settings.data.exportMarkdown}
-            </PaperButton>
             <PaperButton onClick={() => fileRef.current?.click()}>
               {copy.settings.data.restore}
+            </PaperButton>
+            <PaperButton onClick={() => void exportMarkdown()}>
+              {copy.settings.data.exportMarkdown}
             </PaperButton>
             <input
               ref={fileRef}
