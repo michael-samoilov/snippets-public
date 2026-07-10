@@ -514,12 +514,9 @@ export const copy = {
     backup: {
       heading: "Backup",
       lead:
-        "A copy of your entries, delivered from your own device to a Snippets folder in your own Google Drive a little after you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
+        "A readable copy of your entries — Markdown and a restorable archive — that lands in a Snippets folder in your own Google Drive a little after you write. Yours even if this app disappears.",
       connect: "Connect Google Drive",
       connecting: "Connecting…",
-      /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
-      lastDelivered: (when: string) => `Last delivered to your Drive: ${when}.`,
-      firstOnItsWay: "The first delivery is on its way…",
       /** reassurance: the folder is a one-way mirror, safe to touch */
       mirrors:
         "That folder only mirrors your entries — delete or change anything in it and the next delivery sets it right again.",
