@@ -13,7 +13,7 @@ import {
 import { StampMark } from "@/components/stamp-mark";
 import { WaxStamp } from "@/components/capture/wax-stamp";
 import { copy } from "@/lib/copy";
-import { cn, joinText } from "@/lib/utils";
+import { cn, enterFiles, joinText } from "@/lib/utils";
 import { useContainedField } from "@/hooks/use-contained-field";
 
 function autosize(el: HTMLTextAreaElement) {
@@ -191,8 +191,9 @@ export function Capture() {
             autosize(e.target);
           }}
           onKeyDown={(e) => {
-            // Enter files, Shift+Enter is a newline (the chat-compose idiom)
-            if (e.key === "Enter" && !e.shiftKey) {
+            // Desktop: Enter files, Shift+Enter is a newline. Touch: Enter is
+            // always a newline (no Shift+Enter there) and the seal files.
+            if (enterFiles(e)) {
               e.preventDefault();
               void keep();
             }

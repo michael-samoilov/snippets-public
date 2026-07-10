@@ -26,6 +26,7 @@ import {
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { ulid } from "ulidx";
+import { letGoToast } from "@/components/delete-toast";
 import { WaxStamp as CanvasSeal, type SealControl } from "@/components/capture/wax-stamp";
 import { RecordingWash } from "@/components/capture/wash-shaders";
 import { PressGlow } from "@/components/capture/press-glow";
@@ -55,7 +56,7 @@ import { useSession } from "@/lib/auth";
 import { useSyncStatus } from "@/lib/sync";
 import { PaperButton } from "@/components/paper-button";
 import { queryTerms } from "@/lib/search";
-import { cn, joinText } from "@/lib/utils";
+import { cn, enterFiles, joinText } from "@/lib/utils";
 import {
   weekdays,
   ym,
@@ -1374,9 +1375,7 @@ function Calendar() {
       setDeletingSnippet(snippet); // hold the words through the leave animation
       await softDeleteSnippet(snippet.id);
       appBack();
-      toast(copy.deleteEntry.toast, {
-        action: { label: copy.deleteEntry.undo, onClick: () => void restoreSnippet(snippet.id) },
-      });
+      letGoToast(() => void restoreSnippet(snippet.id));
     },
     [appBack],
   );
@@ -3432,8 +3431,9 @@ function FlowBackfillCapture({
               autosizeArea(e.target);
             }}
             onKeyDown={(e) => {
-              // Enter files, Shift+Enter is a newline (the chat-compose idiom)
-              if (e.key === "Enter" && !e.shiftKey) {
+              // Desktop: Enter files, Shift+Enter is a newline. Touch: Enter is
+              // always a newline (no Shift+Enter there) and the seal files.
+              if (enterFiles(e)) {
                 e.preventDefault();
                 keep();
               }
@@ -4703,7 +4703,7 @@ function TodayZoneFill({
               }}
               onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
+              onKeyDown={(e) => { if (enterFiles(e)) { e.preventDefault(); submit(); } }}
               placeholder={
                 listening
                   ? copy.capture.listeningPlaceholder

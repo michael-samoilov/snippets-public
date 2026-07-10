@@ -641,6 +641,69 @@ textarea:focus-visible,
 
 /* ── pressable physics (Emil: the interface must listen) ───── */
 
+/* the let-go undo toast: a paper pill with an ember countdown along its foot.
+   Styled here (not by sonner) because the toast is raised `unstyled`. */
+.delete-toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 15rem;
+  padding: 0.7rem 0.5rem 0.7rem 1rem;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--paper-raised);
+  box-shadow: var(--float-shadow);
+}
+.delete-toast-word {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.delete-toast-undo {
+  position: relative;
+  z-index: 1;
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius);
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--paper-raised);
+  background: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+}
+@media (hover: hover) and (pointer: fine) {
+  .delete-toast-undo:hover {
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.24);
+  }
+}
+/* the countdown — a soft ember wash filling the pill left→right over its own
+   duration, no leading line. scaleX from the left keeps it transform-only (no
+   layout); it sits under the words (14% tint stays legible) and is held back
+   under reduced motion, where the words + Undo simply stand. */
+.delete-toast-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: color-mix(in oklab, var(--ember) 14%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .delete-toast-fill {
+    animation: delete-toast-sweep var(--toast-dur, 5000ms) linear forwards;
+  }
+}
+@keyframes delete-toast-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 .pressable {
   transition:
     transform var(--dur-fast) var(--ease-out),
