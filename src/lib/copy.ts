@@ -377,6 +377,38 @@ export const copy = {
       appearance: "Appearance",
       account: "Account",
     },
+    /**
+     * The status indicators that head each protection's own section
+     * (Account/sync, Encryption, Backup). A glyph, a small-caps state
+     * word, and a mono readout line beneath — matching the sync/backup
+     * data voice.
+     */
+    protection: {
+      encrypted: "Encrypted",
+      /** concrete, not a metaphor: the point is that no one else can read them */
+      encryptedSub: "Even we can’t see your entries — only your devices hold the key.",
+      locked: "Locked",
+      lockedSub: "This device holds no key yet — unlock below to read.",
+      notEncrypted: "Not encrypted",
+      synced: "Synced",
+      syncedSub: (when: string, count: string | null) =>
+        count ? `${when} · ${count} carried` : when,
+      syncing: "Syncing",
+      syncingSub: "Carrying your latest entries…",
+      syncWaitingSub: "Waiting for the first sync…",
+      syncSnag: "Sync snag",
+      syncSnagSub: "Retrying — your entries are safe on this device.",
+      syncPaused: "Sync paused",
+      syncPausedSub: "Unlock encryption to sync this device.",
+      offline: "Offline",
+      offlineSub: "Changes will sync when you’re back.",
+      backedUp: "Backed up",
+      backedUpSub: (when: string) => `Delivered to your Drive · ${when}`,
+      backupFirstSub: "The first delivery is on its way…",
+      backupFailing: "Backup failing",
+      backupOff: "Backup off",
+      backupOffSub: "Connect Google Drive for a readable copy.",
+    },
     account: {
       heading: "Account",
       signedOutLead:

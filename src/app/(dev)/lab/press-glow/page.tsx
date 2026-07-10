@@ -31,6 +31,8 @@ import { useTheme } from "next-themes";
 
 /* ── the glow surface ──────────────────────────────────────────────── */
 
+type LitFn = (src: "pointer" | "touch") => void;
+
 interface GlowOpts {
   ink: "candle" | "wax";
   /** peak strength while the finger is down, 0..1 */
@@ -57,39 +59,74 @@ interface GlowOpts {
   lift: number;
 }
 
+/* per-theme recipes (owner-tuned), candle in both: Paper runs a big, strong
+   pool with a heavy ambient — the cream leaves so little luminance headroom
+   that presence has to come from area, not intensity — while Lamplight's
+   candle carries at low strength, so it goes smaller, softer, and wider */
 export const GLOW_DEFAULTS: GlowOpts = {
   ink: "candle",
-  strength: 0.75,
-  size: 240,
-  blur: 18,
-  reach: 2.6,
-  ambient: 0.5,
+  strength: 0.7,
+  size: 410,
+  blur: 32,
+  reach: 2.1,
+  ambient: 0.8,
   lag: 0.55,
-  grow: 1.012,
+  grow: 1.016,
   rest: 0,
-  lift: 0,
+  lift: 0.25,
 };
+
+export const GLOW_DEFAULTS_DARK: GlowOpts = {
+  ink: "candle",
+  strength: 0.4,
+  size: 210,
+  blur: 46,
+  reach: 3.6,
+  ambient: 0.35,
+  lag: 0.65,
+  grow: 1.016,
+  rest: 0,
+  lift: 0.25,
+};
+
+const defaultsFor = (theme: string | undefined) =>
+  theme === "dark" ? GLOW_DEFAULTS_DARK : GLOW_DEFAULTS;
 
 /* the card's seat on the desk, from printed-flat to floating: the shadow
    widens and softens as the border hands separation over to the light */
-const liftStyle = (L: number): React.CSSProperties => ({
-  boxShadow: [
-    `inset 0 1px 0 var(--press-highlight)`,
+const liftShadows = (L: number) =>
+  [
     `0 ${(2 + 10 * L).toFixed(1)}px ${(6 + 28 * L).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.05 + 0.08 * L).toFixed(3)})`,
     `0 ${(1 + 2 * L).toFixed(1)}px ${(3 + 6 * L).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.04 + 0.05 * L).toFixed(3)})`,
-  ].join(", "),
-  borderColor: `color-mix(in srgb, var(--rule-faint) ${Math.round((1 - L) * 100)}%, transparent)`,
+  ].join(", ");
+const liftBorder = (L: number) =>
+  `color-mix(in srgb, var(--rule-faint) ${Math.round((1 - L) * 100)}%, transparent)`;
+/* the ghost add-card's seat: its fade mask clips anything painted outside
+   the border box, so an outer box-shadow simply never renders on it — and
+   filter runs BEFORE mask on the same element, so the shadow must come from
+   a drop-shadow() on an unmasked parent, where it dissolves with the faded
+   card beneath. Blur halved: drop-shadow blur ≈ box-shadow blur / 2 */
+const liftDropShadow = (L: number) =>
+  [
+    `drop-shadow(0 ${(2 + 10 * L).toFixed(1)}px ${((6 + 28 * L) / 2).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.05 + 0.08 * L).toFixed(3)}))`,
+    `drop-shadow(0 ${(1 + 2 * L).toFixed(1)}px ${((3 + 6 * L) / 2).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.04 + 0.05 * L).toFixed(3)}))`,
+  ].join(" ");
+const liftStyle = (L: number): React.CSSProperties => ({
+  boxShadow: `inset 0 1px 0 var(--press-highlight), ${liftShadows(L)}`,
+  borderColor: liftBorder(L),
 });
 
-/* the inks. Candle is a WARM light, not a white one: white over cream paper
-   has nowhere brighter to go (it vanished in Paper mode), but warmth is a hue
-   shift and reads on both papers — golden pool on cream, lamplight in the
-   dark. The tone is a lab candidate for a future --glow token (deliberately
-   not --marker/--gilt, which are spoken for). Wax mixes harder than the wash
-   does for the same reason: a press is a moment, not an ambience. */
+/* the inks. Candle is per-theme (see the <style> block on the lab root):
+   in Paper it's pure white — light must genuinely WHITEN the
+   sheet, pushing cream toward paper-white (a gold-only tint read as colour,
+   not luminance; and the ink sits under the words, so the text stays dark
+   while the page brightens); in Lamplight it's the warm gold that already
+   reads as a candle. The pair is the shape a future --glow token would
+   take (deliberately not --marker/--gilt, which are spoken for). Wax mixes
+   harder than the wash does: a press is a moment, not an ambience. */
 const inkColor = (o: GlowOpts, a: number) =>
   o.ink === "candle"
-    ? `color-mix(in srgb, rgb(255 226 150 / 0.6) ${Math.round(a * 100)}%, transparent)`
+    ? `color-mix(in srgb, var(--glow-ink) ${Math.round(a * 100)}%, transparent)`
     : `color-mix(in oklab, var(--wax) ${Math.round(a * 52)}%, transparent)`;
 
 const coreGradient = (o: GlowOpts) =>
@@ -108,6 +145,7 @@ function GlowSurface({
   className,
   style,
   back,
+  onLit,
   children,
 }: {
   opts: GlowOpts;
@@ -116,6 +154,8 @@ function GlowSurface({
   /** the surface's own paint (an opaque card background), rendered UNDER
       the glow — light pools on the paper, the words sit on the light */
   back?: React.ReactNode;
+  /** which event path lit the glow — the lab's mid-scroll-grab verifier */
+  onLit?: (src: "pointer" | "touch") => void;
   children: React.ReactNode;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -123,6 +163,10 @@ function GlowSurface({
   const coreRef = useRef<HTMLDivElement>(null);
   const ambientRef = useRef<HTMLDivElement>(null);
   const o = useRef(opts);
+  const litRef = useRef(onLit);
+  useEffect(() => {
+    litRef.current = onLit;
+  });
   useEffect(() => {
     o.current = opts;
     // live-retune the visual bits that aren't per-frame
@@ -149,6 +193,12 @@ function GlowSurface({
     let raf = 0;
     let down = false;
     let focused = false;
+    // the scroll took the pointer, the glow rides the moving card
+    let riding = false;
+    // …and on iOS, touch events outlive the cancelled pointer: the finger
+    // is still individually trackable while the page scrolls
+    let touchLive = false;
+    let settle = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
 
@@ -167,10 +217,10 @@ function GlowSurface({
       if (!raf) raf = requestAnimationFrame(step);
     };
     const level = () => {
-      glow.style.opacity = down ? "1" : focused ? String(o.current.rest) : "0";
+      glow.style.opacity = down || riding ? "1" : focused ? String(o.current.rest) : "0";
     };
     const scale = () => {
-      if (down || focused) {
+      if (down || focused || riding) {
         // normalize the bloom: the dial's value is calibrated on the today
         // zone (~525px diagonal); smaller surfaces scale proportionally MORE
         // so every card visibly grows by the same few pixels — a uniform
@@ -189,6 +239,7 @@ function GlowSurface({
       ty = e.clientY - r.top;
     };
     const onDown = (e: PointerEvent) => {
+      if (riding) settleRide(); // a new press takes over from a live ride
       down = true;
       local(e);
       // first light lands where the finger did — no glide-in from a stale spot
@@ -196,6 +247,36 @@ function GlowSurface({
       place();
       level();
       scale();
+      litRef.current?.("pointer");
+    };
+    /* the mid-scroll grab: a touch that lands while the page is decelerating
+       is claimed as the scroll brake — the browser may deliver the raw touch
+       yet withhold every pointer event. Pointerdown precedes touchstart for
+       a normal press, so a touchstart arriving with no press underway means
+       the pointer path was suppressed: light through the ride machinery,
+       which already runs on touches alone. Whether iOS actually delivers
+       this touch mid-inertia is what the lab's lit-by counter verifies. */
+    const onTouchStart = (e: TouchEvent) => {
+      if (down || riding) return;
+      const t = e.touches[0];
+      if (!t) return;
+      riding = true;
+      touchLive = true;
+      const r = host.getBoundingClientRect();
+      tx = t.clientX - r.left;
+      ty = t.clientY - r.top;
+      x = tx;
+      y = ty;
+      place();
+      level();
+      scale();
+      window.addEventListener("scroll", onScrollRide, true);
+      host.addEventListener("touchmove", onRideMove, { passive: true });
+      host.addEventListener("touchend", onRideEnd);
+      host.addEventListener("touchcancel", onRideEnd);
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 700);
+      litRef.current?.("touch");
     };
     const onMove = (e: PointerEvent) => {
       if (!down && !(focused && o.current.rest > 0)) return;
@@ -207,22 +288,87 @@ function GlowSurface({
       level();
       scale();
     };
+    /* when a drag turns into a page scroll, the browser claims the gesture
+       with a pointercancel and delivers no more POINTER events — but iOS
+       keeps streaming TOUCH events to the gesture's original target for the
+       rest of the gesture. So while riding a scroll the glow follows the
+       finger for real from touchmove (side-to-side drift included; the
+       host's rect is re-read each event because the card itself is moving),
+       and the ride ends when the finger lifts (touchend). Where touches die
+       with the pointer (Android's touchcancel, before any move arrives),
+       fall back to the pinned-card ride: in a 1:1 drag the finger and the
+       content move together anyway, and the light slips away once the page
+       settles (or promptly, if no scroll follows the cancel at all). */
+    const settleRide = () => {
+      riding = false;
+      touchLive = false;
+      clearTimeout(settle);
+      window.removeEventListener("scroll", onScrollRide, true);
+      host.removeEventListener("touchmove", onRideMove);
+      host.removeEventListener("touchend", onRideEnd);
+      host.removeEventListener("touchcancel", onRideEnd);
+      level();
+      scale();
+    };
+    const onScrollRide = () => {
+      if (touchLive) return; // the finger is tracked; touchend ends the ride
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 220);
+    };
+    const onRideMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!riding || !t) return;
+      touchLive = true;
+      // quiet-finger guard: the light must never strand after a lift, so a
+      // ride survives only while touches keep arriving — a missed touchend
+      // (or a finger gone still after the pointer was cancelled) fades it
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 700);
+      const r = host.getBoundingClientRect();
+      tx = t.clientX - r.left;
+      ty = t.clientY - r.top;
+      nudge();
+    };
+    const onRideEnd = (e: TouchEvent) => {
+      // a touchcancel before any move is the touches dying with the pointer
+      // (Android) — keep the pinned ride and let the scroll settle it
+      if (e.type === "touchcancel" && !touchLive) return;
+      if (riding) settleRide();
+    };
+    const onCancel = () => {
+      if (!down) return;
+      down = false;
+      riding = true;
+      window.addEventListener("scroll", onScrollRide, true);
+      host.addEventListener("touchmove", onRideMove, { passive: true });
+      host.addEventListener("touchend", onRideEnd);
+      host.addEventListener("touchcancel", onRideEnd);
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 340);
+    };
     const onFocusIn = () => { focused = true; level(); scale(); };
     const onFocusOut = () => { focused = false; level(); scale(); };
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerup", onUp);
-    host.addEventListener("pointercancel", onUp);
+    host.addEventListener("pointercancel", onCancel);
     host.addEventListener("pointerleave", onUp);
+    host.addEventListener("touchstart", onTouchStart, { passive: true });
     host.addEventListener("focusin", onFocusIn);
     host.addEventListener("focusout", onFocusOut);
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(settle);
+      window.removeEventListener("scroll", onScrollRide, true);
+      host.removeEventListener("touchmove", onRideMove);
+      host.removeEventListener("touchend", onRideEnd);
+      host.removeEventListener("touchcancel", onRideEnd);
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerup", onUp);
-      host.removeEventListener("pointercancel", onUp);
+      host.removeEventListener("pointercancel", onCancel);
       host.removeEventListener("pointerleave", onUp);
+      host.removeEventListener("touchstart", onTouchStart);
       host.removeEventListener("focusin", onFocusIn);
       host.removeEventListener("focusout", onFocusOut);
     };
@@ -231,12 +377,13 @@ function GlowSurface({
   return (
     <div
       ref={hostRef}
-      // touch-action none: on a phone, a finger dragged across the surface
-      // must paint the glow — without this the browser claims the gesture
-      // for page scrolling and a pointercancel snuffs the light mid-stroke.
-      // The page still scrolls from the margins between benches.
-      style={{ touchAction: "none", ...style }}
-      className={`relative transition-transform duration-[240ms] ease-[var(--ease-out)] ${className ?? ""}`}
+      // pan-y: sideways strokes belong to the glow, vertical drags may
+      // become a page scroll — when the browser takes one (pointercancel),
+      // the ride logic above keeps the light on the card until it settles.
+      // (touch-action: none was tried; iOS scrolled anyway AND snuffed the
+      // light, the worst of both)
+      style={{ touchAction: "pan-y", ...style }}
+      className={`relative transition-transform duration-[420ms] ease-[var(--ease-out)] ${className ?? ""}`}
     >
       {back}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
@@ -270,9 +417,9 @@ function GlowSurface({
 const RULES =
   "repeating-linear-gradient(to bottom, transparent 0, transparent 19px, var(--rule-faint) 19px, var(--rule-faint) 20px)";
 
-function TodayBench({ opts }: { opts: GlowOpts }) {
+function TodayBench({ opts, onLit }: { opts: GlowOpts; onLit?: LitFn }) {
   return (
-    <GlowSurface opts={opts} className="h-[430px] w-[300px] rounded-2xl border border-wax/45">
+    <GlowSurface opts={opts} onLit={onLit} className="h-[430px] w-[300px] rounded-2xl border border-wax/45">
       <div className="flex h-full flex-col items-center px-4 py-6 text-center">
         <div className="mt-10 leading-none">
           <p className="voice-label text-[0.72rem] text-ink-faint">Thursday</p>
@@ -300,7 +447,7 @@ function TodayBench({ opts }: { opts: GlowOpts }) {
   );
 }
 
-function AddCardBench({ opts, editing }: { opts: GlowOpts; editing: boolean }) {
+function AddCardBench({ opts, editing, onLit }: { opts: GlowOpts; editing: boolean; onLit?: LitFn }) {
   const [text, setText] = useState(
     editing ? "Lunch with Celine's parents. Logan beforehand texts: “Good luck at brunch mish”" : "",
   );
@@ -308,15 +455,27 @@ function AddCardBench({ opts, editing }: { opts: GlowOpts; editing: boolean }) {
     <div className="w-[300px]">
       <GlowSurface
         opts={opts}
+        onLit={onLit}
         className="rounded-[6px]"
         back={
-          <span
-            aria-hidden
-            style={liftStyle(opts.lift)}
-            className={`pointer-events-none absolute inset-0 rounded-[6px] border bg-paper ${
-              text ? "border-rule" : "[-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)]"
-            }`}
-          />
+          text ? (
+            <span
+              aria-hidden
+              style={liftStyle(opts.lift)}
+              className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule bg-paper"
+            />
+          ) : (
+            /* two nodes, deliberately: on one element the fade mask is applied
+               LAST (after filter), clipping any shadow to the border box — so
+               the drop-shadow sits on an unmasked parent, shadowing the
+               already-faded card. The lift dissolves with the ghost. */
+            <span aria-hidden className="pointer-events-none absolute inset-0" style={{ filter: liftDropShadow(opts.lift) }}>
+              <span
+                className="absolute inset-0 rounded-[6px] border bg-paper [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)]"
+                style={{ boxShadow: "inset 0 1px 0 var(--press-highlight)", borderColor: liftBorder(opts.lift) }}
+              />
+            </span>
+          )
         }
       >
         <textarea
@@ -331,13 +490,14 @@ function AddCardBench({ opts, editing }: { opts: GlowOpts; editing: boolean }) {
   );
 }
 
-function EntryBench({ opts }: { opts: GlowOpts }) {
+function EntryBench({ opts, onLit }: { opts: GlowOpts; onLit?: LitFn }) {
   const [text, setText] = useState(
     "On the bus home at around 6PM, a man got on with a cello case nearly as tall as he was and looked for a spot a few seats away from me, then asked to stand in the aisle for two more stops.",
   );
   return (
     <GlowSurface
       opts={opts}
+      onLit={onLit}
       className="w-[300px] rounded-[10px] border border-rule-faint bg-paper"
       style={liftStyle(opts.lift)}
     >
@@ -401,15 +561,44 @@ export default function PressGlowLab() {
   const [opts, setOpts] = useState<GlowOpts>(GLOW_DEFAULTS);
   const { resolvedTheme, setTheme } = useTheme();
 
+  /* the mid-scroll-grab verifier: counts which event path lit each glow.
+     Normal presses arrive as "pointer"; "touch" means the pointer path was
+     withheld and the touchstart fallback caught it — a grab mid-inertia */
+  const [lit, setLit] = useState({ last: "—", pointer: 0, touch: 0 });
+  const onLit: LitFn = (src) =>
+    setLit((l) => ({
+      last: src,
+      pointer: l.pointer + (src === "pointer" ? 1 : 0),
+      touch: l.touch + (src === "touch" ? 1 : 0),
+    }));
+
+  /* every theme flip brings back that theme's own recipe — the dials are
+     per-theme tunings, not one shared draft (owner's call: tweaks don't
+     carry across; reset to compare the stock recipes any time).
+     Deferred a frame so it lands after hydration: the server always renders
+     the Paper recipe, and swapping during the hydration pass mismatches it */
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setReady(true);
+      setOpts(defaultsFor(resolvedTheme));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [resolvedTheme]);
+
   const benches: { key: string; label: string; note: string; node: React.ReactNode }[] = [
-    { key: "today", label: "today zone", note: "light pooling on the open page", node: <TodayBench opts={opts} /> },
-    { key: "add-rest", label: "add something · at rest", note: "the initial press, before the keyboard", node: <AddCardBench opts={opts} editing={false} /> },
-    { key: "add-edit", label: "add something · editing", note: "mid-entry, caret drags included", node: <AddCardBench opts={opts} editing /> },
-    { key: "entry", label: "entry view · rewriting", note: "an opened entry, words as the field", node: <EntryBench opts={opts} /> },
+    { key: "today", label: "today zone", note: "light pooling on the open page", node: <TodayBench opts={opts} onLit={onLit} /> },
+    { key: "add-rest", label: "add something · at rest", note: "the initial press, before the keyboard", node: <AddCardBench opts={opts} editing={false} onLit={onLit} /> },
+    { key: "add-edit", label: "add something · editing", note: "mid-entry, caret drags included", node: <AddCardBench opts={opts} editing onLit={onLit} /> },
+    { key: "entry", label: "entry view · rewriting", note: "an opened entry, words as the field", node: <EntryBench opts={opts} onLit={onLit} /> },
   ];
 
   return (
     <main className="fixed inset-0 z-50 overflow-auto bg-[var(--desk)] p-4 sm:p-8" data-glow-lab>
+      <style>{`
+        [data-glow-lab] { --glow-ink: rgb(255 255 255); }
+        .dark [data-glow-lab] { --glow-ink: rgb(255 228 160 / 0.6); }
+      `}</style>
       <header className="mb-6 flex items-center gap-4">
         <h1 className="voice-display text-[1.4rem] text-ink">press glow</h1>
       </header>
@@ -417,7 +606,11 @@ export default function PressGlowLab() {
         <h2 className="voice-label text-[0.78rem] text-ink-soft">the desk</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
           touch any surface and drag — the light follows; one dial column drives all four.
-          on a phone the surfaces own their touches, so scroll the page from the space between them
+          vertical drags scroll the page: the light follows the finger through the scroll and leaves when it lifts
+        </p>
+        <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
+          lit by {lit.last} — pointer ×{lit.pointer} · touch ×{lit.touch}
+          <span className="block">flick the page, then grab a card mid-glide: if the light comes and “touch” climbs, the mid-scroll grab works</span>
         </p>
         <div className="mb-8 flex w-[300px] flex-col gap-2.5 sm:w-72">
           <div className="flex items-center gap-2">
@@ -452,7 +645,7 @@ export default function PressGlowLab() {
           </p>
           <button
             type="button"
-            onClick={() => setOpts(GLOW_DEFAULTS)}
+            onClick={() => setOpts(defaultsFor(resolvedTheme))}
             className="voice-label pressable mt-1 self-start rounded-full border border-rule px-3 py-1 text-[0.68rem] text-ink-soft"
           >
             reset
@@ -475,9 +668,11 @@ export default function PressGlowLab() {
         type="button"
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="voice-label pressable float fixed bottom-5 right-5 z-10 rounded-full px-4 py-2 text-[0.72rem] text-ink-soft"
-        suppressHydrationWarning
       >
-        {resolvedTheme ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
+        {/* gated on ready, not just resolvedTheme: next-themes knows the theme
+            during hydration already, and a label the server didn't render would
+            either mismatch or (suppressed) never get patched over the "…" */}
+        {ready && resolvedTheme ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
       </button>
     </main>
   );

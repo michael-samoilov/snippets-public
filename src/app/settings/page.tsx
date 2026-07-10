@@ -157,6 +157,110 @@ function SettingsTabs({
   );
 }
 
+// ── protection strip ─────────────────────────────────────────────
+// A quiet at-a-glance confidence row atop the Account tab: is each
+// protection actually live? Wax = live & good, ember = needs attention,
+// ink-faint = off. It only ever mirrors real state — never over-claims
+// (an unknown enrollment reads neutral, never a false "Encrypted").
+
+type ProtState = "good" | "attention" | "off";
+
+const protTone: Record<ProtState, string> = {
+  good: "text-wax",
+  attention: "text-ember",
+  off: "text-ink-faint",
+};
+
+// Same Feather stroke as the account-menu marks (1.8 on a 24 viewBox).
+const stripIcon = {
+  "aria-hidden": true,
+  viewBox: "0 0 24 24",
+  width: 16,
+  height: 16,
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function ShieldGlyph() {
+  return (
+    <svg {...stripIcon}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+function SyncGlyph() {
+  return (
+    <svg {...stripIcon}>
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10" />
+    </svg>
+  );
+}
+function FolderGlyph() {
+  return (
+    <svg {...stripIcon}>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function formatDelivered(iso: string): string {
+  const at = new Date(iso);
+  if (isToday(at)) return format(at, "h:mm a");
+  if (isYesterday(at)) return `yesterday, ${format(at, "h:mm a")}`;
+  return format(at, "MMMM d");
+}
+
+// The glyph is centred with the label line; the description drops to its
+// own full line beneath — mono, matching the sync/backup readouts.
+function ProtRow({
+  glyph,
+  word,
+  sub,
+  state,
+}: {
+  glyph: React.ReactNode;
+  word: string;
+  sub: string;
+  state: ProtState;
+}) {
+  return (
+    <div className="grid grid-cols-[1.25rem_1fr] items-center gap-x-3 gap-y-1">
+      <span className={`flex justify-center ${protTone[state]}`}>{glyph}</span>
+      <span className={`voice-label text-[0.8rem] ${protTone[state]}`}>{word}</span>
+      {sub && <p className="col-start-2 voice-data text-ink-soft">{sub}</p>}
+    </div>
+  );
+}
+
+// Sync state → its indicator row (lives in the Account section). Always on
+// when signed in; only errors and the encryption lock are "attention" —
+// offline is expected, never red.
+function syncRow(
+  sync: ReturnType<typeof useSyncStatus>,
+): { word: string; sub: string; state: ProtState } {
+  const c = copy.settings.protection;
+  if (sync.locked)
+    return { word: c.syncPaused, sub: c.syncPausedSub, state: "attention" };
+  if (sync.phase === "error")
+    return { word: c.syncSnag, sub: c.syncSnagSub, state: "attention" };
+  if (sync.phase === "offline")
+    return { word: c.offline, sub: c.offlineSub, state: "off" };
+  if (sync.phase === "syncing" || sync.pendingCount > 0)
+    return { word: c.syncing, sub: c.syncingSub, state: "good" };
+  if (sync.lastSyncedAt === null)
+    return { word: c.syncing, sub: c.syncWaitingSub, state: "good" };
+  const when = format(
+    sync.lastSyncedAt,
+    isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
+  );
+  const count = sync.localCount !== null ? sync.localCount.toLocaleString() : null;
+  return { word: c.synced, sub: c.syncedSub(when, count), state: "good" };
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
@@ -379,22 +483,6 @@ function SyncLines() {
   const sync = useSyncStatus();
   const online = useOnline();
 
-  let line: string;
-  if (sync.locked) line = copy.settings.sync.locked;
-  else if (sync.phase === "offline") line = copy.settings.sync.offline;
-  else if (sync.phase === "error") line = copy.settings.sync.error;
-  else if (sync.phase === "syncing") line = copy.settings.sync.syncing;
-  else if (sync.pendingCount > 0)
-    line = copy.settings.sync.pending(sync.pendingCount);
-  else if (sync.lastSyncedAt === null) line = copy.settings.sync.neverSynced;
-  else
-    line = copy.settings.sync.syncedAt(
-      format(
-        sync.lastSyncedAt,
-        isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
-      ),
-    );
-
   // Only meaningful when we can actually compare against the server.
   const outOfStep =
     online &&
@@ -416,8 +504,8 @@ function SyncLines() {
   }
 
   return (
-    <div className="mt-2 space-y-1.5">
-      <p className="voice-prose text-[0.9rem] text-ink-soft">{line}</p>
+    <div className="mt-3 space-y-1.5">
+      <ProtRow glyph={<SyncGlyph />} {...syncRow(sync)} />
       {sync.skewed && (
         <p className="voice-prose text-[0.9rem] text-ink-faint">
           {copy.settings.sync.skewed}
@@ -700,6 +788,14 @@ function EncryptionSection({ email }: { email: string }) {
   else if (!enrolled) {
     body = (
       <>
+        <div className="mt-4">
+          <ProtRow
+            glyph={<ShieldGlyph />}
+            word={copy.settings.protection.notEncrypted}
+            sub=""
+            state="off"
+          />
+        </div>
         <p className="voice-prose mt-4 max-w-[46ch] text-[0.9rem] text-ink-soft">
           {copy.settings.encryption.offLead}
         </p>
@@ -713,9 +809,12 @@ function EncryptionSection({ email }: { email: string }) {
   } else if (hasKey) {
     body = (
       <div className="mt-4">
-        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
-          {copy.settings.encryption.onLead}
-        </p>
+        <ProtRow
+          glyph={<ShieldGlyph />}
+          word={copy.settings.protection.encrypted}
+          sub={copy.settings.protection.encryptedSub}
+          state="good"
+        />
         <div className="mt-4 flex flex-col gap-3">
           <p className="voice-prose max-w-[40ch] text-[0.9rem] text-ink-faint">
             {copy.settings.encryption.turnOffHint}
@@ -746,9 +845,12 @@ function EncryptionSection({ email }: { email: string }) {
           void doUnlock();
         }}
       >
-        <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
-          {copy.settings.encryption.lockedLead}
-        </p>
+        <ProtRow
+          glyph={<ShieldGlyph />}
+          word={copy.settings.protection.locked}
+          sub={copy.settings.protection.lockedSub}
+          state="attention"
+        />
         <div className="mt-3 flex max-w-[26rem] items-stretch gap-2">
           <Input
             type={recoveryMode ? "text" : "password"}
@@ -1006,33 +1108,59 @@ function BackupSection() {
     }
   };
 
-  const deliveredWhen = (iso: string) => {
-    const at = new Date(iso);
-    if (isToday(at)) return format(at, "h:mm a");
-    if (isYesterday(at)) return `yesterday, ${format(at, "h:mm a")}`;
-    return format(at, "MMMM d");
-  };
-
   const connectButton = (label: string) => (
     <PaperButton onClick={() => void connect()} disabled={connecting}>
       {connecting ? copy.settings.backup.connecting : label}
     </PaperButton>
   );
 
-  let statusLine: React.ReactNode = null;
-  let action: React.ReactNode = null;
-  if (!backup) {
-    action = connectButton(copy.settings.backup.connect);
-  } else if (backup.state === "active") {
+  const p = copy.settings.protection;
+  let statusLine: React.ReactNode;
+  let action: React.ReactNode;
+  if (!backup || backup.state === "disconnected") {
+    // never connected, or deliberately off / grant revoked — neutral
     statusLine = (
-      <div className="space-y-1">
-        <p className="voice-prose text-[0.9rem] text-ink-soft">
-          {backup.lastSuccessAt
-            ? copy.settings.backup.lastDelivered(
-                deliveredWhen(backup.lastSuccessAt),
+      <ProtRow
+        glyph={<FolderGlyph />}
+        word={p.backupOff}
+        sub={p.backupOffSub}
+        state="off"
+      />
+    );
+    action = connectButton(
+      backup ? copy.settings.backup.reconnect : copy.settings.backup.connect,
+    );
+  } else if (backup.state === "error") {
+    // failing but still trying — ember, and offer a reconnect
+    statusLine = (
+      <ProtRow
+        glyph={<FolderGlyph />}
+        word={p.backupFailing}
+        sub={
+          backup.lastSuccessAt
+            ? copy.settings.backup.failingSince(
+                format(new Date(backup.lastSuccessAt), "MMMM d"),
               )
-            : copy.settings.backup.firstOnItsWay}
-        </p>
+            : copy.settings.backup.failingNoSuccess
+        }
+        state="attention"
+      />
+    );
+    action = connectButton(copy.settings.backup.reconnect);
+  } else {
+    // active
+    statusLine = (
+      <div className="space-y-3">
+        <ProtRow
+          glyph={<FolderGlyph />}
+          word={p.backedUp}
+          sub={
+            backup.lastSuccessAt
+              ? p.backedUpSub(formatDelivered(backup.lastSuccessAt))
+              : p.backupFirstSub
+          }
+          state="good"
+        />
         <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
           {copy.settings.backup.mirrors}
         </p>
@@ -1045,26 +1173,6 @@ function BackupSection() {
           : copy.settings.backup.disconnect}
       </PaperButton>
     );
-  } else if (backup.state === "error") {
-    // failing but still trying — ember, and offer a reconnect
-    statusLine = (
-      <p className="voice-prose text-[0.9rem] text-ember">
-        {backup.lastSuccessAt
-          ? copy.settings.backup.failingSince(
-              format(new Date(backup.lastSuccessAt), "MMMM d"),
-            )
-          : copy.settings.backup.failingNoSuccess}
-      </p>
-    );
-    action = connectButton(copy.settings.backup.reconnect);
-  } else {
-    // deliberately off (disconnected, or the grant was revoked) — neutral
-    statusLine = (
-      <p className="voice-prose text-[0.9rem] text-ink-soft">
-        {copy.settings.backup.off}
-      </p>
-    );
-    action = connectButton(copy.settings.backup.reconnect);
   }
 
   return (
