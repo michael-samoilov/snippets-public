@@ -94,10 +94,17 @@ export default function PrivacyPage() {
               </ul>
             </li>
             <li>
-              <TocLink href="#google-drive-backup">Google Drive backup</TocLink>
-            </li>
-            <li>
-              <TocLink href="#voice">Voice</TocLink>
+              <TocLink href="#outside-services">Outside services</TocLink>
+              <ul className="mt-2 ml-3.5 space-y-1.5 border-l border-rule-faint pl-3.5">
+                <li>
+                  <TocSubLink href="#google-drive-backup">
+                    Google Drive backup
+                  </TocSubLink>
+                </li>
+                <li>
+                  <TocSubLink href="#voice">Voice</TocSubLink>
+                </li>
+              </ul>
             </li>
             <li>
               <TocLink href="#what-we-dont-do">What we don&rsquo;t do</TocLink>
@@ -116,13 +123,20 @@ export default function PrivacyPage() {
             Can you read what I write?
           </h2>
           <p className="voice-prose text-[0.95rem]">
-            The answer is <Em>no</Em> if you don&rsquo;t sign in, and{" "}
-            <Em>no</Em>{" "}
-            if you turn on the app&rsquo;s encryption setting. If you activate
-            the Google Drive backup, or record entries using the
-            app&rsquo;s microphone, then Google and the transcription services
-            process your data in accordance with their privacy policies (see
-            Google Drive backup and Voice, below).
+            Whether we can read what you write is up to you. If you
+            don&rsquo;t sign in, the answer is <Em>no</Em> — your entries stay
+            in this browser and never reach us. If you sign in without
+            enabling end-to-end encryption, it&rsquo;s <Em>yes</Em> — a copy
+            rests on our server under ordinary encryption whose keys we hold,
+            so in principle we could (in practice, we don&rsquo;t). If you turn
+            on end-to-end encryption, it&rsquo;s <Em>no</Em> again — only your
+            devices hold the key.
+          </p>
+          <p className="voice-prose text-[0.95rem]">
+            Two features reach beyond the app. If you turn on the Google Drive
+            backup, or record an entry with the microphone, then Google and the
+            transcription service handle that data under their own privacy
+            policies — see Google Drive backup and Voice, below.
           </p>
           <Sub id="before-you-sign-in">Before you sign in</Sub>
           <p className="voice-prose text-[0.95rem]">
@@ -139,11 +153,16 @@ export default function PrivacyPage() {
               In principle your entries here could be accessed, but in practice
               we don&rsquo;t
             </Em>
-            . Otherwise, the only data we collect about you is what signing in
+            .
+          </p>
+          <p className="voice-prose text-[0.95rem]">
+            Otherwise, the only data we collect about you is what signing in
             needs: your email address, and — if you use Google — the name and
-            profile picture on your Google account. We do not use or keep
-            passwords for our sign-in process, and{" "}
-            <Em>signing in is never required to use the app</Em>.
+            profile picture on your Google account.
+          </p>
+          <p className="voice-prose text-[0.95rem]">
+            We do not use or keep passwords for our sign-in process.{" "}
+            <Em>Signing in is also never required to use the app</Em>.
           </p>
           <Sub id="end-to-end-encryption">
             If you turn on end-to-end encryption
@@ -171,8 +190,7 @@ export default function PrivacyPage() {
           </p>
           <p className="voice-prose text-[0.95rem]">
             Turning encryption on encrypts your existing entries too, not only
-            the ones you write next — every entry already on the server is
-            re-encrypted. However: anything you had already synced arrived in
+            the ones you write next. However: anything you had already synced arrived in
             the clear before you encrypted it, so it could have been read then,
             and a plaintext copy may linger a while in routine database backups.
             Turning encryption back off does the reverse, re-uploading your
@@ -247,11 +265,12 @@ export default function PrivacyPage() {
 
         <section className="space-y-3">
           <h2
-            id="google-drive-backup"
+            id="outside-services"
             className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
           >
-            Google Drive backup
+            Outside services
           </h2>
+          <Sub id="google-drive-backup">Google Drive backup</Sub>
           <p className="voice-prose text-[0.95rem]">
             <Em>If you connect Google Drive</Em>, readable copies land in a
             folder in your own Drive named &ldquo;Snippets&rdquo; — so that (A)
@@ -292,15 +311,8 @@ export default function PrivacyPage() {
             happens to the token. In normal use, the files never pass through us
             at all.
           </p>
-        </section>
 
-        <section className="space-y-3">
-          <h2
-            id="voice"
-            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
-          >
-            Voice
-          </h2>
+          <Sub id="voice">Voice</Sub>
           <p className="voice-prose text-[0.95rem]">
             <Em>If you speak an entry with the in-app microphone</Em>, the app
             streams your audio to a transcription service — currently{" "}

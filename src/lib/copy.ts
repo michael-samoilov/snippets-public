@@ -181,7 +181,8 @@ export const copy = {
   /** today's capture, housed in the calendar's blue fill zone */
   todayZone: {
     /** the very first invitation — nothing has ever been saved */
-    placeholderFirstEver: "Start saving your memories…",
+    placeholderFirstEver:
+      "Start saving your memories… Speak into the seal, or write here and press it to keep.",
     /** every day after, once the book holds something */
     placeholder: "Write something from today…",
     /** today already holds an entry — invite another */
