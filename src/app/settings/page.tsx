@@ -383,15 +383,17 @@ export default function SettingsPage() {
             )}{" "}
             {copy.settings.data.takeCopy}
           </p>
+          {/* JSON and its restore sit together — they're the same round-trip
+              archive; Markdown (the read-elsewhere copy) trails */}
           <div className="mt-4 flex flex-wrap gap-2">
             <PaperButton onClick={() => void exportJSON()}>
               {copy.settings.data.exportJSON}
             </PaperButton>
-            <PaperButton onClick={() => void exportMarkdown()}>
-              {copy.settings.data.exportMarkdown}
-            </PaperButton>
             <PaperButton onClick={() => fileRef.current?.click()}>
               {copy.settings.data.restore}
+            </PaperButton>
+            <PaperButton onClick={() => void exportMarkdown()}>
+              {copy.settings.data.exportMarkdown}
             </PaperButton>
             <input
               ref={fileRef}
@@ -843,6 +845,9 @@ function EncryptionSection({ email }: { email: string }) {
             </p>
           </div>
           <HoldToErase
+            // outline, not the solid ember of erase/delete: turning
+            // encryption off is grave but loses nothing
+            variant="outline"
             label={copy.settings.encryption.turnOffHold}
             onComplete={() => {
               void (async () => {
@@ -1402,9 +1407,18 @@ const HOLD_MS = 10_000;
 function HoldToErase({
   onComplete,
   label = copy.settings.erase.hold,
+  variant = "fill",
 }: {
   onComplete: () => void;
   label?: string;
+  /**
+   * Two tiers of the same physics. `fill` — solid ember — belongs to true
+   * deletion alone (erase all, delete account). `outline` is the lesser
+   * destructive rank for grave-but-recoverable acts (turning off
+   * encryption loses no entry): an ember hairline that only fills with
+   * the colour as the hold commits.
+   */
+  variant?: "fill" | "outline";
 }) {
   const [holding, setHolding] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1444,11 +1458,22 @@ function HoldToErase({
       onKeyUp={cancel}
       onContextMenu={(e) => e.preventDefault()}
       // full-width so the hold fill sweeps past a covering thumb, staying visible
-      className="relative w-full select-none overflow-hidden rounded-[5px] bg-ember px-4 py-2.5 text-center font-serif text-[0.95rem] text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
+      className={cn(
+        "relative w-full select-none overflow-hidden rounded-[5px] px-4 py-2.5 text-center font-serif text-[0.95rem]",
+        variant === "fill"
+          ? "bg-ember text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
+          : "border border-ember/45 text-ember",
+      )}
     >
       <span
         aria-hidden="true"
-        className="absolute inset-0 bg-ember-deep"
+        className={cn(
+          "absolute inset-0",
+          // the outline's advancing colour is a translucent wash, not the
+          // solid ember — the label stays ember ink and reads over both the
+          // bare paper ahead of the front and the wash behind it
+          variant === "fill" ? "bg-ember-deep" : "bg-ember/15",
+        )}
         style={{
           clipPath: holding ? "inset(0 0 0 0)" : "inset(0 100% 0 0)",
           transition: holding
