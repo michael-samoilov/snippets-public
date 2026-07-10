@@ -13,7 +13,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   addDays,
@@ -51,6 +51,9 @@ import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { renderInline } from "@/lib/inline-markup";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
+import { useSession } from "@/lib/auth";
+import { useSyncStatus } from "@/lib/sync";
+import { PaperButton } from "@/components/paper-button";
 import { queryTerms } from "@/lib/search";
 import { cn, joinText } from "@/lib/utils";
 import {
@@ -2366,6 +2369,16 @@ function Calendar() {
 // between loads, and a stale guess self-corrects the instant the book lands).
 const BOOK_EMPTY_KEY = "snippets:book-empty";
 
+// Dev-only, in ?skeldebug's spirit: ?lockdebug forces the locked letter (the
+// real state needs an enrolled account and a keyless device — unreachable in
+// a sandbox), ?lockdebug=214 fakes the waiting count. Read at module load,
+// before the calendar's mount effects rewrite the URL to ?d=….
+const LOCK_DEBUG: number | null = (() => {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("lockdebug");
+  return v === null ? null : Number(v) || 0;
+})();
+
 /**
  * The deepest altitude is the book itself: every day that holds
  * something, stacked in time, the dates standing in the margin like a
@@ -3615,6 +3628,32 @@ function TodayZoneFill({
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   const draft = useKeptDraft();
+  const router = useRouter();
+  // The locked letter's inputs — it shows only on POSITIVE evidence of the
+  // exact state it addresses, never on assumption: a live signed-in session
+  // (a stale store after sign-out must not strand the letter pointing at an
+  // unlock form that no longer renders), the locked state (enrolled account,
+  // no key on this device), and a KNOWN server count exceeding what's
+  // visible locally (counts are fetched even while locked — see sync.ts —
+  // and retried each visible minute, so an unknown count only delays the
+  // letter, while "nothing actually hidden" stays quiet: there's nothing to
+  // recover, and Settings still names the paused sync).
+  const { status: sessionStatus } = useSession();
+  const sync = useSyncStatus();
+  const hiddenBehindLock =
+    sessionStatus === "signed-in" &&
+    sync.locked &&
+    sync.serverCount !== null &&
+    sync.serverCount > (sync.localCount ?? 0);
+  // NOT gated on the book being empty: keeping an entry while locked must
+  // not dismiss the letter — it stands until the device actually unlocks
+  const lockedLetter = hiddenBehindLock || LOCK_DEBUG !== null;
+  const lockedCount =
+    LOCK_DEBUG !== null
+      ? LOCK_DEBUG || null
+      : sync.serverCount !== null && (sync.localCount ?? 0) === 0
+        ? sync.serverCount
+        : null;
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
@@ -4164,7 +4203,9 @@ function TodayZoneFill({
   const zoneTapRef = useRef({ x: 0, y: 0, t: 0, id: -1, handledAt: 0 });
   const engageZoneTap = (t: HTMLElement) => {
     if (frozen) return;
-    if (t.closest("button")) return;
+    // a tap that means a control — the seal, the letters' links, the locked
+    // letter's Settings button — is never also a bid for the keyboard
+    if (t.closest("button, a")) return;
     const area = areaRef.current;
     if (!area) return;
     const onField = t.closest("textarea") === area;
@@ -4532,11 +4573,44 @@ function TodayZoneFill({
             <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
-          {/* the first-ever introduction: prose on the sheet, retiring itself
-              the instant the writer starts (law 8 — nothing modal near capture).
-              Only on a truly empty book, and only before a keystroke. */}
-          <AnimatePresence>
-            {firstEver && text.trim().length === 0 && (
+          {/* the letters on the sheet: prose, retiring itself the instant the
+              writer starts (law 8 — nothing modal near capture). The locked
+              letter (a returning writer whose entries wait sealed on the
+              server) outranks the first-ever introduction — a locked device's
+              local book is empty too, and greeting that writer as a newcomer
+              is the exact confusion this letter exists to prevent. */}
+          <AnimatePresence mode="wait">
+            {lockedLetter && text.trim().length === 0 ? (
+              <motion.div
+                key="locked-letter"
+                // the locked state is only known once the first sync cycle
+                // answers, a beat after load — so the letter always enters by
+                // fading in, never popping
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                transition={{ duration: 0.24, ease: "easeOut" }}
+                className="w-full space-y-3 text-left"
+              >
+                {copy.todayZone.locked.body(lockedCount).map((para, i) => (
+                  <p
+                    key={i}
+                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                  >
+                    {renderInline(para, `locked-${i}`)}
+                  </p>
+                ))}
+                <div className="flex justify-center pt-1">
+                  <PaperButton
+                    onClick={() =>
+                      router.push("/settings?tab=account&unlock=1")
+                    }
+                  >
+                    {copy.todayZone.locked.action}
+                  </PaperButton>
+                </div>
+              </motion.div>
+            ) : firstEver && text.trim().length === 0 ? (
               <motion.div
                 key="intro"
                 initial={false}
@@ -4553,7 +4627,7 @@ function TodayZoneFill({
                   </p>
                 ))}
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
           {/* the flexible half of the field's centring slack (see centerField);
               the entry grows into this, top first, so its foot never moves */}
@@ -4605,7 +4679,10 @@ function TodayZoneFill({
                   ? copy.capture.listeningPlaceholder
                   : transcribing
                     ? copy.capture.settingWords
-                    : firstEver
+                    : firstEver && !lockedLetter
+                      // a locked device's book is empty too, but its writer is
+                      // no newcomer — the first-ever invitation would jar
+                      // against the letter's "welcome back"
                       ? copy.todayZone.placeholderFirstEver
                       : hasEntry
                         ? copy.todayZone.placeholderHasEntry

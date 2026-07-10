@@ -372,44 +372,6 @@ Design notes:
   uniform. (b) A comment claims "128 bits"; reconcile it with the true
   figure (~120). Neither is exploitable, but both should read honestly.
 
-## 10. New-device unlock: guide users when encrypted entries are unreachable
-
-> "If a user has an account & encrypted their entries but signs in on a
-> new device, and doesn't see their old entries, we should add some kind
-> of flow that indicates they need to enter their encryption
-> passphrase/recovery key to see their other entries."
-
-Accepted 2026-07-09. When a user signs in on a fresh device with an
-enrollment already active on their account (entries server-side in
-`payloadFormat: 2`, a locked sync state), the calendar silently shows
-an empty book — no visible explanation that the entries exist but are
-sealed.
-
-**The flow.** Detect locked state at mount (the sync status store
-already tracks it); surface a gentle, sheet-integrated prompt on the
-empty calendar or settings — something in the house voice explaining
-the entries are encrypted and asking for the passphrase or recovery
-code. Reuse or adapt the existing unlock UI from settings (the
-passphrase + recovery-code inputs); on successful unlock, trigger a
-full sync cycle so the entries decrypt and appear. The unlock
-completes the enrollment story without breaking it when devices
-diverge.
-
-**What it touches.** Sync detection (`src/lib/sync.ts`, the `locked`
-state machine), UI surfacing (calendar empty state or settings alert),
-form reuse/adaptation, triggering a re-pull after successful unlock.
-Audit whether the existing unlock path (settings gear → turn on E2E)
-handles this too, or if it's truly device-specific.
-
-**Copy.** One sentence of explanation ("Your entries are encrypted —
-enter your passphrase or recovery code to see them") in the house
-voice; never accusatory, never a scolding "error." Decide where the
-prompt lives: inline on the empty calendar (if the intent is
-reassurance + action); a Settings line (if the intent is optional
-re-unlock); or a gentle alert (if both). Test the copy surfaces
-*before* asking the user to unlock — make it safe to live with the
-locked state a while.
-
 ## 11. Status indicators: green icons for active security + sync features
 
 Visual signals for user confidence — a quick scan confirms the features

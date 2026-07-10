@@ -683,6 +683,23 @@ function EncryptionSection({ email }: { email: string }) {
     }
   }, [wantSeal, enrolled]);
 
+  // arriving from the calendar's locked letter ("Unlock in Settings"):
+  // bring the unlock form into view once it's actually the section's body.
+  // Clean only the unlock param — the tab must survive a refresh.
+  const sectionRef = useRef<HTMLElement>(null);
+  const [wantUnlock] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("unlock") === "1",
+  );
+  useEffect(() => {
+    if (!wantUnlock || !enrolled || hasKey !== false) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("unlock");
+    window.history.replaceState(null, "", url);
+    sectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [wantUnlock, enrolled, hasKey]);
+
   // the things a guesser tries first: the account's email and its local part
   const guessHints = useMemo(
     () => [email, email.split("@")[0], "snippets"].filter(Boolean),
@@ -879,7 +896,7 @@ function EncryptionSection({ email }: { email: string }) {
   }
 
   return (
-    <section aria-label={copy.settings.encryption.heading}>
+    <section ref={sectionRef} aria-label={copy.settings.encryption.heading}>
       <h2 className="voice-label border-b border-rule pb-1.5">
         {copy.settings.encryption.heading}
       </h2>
