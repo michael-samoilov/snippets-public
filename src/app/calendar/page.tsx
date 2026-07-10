@@ -2333,7 +2333,7 @@ function Calendar() {
                       <ul className="flex min-w-0 flex-col gap-1 pb-3 pt-2">
                         {g.snippets.map((s) => (
                           <li key={s.id}>
-                            <div className="transition-transform duration-[600ms] ease-[var(--ease-bloom)]">
+                            <div className="transition-transform duration-[500ms] ease-[var(--ease-bloom)]">
                             <button
                               type="button"
                               onClick={() => openEntryFromSearch(s)}
@@ -3195,7 +3195,7 @@ function ScheduleCards({
             {/* the bloom wrapper: the FLIP owns the li's transform and the
                 open zoom measures (then hides) the button, so the bloom
                 lives between them on a box nothing else animates */}
-            <div className="transition-transform duration-[600ms] ease-[var(--ease-bloom)]">
+            <div className="transition-transform duration-[500ms] ease-[var(--ease-bloom)]">
             <button
               type="button"
               data-entry={s.id}
@@ -3379,7 +3379,7 @@ function FlowBackfillCapture({
     // also the composer's bloom target (PressGlow grow="parent"): the bloom
     // rides this wrapper so the card's own box (clip-wipe, masks) stays
     // untransformed — one shared press physics with the zone and the tiles
-    <div className={cn("relative transition-transform duration-[600ms] ease-[var(--ease-bloom)]", follows && "mt-1")}>
+    <div className={cn("relative transition-transform duration-[500ms] ease-[var(--ease-bloom)]", follows && "mt-1")}>
       {/* the composer — present at rest and after a keep, GONE during the press
           so today shows only the stamp. Its return wipes in from the left as a
           single already-laid-out line (clip-path reveal — no re-wrapping), slow
@@ -4459,7 +4459,7 @@ function TodayZoneFill({
   // transform rides the same transition (slower, per the glow's bloom):
   // the press glow writes scale onto this box but never its transition
   const frame = cn(
-    "border transition-[border-color,transform] [transition-duration:240ms,600ms] [transition-timing-function:var(--ease-out),var(--ease-bloom)]",
+    "border transition-[border-color,transform] [transition-duration:240ms,500ms] [transition-timing-function:var(--ease-out),var(--ease-bloom)]",
     listening ? "border-wax/70" : "border-wax/45",
   );
 

@@ -141,9 +141,10 @@ html {
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-in: cubic-bezier(0.45, 0, 0.85, 0.4);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  /* the press bloom's breath: unlike the UI's snappy ease-out (80% of the
-     move in the first beats), light swells gradually and settles long */
-  --ease-bloom: cubic-bezier(0.45, 0, 0.15, 1);
+  /* the press bloom's breath: gentler than the UI's snappy ease-out (80%
+     of the move in the first beats) but not languid — a soft early ramp,
+     then a long settle */
+  --ease-bloom: cubic-bezier(0.35, 0.1, 0.2, 1);
 
   /* ── shadcn semantic mapping ──────────────────────────── */
   --radius: 0.375rem;

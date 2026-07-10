@@ -341,7 +341,7 @@ function GlowSurface({
       // (touch-action: none was tried; iOS scrolled anyway AND snuffed the
       // light, the worst of both)
       style={{ touchAction: "pan-y", ...style }}
-      className={`relative transition-transform duration-[600ms] ease-[var(--ease-bloom)] ${className ?? ""}`}
+      className={`relative transition-transform duration-[500ms] ease-[var(--ease-bloom)] ${className ?? ""}`}
     >
       {back}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
