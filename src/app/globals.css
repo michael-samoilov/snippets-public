@@ -717,16 +717,19 @@ textarea:focus-visible,
   transform: scale(0.97);
 }
 
-/* a composer that reads as a card until it's being written in: it dips like
-   every pressable on press-down, but once the caret is inside, taps place the
-   caret without the button theatre. Driven by [data-dip] from JS rather than
-   :active:not(:focus-within) — the press itself focuses the field on
-   pointerdown, so focus-within is already true before :active could paint */
-.pressable-composer {
-  transition: transform var(--dur-fast) var(--ease-out);
-}
-.pressable-composer[data-dip] {
-  transform: scale(0.97);
+/* a writing surface that answers the hand with LIGHT, not a dip: the press
+   glow pools and the surface blooms (press-glow.tsx) — one shared physics
+   for the today zone, the entry tiles, the composer, and the opened entry.
+   Same transition set as .pressable minus transform: the bloom rides its
+   own wrapper at --ease-bloom, and a competing 120ms :active scale here
+   was exactly the fight this class exists to end. */
+.pressable-lit {
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {

@@ -80,14 +80,17 @@ export const GLOW_LAMPLIGHT: GlowRecipe = {
 const ink = (alpha: number) =>
   `color-mix(in srgb, var(--glow-ink) ${Math.round(alpha * 100)}%, transparent)`;
 
-export function PressGlow({ grow = false, className }: {
+export function PressGlow({ grow = false, growWhileFocused = true, className }: {
   /** bloom the surface a hair while pressed/focused. `true` scales the host
       itself; `"parent"` scales the host's parent — for surfaces whose own
-      transform belongs to another animation (the composer's press dip, the
-      entry card's open/close zoom), give them a dedicated wrapper and point
-      the bloom there. The bloom target declares its own transform
-      transition. */
+      transform belongs to another animation (the entry card's open/close
+      zoom, a tile's FLIP), give them a dedicated wrapper and point the
+      bloom there. The bloom target declares its own transform transition. */
   grow?: boolean | "parent";
+  /** writing surfaces hold their bloom while the caret is inside; a BUTTON
+      surface (an entry tile) keeps DOM focus long after the press opened
+      something else — set false so its bloom is press-only, never stuck */
+  growWhileFocused?: boolean;
   /** extra classes for the clipping layer — e.g. a corner radius when the
       host itself carries none (the layer inherits the host's otherwise) */
   className?: string;
@@ -97,8 +100,10 @@ export function PressGlow({ grow = false, className }: {
   const coreRef = useRef<HTMLDivElement>(null);
   const ambientRef = useRef<HTMLDivElement>(null);
   const growRef = useRef(grow);
+  const growFocusRef = useRef(growWhileFocused);
   useEffect(() => {
     growRef.current = grow;
+    growFocusRef.current = growWhileFocused;
   });
 
   useEffect(() => {
@@ -180,7 +185,7 @@ export function PressGlow({ grow = false, className }: {
     const bloomEl = growRef.current === "parent" ? (host.parentElement ?? host) : host;
     const scale = () => {
       if (!growRef.current) return;
-      if ((down || focused || riding) && !reduce) {
+      if ((down || riding || (focused && growFocusRef.current)) && !reduce) {
         // normalized bloom: calibrated on the today zone's ~525px diagonal,
         // smaller surfaces scale proportionally more so every card visibly
         // grows the same few pixels

@@ -2333,17 +2333,18 @@ function Calendar() {
                       <ul className="flex min-w-0 flex-col gap-1 pb-3 pt-2">
                         {g.snippets.map((s) => (
                           <li key={s.id}>
+                            <div className="transition-transform duration-[600ms] ease-[var(--ease-bloom)]">
                             <button
                               type="button"
                               onClick={() => openEntryFromSearch(s)}
                               // isolate: bake the marked ink's blend so the
                               // filtered book scrolls without re-blending
                               className={cn(
-                                "pressable isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                                "pressable-lit isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
                                 "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
                               )}
                             >
-                              <PressGlow className="rounded-[6px]" />
+                              <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
                               {/* relative: the marked words stay ink ON the light */}
                               <div className="relative">
                                 <MarkedPreview
@@ -2353,6 +2354,7 @@ function Calendar() {
                                 />
                               </div>
                             </button>
+                            </div>
                           </li>
                         ))}
                       </ul>
@@ -3190,6 +3192,10 @@ function ScheduleCards({
             exit={{ opacity: 0, height: 0, overflow: "hidden", transition: { duration: 0 } }}
             transition={sweepBirth.transition}
           >
+            {/* the bloom wrapper: the FLIP owns the li's transform and the
+                open zoom measures (then hides) the button, so the bloom
+                lives between them on a box nothing else animates */}
+            <div className="transition-transform duration-[600ms] ease-[var(--ease-bloom)]">
             <button
               type="button"
               data-entry={s.id}
@@ -3198,15 +3204,15 @@ function ScheduleCards({
               // paper (the texture is occluded), so the blend is constant
               // — isolating it lets the browser bake it once and translate
               // on scroll instead of re-blending the prose every frame
-              // against the fixed sheet (the book's scroll-start jank)
+              // against the fixed sheet (the book's scroll-start jank).
+              // pressable-lit: colors transition, but no :active dip — the
+              // press answers with the glow's light and bloom instead
               className={cn(
-                "book-card pressable isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                "book-card pressable-lit isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
                 "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
               )}
             >
-              {/* light pools under the press; the open animation owns the
-                  tile's transform, so no bloom here */}
-              <PressGlow className="rounded-[6px]" />
+              <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
               <p
                 className={cn(
                   "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
@@ -3216,6 +3222,7 @@ function ScheduleCards({
                 {s.text}
               </p>
             </button>
+            </div>
           </motion.li>
           );
         })}
@@ -3294,9 +3301,6 @@ function FlowBackfillCapture({
   const draftStore = useKeptDraft();
   // the thumb-down dip (the seal's `pressed` feedback before release)
   const [pressedDown, setPressedDown] = useState(false);
-  // the card's press-down dip (see .pressable-composer) — only for the press
-  // that BEGINS writing; once the caret is inside, taps just place the caret
-  const [dip, setDip] = useState(false);
   const isToday = day === dayKey();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -3372,9 +3376,9 @@ function FlowBackfillCapture({
       : copy.backfill.other;
 
   return (
-    // also the composer's bloom target (PressGlow grow="parent"): the card's
-    // own transform belongs to the press dip, so the light lifts this
-    // wrapper instead - the dip sinks the card within a gently risen block
+    // also the composer's bloom target (PressGlow grow="parent"): the bloom
+    // rides this wrapper so the card's own box (clip-wipe, masks) stays
+    // untransformed — one shared press physics with the zone and the tiles
     <div className={cn("relative transition-transform duration-[600ms] ease-[var(--ease-bloom)]", follows && "mt-1")}>
       {/* the composer — present at rest and after a keep, GONE during the press
           so today shows only the stamp. Its return wipes in from the left as a
@@ -3385,23 +3389,11 @@ function FlowBackfillCapture({
           initial={seq.phase === "composing" ? { clipPath: "inset(-50% 100% -50% -10%)" } : false}
           animate={{ clipPath: "inset(-50% -10% -50% -10%)" }}
           transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
-          // pressable-composer: the same press-down dip as the entry cards
-          // beside it, only for the press that begins writing. The dip holds
-          // through a drag like a button's :active — pointercancel (fired the
-          // moment the browser takes the gesture for scrolling) is deliberately
-          // NOT a release; the touch stream keeps flowing through a scroll, so
-          // touchend marks the true lift. One-shot window listeners, since
-          // after dragging off the card the element never hears the release.
-          className="group pressable-composer relative"
-          data-dip={dip || undefined}
-          onPointerDown={() => {
-            if (document.activeElement === areaRef.current) return;
-            setDip(true);
-            const clear = () => setDip(false);
-            window.addEventListener("pointerup", clear, { once: true });
-            window.addEventListener("touchend", clear, { once: true });
-            window.addEventListener("touchcancel", clear, { once: true });
-          }}
+          // no press dip here anymore: the card answers with the press
+          // glow's light and bloom (one shared physics with the today zone,
+          // the tiles, and the opened entry) — a dip scaling down against
+          // the bloom scaling up was a visible fight
+          className="group relative"
         >
           {/* the ghost's seat is a drop-shadow on this unmasked parent: the
               face's fade mask clips outer box-shadows entirely, and filter
