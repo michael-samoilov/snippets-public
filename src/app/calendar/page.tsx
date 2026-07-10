@@ -1919,9 +1919,10 @@ function Calendar() {
             </svg>
             {/* the header climbs to the full date in the entry view: the
                 weekday and day-of-month wipe in from their own spots
-                while the month and year hold still */}
+                while the month and year hold still. One comma only, before
+                the year: "Friday July 10, 2026". */}
             <WipeWord open={view === "entry"}>
-              {format(dateFromDayKey(selected), "EEEE")},{" "}
+              {format(dateFromDayKey(selected), "EEEE")}{" "}
             </WipeWord>
             {format(visibleMonth, "MMMM")}
             <WipeWord open={view === "entry"}>
