@@ -35,31 +35,67 @@ interface GlowOpts {
   ink: "candle" | "wax";
   /** peak strength while the finger is down, 0..1 */
   strength: number;
-  /** glow diameter, css px */
+  /** the bright CORE's diameter, css px */
   size: number;
+  /** the core's blur */
   blur: number;
+  /** the AMBIENT halo: its diameter as a multiple of the core's — sized to
+      reach the whole element, the Liquid-Glass "everything lifts a little" */
+  reach: number;
+  /** the ambient halo's strength as a fraction of the core's */
+  ambient: number;
   /** 0 = pinned to the finger; toward 1 = trails it (lerp per frame) */
   lag: number;
-  /** scale while pressed/focused */
+  /** visual bloom while pressed/focused — normalized so every surface grows
+      the same visible amount regardless of its own size */
   grow: number;
   /** fraction of the glow kept while focused but not pressed */
   rest: number;
+  /** how high the card floats off the desk: 0 = the house hairline + tight
+      shadow; 1 = the Claude-app look — borderless, a wide soft drop. Warm
+      (--shadow-hue), never gray, per the light rules. */
+  lift: number;
 }
 
 export const GLOW_DEFAULTS: GlowOpts = {
   ink: "candle",
-  strength: 0.85,
-  size: 340,
-  blur: 24,
+  strength: 0.75,
+  size: 240,
+  blur: 18,
+  reach: 2.6,
+  ambient: 0.5,
   lag: 0.55,
   grow: 1.012,
   rest: 0,
+  lift: 0,
 };
 
-const inkGradient = (o: GlowOpts) =>
+/* the card's seat on the desk, from printed-flat to floating: the shadow
+   widens and softens as the border hands separation over to the light */
+const liftStyle = (L: number): React.CSSProperties => ({
+  boxShadow: [
+    `inset 0 1px 0 var(--press-highlight)`,
+    `0 ${(2 + 10 * L).toFixed(1)}px ${(6 + 28 * L).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.05 + 0.08 * L).toFixed(3)})`,
+    `0 ${(1 + 2 * L).toFixed(1)}px ${(3 + 6 * L).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.04 + 0.05 * L).toFixed(3)})`,
+  ].join(", "),
+  borderColor: `color-mix(in srgb, var(--rule-faint) ${Math.round((1 - L) * 100)}%, transparent)`,
+});
+
+/* the inks. Candle is a WARM light, not a white one: white over cream paper
+   has nowhere brighter to go (it vanished in Paper mode), but warmth is a hue
+   shift and reads on both papers — golden pool on cream, lamplight in the
+   dark. The tone is a lab candidate for a future --glow token (deliberately
+   not --marker/--gilt, which are spoken for). Wax mixes harder than the wash
+   does for the same reason: a press is a moment, not an ambience. */
+const inkColor = (o: GlowOpts, a: number) =>
   o.ink === "candle"
-    ? `radial-gradient(circle closest-side, color-mix(in srgb, var(--press-highlight) ${Math.round(o.strength * 100)}%, transparent), transparent 72%)`
-    : `radial-gradient(circle closest-side, color-mix(in oklab, var(--wax) ${Math.round(o.strength * 34)}%, transparent), transparent 72%)`;
+    ? `color-mix(in srgb, rgb(255 226 150 / 0.6) ${Math.round(a * 100)}%, transparent)`
+    : `color-mix(in oklab, var(--wax) ${Math.round(a * 52)}%, transparent)`;
+
+const coreGradient = (o: GlowOpts) =>
+  `radial-gradient(circle closest-side, ${inkColor(o, o.strength)}, transparent 72%)`;
+const ambientGradient = (o: GlowOpts) =>
+  `radial-gradient(circle closest-side, ${inkColor(o, o.strength * o.ambient)}, transparent 78%)`;
 
 /* Wraps a writing surface. The glow is a pre-blurred disc inside an
    overflow-hidden layer under the content, moved with translate3d only
@@ -70,11 +106,13 @@ const inkGradient = (o: GlowOpts) =>
 function GlowSurface({
   opts,
   className,
+  style,
   back,
   children,
 }: {
   opts: GlowOpts;
   className?: string;
+  style?: React.CSSProperties;
   /** the surface's own paint (an opaque card background), rendered UNDER
       the glow — light pools on the paper, the words sit on the light */
   back?: React.ReactNode;
@@ -82,16 +120,25 @@ function GlowSurface({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const glowRef = useRef<HTMLDivElement>(null);
+  const coreRef = useRef<HTMLDivElement>(null);
+  const ambientRef = useRef<HTMLDivElement>(null);
   const o = useRef(opts);
   useEffect(() => {
     o.current = opts;
     // live-retune the visual bits that aren't per-frame
-    const g = glowRef.current;
-    if (g) {
+    const g = glowRef.current, c = coreRef.current, amb = ambientRef.current;
+    if (g && c && amb) {
       g.style.width = `${opts.size}px`;
       g.style.height = `${opts.size}px`;
-      g.style.filter = `blur(${opts.blur}px)`;
-      g.style.background = inkGradient(opts);
+      c.style.width = `${opts.size}px`;
+      c.style.height = `${opts.size}px`;
+      c.style.filter = `blur(${opts.blur}px)`;
+      c.style.background = coreGradient(opts);
+      const d = Math.round(opts.size * opts.reach);
+      amb.style.width = `${d}px`;
+      amb.style.height = `${d}px`;
+      amb.style.filter = `blur(${opts.blur * 3}px)`;
+      amb.style.background = ambientGradient(opts);
     }
   }, [opts]);
 
@@ -123,7 +170,18 @@ function GlowSurface({
       glow.style.opacity = down ? "1" : focused ? String(o.current.rest) : "0";
     };
     const scale = () => {
-      host.style.transform = down || focused ? `scale(${o.current.grow})` : "";
+      if (down || focused) {
+        // normalize the bloom: the dial's value is calibrated on the today
+        // zone (~525px diagonal); smaller surfaces scale proportionally MORE
+        // so every card visibly grows by the same few pixels — a uniform
+        // factor left the one-line add card's half-pixel bloom imperceptible
+        const r = host.getBoundingClientRect();
+        const diag = Math.max(120, Math.hypot(r.width, r.height));
+        const eff = Math.min(1.06, 1 + (o.current.grow - 1) * (525 / diag));
+        host.style.transform = `scale(${eff})`;
+      } else {
+        host.style.transform = "";
+      }
     };
     const local = (e: PointerEvent) => {
       const r = host.getBoundingClientRect();
@@ -177,17 +235,30 @@ function GlowSurface({
       // must paint the glow — without this the browser claims the gesture
       // for page scrolling and a pointercancel snuffs the light mid-stroke.
       // The page still scrolls from the margins between benches.
-      style={{ touchAction: "none" }}
+      style={{ touchAction: "none", ...style }}
       className={`relative transition-transform duration-[240ms] ease-[var(--ease-out)] ${className ?? ""}`}
     >
       {back}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+        {/* one translated wrapper carries BOTH lights, so tracking stays a
+            single compositor transform: the tight bright core at the finger,
+            and the wide soft ambient halo that lifts the whole surface —
+            the Liquid-Glass read (everything brightens, most at the touch) */}
         <div
           ref={glowRef}
           data-glow
-          className="absolute left-0 top-0 rounded-full opacity-0 transition-opacity duration-[320ms] ease-[var(--ease-out)]"
+          className="absolute left-0 top-0 opacity-0 transition-opacity duration-[320ms] ease-[var(--ease-out)]"
           style={{ willChange: "transform, opacity" }}
-        />
+        >
+          <div
+            ref={ambientRef}
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          />
+          <div
+            ref={coreRef}
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          />
+        </div>
       </div>
       <div className="relative">{children}</div>
     </div>
@@ -241,8 +312,9 @@ function AddCardBench({ opts, editing }: { opts: GlowOpts; editing: boolean }) {
         back={
           <span
             aria-hidden
-            className={`pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] ${
-              text ? "border-rule" : "border-rule-faint [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)]"
+            style={liftStyle(opts.lift)}
+            className={`pointer-events-none absolute inset-0 rounded-[6px] border bg-paper ${
+              text ? "border-rule" : "[-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)]"
             }`}
           />
         }
@@ -266,7 +338,8 @@ function EntryBench({ opts }: { opts: GlowOpts }) {
   return (
     <GlowSurface
       opts={opts}
-      className="w-[300px] rounded-[10px] border border-rule-faint bg-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
+      className="w-[300px] rounded-[10px] border border-rule-faint bg-paper"
+      style={liftStyle(opts.lift)}
     >
       <div className="px-4 pt-3">
         <textarea
@@ -363,11 +436,17 @@ export default function PressGlowLab() {
             ))}
           </div>
           <Dial label="strength" value={opts.strength} min={0.1} max={1} step={0.05} onChange={(v) => setOpts({ ...opts, strength: v })} />
-          <Dial label="size" value={opts.size} min={120} max={560} step={10} fmt={(v) => `${v.toFixed(0)}px`} onChange={(v) => setOpts({ ...opts, size: v })} />
-          <Dial label="blur" value={opts.blur} min={0} max={80} step={2} fmt={(v) => `${v.toFixed(0)}px`} onChange={(v) => setOpts({ ...opts, blur: v })} />
+          <Dial label="core size" value={opts.size} min={100} max={480} step={10} fmt={(v) => `${v.toFixed(0)}px`} onChange={(v) => setOpts({ ...opts, size: v })} />
+          <Dial label="core blur" value={opts.blur} min={0} max={60} step={2} fmt={(v) => `${v.toFixed(0)}px`} onChange={(v) => setOpts({ ...opts, blur: v })} />
+          <Dial label="reach" value={opts.reach} min={1.2} max={4} step={0.1} fmt={(v) => `×${v.toFixed(1)}`} onChange={(v) => setOpts({ ...opts, reach: v })} />
+          <Dial label="ambient" value={opts.ambient} min={0} max={1} step={0.05} onChange={(v) => setOpts({ ...opts, ambient: v })} />
           <Dial label="lag" value={opts.lag} min={0} max={0.95} step={0.05} onChange={(v) => setOpts({ ...opts, lag: v })} />
           <Dial label="grow" value={opts.grow} min={1} max={1.05} step={0.002} fmt={(v) => `×${v.toFixed(3)}`} onChange={(v) => setOpts({ ...opts, grow: v })} />
           <Dial label="rest" value={opts.rest} min={0} max={1} step={0.05} onChange={(v) => setOpts({ ...opts, rest: v })} />
+          <Dial label="lift" value={opts.lift} min={0} max={1} step={0.05} onChange={(v) => setOpts({ ...opts, lift: v })} />
+          <p className="voice-data text-[0.6rem] lowercase text-ink-faint">
+            lift: the card&apos;s seat on the desk — 0 is the house hairline, 1 floats it on a wide soft shadow (the claude-app card)
+          </p>
           <p className="voice-data text-[0.6rem] lowercase text-ink-faint">
             rest: how much light lingers while the field holds focus with no finger down
           </p>
