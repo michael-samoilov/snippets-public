@@ -529,16 +529,21 @@ function SyncLines() {
       )}
       {countLine && <p className="voice-data text-ink-faint">{countLine}</p>}
       {outOfStep && (
-        <p className="voice-prose text-[0.9rem] text-ember">
-          {copy.settings.sync.outOfStep}{" "}
-          <button
-            type="button"
-            onClick={() => void reconcile()}
-            className="pressable rounded-[3px] underline decoration-ember/40 underline-offset-2 hover:decoration-ember"
-          >
-            {copy.settings.sync.reconcile}
-          </button>
-        </p>
+        // the house pattern for actions: the state, then what pressing the
+        // button will actually do, then the button (see turnOffHint)
+        <div className="pt-1">
+          <p className="voice-prose text-[0.9rem] text-ember">
+            {copy.settings.sync.outOfStep}
+          </p>
+          <p className="voice-prose mt-1 max-w-[46ch] text-[0.9rem] text-ink-faint">
+            {copy.settings.sync.reconcileHint}
+          </p>
+          <div className="mt-3">
+            <PaperButton onClick={() => void reconcile()}>
+              {copy.settings.sync.reconcile}
+            </PaperButton>
+          </div>
+        </div>
       )}
     </div>
   );

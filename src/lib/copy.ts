@@ -451,6 +451,10 @@ export const copy = {
         `${device} locally on this device · you’re offline`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
+      /** what pressing Reconcile will actually do — the same LWW rule as
+          every sync, walked over the whole book; honest about deletions */
+      reconcileHint:
+        "Reconcile re-checks every entry against the server and keeps whichever copy is newer — the same rule every sync follows, applied to everything at once. Nothing is removed unless you deleted it somewhere yourself.",
       locked: "Your entries are end-to-end encrypted — unlock below to sync.",
     },
     encryption: {
