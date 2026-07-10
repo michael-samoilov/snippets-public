@@ -26,6 +26,7 @@ import {
 import { AnimatePresence, motion, animate, useReducedMotion } from "motion/react";
 import { toast } from "sonner";
 import { ulid } from "ulidx";
+import { letGoToast } from "@/components/delete-toast";
 import { WaxStamp as CanvasSeal, type SealControl } from "@/components/capture/wax-stamp";
 import { RecordingWash } from "@/components/capture/wash-shaders";
 import { PressGlow } from "@/components/capture/press-glow";
@@ -1374,9 +1375,7 @@ function Calendar() {
       setDeletingSnippet(snippet); // hold the words through the leave animation
       await softDeleteSnippet(snippet.id);
       appBack();
-      toast(copy.deleteEntry.toast, {
-        action: { label: copy.deleteEntry.undo, onClick: () => void restoreSnippet(snippet.id) },
-      });
+      letGoToast(() => void restoreSnippet(snippet.id));
     },
     [appBack],
   );

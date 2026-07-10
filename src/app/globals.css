@@ -638,6 +638,63 @@ textarea:focus-visible,
 
 /* ── pressable physics (Emil: the interface must listen) ───── */
 
+/* the let-go undo toast: a paper pill with an ember countdown along its foot.
+   Styled here (not by sonner) because the toast is raised `unstyled`. */
+.delete-toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 15rem;
+  padding: 0.7rem 0.5rem 0.7rem 1rem;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--paper-raised);
+  box-shadow: var(--float-shadow);
+}
+.delete-toast-word {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.delete-toast-undo {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius);
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--wax);
+}
+@media (hover: hover) and (pointer: fine) {
+  .delete-toast-undo:hover {
+    background: var(--wax-faint);
+  }
+}
+/* the countdown fill — scaleX from the left so it's transform-only (no layout),
+   linear over the toast's own duration; when it reaches the far edge the toast
+   is already leaving. Held back under reduced motion (the words + Undo stand). */
+.delete-toast-fill {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: var(--ember);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .delete-toast-fill {
+    animation: delete-toast-sweep var(--toast-dur, 5000ms) linear forwards;
+  }
+}
+@keyframes delete-toast-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 .pressable {
   transition:
     transform var(--dur-fast) var(--ease-out),
