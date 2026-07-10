@@ -207,6 +207,12 @@ async function runCycle(): Promise<void> {
         throw new Error("enrollment unconfirmed — refusing a plaintext push");
       if (enrolled) {
         setStatus({ phase: "idle", locked: true });
+        // the calendar's locked letter says how much waits behind the
+        // lock — the status endpoint needs no key, so the counts are
+        // safe to fetch even though the book itself must not move
+        try {
+          await refreshCounts();
+        } catch {}
         return;
       }
       setStatus({ locked: false });
