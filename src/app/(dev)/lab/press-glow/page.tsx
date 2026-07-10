@@ -57,18 +57,19 @@ interface GlowOpts {
   lift: number;
 }
 
-/* per-theme recipes (owner-tuned): Paper needs a stronger, tighter pool —
-   the cream leaves it little luminance headroom — while Lamplight's candle
-   carries at low strength, so it goes softer, wider, and trails more */
+/* per-theme recipes (owner-tuned), candle in both: Paper runs a big, strong
+   pool with a heavy ambient — the cream leaves so little luminance headroom
+   that presence has to come from area, not intensity — while Lamplight's
+   candle carries at low strength, so it goes smaller, softer, and wider */
 export const GLOW_DEFAULTS: GlowOpts = {
   ink: "candle",
-  strength: 0.75,
-  size: 240,
-  blur: 18,
-  reach: 2.6,
-  ambient: 0.5,
+  strength: 0.7,
+  size: 410,
+  blur: 32,
+  reach: 2.1,
+  ambient: 0.8,
   lag: 0.55,
-  grow: 1.012,
+  grow: 1.016,
   rest: 0,
   lift: 0.25,
 };
@@ -81,7 +82,7 @@ export const GLOW_DEFAULTS_DARK: GlowOpts = {
   reach: 3.6,
   ambient: 0.35,
   lag: 0.65,
-  grow: 1.012,
+  grow: 1.016,
   rest: 0,
   lift: 0.25,
 };
@@ -91,13 +92,26 @@ const defaultsFor = (theme: string | undefined) =>
 
 /* the card's seat on the desk, from printed-flat to floating: the shadow
    widens and softens as the border hands separation over to the light */
-const liftStyle = (L: number): React.CSSProperties => ({
-  boxShadow: [
-    `inset 0 1px 0 var(--press-highlight)`,
+const liftShadows = (L: number) =>
+  [
     `0 ${(2 + 10 * L).toFixed(1)}px ${(6 + 28 * L).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.05 + 0.08 * L).toFixed(3)})`,
     `0 ${(1 + 2 * L).toFixed(1)}px ${(3 + 6 * L).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.04 + 0.05 * L).toFixed(3)})`,
-  ].join(", "),
-  borderColor: `color-mix(in srgb, var(--rule-faint) ${Math.round((1 - L) * 100)}%, transparent)`,
+  ].join(", ");
+const liftBorder = (L: number) =>
+  `color-mix(in srgb, var(--rule-faint) ${Math.round((1 - L) * 100)}%, transparent)`;
+/* the ghost add-card's seat: its fade mask clips anything painted outside
+   the border box, so an outer box-shadow simply never renders on it — and
+   filter runs BEFORE mask on the same element, so the shadow must come from
+   a drop-shadow() on an unmasked parent, where it dissolves with the faded
+   card beneath. Blur halved: drop-shadow blur ≈ box-shadow blur / 2 */
+const liftDropShadow = (L: number) =>
+  [
+    `drop-shadow(0 ${(2 + 10 * L).toFixed(1)}px ${((6 + 28 * L) / 2).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.05 + 0.08 * L).toFixed(3)}))`,
+    `drop-shadow(0 ${(1 + 2 * L).toFixed(1)}px ${((3 + 6 * L) / 2).toFixed(1)}px rgb(var(--shadow-hue) / ${(0.04 + 0.05 * L).toFixed(3)}))`,
+  ].join(" ");
+const liftStyle = (L: number): React.CSSProperties => ({
+  boxShadow: `inset 0 1px 0 var(--press-highlight), ${liftShadows(L)}`,
+  borderColor: liftBorder(L),
 });
 
 /* the inks. Candle is per-theme (see the <style> block on the lab root):
@@ -257,7 +271,7 @@ function GlowSurface({
       // for page scrolling and a pointercancel snuffs the light mid-stroke.
       // The page still scrolls from the margins between benches.
       style={{ touchAction: "none", ...style }}
-      className={`relative transition-transform duration-[240ms] ease-[var(--ease-out)] ${className ?? ""}`}
+      className={`relative transition-transform duration-[420ms] ease-[var(--ease-out)] ${className ?? ""}`}
     >
       {back}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
@@ -331,13 +345,24 @@ function AddCardBench({ opts, editing }: { opts: GlowOpts; editing: boolean }) {
         opts={opts}
         className="rounded-[6px]"
         back={
-          <span
-            aria-hidden
-            style={liftStyle(opts.lift)}
-            className={`pointer-events-none absolute inset-0 rounded-[6px] border bg-paper ${
-              text ? "border-rule" : "[-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)]"
-            }`}
-          />
+          text ? (
+            <span
+              aria-hidden
+              style={liftStyle(opts.lift)}
+              className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule bg-paper"
+            />
+          ) : (
+            /* two nodes, deliberately: on one element the fade mask is applied
+               LAST (after filter), clipping any shadow to the border box — so
+               the drop-shadow sits on an unmasked parent, shadowing the
+               already-faded card. The lift dissolves with the ghost. */
+            <span aria-hidden className="pointer-events-none absolute inset-0" style={{ filter: liftDropShadow(opts.lift) }}>
+              <span
+                className="absolute inset-0 rounded-[6px] border bg-paper [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)]"
+                style={{ boxShadow: "inset 0 1px 0 var(--press-highlight)", borderColor: liftBorder(opts.lift) }}
+              />
+            </span>
+          )
         }
       >
         <textarea
