@@ -971,6 +971,21 @@ mark.snippet-mark {
   }
 }
 
+/* First-run swap: the calendar's static skeleton carries BOTH the today-zone
+   and the welcome-intro bodies. A pre-paint script (layout.tsx) stamps
+   `data-first-run` on <html> when the book was last empty, so the correct one
+   is chosen before the first frame — no today-shell flash before the in-feed
+   catches up. Default (unstamped) shows the filled/today body. */
+.skeleton-empty-only {
+  display: none;
+}
+:root[data-first-run] .skeleton-filled-only {
+  display: none;
+}
+:root[data-first-run] .skeleton-empty-only {
+  display: block;
+}
+
 /* ── quiet links ───────────────────────────────────────────── */
 
 .link-quiet {
