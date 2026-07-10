@@ -8,10 +8,13 @@ import { NextResponse, type NextRequest } from "next/server";
  *    skeleton gallery, the dev bake writer) 404s. (Defence in depth: the bake API
  *    also refuses to write unless NODE_ENV is development, and a deployed FS is
  *    read-only.)
- *  - `?skeldebug` on the calendar — the page-load skeletons are held on screen for
- *    inspection; that's a dev state, not something a visitor should land in, so the
- *    param is stripped (redirect to the clean URL) in production.
+ *  - the calendar's debug params — dev states held on screen for inspection
+ *    (`?skeldebug` parks a page-load skeleton, `?lockdebug` forces the locked
+ *    letter); not something a visitor should land in, so they're stripped
+ *    (redirect to the clean URL) in production.
  */
+const CALENDAR_DEBUG_PARAMS = ["skeldebug", "lockdebug"];
+
 export function proxy(req: NextRequest) {
   if (process.env.VERCEL_ENV !== "production") return NextResponse.next();
 
@@ -21,9 +24,10 @@ export function proxy(req: NextRequest) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  if (searchParams.has("skeldebug")) {
+  const held = CALENDAR_DEBUG_PARAMS.filter((p) => searchParams.has(p));
+  if (held.length > 0) {
     const url = req.nextUrl.clone();
-    url.searchParams.delete("skeldebug");
+    for (const p of held) url.searchParams.delete(p);
     return NextResponse.redirect(url);
   }
 

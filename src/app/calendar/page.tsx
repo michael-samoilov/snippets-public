@@ -2372,7 +2372,9 @@ const BOOK_EMPTY_KEY = "snippets:book-empty";
 // Dev-only, in ?skeldebug's spirit: ?lockdebug forces the locked letter (the
 // real state needs an enrolled account and a keyless device — unreachable in
 // a sandbox), ?lockdebug=214 fakes the waiting count. Read at module load,
-// before the calendar's mount effects rewrite the URL to ?d=….
+// before the calendar's mount effects rewrite the URL to ?d=…. Like skeldebug
+// it never reaches the production domain — src/proxy.ts strips both params
+// there, the same lockdown that 404s /lab.
 const LOCK_DEBUG: number | null = (() => {
   if (typeof window === "undefined") return null;
   const v = new URLSearchParams(window.location.search).get("lockdebug");
