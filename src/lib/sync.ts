@@ -228,8 +228,11 @@ async function runCycle(): Promise<void> {
     void maybeDeliverBackup(status.backup);
   } catch (error) {
     if (error instanceof SignedOut) {
-      // session gone (expired, signed out elsewhere) — not an error state
-      setStatus({ phase: "idle" });
+      // session gone (expired, signed out elsewhere) — not an error state.
+      // locked is a claim about the signed-in account; without a session
+      // it can't be verified, and the surfaces it drives (the calendar's
+      // locked letter, the Settings unlock form) have nowhere to lead
+      setStatus({ phase: "idle", locked: false });
       return;
     }
     if (error instanceof LockedError) {
@@ -444,6 +447,7 @@ export async function releaseBinding(): Promise<void> {
     serverCount: null,
     backup: null,
     skewed: false,
+    locked: false,
   });
 }
 

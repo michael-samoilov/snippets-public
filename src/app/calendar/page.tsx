@@ -50,6 +50,7 @@ import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { renderInline } from "@/lib/inline-markup";
 import type { Snippet } from "@/lib/types";
 import { useSettings } from "@/lib/settings";
+import { useSession } from "@/lib/auth";
 import { useSyncStatus } from "@/lib/sync";
 import { PaperButton } from "@/components/paper-button";
 import { queryTerms } from "@/lib/search";
@@ -3621,18 +3622,22 @@ function TodayZoneFill({
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   const draft = useKeptDraft();
   const router = useRouter();
-  // The locked letter's inputs: the account is enrolled in end-to-end
-  // encryption but this device holds no key, and the server holds entries
-  // this device can't show (counts are fetched even while locked — see
-  // sync.ts). serverCount unknown counts as "assume yes": an enrolled
-  // account almost always has entries, and a beat of letter that then
-  // yields to the intro is better than a newcomer's welcome to a returning
-  // writer. Known counts with nothing hidden (server ≤ local) stay quiet —
-  // there's nothing to recover, and Settings still names the paused sync.
+  // The locked letter's inputs — it shows only on POSITIVE evidence of the
+  // exact state it addresses, never on assumption: a live signed-in session
+  // (a stale store after sign-out must not strand the letter pointing at an
+  // unlock form that no longer renders), the locked state (enrolled account,
+  // no key on this device), and a KNOWN server count exceeding what's
+  // visible locally (counts are fetched even while locked — see sync.ts —
+  // and retried each visible minute, so an unknown count only delays the
+  // letter, while "nothing actually hidden" stays quiet: there's nothing to
+  // recover, and Settings still names the paused sync).
+  const { status: sessionStatus } = useSession();
   const sync = useSyncStatus();
   const hiddenBehindLock =
+    sessionStatus === "signed-in" &&
     sync.locked &&
-    (sync.serverCount === null || sync.serverCount > (sync.localCount ?? 0));
+    sync.serverCount !== null &&
+    sync.serverCount > (sync.localCount ?? 0);
   // NOT gated on the book being empty: keeping an entry while locked must
   // not dismiss the letter — it stands until the device actually unlocks
   const lockedLetter = hiddenBehindLock || LOCK_DEBUG !== null;
@@ -4582,7 +4587,7 @@ function TodayZoneFill({
                     {renderInline(para, `locked-${i}`)}
                   </p>
                 ))}
-                <div className="pt-1">
+                <div className="flex justify-center pt-1">
                   <PaperButton
                     onClick={() =>
                       router.push("/settings?tab=account&unlock=1")
