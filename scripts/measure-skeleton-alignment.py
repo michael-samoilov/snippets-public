@@ -78,7 +78,10 @@ def main():
         pg = c.new_page()
         pg.add_init_script("try{localStorage.setItem('theme','light')}catch(e){}")
         pg.goto("http://localhost:3000/calendar?skeldebug", wait_until="networkidle")
-        pg.wait_for_timeout(700)
+        # let page-settle finish: skeldebug re-mounts CalendarSkeleton at
+        # hydration (SSR shell → held debug view), restarting the 280ms entrance;
+        # measuring too early catches its 6px translateY mid-flight
+        pg.wait_for_timeout(2500)
         skel = pg.evaluate(MEASURE)
         pg.evaluate(GUIDES, skel)
         pg.screenshot(path=os.path.join(OUT, "skel.png"))
