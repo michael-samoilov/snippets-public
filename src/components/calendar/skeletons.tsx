@@ -44,7 +44,7 @@ export function TodaySkeleton() {
         data-today-zone-box
         className="relative flex min-h-[22rem] w-full flex-1 flex-col rounded-2xl border border-wax/45"
       >
-        <div className="flex flex-1 flex-col items-center gap-4 px-4 py-6 text-center">
+        <div className="flex flex-1 flex-col items-center gap-4 px-[8%] py-6 text-center">
           {/* today's date, seated high under the zone's top */}
           <div className="mt-[83px] flex flex-col items-center gap-2 leading-none">
             <span className="skeleton-shimmer h-2 w-16 rounded-[2px]" style={FAINT} />
@@ -54,7 +54,7 @@ export function TodaySkeleton() {
           <div className="w-px flex-1" />
           {/* the ruled composer field — three rules, a prompt bar on the first */}
           <div
-            className="w-[calc(100%-29.6px)] min-w-[14rem]"
+            className="w-full min-w-[14rem]"
             style={{
               minHeight: 60,
               backgroundImage:
@@ -74,6 +74,58 @@ export function TodaySkeleton() {
               className="skeleton-shimmer size-28 rounded-full border border-rule-faint"
               style={FAINT}
             />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── welcome: the first-run introduction (an empty book) ──────────────
+   When nothing has been kept, the zone opens onto the intro prose instead of
+   the composer — the date up top, then paragraphs that fill the sheet and push
+   the seal below the fold. So this skeleton drops the ruled field and the seal
+   and stands in prose lines: a short opening, a long middle, and more running
+   off the bottom. Line widths are a fixed pattern (never random). */
+const WELCOME_PARAS = [
+  [1, 0.25],
+  [1, 1, 1, 1, 1, 1, 1, 0.62],
+  [0.78, 1, 1, 1, 1, 0.55],
+  [1, 1, 1, 1, 1, 1, 0.4],
+  [1, 0.55],
+];
+
+export function WelcomeSkeleton() {
+  return (
+    // pt-1, not pt-[19px]: a truly empty book seats the zone almost flush under
+    // the rail (TodayZoneFill's firstEver stance), unlike the returning-visitor
+    // today zone
+    <div className="flex h-full w-full flex-col pt-1" aria-hidden="true">
+      <div
+        data-today-zone-box
+        className="relative flex min-h-[22rem] w-full flex-1 flex-col overflow-hidden rounded-2xl border border-wax/45"
+      >
+        <div className="flex flex-1 flex-col items-center gap-4 px-[8%] py-6">
+          {/* today's date, seated high under the zone's top */}
+          <div className="mt-[83px] flex flex-col items-center gap-2 leading-none">
+            <span className="skeleton-shimmer h-2 w-16 rounded-[2px]" style={FAINT} />
+            <span className="skeleton-shimmer h-6 w-32 rounded-[3px]" style={FAINT} />
+          </div>
+          {/* the intro prose — paragraphs filling the sheet, left-aligned like
+              the real copy, at its 0.92rem / 1.5 rhythm */}
+          <div className="w-full space-y-3 text-left">
+            {WELCOME_PARAS.map((para, p) => (
+              <div key={p} className="text-[0.92rem] leading-[1.5]">
+                {para.map((w, i) => (
+                  <div key={i} className="flex h-[1.5em] items-center">
+                    <span
+                      className="skeleton-shimmer h-[7px] rounded-[2px]"
+                      style={{ ...FAINT, width: `${w * 100}%` }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       </div>

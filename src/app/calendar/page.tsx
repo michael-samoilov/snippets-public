@@ -66,6 +66,7 @@ import {
   YearSkeleton,
   TodaySkeleton,
   EntrySkeleton,
+  WelcomeSkeleton,
 } from "@/components/calendar/skeletons";
 
 const EntryView = dynamic(
@@ -232,7 +233,7 @@ function LedgerRows() {
   );
 }
 
-type SkeletonView = "today" | "schedule" | "month" | "year" | "entry";
+type SkeletonView = "today" | "schedule" | "month" | "year" | "entry" | "welcome";
 
 // A calm placeholder painted on the SERVER (the Suspense fallback is SSR'd), so
 // the frame shows the instant the HTML lands instead of a blank sheet. The
@@ -308,6 +309,8 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
           <LedgerRows />
         ) : view === "entry" ? (
           <EntrySkeleton />
+        ) : view === "welcome" ? (
+          <WelcomeSkeleton />
         ) : (
           <TodaySkeleton />
         )}
@@ -324,7 +327,11 @@ function CalendarSkeleton({ view = "today" }: { view?: SkeletonView }) {
 function SkeletonDebug() {
   const held = useSearchParams().get("skeldebug");
   const view: SkeletonView =
-    held === "year" || held === "month" || held === "schedule" || held === "entry"
+    held === "year" ||
+    held === "month" ||
+    held === "schedule" ||
+    held === "entry" ||
+    held === "welcome"
       ? held
       : "today";
   return (
@@ -2330,6 +2337,12 @@ function Calendar() {
 
 /* ── the schedule: the book of kept days ────────────────────────── */
 
+// The book's empty/filled state, cached from the last resolved query so the
+// NEXT load can pick its skeleton synchronously (which one to hold isn't
+// knowable until the IndexedDB query returns — but the answer rarely changes
+// between loads, and a stale guess self-corrects the instant the book lands).
+const BOOK_EMPTY_KEY = "snippets:book-empty";
+
 /**
  * The deepest altitude is the book itself: every day that holds
  * something, stacked in time, the dates standing in the margin like a
@@ -2856,6 +2869,19 @@ function ScheduleFeedBase({
   // the book holds nothing yet — the today zone opens with a warmer first
   // invitation (and there's no yesterday to review above it)
   const bookEmpty = (all?.length ?? 0) === 0;
+  // remember whether the book was empty, so the next load's skeleton can hold
+  // the welcome intro rather than the composer without waiting on the query
+  useEffect(() => {
+    if (all === undefined) return; // still loading — bookEmpty isn't real yet
+    try {
+      localStorage.setItem(BOOK_EMPTY_KEY, bookEmpty ? "1" : "0");
+    } catch {}
+  }, [all, bookEmpty]);
+  // read once at mount (client-only): last-known empty state, to choose the
+  // loading skeleton before this query resolves
+  const [bookEmptyHint] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(BOOK_EMPTY_KEY) === "1",
+  );
 
   // hundreds of day sections — memoized as elements, so the scroll
   // spy's selection churn (a page re-render per day crossed) bails
@@ -3027,7 +3053,15 @@ function ScheduleFeedBase({
             that then pops. Landing on today opens onto the compose zone (the
             book's foot fills the viewport), so hold that; a deep-link into any
             other day lands among its entries, so hold the ruled book instead. */}
-        {body ?? (selected === todayKey ? <TodaySkeleton /> : <LedgerRows />)}
+        {body ??
+          (selected !== todayKey ? (
+            <LedgerRows />
+          ) : bookEmptyHint ? (
+            // an empty book opens today onto the welcome intro, not the composer
+            <WelcomeSkeleton />
+          ) : (
+            <TodaySkeleton />
+          ))}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
