@@ -443,12 +443,11 @@ export const copy = {
       offline: "Offline — changes will sync when you’re back.",
       error: "Sync hit a snag — retrying.",
       skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
-      /** the tiny mono integrity line, e.g. "1,204 locally on this device · 1,204 on the server" */
+      /** the tiny mono integrity line, e.g. "1,204 on device · 1,204 on server" */
       counts: (device: string, server: string) =>
-        `${device} locally on this device · ${server} on the server`,
+        `${device} on device · ${server} on server`,
       /** same line while offline — the server side can't be known, so name the state */
-      countsOffline: (device: string) =>
-        `${device} locally on this device · you’re offline`,
+      countsOffline: (device: string) => `${device} on device · you’re offline`,
       outOfStep: "The counts disagree.",
       reconcile: "Reconcile",
       /** what pressing Reconcile will actually do — the same LWW rule as
