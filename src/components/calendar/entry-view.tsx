@@ -9,7 +9,7 @@ import { updateSnippet } from "@/lib/db";
 import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
 import { allOccurrences, queryTerms } from "@/lib/search";
-import { cn } from "@/lib/utils";
+import { cn, enterFiles } from "@/lib/utils";
 import { useScrollEdges } from "@/components/ui/scroll-terminus";
 import { autosizeArea } from "./shared";
 
@@ -298,10 +298,9 @@ function EntryBody({
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") stopEdit();
-            // Enter is a newline — this is prose, not a chat line. The edit
-            // commits on blur (tap away) or via the confirm stamp; ⌘/Ctrl+Enter
-            // is the desktop accelerator. A mobile return key just breaks the line.
-            else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            // Desktop: Enter commits the edit, Shift+Enter is a newline. Touch:
+            // Enter is always a newline; the edit commits on blur or the stamp.
+            else if (enterFiles(e)) {
               e.preventDefault();
               stopEdit();
             }

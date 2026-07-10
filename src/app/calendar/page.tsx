@@ -56,7 +56,7 @@ import { useSession } from "@/lib/auth";
 import { useSyncStatus } from "@/lib/sync";
 import { PaperButton } from "@/components/paper-button";
 import { queryTerms } from "@/lib/search";
-import { cn, joinText } from "@/lib/utils";
+import { cn, enterFiles, joinText } from "@/lib/utils";
 import {
   weekdays,
   ym,
@@ -3431,10 +3431,9 @@ function FlowBackfillCapture({
               autosizeArea(e.target);
             }}
             onKeyDown={(e) => {
-              // Enter is a newline — this is prose, not a chat line, and the
-              // wax seal files. ⌘/Ctrl+Enter is the desktop accelerator for
-              // that seal; a mobile return key just breaks the line.
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              // Desktop: Enter files, Shift+Enter is a newline. Touch: Enter is
+              // always a newline (no Shift+Enter there) and the seal files.
+              if (enterFiles(e)) {
                 e.preventDefault();
                 keep();
               }
@@ -4704,7 +4703,7 @@ function TodayZoneFill({
               }}
               onFocus={() => { lastFocusAt.current = performance.now(); scheduleAnchor(); }}
               onBlur={releaseTail}
-              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } }}
+              onKeyDown={(e) => { if (enterFiles(e)) { e.preventDefault(); submit(); } }}
               placeholder={
                 listening
                   ? copy.capture.listeningPlaceholder
