@@ -81,10 +81,13 @@ const ink = (alpha: number) =>
   `color-mix(in srgb, var(--glow-ink) ${Math.round(alpha * 100)}%, transparent)`;
 
 export function PressGlow({ grow = false, className }: {
-  /** bloom the host a hair while pressed/focused. Leave OFF on surfaces
-      whose transform is owned elsewhere (the composer's press dip, the
-      entry card's open/close zoom) */
-  grow?: boolean;
+  /** bloom the surface a hair while pressed/focused. `true` scales the host
+      itself; `"parent"` scales the host's parent — for surfaces whose own
+      transform belongs to another animation (the composer's press dip, the
+      entry card's open/close zoom), give them a dedicated wrapper and point
+      the bloom there. The bloom target declares its own transform
+      transition. */
+  grow?: boolean | "parent";
   /** extra classes for the clipping layer — e.g. a corner radius when the
       host itself carries none (the layer inherits the host's otherwise) */
   className?: string;
@@ -121,11 +124,17 @@ export function PressGlow({ grow = false, className }: {
     let rec = GLOW_PAPER;
     let reduce = false;
 
+    let shedWC = 0;
     const arm = () => {
       reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       rec = document.documentElement.classList.contains("dark")
         ? GLOW_LAMPLIGHT
         : GLOW_PAPER;
+      // will-change only for the press's lifetime: a standing hint would
+      // hold a compositor layer per surface, and the book renders hundreds
+      // of tiles — the exact per-card layer cost perf-flat exists to shed
+      clearTimeout(shedWC);
+      glow.style.willChange = "transform, opacity";
       glow.style.width = `${rec.size}px`;
       glow.style.height = `${rec.size}px`;
       core.style.width = `${rec.size}px`;
@@ -155,23 +164,35 @@ export function PressGlow({ grow = false, className }: {
       if (!raf) raf = requestAnimationFrame(step);
     };
     const level = () => {
-      glow.style.opacity = down || riding ? "1" : "0";
+      const lit = down || riding;
+      glow.style.opacity = lit ? "1" : "0";
+      if (!lit) {
+        // shed the compositor hint once the fade has finished
+        clearTimeout(shedWC);
+        shedWC = window.setTimeout(() => {
+          glow.style.willChange = "";
+        }, 400);
+      }
     };
+    // the bloom's target: the host, or — where the host's transform belongs
+    // to another animation (a press dip, an open/close zoom) — a dedicated
+    // ancestor nothing else transforms
+    const bloomEl = growRef.current === "parent" ? (host.parentElement ?? host) : host;
     const scale = () => {
       if (!growRef.current) return;
       if ((down || focused || riding) && !reduce) {
         // normalized bloom: calibrated on the today zone's ~525px diagonal,
         // smaller surfaces scale proportionally more so every card visibly
         // grows the same few pixels
-        // the HOST declares its own `transition` for transform (the glow
-        // never writes that property — the surface may be transitioning
+        // the bloom TARGET declares its own `transition` for transform (the
+        // glow never writes that property — the surface may be transitioning
         // border-color or others of its own)
-        const r = host.getBoundingClientRect();
+        const r = bloomEl.getBoundingClientRect();
         const diag = Math.max(120, Math.hypot(r.width, r.height));
         const eff = Math.min(1.06, 1 + (rec.grow - 1) * (525 / diag));
-        host.style.transform = `scale(${eff})`;
+        bloomEl.style.transform = `scale(${eff})`;
       } else {
-        host.style.transform = "";
+        bloomEl.style.transform = "";
       }
     };
     const local = (cx: number, cy: number) => {
@@ -268,6 +289,7 @@ export function PressGlow({ grow = false, className }: {
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(settle);
+      clearTimeout(shedWC);
       window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);

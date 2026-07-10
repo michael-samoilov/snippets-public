@@ -27,17 +27,24 @@ function EntryViewBase({
   // opening. The zoom drives [data-entry-card]'s box and fades the
   // content in; the date now lives in the header, so no header here.
   return (
-    // max-h, not h: a short entry's card reaches only as far as its
-    // words; only a long one fills the stage and scrolls inside, with
-    // the card's own bottom rule marking where the scroll terminates
+    // the bloom wrapper: the open/close zoom owns the CARD's transform (and
+    // its 0,0 origin), so the press bloom lifts this layout-neutral shell
+    // instead — its own transition, nothing else animates it. h-full, not
+    // max-h: the card's max-h-full needs a DEFINITE height above it to cap
+    // a long entry (a shrink-wrapped wrapper would resolve it to none and
+    // let the card overflow the stage)
+    <div className="flex h-full min-h-0 flex-col transition-transform duration-[420ms] ease-[var(--ease-out)]">
+    {/* max-h, not h: a short entry's card reaches only as far as its
+        words; only a long one fills the stage and scrolls inside, with
+        the card's own bottom rule marking where the scroll terminates */}
     <div
       data-entry-card
       className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border [border-color:var(--card-seat-border)] bg-paper [box-shadow:var(--card-seat)]"
       style={{ transformOrigin: "0 0" }}
     >
       {/* light pools under a press on the words (the rewrite affordance made
-          visible). No grow: the open/close zoom owns this card's transform */}
-      <PressGlow />
+          visible); the bloom rides the wrapper above */}
+      <PressGlow grow="parent" />
       {snippet ? (
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (
@@ -53,6 +60,7 @@ function EntryViewBase({
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] shadow-[inset_0_1px_0_var(--press-highlight)]"
       />
+    </div>
     </div>
   );
 }

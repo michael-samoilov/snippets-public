@@ -2344,11 +2344,15 @@ function Calendar() {
                                 "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
                               )}
                             >
-                              <MarkedPreview
-                                text={s.text}
-                                query={query}
-                                isQuote={s.kind === "quote"}
-                              />
+                              <PressGlow className="rounded-[6px]" />
+                              {/* relative: the marked words stay ink ON the light */}
+                              <div className="relative">
+                                <MarkedPreview
+                                  text={s.text}
+                                  query={query}
+                                  isQuote={s.kind === "quote"}
+                                />
+                              </div>
                             </button>
                           </li>
                         ))}
@@ -3006,8 +3010,8 @@ function ScheduleFeedBase({
                     // read as one sweep across the row
                     return isToday ? (
                       <motion.div
-                        initial={todayJustKept ? { opacity: 0, clipPath: "inset(0 100% 0 0)" } : false}
-                        animate={{ opacity: 1, clipPath: "inset(0 0% 0 0)" }}
+                        initial={todayJustKept ? { opacity: 0, clipPath: "inset(-50% 100% -50% -10%)" } : false}
+                        animate={{ opacity: 1, clipPath: "inset(-50% -10% -50% -10%)" }}
                         transition={{ duration: 0.1, ease: "easeInOut" }}
                       >
                         {dateInner}
@@ -3144,9 +3148,13 @@ function ScheduleCards({
   // float). The margin date wipes just before it, so the two read as one uniform
   // sweep across the row's width: the date takes the first fifth, the card the
   // rest (it waits out the date with a delay).
+  // negative top/bottom/left insets from the start, and a negative right at
+  // rest: the wipe still reveals left-to-right, but the clip-path motion
+  // leaves STANDING on the li afterwards sits well outside the card's seat
+  // shadow instead of guillotining it at the border box
   const sweepBirth = {
-    initial: { opacity: 0, clipPath: "inset(0 100% 0 0)" },
-    animate: { opacity: 1, clipPath: "inset(0 0% 0 0)" },
+    initial: { opacity: 0, clipPath: "inset(-50% 100% -50% -10%)" },
+    animate: { opacity: 1, clipPath: "inset(-50% -10% -50% -10%)" },
     transition: { duration: 0.4, delay: 0.1, ease: "easeInOut" as const },
   };
 
@@ -3197,9 +3205,12 @@ function ScheduleCards({
                 "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
               )}
             >
+              {/* light pools under the press; the open animation owns the
+                  tile's transform, so no bloom here */}
+              <PressGlow className="rounded-[6px]" />
               <p
                 className={cn(
-                  "book-card-prose voice-prose line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
                   s.kind === "quote" && "hang-quotes italic",
                 )}
               >
@@ -3362,15 +3373,18 @@ function FlowBackfillCapture({
       : copy.backfill.other;
 
   return (
-    <div className={cn("relative", follows && "mt-1")}>
+    // also the composer's bloom target (PressGlow grow="parent"): the card's
+    // own transform belongs to the press dip, so the light lifts this
+    // wrapper instead - the dip sinks the card within a gently risen block
+    <div className={cn("relative transition-transform duration-[420ms] ease-[var(--ease-out)]", follows && "mt-1")}>
       {/* the composer — present at rest and after a keep, GONE during the press
           so today shows only the stamp. Its return wipes in from the left as a
           single already-laid-out line (clip-path reveal — no re-wrapping), slow
           on purpose (a once-or-twice-a-day beat). */}
       {composerOpen && (
         <motion.div
-          initial={seq.phase === "composing" ? { clipPath: "inset(0 100% 0 0)" } : false}
-          animate={{ clipPath: "inset(0 0 0 0)" }}
+          initial={seq.phase === "composing" ? { clipPath: "inset(-50% 100% -50% -10%)" } : false}
+          animate={{ clipPath: "inset(-50% -10% -50% -10%)" }}
           transition={{ duration: KEEP_BEATS.composeMs / 1000, ease: [0.23, 1, 0.32, 1] }}
           // pressable-composer: the same press-down dip as the entry cards
           // beside it, only for the press that begins writing. The dip holds
@@ -3405,9 +3419,8 @@ function FlowBackfillCapture({
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />
-          {/* light under the finger, above the card's paint, under its words.
-              No grow: this card's transform belongs to the press dip */}
-          <PressGlow className="rounded-[6px]" />
+          {/* light under the finger, above the card's paint, under its words */}
+          <PressGlow grow="parent" className="rounded-[6px]" />
           <textarea
             ref={areaRef}
             value={text}
@@ -4565,8 +4578,13 @@ function TodayZoneFill({
             )}
           </AnimatePresence>
           {/* the press glow — light pools under a touch anywhere on the
-              paper and follows the finger; above the wash, under the words */}
-          <PressGlow grow />
+              paper and follows the finger; above the wash, under the words.
+              NOT while a letter is on the sheet (the first-ever introduction
+              or the locked letter): a newcomer is reading, scrolling, and
+              finding their feet — light chasing the finger over the words
+              is exactly the distraction those beats can't afford. It
+              returns the moment the letter retires. */}
+          {!((lockedLetter || firstEver) && text.trim().length === 0) && <PressGlow grow />}
           {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
               px), so the ruled field and the intro keep the same visual margin
               from a narrow phone up to the wide desk — the ruled paper and the
