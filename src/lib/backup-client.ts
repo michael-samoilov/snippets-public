@@ -167,8 +167,9 @@ export async function maybeDeliverBackup(
   if (!(await hasDriveToken())) {
     // a device connected before delivery moved client-side (or a fresh
     // one) adopts the server-held token once; if the server has none to
-    // give — already adopted on another device — this device just won't
-    // deliver, which is fine, one delivering device is enough
+    // give — already adopted on another device — this device won't
+    // deliver until the writer adds it (Settings → "Back up from this
+    // device too" mints it a grant of its own; every added device delivers)
     if (adoptSettled) return;
     const adoption = await adoptDriveToken().catch(
       () => "transient" as const,

@@ -216,9 +216,24 @@ export default function PrivacyPage() {
           <details className="group mt-2 rounded-[7px] border border-rule-faint px-4 py-3">
             <summary className="voice-label cursor-pointer list-none text-[0.75rem] text-ink-soft marker:content-none hover:text-ink">
               The mechanics, for the curious
-              <span className="ml-1 inline-block transition-transform group-open:rotate-90">
-                ›
-              </span>
+              {/* a stroke chevron (Feather, the app's 1.8/24 line), not the ›
+                  glyph: the text glyph's ink sits off-centre in its em box,
+                  so the old span swung through an arc instead of turning in
+                  place. This ink is symmetric about the box centre, so the
+                  turn pivots true — and still reads as a chevron once
+                  turned, which the swashed Fraunces guillemet did not. */}
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="ml-1 inline-block h-[0.95em] w-[0.95em] -translate-y-[0.06em] transition-transform group-open:rotate-90"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="9 6 15 12 9 18" />
+              </svg>
             </summary>
             <div className="mt-3 space-y-3">
               <p className="voice-prose text-[0.9rem] text-ink-soft">

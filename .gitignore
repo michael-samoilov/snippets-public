@@ -42,3 +42,4 @@ next-env.d.ts
 
 # skeleton-alignment harness screenshots
 scripts/.skeleton-align/
+scripts/.header-align/

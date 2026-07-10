@@ -106,10 +106,14 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (keep `src/lib/render-book.ts` the single renderer — the JSON stays
   bit-compatible with Restore from JSON) and uploads to the visible
   Drive folder itself (`src/lib/backup-client.ts` + `drive-client.ts`),
-  after each settled sync. The server keeps NO Drive tokens: the
-  device adopts the refresh token once (`/api/backup/adopt` — the
-  server then forgets it) and exchanges it statelessly
-  (`/api/backup/refresh`). The device reports deliveries
+  after each settled sync. The server keeps NO Drive tokens: each
+  device adopts its own refresh token once (`/api/backup/adopt` —
+  the server then forgets it) and exchanges it statelessly
+  (`/api/backup/refresh`). Grants are PER DEVICE and additive — any
+  signed-in device can mint its own via the same consent (Settings →
+  "Back up from this device too"); every device holding one delivers,
+  and Drive writes converge by name, no duplicates. The device
+  reports deliveries
   (`/api/backup/delivered`) AND failures (`/api/backup/failed` →
   ledger state `error`); Settings derives its line via
   `backupHealth()` (`backup-shared.ts`, unit-tested) — "failing" is

@@ -28,7 +28,6 @@ import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "
 import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
 import {
   adoptDriveToken,
-  deliverBackup,
   forgetDriveTokens,
   hasDriveToken,
 } from "@/lib/backup-client";
@@ -1111,10 +1110,16 @@ function BackupSection() {
           setError(copy.settings.backup.connectFailed);
           return;
         }
-        // this device adopts the token (the server forgets it) and runs
-        // the first delivery itself — the freshness line is never blank
-        const adopted = await adoptDriveToken();
-        if (adopted === "adopted") await deliverBackup();
+        // this device adopts the token; the server forgets it. The first
+        // delivery is NOT run here — it rides the settled sync cycle that
+        // requestSync() below kicks off, exactly like every later delivery.
+        // Delivering straight from the consent redirect rendered whatever
+        // happened to be in local storage at that moment: a fresh device
+        // mid-first-pull (or a locked one) would overwrite the Drive
+        // archive with a partial book, and the hourly gap would then hold
+        // that bad copy in place. After a settled cycle the local book is
+        // level with the server — the fullest copy there is.
+        await adoptDriveToken();
       } catch {
         setError(copy.settings.backup.connectFailed);
       } finally {
@@ -1222,9 +1227,14 @@ function BackupSection() {
           {copy.settings.backup.mirrors}
         </p>
         {deviceHasToken === false && (
-          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
-            {copy.settings.backup.deliversElsewhere}
-          </p>
+          <div className="space-y-3">
+            <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+              {copy.settings.backup.deliversElsewhere}
+            </p>
+            {/* same consent, this device: Google mints it a grant of its own
+                (the other device keeps its own — both deliver from then on) */}
+            <div>{connectButton(copy.settings.backup.connectHere)}</div>
+          </div>
         )}
       </div>
     );
