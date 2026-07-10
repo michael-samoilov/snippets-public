@@ -2333,8 +2333,8 @@ function Calendar() {
                               // isolate: bake the marked ink's blend so the
                               // filtered book scrolls without re-blending
                               className={cn(
-                                "pressable isolate block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
-                                "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
+                                "pressable isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                                "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
                               )}
                             >
                               <MarkedPreview
@@ -3168,8 +3168,8 @@ function ScheduleCards({
               // on scroll instead of re-blending the prose every frame
               // against the fixed sheet (the book's scroll-start jank)
               className={cn(
-                "book-card pressable isolate block w-full rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
-                "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
+                "book-card pressable isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
               )}
             >
               <p
@@ -3365,14 +3365,17 @@ function FlowBackfillCapture({
             window.addEventListener("touchcancel", clear, { once: true });
           }}
         >
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised"
-          />
+          {/* the ghost's seat is a drop-shadow on this unmasked parent: the
+              face's fade mask clips outer box-shadows entirely, and filter
+              runs before mask on one element — so the shadow lives a level
+              up and dissolves with the ghost */}
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0 [filter:var(--card-seat-drop)]">
+            <span className="absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised" />
+          </span>
           <span
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-[opacity,background-color] duration-150",
+              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper [box-shadow:var(--card-seat)] transition-[opacity,background-color] duration-150",
               "border-rule-faint group-focus-within:border-rule group-hover:bg-paper-raised",
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}

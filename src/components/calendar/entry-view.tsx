@@ -32,7 +32,7 @@ function EntryViewBase({
     // the card's own bottom rule marking where the scroll terminates
     <div
       data-entry-card
-      className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]"
+      className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border [border-color:var(--card-seat-border)] bg-paper [box-shadow:var(--card-seat)]"
       style={{ transformOrigin: "0 0" }}
     >
       {/* light pools under a press on the words (the rewrite affordance made
