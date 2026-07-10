@@ -145,14 +145,6 @@ export default function SignInPage() {
                 id="signin-email"
                 type="email"
                 autoComplete="email"
-                // iOS Safari defaults autocorrect OFF for type="email", and
-                // that setting also silently disables the system's own text
-                // replacement shortcuts (e.g. a user's saved "myem" → their
-                // full address) — the same UITextInputTraits subsystem
-                // drives both. Turning it back on restores those shortcuts;
-                // autocapitalize stays off, which is correct for an email.
-                autoCorrect="on"
-                autoCapitalize="none"
                 autoFocus
                 placeholder={copy.signin.emailPlaceholder}
                 value={email}

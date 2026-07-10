@@ -182,7 +182,7 @@ export const copy = {
   todayZone: {
     /** the very first invitation — nothing has ever been saved */
     placeholderFirstEver:
-      "Start saving your memories… Speak into the seal, or write here and press it to keep.",
+      "Start saving your memories… Press the microphone to record, or write here and press the seal to submit.",
     /** every day after, once the book holds something */
     placeholder: "Write something from today…",
     /** today already holds an entry — invite another */
@@ -352,6 +352,13 @@ export const copy = {
   settings: {
     title: "Settings",
     back: "Back to your entries",
+    /** the two top-level sections of the page */
+    tabs: {
+      /** the tablist's accessible name */
+      label: "Settings sections",
+      appearance: "Appearance",
+      account: "Account",
+    },
     account: {
       heading: "Account",
       signedOutLead:

@@ -272,11 +272,11 @@ export default function PrivacyPage() {
           </h2>
           <Sub id="google-drive-backup">Google Drive backup</Sub>
           <p className="voice-prose text-[0.95rem]">
-            <Em>If you connect Google Drive</Em>, readable copies land in a
+            If you connect Google Drive, readable copies land in a
             folder in your own Drive named &ldquo;Snippets&rdquo; — so that (A)
-            if you use encryption and lose your passphrase and recovery code you
+            if you use encryption and lose your passphrase and recovery code, you
             can still import your entries and keep saving your memories, and (B)
-            so that if this app ever disappears you still hold a safe,
+            so that if this app ever disappears, you still hold a safe,
             up-to-date copy of them. Whether or not you use encryption, these
             are plain, readable files by design — that is what lets them rescue
             you.{" "}
@@ -314,7 +314,7 @@ export default function PrivacyPage() {
 
           <Sub id="voice">Voice</Sub>
           <p className="voice-prose text-[0.95rem]">
-            <Em>If you speak an entry with the in-app microphone</Em>, the app
+            If you speak an entry with the in-app microphone, the app
             streams your audio to a transcription service — currently{" "}
             <a
               href="https://deepgram.com/privacy"
