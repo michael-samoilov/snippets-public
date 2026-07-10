@@ -359,6 +359,37 @@ export const copy = {
       appearance: "Appearance",
       account: "Account",
     },
+    /** the at-a-glance confidence strip atop the Account tab */
+    protection: {
+      ariaLabel: "What’s protecting your entries",
+      /** neutral noun shown for the brief moment enrollment is still loading */
+      encryption: "Encryption",
+      encrypted: "Encrypted",
+      encryptedSub: "Only your devices hold the key.",
+      locked: "Locked",
+      lockedSub: "Unlock below to read on this device.",
+      notEncrypted: "Not encrypted",
+      notEncryptedSub: "Add end-to-end encryption below.",
+      synced: "Synced",
+      syncedSub: (when: string, count: string | null) =>
+        count ? `${when} · ${count} carried` : when,
+      syncing: "Syncing",
+      syncingSub: "Carrying your latest entries…",
+      syncWaitingSub: "Waiting for the first sync…",
+      syncSnag: "Sync snag",
+      syncSnagSub: "Retrying — your entries are safe on this device.",
+      syncPaused: "Sync paused",
+      syncPausedSub: "Unlock encryption to sync this device.",
+      offline: "Offline",
+      offlineSub: "Changes will sync when you’re back.",
+      backedUp: "Backed up",
+      backedUpSub: (when: string) => `Delivered to your Drive · ${when}`,
+      backupFirstSub: "The first delivery is on its way…",
+      backupFailing: "Backup failing",
+      backupFailingSub: "Reconnect below to fix it.",
+      backupOff: "Backup off",
+      backupOffSub: "Connect Google Drive for a readable copy.",
+    },
     account: {
       heading: "Account",
       signedOutLead:

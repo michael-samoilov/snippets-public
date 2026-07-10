@@ -157,6 +157,164 @@ function SettingsTabs({
   );
 }
 
+// ── protection strip ─────────────────────────────────────────────
+// A quiet at-a-glance confidence row atop the Account tab: is each
+// protection actually live? Wax = live & good, ember = needs attention,
+// ink-faint = off. It only ever mirrors real state — never over-claims
+// (an unknown enrollment reads neutral, never a false "Encrypted").
+
+type ProtState = "good" | "attention" | "off";
+
+const protTone: Record<ProtState, string> = {
+  good: "text-wax",
+  attention: "text-ember",
+  off: "text-ink-faint",
+};
+
+// Same Feather stroke as the account-menu marks (1.8 on a 24 viewBox).
+const stripIcon = {
+  "aria-hidden": true,
+  viewBox: "0 0 24 24",
+  width: 16,
+  height: 16,
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function ShieldGlyph() {
+  return (
+    <svg {...stripIcon}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+function SyncGlyph() {
+  return (
+    <svg {...stripIcon}>
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10" />
+    </svg>
+  );
+}
+function FolderGlyph() {
+  return (
+    <svg {...stripIcon}>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function formatDelivered(iso: string): string {
+  const at = new Date(iso);
+  if (isToday(at)) return format(at, "h:mm a");
+  if (isYesterday(at)) return `yesterday, ${format(at, "h:mm a")}`;
+  return format(at, "MMMM d");
+}
+
+// The glyph is centred with the label line; the description drops to its
+// own full line beneath the label (aligned under the label, not the mark).
+function ProtRow({
+  glyph,
+  word,
+  sub,
+  state,
+  mono,
+}: {
+  glyph: React.ReactNode;
+  word: string;
+  sub: string;
+  state: ProtState;
+  mono?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[1.25rem_1fr] items-center gap-x-3 gap-y-1">
+      <span className={`flex justify-center ${protTone[state]}`}>{glyph}</span>
+      <span className={`voice-label text-[0.8rem] ${protTone[state]}`}>{word}</span>
+      {sub && (
+        <p
+          className={`col-start-2 ${
+            mono ? "voice-data" : "voice-prose text-[0.9rem]"
+          } text-ink-soft`}
+        >
+          {sub}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ProtectionStrip() {
+  const sync = useSyncStatus();
+  const [enrolled, setEnrolled] = useState<boolean | null>(null);
+  useEffect(() => {
+    void refreshEnrollment().then((e) =>
+      setEnrolled(e === "unknown" ? null : e),
+    );
+  }, [sync.locked]);
+
+  const c = copy.settings.protection;
+
+  // Encryption — a null enrollment (still loading) stays neutral so the
+  // strip never flashes a claim it can't back.
+  let enc: { word: string; sub: string; state: ProtState };
+  if (enrolled === null) enc = { word: c.encryption, sub: "", state: "off" };
+  else if (!enrolled)
+    enc = { word: c.notEncrypted, sub: c.notEncryptedSub, state: "off" };
+  else if (sync.locked)
+    enc = { word: c.locked, sub: c.lockedSub, state: "attention" };
+  else enc = { word: c.encrypted, sub: c.encryptedSub, state: "good" };
+
+  // Sync — always on when signed in; only errors and the encryption lock
+  // are "attention", offline is expected (never red).
+  let syncRow: { word: string; sub: string; state: ProtState; mono?: boolean };
+  if (sync.locked)
+    syncRow = { word: c.syncPaused, sub: c.syncPausedSub, state: "attention" };
+  else if (sync.phase === "error")
+    syncRow = { word: c.syncSnag, sub: c.syncSnagSub, state: "attention" };
+  else if (sync.phase === "offline")
+    syncRow = { word: c.offline, sub: c.offlineSub, state: "off" };
+  else if (sync.phase === "syncing" || sync.pendingCount > 0)
+    syncRow = { word: c.syncing, sub: c.syncingSub, state: "good" };
+  else if (sync.lastSyncedAt === null)
+    syncRow = { word: c.syncing, sub: c.syncWaitingSub, state: "good" };
+  else {
+    const when = format(
+      sync.lastSyncedAt,
+      isToday(sync.lastSyncedAt) ? "h:mm a" : "MMM d",
+    );
+    const count = sync.localCount !== null ? sync.localCount.toLocaleString() : null;
+    syncRow = { word: c.synced, sub: c.syncedSub(when, count), state: "good", mono: true };
+  }
+
+  // Backup — the Drive ledger from the last status fetch.
+  const b = sync.backup;
+  let backupRow: { word: string; sub: string; state: ProtState; mono?: boolean };
+  if (!b || b.state === "disconnected")
+    backupRow = { word: c.backupOff, sub: c.backupOffSub, state: "off" };
+  else if (b.state === "error")
+    backupRow = { word: c.backupFailing, sub: c.backupFailingSub, state: "attention" };
+  else
+    backupRow = b.lastSuccessAt
+      ? {
+          word: c.backedUp,
+          sub: c.backedUpSub(formatDelivered(b.lastSuccessAt)),
+          state: "good",
+          mono: true,
+        }
+      : { word: c.backedUp, sub: c.backupFirstSub, state: "good" };
+
+  return (
+    <section aria-label={c.ariaLabel} className="space-y-4">
+      <ProtRow glyph={<ShieldGlyph />} {...enc} />
+      <ProtRow glyph={<SyncGlyph />} {...syncRow} />
+      <ProtRow glyph={<FolderGlyph />} {...backupRow} />
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
@@ -246,6 +404,7 @@ export default function SettingsPage() {
           aria-labelledby="settings-tab-account"
           className="space-y-10"
         >
+        {user && <ProtectionStrip />}
         <AccountSection />
         {user && <EncryptionSection email={user.email} />}
         {user && <BackupSection />}
