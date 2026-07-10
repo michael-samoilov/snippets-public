@@ -459,7 +459,6 @@ export const copy = {
           sync, walked over the whole book; honest about deletions */
       reconcileHint:
         "This re-checks every entry against the server and keeps whichever copy is newer — the same rule every sync follows, applied to everything at once. Nothing is removed unless you deleted it somewhere yourself.",
-      locked: "Your entries are end-to-end encrypted — unlock below to sync.",
     },
     encryption: {
       heading: "Encryption",
@@ -537,8 +536,6 @@ export const copy = {
         "Backups stop. The files already in your Drive stay where they are.",
       disconnect: "Disconnect",
       disconnecting: "Disconnecting…",
-      /** deliberate off-state, distinct from a failure */
-      off: "Backups are off. Reconnect whenever you like — your Drive files stay put.",
       scopeDeclined:
         "Google didn’t grant the Drive permission — try again and leave the box ticked.",
       connectFailed: "Drive couldn’t be connected. Try again in a moment.",
