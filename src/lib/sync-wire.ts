@@ -66,6 +66,9 @@ export interface BackupStatusSummary {
   state: "active" | "disconnected" | "error";
   lastSuccessAt: string | null;
   consecutiveFailures: number;
+  /** the book has moved past the last delivered seq — a stale ledger matters
+      only while this is true (a dormant book is allowed to rest) */
+  behind: boolean;
 }
 
 export interface StatusResponse {
@@ -80,6 +83,19 @@ export class LockedError extends Error {
   constructor() {
     super("the book key is not on this device");
     this.name = "LockedError";
+  }
+}
+
+/**
+ * Thrown when a sealed row won't open under the key this device holds —
+ * the account was re-encrypted elsewhere (encryption turned off and back
+ * on), so the key here is stale. The sync engine treats it as "this
+ * device must unlock again", never as a transient snag to retry forever.
+ */
+export class KeyMismatchError extends Error {
+  constructor() {
+    super("the book key on this device no longer opens the account's entries");
+    this.name = "KeyMismatchError";
   }
 }
 
@@ -132,10 +148,17 @@ export async function fromWireRow(
   let payload: SnippetPayload;
   if (row.payloadFormat === PAYLOAD_FORMAT_SEALED || isEncryptedPayload(row.payload)) {
     if (!key) throw new LockedError();
-    payload = await decryptJSON<SnippetPayload>(
-      key,
-      row.payload as EncryptedPayload,
-    );
+    try {
+      payload = await decryptJSON<SnippetPayload>(
+        key,
+        row.payload as EncryptedPayload,
+      );
+    } catch {
+      // a key we hold that doesn't open the row = the account was
+      // re-sealed under a new key elsewhere; fail as "unlock again",
+      // not as a garbled row or an endless retry
+      throw new KeyMismatchError();
+    }
   } else {
     payload = row.payload as SnippetPayload;
   }

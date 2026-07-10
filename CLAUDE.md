@@ -95,8 +95,13 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   never replaceable, that's deliberate). On-device the key is a
   NON-extractable CryptoKey in the meta table. Enrolled + no key =
   the `locked` sync state: sync pauses loudly, capture never does.
-  Decrypt/encrypt OUTSIDE Dexie transactions (foreign awaits kill
-  them). Manual-sticky merge degrades to client-only for sealed rows.
+  A key that no longer opens pulled rows (encryption turned off→on
+  elsewhere) throws `KeyMismatchError`: the device forgets the stale
+  key and re-enters `locked` — never an endless retry. On outages the
+  enrollment probe may reuse a cached "enrolled", never a cached
+  "not enrolled" (that could push plaintext into a sealed book;
+  unit-tested in `e2e.test.ts`). Decrypt/encrypt OUTSIDE Dexie
+  transactions (foreign awaits kill them).
 - **Drive backup (device-delivered):** the writer's device renders
   (keep `src/lib/render-book.ts` the single renderer — the JSON stays
   bit-compatible with Restore from JSON) and uploads to the visible
@@ -105,9 +110,15 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   device adopts the refresh token once (`/api/backup/adopt` — the
   server then forgets it) and exchanges it statelessly
   (`/api/backup/refresh`). The device reports deliveries
-  (`/api/backup/delivered`); the daily cron (`CRON_SECRET`,
-  vercel.json) is a watchdog only — stale ledger + moving book →
-  one email per silence — plus the tombstone scrubber. Google OAuth
+  (`/api/backup/delivered`) AND failures (`/api/backup/failed` →
+  ledger state `error`); Settings derives its line via
+  `backupHealth()` (`backup-shared.ts`, unit-tested) — "failing" is
+  a reported error OR a ledger quiet past 3 days while the book
+  moved (`behind` flag from `/api/sync/status`), which catches the
+  vanished-device case no report can reach. The daily cron
+  (`CRON_SECRET`, vercel.json) is a watchdog only — stale ledger +
+  moving book → one email per silence — plus the tombstone
+  scrubber. Google OAuth
   app must be *published to Production* or refresh tokens die in
   7 days. Plaintext Drive files are the key-loss safety net; never
   encrypt them.

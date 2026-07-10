@@ -30,7 +30,9 @@ import {
   adoptDriveToken,
   deliverBackup,
   forgetDriveTokens,
+  hasDriveToken,
 } from "@/lib/backup-client";
+import { backupHealth } from "@/lib/backup-shared";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
 import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
@@ -257,6 +259,10 @@ function syncRow(
       ),
       state: "attention",
     };
+  if (sync.phase === "signedOut")
+    // an expired session must say so, or pending writes pile up under an
+    // unexplained count
+    return { word: c.signedOut, sub: c.signedOutSub, state: "attention" };
   if (sync.phase === "error")
     return { word: c.syncSnag, sub: c.syncSnagSub, state: "attention" };
   if (sync.phase === "offline")
@@ -556,24 +562,25 @@ function SyncLines() {
 function StorageLine({ signedIn }: { signedIn: boolean }) {
   const storage = useStorageHealth();
   if (storage.usageBytes === null || storage.quotaBytes === null) return null;
-  const line =
+  // the quantities in the data voice; the guarantee — and the concrete
+  // circumstance under which it can break — spelled out in prose
+  const note =
     storage.persisted === true
-      ? copy.settings.data.storagePersistent(
-          formatBytes(storage.usageBytes),
-          formatBytes(storage.quotaBytes),
-        )
-      : copy.settings.data.storageBestEffort(
-          formatBytes(storage.usageBytes),
-          formatBytes(storage.quotaBytes),
-        );
+      ? copy.settings.data.storageKept
+      : signedIn
+        ? copy.settings.data.storageEvictableSignedIn
+        : copy.settings.data.storageEvictableSignedOut;
   return (
     <div className="mt-4 space-y-1">
-      <p className="voice-data text-ink-faint">{line}</p>
-      {storage.persisted !== true && !signedIn && (
-        <p className="voice-prose text-[0.9rem] text-ink-faint">
-          {copy.settings.data.storageEvictionHint}
-        </p>
-      )}
+      <p className="voice-data text-ink-faint">
+        {copy.settings.data.storageLine(
+          formatBytes(storage.usageBytes),
+          formatBytes(storage.quotaBytes),
+        )}
+      </p>
+      <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+        {note}
+      </p>
     </div>
   );
 }
@@ -1072,6 +1079,16 @@ function BackupSection() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // whether THIS device holds the delivery token — when it doesn't, the
+  // freshness line gains a quiet "deliveries run from the device where
+  // Drive was connected", so a phone-only writer isn't left assuming
+  // deliveries follow them
+  const [deviceHasToken, setDeviceHasToken] = useState<boolean | null>(null);
+  useEffect(() => {
+    void hasDriveToken()
+      .then(setDeviceHasToken)
+      .catch(() => setDeviceHasToken(null));
+  }, [backup?.state, backup?.lastSuccessAt]);
 
   // returning from the Google consent: finalize server-side, then let
   // the status refresh carry the freshness line
@@ -1094,7 +1111,7 @@ function BackupSection() {
         // this device adopts the token (the server forgets it) and runs
         // the first delivery itself — the freshness line is never blank
         const adopted = await adoptDriveToken();
-        if (adopted) await deliverBackup();
+        if (adopted === "adopted") await deliverBackup();
       } catch {
         setError(copy.settings.backup.connectFailed);
       } finally {
@@ -1142,10 +1159,19 @@ function BackupSection() {
     </PaperButton>
   );
 
+  // one derivation for the whole line (pure + unit-tested in
+  // backup-shared.test.ts): "failing" covers both a reported delivery
+  // error and a ledger gone quiet past the stale window while the book
+  // moved — the vanished-device case, which no report can reach.
+  // "now" is frozen at mount: the staleness window is days, so a page
+  // visit's age can't change the verdict (and render stays pure).
+  const [mountedAt] = useState(() => Date.now());
+  const health = backupHealth(backup, mountedAt);
+
   const p = copy.settings.protection;
   let statusLine: React.ReactNode;
   let action: React.ReactNode;
-  if (!backup || backup.state === "disconnected") {
+  if (health === "none" || health === "off") {
     // never connected, or deliberately off / grant revoked — neutral
     statusLine = (
       <ProtRow
@@ -1156,16 +1182,16 @@ function BackupSection() {
       />
     );
     action = connectButton(
-      backup ? copy.settings.backup.reconnect : copy.settings.backup.connect,
+      health === "off" ? copy.settings.backup.reconnect : copy.settings.backup.connect,
     );
-  } else if (backup.state === "error") {
-    // failing but still trying — ember, and offer a reconnect
+  } else if (health === "failing") {
+    // failing — a reported error, or quiet-too-long while entries pile up
     statusLine = (
       <ProtRow
         glyph={<FolderGlyph />}
         word={p.backupFailing}
         sub={
-          backup.lastSuccessAt
+          backup?.lastSuccessAt
             ? copy.settings.backup.failingSince(
                 format(new Date(backup.lastSuccessAt), "MMMM d"),
               )
@@ -1176,14 +1202,14 @@ function BackupSection() {
     );
     action = connectButton(copy.settings.backup.reconnect);
   } else {
-    // active
+    // fresh, or pending its first delivery
     statusLine = (
       <div className="space-y-3">
         <ProtRow
           glyph={<FolderGlyph />}
           word={p.backedUp}
           sub={
-            backup.lastSuccessAt
+            health === "fresh" && backup?.lastSuccessAt
               ? p.backedUpSub(formatDelivered(backup.lastSuccessAt))
               : p.backupFirstSub
           }
@@ -1192,6 +1218,11 @@ function BackupSection() {
         <p className="voice-prose text-[0.9rem] text-ink-faint">
           {copy.settings.backup.mirrors}
         </p>
+        {deviceHasToken === false && (
+          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+            {copy.settings.backup.deliversElsewhere}
+          </p>
+        )}
       </div>
     );
     action = (

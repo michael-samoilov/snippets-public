@@ -39,9 +39,13 @@ export async function refreshEnrollment(): Promise<boolean | "unknown"> {
     const response = await fetch("/api/keys");
     if (response.status === 404) return (enrolledCache = false);
     if (response.ok) return (enrolledCache = true);
-    return enrolledCache ?? "unknown";
+    // On an error, only a cached TRUE may stand in — worst case we lock
+    // unnecessarily, which is safe. A cached FALSE must not: the account
+    // could have been sealed elsewhere since, and acting on the stale
+    // "false" would push plaintext into a sealed book.
+    return enrolledCache === true ? true : "unknown";
   } catch {
-    return enrolledCache ?? "unknown";
+    return enrolledCache === true ? true : "unknown";
   }
 }
 

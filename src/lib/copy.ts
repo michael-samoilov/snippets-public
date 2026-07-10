@@ -405,6 +405,8 @@ export const copy = {
         device !== null && server !== null
           ? `Unlock encryption to sync — ${device} on this device, ${server} waiting on the server.`
           : "Unlock encryption to sync this device.",
+      signedOut: "Signed out",
+      signedOutSub: "Your session ended — sign in again to keep syncing.",
       offline: "Offline",
       offlineSub: "Changes will sync when you’re back.",
       backedUp: "Backed up",
@@ -451,12 +453,12 @@ export const copy = {
       /** same line while offline — the server side can't be known, so name the state */
       countsOffline: (device: string) => `${device} on device · you’re offline`,
       outOfStep: "The counts disagree.",
-      reconcile: "Reconcile",
-      /** what pressing Reconcile will actually do — the same LWW rule as
-          every sync, walked over the whole book; honest about deletions */
+      /** the fix action, named by what it literally does — pull is merge-safe */
+      reconcile: "Re-download all entries",
+      /** what pressing it will actually do — the same LWW rule as every
+          sync, walked over the whole book; honest about deletions */
       reconcileHint:
-        "Reconcile re-checks every entry against the server and keeps whichever copy is newer — the same rule every sync follows, applied to everything at once. Nothing is removed unless you deleted it somewhere yourself.",
-      locked: "Your entries are end-to-end encrypted — unlock below to sync.",
+        "This re-checks every entry against the server and keeps whichever copy is newer — the same rule every sync follows, applied to everything at once. Nothing is removed unless you deleted it somewhere yourself.",
     },
     encryption: {
       heading: "Encryption",
@@ -471,7 +473,7 @@ export const copy = {
       // read anywhere it isn't already met (and "unlocked" read as the phone's
       // own lock screen anyway)
       turnOffHint:
-        "Every entry — including ones written while encrypted — returns to standard server-side encryption, readable by the service again.",
+        "Every entry — including ones written while encrypted — returns to ordinary encryption, where the service holds the keys and could read them again.",
       turningOff: "Turning off…",
       turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
       lockedLead:
@@ -498,7 +500,8 @@ export const copy = {
       strengthOk: "Strong enough.",
       strengthStrong: "Very strong.",
       mismatch: "Those two didn’t match.",
-      wrongSecret: "That didn’t open it. Codes and phrases are exact.",
+      wrongSecret:
+        "That didn’t open it. Codes and phrases must match exactly — spaces and capitals included.",
       enrollFailed: "Your entries couldn’t be encrypted just now. Try again in a moment.",
       recoveryTitle: "Your recovery code",
       recoveryBody:
@@ -511,7 +514,7 @@ export const copy = {
     backup: {
       heading: "Backup",
       lead:
-        "A copy of your entries, delivered from your own device to a Snippets folder in your own Google Drive as you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
+        "A copy of your entries, delivered from your own device to a Snippets folder in your own Google Drive a little after you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
       connect: "Connect Google Drive",
       connecting: "Connecting…",
       /** e.g. "Last delivered to your Drive: yesterday, 6:12 am." */
@@ -520,6 +523,9 @@ export const copy = {
       /** reassurance: the folder is a one-way mirror, safe to touch */
       mirrors:
         "That folder only mirrors your entries — delete or change anything in it and the next delivery sets it right again.",
+      /** shown when the account is connected but the Drive token lives on another device */
+      deliversElsewhere:
+        "Deliveries run from the device where Google Drive was connected — open Snippets there now and then to keep the copy fresh.",
       /** e.g. "Backups haven’t gone through since June 30." */
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
@@ -530,8 +536,6 @@ export const copy = {
         "Backups stop. The files already in your Drive stay where they are.",
       disconnect: "Disconnect",
       disconnecting: "Disconnecting…",
-      /** deliberate off-state, distinct from a failure */
-      off: "Backups are off. Reconnect whenever you like — your Drive files stay put.",
       scopeDeclined:
         "Google didn’t grant the Drive permission — try again and leave the box ticked.",
       connectFailed: "Drive couldn’t be connected. Try again in a moment.",
@@ -550,19 +554,13 @@ export const copy = {
       sunday: "Sunday",
       monday: "Monday",
     },
-    filing: {
-      heading: "Filing",
-      auto: "Automatic filing",
-      autoHint:
-        "New entries are quietly filed by Claude — a title, a kind, tags — kept in the data to make search smarter, never shown on the page. Needs an API key on the server. Your words stay on this device either way — only the entry text is sent for filing.",
-    },
     danger: {
       heading: "Danger zone",
       eraseTitle: "Let everything go",
       eraseDesc:
         "Erase every entry on this device, permanently. Export a copy first if you might want one.",
       eraseDescSynced:
-        "Erase every entry — here, on the server, and on every device signed in to this account — permanently. Export a copy first if you might want one.",
+        "Erase every entry — here, on the server, and on every device signed in to this account — permanently. Your Google Drive backup mirrors this: the next delivery empties it too. Export a copy first if you might want one.",
       eraseHold: "Hold to erase",
       deleteTitle: "Delete account",
       deleteDesc:
@@ -577,14 +575,18 @@ export const copy = {
       countSoFar: (n: number) =>
         `${n} ${n === 1 ? "entry" : "entries"} so far.`,
       takeCopy: "Take a copy whenever you like.",
-      /** the storage-health line, e.g. "persistent · using 4 MB of 60 GB" */
-      storagePersistent: (used: string, quota: string) =>
-        `storage: persistent · using ${used} of ${quota}`,
-      storageBestEffort: (used: string, quota: string) =>
-        `storage: best-effort · using ${used} of ${quota}`,
+      /** the storage-health line, e.g. "storage: using 4 MB of 60 GB" */
+      storageLine: (used: string, quota: string) =>
+        `storage: using ${used} of ${quota}`,
+      /** the browser granted persistent storage — name what that protects against */
+      storageKept:
+        "The browser has agreed to keep this data even if the device runs low on space.",
+      /** persistence denied — name the concrete circumstance, and the way out */
+      storageEvictableSignedOut:
+        "If this device runs low on space, the browser is allowed to clear this site’s data — and your entries with it. Signing in keeps a copy on the server.",
+      storageEvictableSignedIn:
+        "If this device runs low on space, the browser is allowed to clear this site’s data — your entries stay safe on the server.",
       /** shown under a best-effort line — why it matters, what helps */
-      storageEvictionHint:
-        "This browser may let go of local data under pressure — signing in keeps a copy on the server.",
       exportJSON: "Export JSON",
       exportMarkdown: "Export Markdown",
       restore: "Restore from JSON…",
@@ -602,7 +604,7 @@ export const copy = {
       body:
         "This erases every entry on this device, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
       bodySynced:
-        "This erases every entry — here, on the server, and on every device signed in to this account, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
+        "This erases every entry — here, on the server, and on every device signed in to this account, permanently. Your Google Drive backup mirrors this: the next delivery empties it too. If you want a copy first, export before you do this. Hold the button down to be sure.",
       cancel: "Keep everything",
       hold: "Hold to erase",
       holding: "Hold…",
