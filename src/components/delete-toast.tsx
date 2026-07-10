@@ -7,10 +7,10 @@ import { copy } from "@/lib/copy";
 export const DELETE_TOAST_MS = 5000;
 
 /**
- * The undo toast raised when an entry is let go. An ember hairline sweeps
- * left→right along the foot over the whole window; when it lands, the toast
- * leaves and the deletion settles. The bar tells the hand how much time is
- * left to catch it. Ember is destructive's colour alone — this is that clock.
+ * The undo toast raised when an entry is let go. A soft ember wash fills the
+ * pill left→right over the whole window; when it reaches the far edge, the
+ * toast leaves and the deletion settles. The wash tells the hand how much time
+ * is left to catch it. Ember is destructive's colour alone — this is that clock.
  */
 function DeleteToast({ id, onUndo }: { id: string | number; onUndo: () => void }) {
   return (
