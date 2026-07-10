@@ -186,6 +186,9 @@ function GlowSurface({
     let focused = false;
     // the scroll took the pointer, the glow rides the moving card
     let riding = false;
+    // …and on iOS, touch events outlive the cancelled pointer: the finger
+    // is still individually trackable while the page scrolls
+    let touchLive = false;
     let settle = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
@@ -227,10 +230,7 @@ function GlowSurface({
       ty = e.clientY - r.top;
     };
     const onDown = (e: PointerEvent) => {
-      // a new press takes over from any ride still settling
-      riding = false;
-      clearTimeout(settle);
-      window.removeEventListener("scroll", onScrollRide, true);
+      if (riding) settleRide(); // a new press takes over from a live ride
       down = true;
       local(e);
       // first light lands where the finger did — no glide-in from a stale spot
@@ -250,26 +250,60 @@ function GlowSurface({
       scale();
     };
     /* when a drag turns into a page scroll, the browser claims the gesture
-       with a pointercancel and delivers no more pointer events. But in a
-       1:1 drag-scroll the finger and the content move together, so the glow,
-       pinned card-local, keeps tracking the finger on its own — the light
-       rides the card. It slips away once the page settles (or promptly if no
-       scroll actually follows the cancel). */
+       with a pointercancel and delivers no more POINTER events — but iOS
+       keeps streaming TOUCH events to the gesture's original target for the
+       rest of the gesture. So while riding a scroll the glow follows the
+       finger for real from touchmove (side-to-side drift included; the
+       host's rect is re-read each event because the card itself is moving),
+       and the ride ends when the finger lifts (touchend). Where touches die
+       with the pointer (Android's touchcancel, before any move arrives),
+       fall back to the pinned-card ride: in a 1:1 drag the finger and the
+       content move together anyway, and the light slips away once the page
+       settles (or promptly, if no scroll follows the cancel at all). */
     const settleRide = () => {
       riding = false;
+      touchLive = false;
+      clearTimeout(settle);
       window.removeEventListener("scroll", onScrollRide, true);
+      host.removeEventListener("touchmove", onRideMove);
+      host.removeEventListener("touchend", onRideEnd);
+      host.removeEventListener("touchcancel", onRideEnd);
       level();
       scale();
     };
     const onScrollRide = () => {
+      if (touchLive) return; // the finger is tracked; touchend ends the ride
       clearTimeout(settle);
       settle = window.setTimeout(settleRide, 220);
+    };
+    const onRideMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!riding || !t) return;
+      touchLive = true;
+      // quiet-finger guard: the light must never strand after a lift, so a
+      // ride survives only while touches keep arriving — a missed touchend
+      // (or a finger gone still after the pointer was cancelled) fades it
+      clearTimeout(settle);
+      settle = window.setTimeout(settleRide, 700);
+      const r = host.getBoundingClientRect();
+      tx = t.clientX - r.left;
+      ty = t.clientY - r.top;
+      nudge();
+    };
+    const onRideEnd = (e: TouchEvent) => {
+      // a touchcancel before any move is the touches dying with the pointer
+      // (Android) — keep the pinned ride and let the scroll settle it
+      if (e.type === "touchcancel" && !touchLive) return;
+      if (riding) settleRide();
     };
     const onCancel = () => {
       if (!down) return;
       down = false;
       riding = true;
       window.addEventListener("scroll", onScrollRide, true);
+      host.addEventListener("touchmove", onRideMove, { passive: true });
+      host.addEventListener("touchend", onRideEnd);
+      host.addEventListener("touchcancel", onRideEnd);
       clearTimeout(settle);
       settle = window.setTimeout(settleRide, 340);
     };
@@ -286,6 +320,9 @@ function GlowSurface({
       cancelAnimationFrame(raf);
       clearTimeout(settle);
       window.removeEventListener("scroll", onScrollRide, true);
+      host.removeEventListener("touchmove", onRideMove);
+      host.removeEventListener("touchend", onRideEnd);
+      host.removeEventListener("touchcancel", onRideEnd);
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerup", onUp);
@@ -515,7 +552,7 @@ export default function PressGlowLab() {
         <h2 className="voice-label text-[0.78rem] text-ink-soft">the desk</h2>
         <p className="voice-data mb-4 text-[0.62rem] lowercase text-ink-faint">
           touch any surface and drag — the light follows; one dial column drives all four.
-          vertical drags scroll the page: the light rides the card and slips away once it settles
+          vertical drags scroll the page: the light follows the finger through the scroll and leaves when it lifts
         </p>
         <div className="mb-8 flex w-[300px] flex-col gap-2.5 sm:w-72">
           <div className="flex items-center gap-2">
