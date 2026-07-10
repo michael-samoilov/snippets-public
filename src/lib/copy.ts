@@ -514,7 +514,7 @@ export const copy = {
     backup: {
       heading: "Backup",
       lead:
-        "A copy of your entries, delivered from your own device to a Snippets folder in your own Google Drive a little after you write — readable Markdown and a restorable archive. Yours even if this app disappears.",
+        "A readable copy of your entries — Markdown and a restorable archive — that lands in a Snippets folder in your own Google Drive a little after you write. Yours even if this app disappears.",
       connect: "Connect Google Drive",
       connecting: "Connecting…",
       /** reassurance: the folder is a one-way mirror, safe to touch */
