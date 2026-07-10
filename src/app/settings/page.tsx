@@ -51,22 +51,24 @@ import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { id: "appearance", label: copy.settings.tabs.appearance },
   { id: "account", label: copy.settings.tabs.account },
+  { id: "appearance", label: copy.settings.tabs.appearance },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-// The open panel lives in the URL (?tab=account) so a link lands on it and
-// a reload keeps it. Read it through useSyncExternalStore — the server and
-// first paint show the default, the client adopts the query with no
-// hydration flash, and back/forward just work. replaceState is silent, so a
-// tap dispatches a custom event to nudge the store.
+// The open panel lives in the URL (?tab=appearance) so a link lands on it and
+// a reload keeps it. Account is the default (it holds the protections a
+// visitor comes to check; ?tab=account is honoured for old links). Read it
+// through useSyncExternalStore — the server and first paint show the
+// default, the client adopts the query with no hydration flash, and
+// back/forward just work. replaceState is silent, so a tap dispatches a
+// custom event to nudge the store.
 const TAB_EVENT = "settings:tab";
 
 function readTab(): TabId {
-  return new URLSearchParams(window.location.search).get("tab") === "account"
-    ? "account"
-    : "appearance";
+  return new URLSearchParams(window.location.search).get("tab") === "appearance"
+    ? "appearance"
+    : "account";
 }
 
 function subscribeTab(onChange: () => void) {
@@ -80,7 +82,7 @@ function subscribeTab(onChange: () => void) {
 
 function selectTab(id: TabId) {
   const url = new URL(window.location.href);
-  if (id === "appearance") url.searchParams.delete("tab");
+  if (id === "account") url.searchParams.delete("tab");
   else url.searchParams.set("tab", id);
   window.history.replaceState(null, "", url);
   window.dispatchEvent(new Event(TAB_EVENT));
@@ -245,7 +247,16 @@ function syncRow(
 ): { word: string; sub: string; state: ProtState } {
   const c = copy.settings.protection;
   if (sync.locked)
-    return { word: c.syncPaused, sub: c.syncPausedSub, state: "attention" };
+    return {
+      word: c.syncPaused,
+      // counts are fetched even while locked (see sync.ts), so the pause
+      // can say concretely what waits behind it
+      sub: c.syncPausedSub(
+        sync.localCount !== null ? sync.localCount.toLocaleString() : null,
+        sync.serverCount !== null ? sync.serverCount.toLocaleString() : null,
+      ),
+      state: "attention",
+    };
   if (sync.phase === "error")
     return { word: c.syncSnag, sub: c.syncSnagSub, state: "attention" };
   if (sync.phase === "offline")
@@ -279,7 +290,7 @@ export default function SettingsPage() {
   const tab = useSyncExternalStore<TabId>(
     subscribeTab,
     readTab,
-    () => "appearance",
+    () => "account",
   );
   // theme is unknowable server-side; render the swatches neutral until hydrated
   const mounted = useSyncExternalStore(
@@ -492,9 +503,14 @@ function SyncLines() {
   const sync = useSyncStatus();
   const online = useOnline();
 
-  // Only meaningful when we can actually compare against the server.
+  // Only meaningful when we can actually compare against the server — and
+  // never while locked: there the counts are EXPECTED to disagree (the
+  // sealed entries can't come down until the device unlocks), the paused
+  // row already explains it, and reconcile's re-walk couldn't run anyway
+  // (the cycle bails while locked), so the button would be a dead end.
   const outOfStep =
     online &&
+    !sync.locked &&
     sync.localCount !== null &&
     sync.serverCount !== null &&
     Math.abs(sync.localCount - sync.serverCount) > sync.pendingCount;

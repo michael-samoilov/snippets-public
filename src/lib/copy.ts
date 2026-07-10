@@ -400,7 +400,11 @@ export const copy = {
       syncSnag: "Sync snag",
       syncSnagSub: "Retrying — your entries are safe on this device.",
       syncPaused: "Sync paused",
-      syncPausedSub: "Unlock encryption to sync this device.",
+      /** the counts make the pause concrete — what's here vs what waits sealed */
+      syncPausedSub: (device: string | null, server: string | null) =>
+        device !== null && server !== null
+          ? `Unlock encryption to sync — ${device} on this device, ${server} waiting on the server.`
+          : "Unlock encryption to sync this device.",
       offline: "Offline",
       offlineSub: "Changes will sync when you’re back.",
       backedUp: "Backed up",
