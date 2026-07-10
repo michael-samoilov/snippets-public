@@ -57,6 +57,9 @@ interface GlowOpts {
   lift: number;
 }
 
+/* per-theme recipes (owner-tuned): Paper needs a stronger, tighter pool —
+   the cream leaves it little luminance headroom — while Lamplight's candle
+   carries at low strength, so it goes softer, wider, and trails more */
 export const GLOW_DEFAULTS: GlowOpts = {
   ink: "candle",
   strength: 0.75,
@@ -67,8 +70,24 @@ export const GLOW_DEFAULTS: GlowOpts = {
   lag: 0.55,
   grow: 1.012,
   rest: 0,
-  lift: 0,
+  lift: 0.25,
 };
+
+export const GLOW_DEFAULTS_DARK: GlowOpts = {
+  ink: "candle",
+  strength: 0.4,
+  size: 210,
+  blur: 46,
+  reach: 3.6,
+  ambient: 0.35,
+  lag: 0.65,
+  grow: 1.012,
+  rest: 0,
+  lift: 0.25,
+};
+
+const defaultsFor = (theme: string | undefined) =>
+  theme === "dark" ? GLOW_DEFAULTS_DARK : GLOW_DEFAULTS;
 
 /* the card's seat on the desk, from printed-flat to floating: the shadow
    widens and softens as the border hands separation over to the light */
@@ -403,6 +422,22 @@ export default function PressGlowLab() {
   const [opts, setOpts] = useState<GlowOpts>(GLOW_DEFAULTS);
   const { resolvedTheme, setTheme } = useTheme();
 
+  /* seed the dials with the theme's recipe when the theme resolves or flips —
+     but only while they still sit at a stock recipe (reference check: every
+     dial change spreads a fresh object), so mid-tweak comparisons survive.
+     Deferred a frame so it lands after hydration: the server always renders
+     the Paper recipe, and swapping during the hydration pass mismatches it */
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setReady(true);
+      setOpts((prev) =>
+        prev === GLOW_DEFAULTS || prev === GLOW_DEFAULTS_DARK ? defaultsFor(resolvedTheme) : prev,
+      );
+    });
+    return () => cancelAnimationFrame(id);
+  }, [resolvedTheme]);
+
   const benches: { key: string; label: string; note: string; node: React.ReactNode }[] = [
     { key: "today", label: "today zone", note: "light pooling on the open page", node: <TodayBench opts={opts} /> },
     { key: "add-rest", label: "add something · at rest", note: "the initial press, before the keyboard", node: <AddCardBench opts={opts} editing={false} /> },
@@ -458,7 +493,7 @@ export default function PressGlowLab() {
           </p>
           <button
             type="button"
-            onClick={() => setOpts(GLOW_DEFAULTS)}
+            onClick={() => setOpts(defaultsFor(resolvedTheme))}
             className="voice-label pressable mt-1 self-start rounded-full border border-rule px-3 py-1 text-[0.68rem] text-ink-soft"
           >
             reset
@@ -481,9 +516,11 @@ export default function PressGlowLab() {
         type="button"
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="voice-label pressable float fixed bottom-5 right-5 z-10 rounded-full px-4 py-2 text-[0.72rem] text-ink-soft"
-        suppressHydrationWarning
       >
-        {resolvedTheme ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
+        {/* gated on ready, not just resolvedTheme: next-themes knows the theme
+            during hydration already, and a label the server didn't render would
+            either mismatch or (suppressed) never get patched over the "…" */}
+        {ready && resolvedTheme ? (resolvedTheme === "dark" ? "paper" : "lamplight") : "…"}
       </button>
     </main>
   );
