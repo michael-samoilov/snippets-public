@@ -46,6 +46,8 @@ import {
   StorageWriteError,
 } from "@/lib/db";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
+import { pushUrl, replaceUrl } from "@/lib/history";
+import { bookScrolled } from "@/lib/fling-relief";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
 import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
@@ -582,21 +584,21 @@ function Calendar() {
     const e = sp.get("e");
     const y = sp.get("y");
     if (d) {
-      window.history.replaceState(null, "", pathname);
-      window.history.pushState(null, "", `${pathname}?d=${d}`);
-      if (e) window.history.pushState(null, "", `${pathname}?d=${d}&e=${e}`);
+      replaceUrl(pathname);
+      pushUrl(`${pathname}?d=${d}`);
+      if (e) pushUrl(`${pathname}?d=${d}&e=${e}`);
     } else if (y && /^\d{4}$/.test(y)) {
       // arrived at the year glance: floor it on the month canvas, then the year,
       // so Back drops to the month rather than walking off the page
-      window.history.replaceState(null, "", pathname);
-      window.history.pushState(null, "", `${pathname}?y=${y}`);
+      replaceUrl(pathname);
+      pushUrl(`${pathname}?y=${y}`);
     } else {
       // No deep link: the book (schedule) is home, but the grid is still "a
       // zoom-out away" — so synthesize the month floor beneath it here too.
       // Without this the title's ‹ and the back gesture call history.back()
       // with no calendar entry below and walk off the page entirely.
-      window.history.replaceState(null, "", pathname);
-      window.history.pushState(null, "", `${pathname}?d=${initialDay}`);
+      replaceUrl(pathname);
+      pushUrl(`${pathname}?d=${initialDay}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -640,7 +642,7 @@ function Calendar() {
       setSelected(key);
       navigator.vibrate?.(6);
       if (urlTimer.current) clearTimeout(urlTimer.current);
-      window.history.pushState(null, "", `${pathname}?d=${key}`);
+      pushUrl(`${pathname}?d=${key}`);
       scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
       runZoom("month", "schedule", key);
     },
@@ -662,7 +664,7 @@ function Calendar() {
       });
       if (urlTimer.current) clearTimeout(urlTimer.current);
       urlTimer.current = setTimeout(() => {
-        window.history.replaceState(null, "", `${pathname}?d=${key}`);
+        replaceUrl(`${pathname}?d=${key}`);
       }, 250);
     },
     [pathname],
@@ -1152,7 +1154,7 @@ function Calendar() {
 
   const openYear = () => {
     const y = visibleMonth.getFullYear();
-    window.history.pushState(null, "", `${pathname}?y=${y}`);
+    pushUrl(`${pathname}?y=${y}`);
     climbToYear(y);
   };
 
@@ -1354,11 +1356,7 @@ function Calendar() {
         setVisibleMonth(m);
         setVisibleYear(m.getFullYear());
       }
-      window.history.pushState(
-        null,
-        "",
-        `${pathname}?d=${s?.day ?? selectedRef.current}&e=${id}`,
-      );
+      pushUrl(`${pathname}?d=${s?.day ?? selectedRef.current}&e=${id}`);
       runZoom("schedule", "entry", id);
     },
     [all, pathname, runZoom],
@@ -1424,7 +1422,7 @@ function Calendar() {
     setVisibleMonth(m);
     setVisibleYear(m.getFullYear());
     if (urlTimer.current) clearTimeout(urlTimer.current);
-    window.history.replaceState(null, "", `${pathname}?d=${key}`);
+    replaceUrl(`${pathname}?d=${key}`);
     scheduleFeedRef.current?.goTo(key, smooth);
   };
 
@@ -1508,7 +1506,7 @@ function Calendar() {
       jumpTo(dayKey(), true);
       return;
     }
-    window.history.replaceState(null, "", pathname);
+    replaceUrl(pathname);
     if (view === "year" && !zoom) {
       pickMonth(currentMonth);
     } else {
@@ -1796,7 +1794,7 @@ function Calendar() {
     setSelected(day);
     navigator.vibrate?.(6);
     if (urlTimer.current) clearTimeout(urlTimer.current);
-    window.history.pushState(null, "", `${pathname}?d=${day}`);
+    pushUrl(`${pathname}?d=${day}`);
     scheduleFeedRef.current?.goTo(day);
     runZoom("year", "schedule", day);
   };
@@ -1807,8 +1805,8 @@ function Calendar() {
   const openEntryFromSearch = (s: Snippet) => {
     closeSearch();
     if (urlTimer.current) clearTimeout(urlTimer.current);
-    window.history.replaceState(null, "", pathname);
-    window.history.pushState(null, "", `${pathname}?d=${s.day}`);
+    replaceUrl(pathname);
+    pushUrl(`${pathname}?d=${s.day}`);
     scheduleFeedRef.current?.goTo(s.day); // the page behind the dive
     openEntry(s.id); // sets the entry, pushes ?d&e, zooms the book → card
   };
@@ -2211,7 +2209,7 @@ function Calendar() {
               onPickMonth={(m) => {
                 // picking a month leaves the glance for the canvas — drop the
                 // `?y=` so the URL reflects the month (no stale year param)
-                window.history.replaceState(null, "", pathname);
+                replaceUrl(pathname);
                 pickMonth(m);
               }}
               onVisible={setVisibleYear}
@@ -2425,11 +2423,16 @@ function ScheduleFeedBase({
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
   const [probe, setProbe] = useState<string | null>(selected);
-  // First paint renders only a screenful of recent days; the rest of the history
+  // First paint renders only a screenful of days; the rest of the history
   // mounts a frame later, off the critical path — so opening the book costs a
-  // constant ~screenful no matter how many years it holds. The book opens at the
-  // foot (today), so the recent days ARE what's on screen. Skipped for a deep-link
-  // to an old day, which must render in full to be scrolled to.
+  // constant ~screenful no matter how many years it holds. Opening at the foot
+  // (today), the window is the most recent days; a deep-link to an old day
+  // windows AROUND that day instead. The deep-link case used to render the
+  // whole ledger synchronously "so its row exists to land on" — but after a
+  // memory crash iOS reloads the crashed ?d= URL, so that full build landed
+  // exactly on the device that had just proven it couldn't afford it, and one
+  // crash became "A problem repeatedly occurred". The windowed target row
+  // exists to land on all the same.
   const [fullBook, setFullBook] = useState(false);
   // a pending kept draft for today means a keep JUST happened (it's cleared once
   // the live row lands) — the only time today's date should wipe in (never on a
@@ -2509,17 +2512,26 @@ function ScheduleFeedBase({
     }));
   }, [all, probe, todayKey, yesterdayKey]);
 
-  // the rows actually rendered on first paint: only the most recent FIRST_PAINT_DAYS
-  // (the book opens at the foot/today, so these are what's visible) until the full
-  // book mounts a frame later. A deep-link to a past day renders the whole ledger
-  // so its row exists to land on.
+  // the rows actually rendered on first paint: FIRST_PAINT_DAYS around the
+  // landing day (the tail when landing on today, a centered slice for a
+  // deep-link into history) until the full book mounts a frame later
   const FIRST_PAINT_DAYS = 35;
   const windowRows = useMemo(() => {
     if (!rows) return rows;
-    if (fullBook || selected !== todayKey || rows.length <= FIRST_PAINT_DAYS)
-      return rows;
-    return rows.slice(-FIRST_PAINT_DAYS);
+    if (fullBook || rows.length <= FIRST_PAINT_DAYS) return rows;
+    if (selected === todayKey) return rows.slice(-FIRST_PAINT_DAYS);
+    const i = rows.findIndex((r) => r.day === selected);
+    if (i < 0) return rows;
+    const start = Math.max(0, i - Math.floor(FIRST_PAINT_DAYS / 2));
+    return rows.slice(start, start + FIRST_PAINT_DAYS);
   }, [rows, fullBook, selected, todayKey]);
+  // whether the window reaches the ledger's tail — only then does the today
+  // zone belong at its foot; a mid-history window must not seat today's
+  // composer under some past June for its one frame of life
+  const windowTail =
+    !rows ||
+    !windowRows ||
+    windowRows[windowRows.length - 1]?.day === rows[rows.length - 1]?.day;
 
   const scrollToRow = useCallback((day: string, smooth = false) => {
     const el = scrollerRef.current;
@@ -2834,14 +2846,16 @@ function ScheduleFeedBase({
     return () => cancelAnimationFrame(id);
   }, [fullBook, rows]);
 
-  // the rest of the history mounts ABOVE today, growing the scroll height; with
-  // overflow-anchor off that would shove today off-screen, so re-pin to the foot
-  // in the same commit (a layout effect, before paint — no visible jump). Skip if
-  // the reader has already grabbed the scroll, so the mount doesn't yank them.
+  // the rest of the history mounts ABOVE the landing day, growing the scroll
+  // height; with overflow-anchor off that would shove the page off-screen, so
+  // re-pin to the day the book landed on in the same commit (a layout effect,
+  // before paint — no visible jump). spyRef holds that day (the landing wrote
+  // it); `selected` only seeds it. Skip if the reader has already grabbed the
+  // scroll, so the mount doesn't yank them.
   useLayoutEffect(() => {
-    if (!fullBook || selected !== todayKey || tookOverRef.current) return;
+    if (!fullBook || tookOverRef.current) return;
     measureRows();
-    scrollToRow(todayKey);
+    scrollToRow(spyRef.current ?? selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBook]);
 
@@ -2869,6 +2883,10 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       if (!el) return;
       const top = el.scrollTop;
+      // fling relief reads every sample — a fast fling sheds the book's
+      // grace layers (see lib/fling-relief) so iOS can raster the tiles
+      // it demands without being jetsam-killed for the allocation spike
+      bookScrolled(top);
       if (progTargetRef.current !== null) {
         // a Today scroll is animating to its target — let it run, but don't let
         // the days it passes claim the header (that flashes the Today button)
@@ -3046,7 +3064,7 @@ function ScheduleFeedBase({
                 {format(d, "MMMM yyyy")}
               </p>
             )}
-            {last ? (
+            {last && windowTail ? (
               // pageRow and the zone are siblings under the scroller (no wrapper),
               // so the zone's own min-h-full resolves against the scroller — it's
               // always a full viewport tall regardless of what today holds above
@@ -3071,7 +3089,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [windowRows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
+    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
   );
 
   return (

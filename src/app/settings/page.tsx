@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eraseAll } from "@/lib/db";
+import { replaceUrl } from "@/lib/history";
 import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "@/lib/e2e";
 import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
 import {
@@ -85,7 +86,7 @@ function selectTab(id: TabId) {
   const url = new URL(window.location.href);
   if (id === "account") url.searchParams.delete("tab");
   else url.searchParams.set("tab", id);
-  window.history.replaceState(null, "", url);
+  replaceUrl(url);
   window.dispatchEvent(new Event(TAB_EVENT));
 }
 
@@ -712,7 +713,7 @@ function EncryptionSection({ email }: { email: string }) {
   );
   useEffect(() => {
     if (wantSeal && enrolled === false) {
-      window.history.replaceState(null, "", "/settings");
+      replaceUrl("/settings");
       setEnrollOpen(true);
     }
   }, [wantSeal, enrolled]);
@@ -730,7 +731,7 @@ function EncryptionSection({ email }: { email: string }) {
     if (!wantUnlock || !enrolled || hasKey !== false) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("unlock");
-    window.history.replaceState(null, "", url);
+    replaceUrl(url);
     sectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [wantUnlock, enrolled, hasKey]);
 
@@ -1102,7 +1103,7 @@ function BackupSection() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("drive") !== "connected") return;
-    window.history.replaceState(null, "", "/settings");
+    replaceUrl("/settings");
     void (async () => {
       setConnecting(true);
       try {
