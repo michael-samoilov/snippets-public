@@ -24,7 +24,10 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // separate error slots so each message renders beside the control that
+  // triggered it, rather than one shared line stranded between the two flows
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "signed-in") router.replace("/calendar");
@@ -39,18 +42,18 @@ export default function SignInPage() {
   const sendCode = async () => {
     const address = email.trim();
     if (!/^\S+@\S+\.\S+$/.test(address)) {
-      setError(copy.signin.errors.invalidEmail);
+      setEmailError(copy.signin.errors.invalidEmail);
       return;
     }
     setBusy(true);
-    setError(null);
+    setEmailError(null);
     const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
       email: address,
       type: "sign-in",
     });
     setBusy(false);
     if (sendError) {
-      setError(
+      setEmailError(
         sendError.status === 503
           ? copy.signin.errors.notConfigured
           : copy.signin.errors.sendFailed,
@@ -64,18 +67,18 @@ export default function SignInPage() {
 
   const verify = async () => {
     if (code.trim().length < 6) {
-      setError(copy.signin.errors.badCode);
+      setEmailError(copy.signin.errors.badCode);
       return;
     }
     setBusy(true);
-    setError(null);
+    setEmailError(null);
     const { error: verifyError } = await authClient.signIn.emailOtp({
       email,
       otp: code.trim(),
     });
     setBusy(false);
     if (verifyError) {
-      setError(copy.signin.errors.badCode);
+      setEmailError(copy.signin.errors.badCode);
       return;
     }
     router.push("/welcome");
@@ -83,16 +86,16 @@ export default function SignInPage() {
 
   const google = async () => {
     setBusy(true);
-    setError(null);
-    const { error: googleError } = await authClient.signIn.social({
+    setGoogleError(null);
+    const { error: signInError } = await authClient.signIn.social({
       provider: "google",
       callbackURL: "/welcome",
     });
     // on success the browser navigates away; reaching here means it didn't
     setBusy(false);
-    if (googleError) {
-      setError(
-        googleError.status === 503
+    if (signInError) {
+      setGoogleError(
+        signInError.status === 503
           ? copy.signin.errors.notConfigured
           : copy.signin.errors.googleFailed,
       );
@@ -194,7 +197,7 @@ export default function SignInPage() {
                 className="pressable rounded-[5px] font-serif text-[0.9rem] text-ink-faint hover:text-ink-soft"
                 onClick={() => {
                   setStep("email");
-                  setError(null);
+                  setEmailError(null);
                 }}
               >
                 {copy.signin.differentEmail}
@@ -203,9 +206,9 @@ export default function SignInPage() {
           </form>
         )}
 
-        {error && (
+        {emailError && (
           <p role="alert" className="voice-prose mt-4 text-[0.9rem] text-ember">
-            {error}
+            {emailError}
           </p>
         )}
 
@@ -229,6 +232,11 @@ export default function SignInPage() {
               {copy.signin.google}
             </span>
           </PaperButton>
+          {googleError && (
+            <p role="alert" className="voice-prose mt-3 text-[0.9rem] text-ember">
+              {googleError}
+            </p>
+          )}
         </div>
 
         {/* the agreement, said once and quietly — both documents one tap away */}

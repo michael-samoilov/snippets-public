@@ -189,13 +189,17 @@ const stripIcon = {
 
 // the Feather shield with a padlock set inside — protection that reads
 // specifically as a LOCK, not just cover (same treatment on every shield
-// in the app; see profile-menu's ShieldIcon)
+// in the app; see profile-menu's ShieldIcon). The Feather shield fills
+// less of its 24-box than the gear/person, so it read small in the row —
+// a viewBox zoomed 1.15 about centre grows the whole mark to the set's
+// weight within the SAME 16px footprint (no row shift), and the
+// stroke-width drops in step so the line stays the family's 1.8.
 function ShieldGlyph() {
   return (
-    <svg {...stripIcon}>
+    <svg {...stripIcon} viewBox="1.565 1.565 20.87 20.87" strokeWidth={1.565}>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <rect x="8.65" y="10.05" width="6.7" height="4.25" rx="1" />
-      <path d="M10 10.05v-1.45a2 2 0 0 1 4 0v1.45" />
+      <rect x="9" y="10.6" width="6" height="3.6" rx="0.9" />
+      <path d="M10.3 10.6v-1.2a1.7 1.7 0 0 1 3.4 0v1.2" />
     </svg>
   );
 }
