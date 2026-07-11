@@ -364,11 +364,6 @@ function EntryBody({
             // caret is kept in view by useKeyboardRoom, so the marker isn't
             // needed mid-edit anyway.
             edges.bottom && !editing ? "opacity-100" : "opacity-0",
-            // …and it YIELDS to the press glow: the fade is opaque paper and
-            // would cover the light (the words>light>fade>words paint cycle
-            // has no other resolution) — while the hand is on the card the
-            // terminus steps aside, and returns as the light leaves
-            "[[data-glow-lit]_&]:opacity-0",
           )}
         >
           {/* the soft fade, dissolving to solid paper just above the rule */}

@@ -7,11 +7,10 @@ import { useEffect, useRef } from "react";
  * tracking a drag, adopted from /lab/press-glow (the Claude-app composer
  * micro-interaction, rebuilt in the desk's own light).
  *
- * Drop it INSIDE a positioned, rounded container, before the content:
- * it renders an absolute glow layer clipped to the surface and wires its
- * pointer handlers onto the parent. Content that must sit above the light
- * (the words — ink lies ON the light) needs to be positioned and come
- * later in the DOM, since both paint in the positioned phase.
+ * Drop it INSIDE a positioned, rounded container: it renders an absolute
+ * glow layer clipped to the surface (painted ABOVE the content — light
+ * falls on the printed page; see the blend notes at the layer) and wires
+ * its pointer handlers onto the parent.
  *
  * Two lights ride one compositor transform: a tight bright core at the
  * finger and a wide soft ambient halo that lifts the whole surface — the
@@ -176,9 +175,6 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     const level = () => {
       const lit = (down || riding) && !quenched;
       glow.style.opacity = lit ? "1" : "0";
-      // overlays that would otherwise paint over the light (the entry
-      // foot's terminus fade) yield to it via this attribute
-      host.toggleAttribute("data-glow-lit", lit);
       if (!lit) {
         // shed the compositor hint once the fade has finished
         clearTimeout(shedWC);
@@ -348,10 +344,17 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
   }, []);
 
   return (
+    // ABOVE the words (z-15 clears the entry fade z-6 and top-edge z-10):
+    // light falls ON the printed page. Paper blends `overlay` — it saturates
+    // the cream toward white but only nudges the ink (≈12%→20% luminance),
+    // so the pool brightens the sheet while the words stay printed matter.
+    // Lamplight paints plain: a low-alpha warm veil never outshines the
+    // cream glyphs. This dissolves the words>light>fade>words paint cycle —
+    // the terminus fade keeps its place beneath the light.
     <div
       ref={layerRef}
       aria-hidden
-      className={`pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit] ${className ?? ""}`}
+      className={`pointer-events-none absolute inset-0 z-[15] overflow-hidden rounded-[inherit] mix-blend-overlay dark:mix-blend-normal ${className ?? ""}`}
     >
       <div
         ref={glowRef}
