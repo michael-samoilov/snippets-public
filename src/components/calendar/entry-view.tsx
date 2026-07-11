@@ -184,6 +184,19 @@ function EntryBody({
       }
     }
   };
+  // where the press landed: a click only counts as a tap — and opens the
+  // rewrite — if the finger didn't wander. iOS can deliver the click at the
+  // RELEASE point's element (drag from the words, let go over the foot),
+  // which used to open editing from what was really a drag.
+  const pressAt = useRef<{ x: number; y: number; t: number } | null>(null);
+  const recordPress = (e: React.PointerEvent) => {
+    pressAt.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+  };
+  const wasTap = (e: React.MouseEvent) => {
+    const d = pressAt.current;
+    if (!d) return true; // no pointer record (keyboard/AT) — allow
+    return performance.now() - d.t < 600 && Math.hypot(e.clientX - d.x, e.clientY - d.y) <= 12;
+  };
   const startEdit = () => {
     if (editing) return;
     setDraft(snippet.text);
@@ -266,7 +279,8 @@ function EntryBody({
         // long-press can still select and copy. overflow-x hidden +
         // wrap-anywhere keep a long token from scrolling sideways
         tabIndex={editing ? -1 : 0}
-        onClick={editing ? undefined : startEdit}
+        onPointerDown={editing ? undefined : recordPress}
+        onClick={editing ? undefined : (e) => wasTap(e) && startEdit()}
         onKeyDown={(e) => {
           if (editing) {
             if (e.key === "Escape") stopEdit();
@@ -330,7 +344,9 @@ function EntryBody({
       <div
         data-entry-foot
         // pressing the foot's empty band edits too — not only the words
-        onClick={editing ? undefined : startEdit}
+        // (same tap guard: a drag that ends here must not open the rewrite)
+        onPointerDown={editing ? undefined : recordPress}
+        onClick={editing ? undefined : (e) => wasTap(e) && startEdit()}
         className="relative shrink-0"
       >
         {/* the scroll terminus — a soft fade + hairline marking that the words
@@ -348,6 +364,11 @@ function EntryBody({
             // caret is kept in view by useKeyboardRoom, so the marker isn't
             // needed mid-edit anyway.
             edges.bottom && !editing ? "opacity-100" : "opacity-0",
+            // …and it YIELDS to the press glow: the fade is opaque paper and
+            // would cover the light (the words>light>fade>words paint cycle
+            // has no other resolution) — while the hand is on the card the
+            // terminus steps aside, and returns as the light leaves
+            "[[data-glow-lit]_&]:opacity-0",
           )}
         >
           {/* the soft fade, dissolving to solid paper just above the rule */}

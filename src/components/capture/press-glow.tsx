@@ -121,7 +121,12 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let riding = false;
     // …and on iOS, touch events outlive the cancelled pointer
     let touchLive = false;
+    // light quenched by finger stillness while the gesture may still live
+    let quenched = false;
     let settle = 0;
+    let lastScrollAt = 0;
+    let scaleClear = 0;
+    let stillDeath = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
     // the recipe in force for the current press (re-read per press: theme
@@ -169,8 +174,11 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       if (!raf) raf = requestAnimationFrame(step);
     };
     const level = () => {
-      const lit = down || riding;
+      const lit = (down || riding) && !quenched;
       glow.style.opacity = lit ? "1" : "0";
+      // overlays that would otherwise paint over the light (the entry
+      // foot's terminus fade) yield to it via this attribute
+      host.toggleAttribute("data-glow-lit", lit);
       if (!lit) {
         // shed the compositor hint once the fade has finished
         clearTimeout(shedWC);
@@ -207,6 +215,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     };
     const onDown = (e: PointerEvent) => {
       if (riding) settleRide(); // a new press takes over from a live ride
+      clearTimeout(scaleClear);
       arm();
       down = true;
       local(e.clientX, e.clientY);
@@ -234,30 +243,57 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
        touchend. Where touches die too (Android's touchcancel before any
        move), the light stays pinned to the surface — finger and content
        move together in a 1:1 drag — and settles when the scroll does. */
+    /* the bloom must not retract while a scroll it hosts is alive: iOS
+       kills a live scroll gesture — and its momentum — the moment an
+       ancestor of the scroller changes transform. So the LIGHT answers the
+       finger (off at lift, quenched by stillness), while the SCALE waits
+       out the scroll and releases only once it settles. */
+    const releaseScale = () => {
+      clearTimeout(scaleClear);
+      if (performance.now() - lastScrollAt < 240) {
+        scaleClear = window.setTimeout(releaseScale, 260);
+        return;
+      }
+      window.removeEventListener("scroll", onScrollRide, true);
+      scale();
+    };
     const settleRide = () => {
       riding = false;
       touchLive = false;
+      quenched = false;
       clearTimeout(settle);
-      window.removeEventListener("scroll", onScrollRide, true);
+      clearTimeout(stillDeath);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
       host.removeEventListener("touchcancel", onRideEnd);
       level();
-      scale();
+      releaseScale();
     };
     const onScrollRide = () => {
-      if (touchLive) return; // the finger is tracked; touchend ends the ride
+      lastScrollAt = performance.now();
+      if (touchLive || !riding) return; // tracked finger / momentum tail
       clearTimeout(settle);
       settle = window.setTimeout(settleRide, 220);
+    };
+    // finger stillness only dims the light (it must never strand after a
+    // missed lift) — the gesture may still be alive, so the ride and the
+    // bloom stay until a real end. A long-dead gesture is torn down whole.
+    const quench = () => {
+      quenched = true;
+      level();
     };
     const onRideMove = (e: TouchEvent) => {
       const t = e.touches[0];
       if (!riding || !t) return;
       touchLive = true;
-      // quiet-finger guard: the light must never strand after a lift — a
-      // ride survives only while touches keep arriving
+      if (quenched) {
+        quenched = false; // the finger moved again — same gesture, relight
+        level();
+      }
       clearTimeout(settle);
-      settle = window.setTimeout(settleRide, 700);
+      settle = window.setTimeout(quench, 700);
+      clearTimeout(stillDeath);
+      stillDeath = window.setTimeout(settleRide, 3000);
       local(t.clientX, t.clientY);
       nudge();
     };
@@ -295,6 +331,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       cancelAnimationFrame(raf);
       clearTimeout(settle);
       clearTimeout(shedWC);
+      clearTimeout(scaleClear);
+      clearTimeout(stillDeath);
       window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
