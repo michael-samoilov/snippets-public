@@ -318,11 +318,8 @@ export const copy = {
 
   /** the account mark and its menu */
   account: {
+    /** the account mark's accessible name (a single link to Settings) */
     label: "Account",
-    signIn: "Sign in to sync across devices",
-    settings: "Settings",
-    privacy: "Privacy policy",
-    signOut: "Sign out",
   },
 
   /** the sign-in page */
@@ -381,6 +378,15 @@ export const copy = {
       label: "Settings sections",
       appearance: "Appearance",
       account: "Account",
+      agreement: "Agreement",
+    },
+    /** the Agreement tab — two rows that open the full documents */
+    agreement: {
+      lead: "How Snippets handles your words, and the terms you use it under. Each opens in full.",
+      privacy: "Privacy policy",
+      privacySub: "What happens to your data — and what we can and can’t read.",
+      terms: "Terms of service",
+      termsSub: "The agreement — what you may expect of us, and we of you.",
     },
     /**
      * The status indicators that head each protection's own section

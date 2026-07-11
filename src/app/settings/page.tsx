@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTheme } from "next-themes";
@@ -55,6 +56,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { id: "account", label: copy.settings.tabs.account },
   { id: "appearance", label: copy.settings.tabs.appearance },
+  { id: "agreement", label: copy.settings.tabs.agreement },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -68,9 +70,8 @@ type TabId = (typeof TABS)[number]["id"];
 const TAB_EVENT = "settings:tab";
 
 function readTab(): TabId {
-  return new URLSearchParams(window.location.search).get("tab") === "appearance"
-    ? "appearance"
-    : "account";
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return t === "appearance" || t === "agreement" ? t : "account";
 }
 
 function subscribeTab(onChange: () => void) {
@@ -333,7 +334,7 @@ export default function SettingsPage() {
     <PageBackHeader title={copy.settings.title}>
       <SettingsTabs tab={tab} onSelect={selectTab} />
 
-      {tab === "appearance" ? (
+      {tab === "appearance" && (
         <div
           role="tabpanel"
           id="settings-panel-appearance"
@@ -382,7 +383,9 @@ export default function SettingsPage() {
           </div>
         </section>
         </div>
-      ) : (
+      )}
+
+      {tab === "account" && (
         <div
           role="tabpanel"
           id="settings-panel-account"
@@ -432,7 +435,76 @@ export default function SettingsPage() {
         <DangerZone user={user} />
         </div>
       )}
+
+      {tab === "agreement" && (
+        <div
+          role="tabpanel"
+          id="settings-panel-agreement"
+          aria-labelledby="settings-tab-agreement"
+          className="space-y-4"
+        >
+          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+            {copy.settings.agreement.lead}
+          </p>
+          <div className="space-y-3">
+            <AgreementLink
+              href="/privacy"
+              title={copy.settings.agreement.privacy}
+              sub={copy.settings.agreement.privacySub}
+            />
+            <AgreementLink
+              href="/terms"
+              title={copy.settings.agreement.terms}
+              sub={copy.settings.agreement.termsSub}
+            />
+          </div>
+        </div>
+      )}
     </PageBackHeader>
+  );
+}
+
+/**
+ * A row in the Agreement tab: the collapsible-section look from the
+ * privacy page (bordered box, small-caps label, stroke chevron), but it
+ * navigates instead of expanding — so the chevron points the way out,
+ * held still, never turning.
+ */
+function AgreementLink({
+  href,
+  title,
+  sub,
+}: {
+  href: string;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="pressable group flex items-center justify-between gap-3 rounded-[7px] border border-rule-faint px-4 py-3 hover:border-rule"
+    >
+      <span className="min-w-0">
+        <span className="voice-label block text-[0.75rem] text-ink-soft group-hover:text-ink">
+          {title}
+        </span>
+        <span className="voice-prose mt-0.5 block text-[0.85rem] text-ink-faint">
+          {sub}
+        </span>
+      </span>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="size-[0.95em] shrink-0 text-ink-faint group-hover:text-ink-soft"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points="9 6 15 12 9 18" />
+      </svg>
+    </Link>
   );
 }
 
