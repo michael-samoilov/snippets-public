@@ -319,6 +319,18 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       focused = false;
       scale();
     };
+    // a press the browser never resolves (the app backgrounded mid-press)
+    // must not strand the light or the bloom — going hidden rests everything
+    const onHidden = () => {
+      if (document.visibilityState !== "hidden") return;
+      down = false;
+      focused = false;
+      if (riding) settleRide();
+      else {
+        level();
+        scale();
+      }
+    };
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerup", onUp);
@@ -326,6 +338,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     host.addEventListener("pointerleave", onUp);
     host.addEventListener("focusin", onFocusIn);
     host.addEventListener("focusout", onFocusOut);
+    document.addEventListener("visibilitychange", onHidden);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(settle);
@@ -343,6 +356,12 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       host.removeEventListener("pointerleave", onUp);
       host.removeEventListener("focusin", onFocusIn);
       host.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("visibilitychange", onHidden);
+      // the bloom target is OUTSIDE this component (the host or its parent):
+      // unmounting mid-bloom (the entry view re-keys to another entry) must
+      // not leave it scaled forever
+      bloomEl.style.transform = "";
+      layer.style.mixBlendMode = "";
     };
   }, []);
 

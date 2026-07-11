@@ -2265,7 +2265,10 @@ function Calendar() {
           className={cn(
             // pt-2 mirrors the schedule card's gap below its date rule,
             // so the expanded card keeps that same breath under the title
-            "absolute inset-0 px-2 pt-2 [touch-action:pan-y]",
+            // pb-1.5: the card's bloom grows ~4px past its box from a center
+            // origin, and the stage clips at its bottom edge — the bottom
+            // breathing room mirrors what pt-2 already gives the top
+            "absolute inset-0 px-2 pb-1.5 pt-2 [touch-action:pan-y]",
             !showEntryLayer && "invisible",
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
