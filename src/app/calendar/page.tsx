@@ -2445,6 +2445,10 @@ function ScheduleFeedBase({
   const spyRef = useRef<string | null>(null);
   const pendingRef = useRef<string | null>(null);
   const rafRef = useRef(0);
+  // re-read the rows' geometry once each scroll settles: content-visibility
+  // swaps a day's estimated height for its real one as it first reveals, and
+  // the spy's cache must follow (at rest — never on the scroll path)
+  const geomSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didInit = useRef(false);
   // a Today scroll owns the header while it animates: the days it passes must
   // not each claim the title (which flashes the Today button back in)
@@ -2873,6 +2877,7 @@ function ScheduleFeedBase({
       el.removeEventListener("wheel", onUser);
       el.removeEventListener("touchstart", onUser);
       el.removeEventListener("pointerdown", onUser);
+      if (geomSettleRef.current) clearTimeout(geomSettleRef.current);
     };
   }, []);
 
@@ -2923,6 +2928,8 @@ function ScheduleFeedBase({
         spyRef.current = cur;
         onVisible(cur);
       }
+      if (geomSettleRef.current) clearTimeout(geomSettleRef.current);
+      geomSettleRef.current = setTimeout(measureRows, 300);
     });
   };
 
@@ -2970,11 +2977,38 @@ function ScheduleFeedBase({
         // (already-mounted) list. Its ScheduleCards stays rendered so the
         // AnimatePresence is live to animate that card in.
         const hideToday = isToday && row.snippets.length === 0;
+        // Off-screen days cost nothing: content-visibility skips their layout
+        // and paint entirely, so a long scroll renders a screenful, not the
+        // whole ledger — the render bill that outlived fling relief (Lamplight
+        // never blended, and a steady scroll never sheds; the tiles were cheap
+        // and there were simply too many). The intrinsic size is an estimate
+        // from the words themselves (line-clamped cards at ~36 chars/line);
+        // `auto` remembers the real height after first reveal, so any error is
+        // paid once. Today keeps full rendering — the zone's foot pinning
+        // measures it, and it's always at hand anyway. Pre-Safari-18 ignores
+        // the declaration and simply keeps today's behavior.
+        const estHeight =
+          21 +
+          row.snippets.reduce((h, s) => {
+            let lines = 0;
+            for (const para of s.text.split("\n"))
+              lines += Math.max(1, Math.ceil(para.length / 36));
+            return h + Math.min(6, lines) * 21 + 26;
+          }, 0) +
+          (showComposer && !isToday ? 56 : 0);
         const pageRow = (
           <section
             ref={rowRef(row.day)}
             data-day={row.day}
             aria-label={friendlyDay(row.day)}
+            style={
+              isToday
+                ? undefined
+                : ({
+                    contentVisibility: "auto",
+                    containIntrinsicSize: `auto ${estHeight}px`,
+                  } as React.CSSProperties)
+            }
             className={cn(
               "grid grid-cols-[2.1rem_1fr] gap-x-2",
               // every day rules off from the one above. Today's empty section

@@ -24,9 +24,12 @@
  * nobody sees.
  */
 
-// ~3px/ms is past any reading pace (a screenful in ~300ms) but well
-// inside what a flick reaches; below it, normal scrolling never sheds
-const FLING_SPEED = 3;
+// ~1.75px/ms — a screenful every half second — is skimming, not reading:
+// nothing shed at that pace is being looked at. The gate first shipped at
+// 3px/ms and a real crash scrolled straight under it (a steady ~1.5px/ms
+// through months of history), so it sits just below that pace now; an
+// actual reading scroll (well under 1px/ms) still never sheds
+const FLING_SPEED = 1.75;
 // scroll events stop when the momentum ends; one quiet beat = at rest
 const REST_MS = 160;
 // rAF samples arrive ~16ms apart; a gap this long means a new gesture,
