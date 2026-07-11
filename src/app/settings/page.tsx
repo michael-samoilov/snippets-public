@@ -186,10 +186,15 @@ const stripIcon = {
   strokeLinejoin: "round" as const,
 };
 
+// the Feather shield with a keyhole set inside — protection that reads
+// specifically as a LOCK, not just cover (same treatment on every shield
+// in the app; see profile-menu's ShieldIcon)
 function ShieldGlyph() {
   return (
     <svg {...stripIcon}>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <circle cx="12" cy="10" r="1.9" />
+      <line x1="12" y1="11.9" x2="12" y2="14.5" />
     </svg>
   );
 }
