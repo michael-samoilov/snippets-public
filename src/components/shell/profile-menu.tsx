@@ -150,8 +150,8 @@ function ShieldIcon() {
   return (
     <svg {...iconProps}>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <rect x="8.8" y="10.2" width="6.4" height="4" rx="0.95" />
-      <path d="M10.1 10.2v-1.35a1.9 1.9 0 0 1 3.8 0v1.35" />
+      <rect x="8.65" y="10.05" width="6.7" height="4.25" rx="1" />
+      <path d="M10 10.05v-1.45a2 2 0 0 1 4 0v1.45" />
     </svg>
   );
 }
