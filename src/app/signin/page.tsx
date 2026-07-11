@@ -117,10 +117,9 @@ export default function SignInPage() {
           >
             {copy.signin.emailLabel}
           </label>
-          {/* a compact form row, not full width (matching the settings
-              passphrase row) — the field fills, the button sits at its
-              natural width on the right, both the same height */}
-          <div className="mt-4 flex max-w-[26rem] items-stretch gap-2">
+          {/* the field fills the full container width, the button sits at
+              its natural width on the right, both the same height */}
+          <div className="mt-4 flex items-stretch gap-2">
             <Input
               id="signin-email"
               type="email"
