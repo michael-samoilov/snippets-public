@@ -2448,10 +2448,22 @@ function ScheduleFeedBase({
   const spyRef = useRef<string | null>(null);
   const pendingRef = useRef<string | null>(null);
   const rafRef = useRef(0);
-  // re-read the rows' geometry once each scroll settles: content-visibility
-  // swaps a day's estimated height for its real one as it first reveals, and
-  // the spy's cache must follow (at rest — never on the scroll path)
+  // re-read the rows' geometry once each scroll settles, so the spy's cache
+  // follows any layout drift (at rest — never on the scroll path)
   const geomSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // every day's REAL height, measured once the full book has laid out.
+  // content-visibility waits for these: skipping a section behind an
+  // ESTIMATED placeholder meant its first reveal swapped the estimate for
+  // the truth mid-scroll, and every pixel of error shifted the page under
+  // a live fling — read on device as the swipe's momentum dying. With the
+  // measured height as the placeholder, a reveal swaps like for like and
+  // the scroll never feels it. Null until measured: the book lays out in
+  // full first (exactly the pre-content-visibility load, which was never
+  // the crash — the crash was scroll-time rendering), then sheds.
+  const [dayHeights, setDayHeights] = useState<ReadonlyMap<
+    string,
+    number
+  > | null>(null);
   const didInit = useRef(false);
   // a Today scroll owns the header while it animates: the days it passes must
   // not each claim the title (which flashes the Today button back in)
@@ -2741,6 +2753,10 @@ function ScheduleFeedBase({
       // INSTANT so the page is simply held put rather than animated. offsetTop is
       // re-read each time, so it tracks the row wherever the reflow moves it.
       const pin = () => {
+        // the reader grabbing the scroll stands the pin down outright — a
+        // small drift is indistinguishable from the start of their swipe,
+        // and writing scrollTop under a live gesture kills its momentum
+        if (tookOverRef.current) return;
         const s = scrollerRef.current;
         const r = rowRefs.current.get(day);
         if (!s || !r) return;
@@ -2857,12 +2873,34 @@ function ScheduleFeedBase({
   // height; with overflow-anchor off that would shove the page off-screen, so
   // re-pin to the day the book landed on in the same commit (a layout effect,
   // before paint — no visible jump). spyRef holds that day (the landing wrote
-  // it); `selected` only seeds it. Skip if the reader has already grabbed the
-  // scroll, so the mount doesn't yank them.
+  // it); `selected` only seeds it. The re-pin stands down if the reader has
+  // already grabbed the scroll — the measurement never does (it writes
+  // nothing; it's the truth content-visibility waits for). The heights apply
+  // a beat later, off the mount's own commit: turning skipping on is one
+  // style pass over the whole book, and it changes no geometry (measured
+  // placeholders), so at worst it costs a quiet frame — never a shift.
   useLayoutEffect(() => {
-    if (!fullBook || tookOverRef.current) return;
+    if (!fullBook) return;
     measureRows();
-    scrollToRow(spyRef.current ?? selected);
+    if (!tookOverRef.current) scrollToRow(spyRef.current ?? selected);
+    // content-box heights, sub-pixel: contain-intrinsic-size declares the
+    // CONTENT box, and the sections' border-box offsets would double-count
+    // their 1px rule — ~1px of drift per section, the exact class of error
+    // this measurement exists to end
+    const heights = new Map<string, number>();
+    for (const [day, el] of rowRefs.current) {
+      const cs = getComputedStyle(el);
+      const h =
+        el.getBoundingClientRect().height -
+        (parseFloat(cs.borderTopWidth) || 0) -
+        (parseFloat(cs.borderBottomWidth) || 0);
+      heights.set(day, Math.max(1, Math.round(h * 100) / 100));
+    }
+    const id = setTimeout(
+      () => startTransition(() => setDayHeights(heights)),
+      400,
+    );
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBook]);
 
@@ -2984,12 +3022,16 @@ function ScheduleFeedBase({
         // and paint entirely, so a long scroll renders a screenful, not the
         // whole ledger — the render bill that outlived fling relief (Lamplight
         // never blended, and a steady scroll never sheds; the tiles were cheap
-        // and there were simply too many). The intrinsic size is an estimate
-        // from the words themselves (line-clamped cards at ~36 chars/line);
-        // `auto` remembers the real height after first reveal, so any error is
-        // paid once. Today keeps full rendering — the zone's foot pinning
-        // measures it, and it's always at hand anyway. Pre-Safari-18 ignores
-        // the declaration and simply keeps today's behavior.
+        // and there were simply too many). Skipping waits for dayHeights (the
+        // full book's MEASURED layout): behind a measured placeholder a first
+        // reveal swaps like for like and the scroll never feels it — behind an
+        // estimated one, every pixel of error shifted the page under a live
+        // fling and killed its momentum. The estimate (line-clamped cards at
+        // ~36 chars/line) stands in only for days born after the measure (a
+        // backfilled page, a sync pull); `auto` then remembers their real
+        // height at first reveal. Today keeps full rendering — the zone's
+        // foot pinning measures it, and it's always at hand anyway.
+        // Pre-Safari-18 ignores the declaration and keeps today's behavior.
         const estHeight =
           21 +
           row.snippets.reduce((h, s) => {
@@ -3005,11 +3047,11 @@ function ScheduleFeedBase({
             data-day={row.day}
             aria-label={friendlyDay(row.day)}
             style={
-              isToday
+              isToday || !dayHeights
                 ? undefined
                 : ({
                     contentVisibility: "auto",
-                    containIntrinsicSize: `auto ${estHeight}px`,
+                    containIntrinsicSize: `auto ${dayHeights.get(row.day) ?? estHeight}px`,
                   } as React.CSSProperties)
             }
             className={cn(
@@ -3126,7 +3168,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
+    [windowRows, windowTail, dayHeights, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
   );
 
   return (
