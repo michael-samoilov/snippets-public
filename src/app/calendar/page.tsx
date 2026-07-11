@@ -48,6 +48,7 @@ import {
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { pushUrl, replaceUrl } from "@/lib/history";
 import { bookScrolled } from "@/lib/fling-relief";
+import { enterRecoveryIfLooping } from "@/lib/crash-recovery";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
 import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
@@ -412,12 +413,27 @@ interface ScheduleFeedHandle {
 function Calendar() {
   const params = useSearchParams();
   const pathname = usePathname();
+  // Did we just reload into a crash loop? A deep-linked day rebuilds the whole
+  // book from that day forward — the heaviest render — so if THAT is what's
+  // killing the page, honoring the same `?d=` on every reload loops forever
+  // ("A problem repeatedly occurred"). In recovery we ignore the deep link,
+  // open the light recent-days window, and skip mounting the rest of the book
+  // (see the fullBook effect) — a cheap load that survives and clears the
+  // loop. Read once at mount; SSR and the very first client render are never
+  // in recovery, so there's no hydration skew.
+  const [recovery] = useState(() =>
+    typeof window === "undefined"
+      ? false
+      : enterRecoveryIfLooping(Date.now()),
+  );
+  const deepLink = !recovery;
   const initialDay = (() => {
-    const d = params.get("d");
+    const d = deepLink ? params.get("d") : null;
     return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : dayKey();
   })();
   // a bare ?y=YYYY (no ?d/?e) opens straight to the year glance
   const initialYear = (() => {
+    if (!deepLink) return null;
     const y = params.get("y");
     return !params.get("d") && !params.get("e") && y && /^\d{4}$/.test(y)
       ? Number(y)
@@ -430,7 +446,7 @@ function Calendar() {
   // day, and ?d=…&e= straight to an entry.
   const [view, setView] = useState<View>(() => {
     if (initialYear != null) return "year";
-    const d = params.get("d");
+    const d = deepLink ? params.get("d") : null;
     const validDay = !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
     return validDay && params.get("e") ? "entry" : "schedule";
   });
@@ -580,9 +596,11 @@ function Calendar() {
   // always has a floor.
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    const d = sp.get("d");
-    const e = sp.get("e");
-    const y = sp.get("y");
+    // in recovery we disown the (crashing) deep link entirely — floor on
+    // today, as if opened fresh, so the reloaded URL is the light one
+    const d = recovery ? null : sp.get("d");
+    const e = recovery ? null : sp.get("e");
+    const y = recovery ? null : sp.get("y");
     if (d) {
       replaceUrl(pathname);
       pushUrl(`${pathname}?d=${d}`);
@@ -2249,6 +2267,7 @@ function Calendar() {
               today={today}
               selected={selected}
               all={all}
+              recovery={recovery}
               onVisible={onScheduleDay}
               onOpen={openEntry}
             />
@@ -2405,6 +2424,7 @@ function ScheduleFeedBase({
   today,
   selected,
   all,
+  recovery,
   onVisible,
   onOpen,
 }: {
@@ -2414,6 +2434,9 @@ function ScheduleFeedBase({
   today: Date;
   selected: string;
   all: Snippet[] | undefined;
+  // a crash-loop recovery load: keep the book light (recent days only), never
+  // auto-mount the full history — see the fullBook effect
+  recovery: boolean;
   onVisible: (day: string) => void;
   onOpen: (id: string) => void;
 }) {
@@ -2844,14 +2867,18 @@ function ScheduleFeedBase({
   }, [rows, scrollToRow, measureRows]);
 
   // once the first (windowed) paint is on screen, mount the rest of the history
-  // off the critical path — a frame later, as a low-priority transition
+  // off the critical path — a frame later, as a low-priority transition. In
+  // recovery we DON'T: mounting the whole book is the suspected crash, and a
+  // reload loop only breaks if the recovered load stays light. The recent-days
+  // window is enough to read and to capture; a later, loop-free reopen returns
+  // to the full book.
   useEffect(() => {
-    if (fullBook || !rows) return;
+    if (fullBook || !rows || recovery) return;
     const id = requestAnimationFrame(() =>
       startTransition(() => setFullBook(true)),
     );
     return () => cancelAnimationFrame(id);
-  }, [fullBook, rows]);
+  }, [fullBook, rows, recovery]);
 
   // the rest of the history mounts ABOVE the landing day, growing the scroll
   // height; with overflow-anchor off that would shove the page off-screen, so
@@ -3266,6 +3293,7 @@ const ScheduleFeed = memo(
     p.diveFreeze === n.diveFreeze &&
     p.today === n.today &&
     p.all === n.all &&
+    p.recovery === n.recovery &&
     p.onVisible === n.onVisible &&
     p.onOpen === n.onOpen,
 );
