@@ -328,7 +328,6 @@ export const copy = {
   /** the sign-in page */
   signin: {
     title: "Sign in",
-    back: "Back to your entries",
     lead:
       "Your entries stay on this device either way — signing in keeps a copy on the server and lets another device carry them too.",
     emailLabel: "Email",

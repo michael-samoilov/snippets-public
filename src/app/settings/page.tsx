@@ -551,7 +551,7 @@ function SyncLines() {
           <p className="voice-prose text-[0.9rem] text-ember">
             {copy.settings.sync.outOfStep}
           </p>
-          <p className="voice-prose mt-1 max-w-[46ch] text-[0.9rem] text-ink-faint">
+          <p className="voice-prose mt-1 text-[0.9rem] text-ink-faint">
             {copy.settings.sync.reconcileHint}
           </p>
           <div className="mt-3">
@@ -589,7 +589,7 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
           formatBytes(storage.quotaBytes),
         )}
       </p>
-      <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+      <p className="voice-prose text-[0.9rem] text-ink-faint">
         {note}
       </p>
     </div>
@@ -1237,7 +1237,7 @@ function BackupSection() {
         </p>
         {deviceHasToken === false && (
           <div className="space-y-3">
-            <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+            <p className="voice-prose text-[0.9rem] text-ink-faint">
               {copy.settings.backup.deliversElsewhere}
             </p>
             {/* same consent, this device: Google mints it a grant of its own

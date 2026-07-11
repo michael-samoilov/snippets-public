@@ -42,7 +42,7 @@ function Section({
 export default function TermsPage() {
   return (
     <PageBackHeader title="Terms">
-      <div className="max-w-[52ch] space-y-8">
+      <div className="space-y-8">
         <p className="voice-data text-ink-faint">
           last updated {LAST_UPDATED.toLowerCase()}
         </p>
