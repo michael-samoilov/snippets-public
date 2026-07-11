@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { PaperButton } from "@/components/paper-button";
@@ -229,6 +230,25 @@ export default function SignInPage() {
             </span>
           </PaperButton>
         </div>
+
+        {/* the agreement, said once and quietly — both documents one tap away */}
+        <p className="voice-prose mt-6 text-center text-[0.82rem] text-ink-faint">
+          {copy.signin.agree}{" "}
+          <Link
+            href="/terms"
+            className="underline underline-offset-2 hover:text-ink-soft"
+          >
+            {copy.signin.agreeTerms}
+          </Link>{" "}
+          {copy.signin.agreeAnd}{" "}
+          <Link
+            href="/privacy"
+            className="underline underline-offset-2 hover:text-ink-soft"
+          >
+            {copy.signin.agreePrivacy}
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );
