@@ -139,11 +139,13 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       rec = document.documentElement.classList.contains("dark")
         ? GLOW_LAMPLIGHT
         : GLOW_PAPER;
-      // will-change only for the press's lifetime: a standing hint would
-      // hold a compositor layer per surface, and the book renders hundreds
-      // of tiles — the exact per-card layer cost perf-flat exists to shed
+      // will-change and the blend live only for the press's lifetime: a
+      // standing hint/blend would hold a compositor layer (and an offscreen
+      // blend group) per surface, and the book renders hundreds of tiles —
+      // the exact per-card cost perf-flat and zoom relief exist to shed
       clearTimeout(shedWC);
       glow.style.willChange = "transform, opacity";
+      layer.style.mixBlendMode = rec === GLOW_PAPER ? "overlay" : "";
       glow.style.width = `${rec.size}px`;
       glow.style.height = `${rec.size}px`;
       core.style.width = `${rec.size}px`;
@@ -180,6 +182,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         clearTimeout(shedWC);
         shedWC = window.setTimeout(() => {
           glow.style.willChange = "";
+          layer.style.mixBlendMode = "";
         }, 400);
       }
     };
@@ -351,10 +354,14 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     // Lamplight paints plain: a low-alpha warm veil never outshines the
     // cream glyphs. This dissolves the words>light>fade>words paint cycle —
     // the terminus fade keeps its place beneath the light.
+    // The blend is applied per-press in arm() (a transparent glow blends
+    // identically either way): a standing mix-blend would hold an offscreen
+    // blend group per surface — hundreds of tiles — at rest, the exact
+    // per-card compositing tax perf-flat and zoom relief exist to shed.
     <div
       ref={layerRef}
       aria-hidden
-      className={`pointer-events-none absolute inset-0 z-[15] overflow-hidden rounded-[inherit] mix-blend-overlay dark:mix-blend-normal ${className ?? ""}`}
+      className={`pointer-events-none absolute inset-0 z-[15] overflow-hidden rounded-[inherit] ${className ?? ""}`}
     >
       <div
         ref={glowRef}
