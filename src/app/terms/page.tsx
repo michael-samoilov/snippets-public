@@ -157,6 +157,19 @@ export default function TermsPage() {
             so in the app. Using Snippets after a change means you accept it.
           </p>
         </Section>
+
+        <Section id="questions" title="Questions">
+          <p className="voice-prose text-[0.95rem]">
+            About these terms, or anything the app does:{" "}
+            <a
+              href="mailto:snippets.support@gmail.com"
+              className="underline underline-offset-2"
+            >
+              snippets.support@gmail.com
+            </a>
+            .
+          </p>
+        </Section>
       </div>
     </PageBackHeader>
   );
