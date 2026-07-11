@@ -344,6 +344,12 @@ export const copy = {
     /** the rule between the email flow and Google */
     or: "or",
     google: "Continue with Google",
+    /** the quiet agreement line beneath the sign-in actions; the two
+        phrases render as links to /terms and /privacy */
+    agree: "By signing in you agree to the",
+    agreeTerms: "terms of service",
+    agreeAnd: "and the",
+    agreePrivacy: "privacy policy",
     errors: {
       invalidEmail: "That doesn’t look like an address.",
       sendFailed: "The code couldn’t be sent. Try again in a moment.",

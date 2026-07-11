@@ -400,6 +400,15 @@ export default function PrivacyPage() {
             Drive, remain yours.
           </p>
         </section>
+
+        <p className="voice-prose text-[0.9rem] text-ink-soft">
+          The agreement side of things — what you may expect of us, and we of
+          you — lives in the{" "}
+          <Link href="/terms" className="underline underline-offset-2">
+            terms of service
+          </Link>
+          .
+        </p>
       </div>
     </PageBackHeader>
   );
