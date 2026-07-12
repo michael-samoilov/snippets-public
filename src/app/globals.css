@@ -509,20 +509,22 @@ textarea:focus-visible,
   position: static;
 }
 
-/* The crash fix (confirmed on-device): the book sheds its per-card BLEND. A
-   modern iPhone shrugs off a few hundred plain sections, but a few hundred
-   cards each carrying an offscreen blend buffer (the ink-into-paper multiply)
-   plus the isolated layer that baked it is a real GPU-memory load — enough to
-   jetsam-kill a years-deep book. So the prose no longer multiplies into the
-   paper, and the `isolate` (which existed only for that blend) goes with it.
-   KEPT: the card's lift — its `--card-seat` seat shadow (owner's call: the
-   blend was the dominant cost; the shadow is affordable at real book sizes) —
-   the inset top highlight, and the desk grain + lamplight. Only the
-   paper-drinks-the-ink texture inside the strokes is gone; the text-shadow halo
-   keeps the edges soft. (The permanent fix that makes even the blend free is
-   windowing the render — only the on-screen cards paint.) */
+/* The crash fix (confirmed on-device): the book sheds EVERY per-card paint
+   cost. A modern iPhone shrugs off a few hundred plain sections, but a few
+   hundred cards each carrying an offscreen blend buffer (the ink-into-paper
+   multiply), its own isolated layer, AND two blurred drop-shadows
+   (--card-seat) is a real GPU-memory load that jetsam-kills a years-deep book.
+   All three are per-card and scale with the book. So: the prose no longer
+   multiplies, the `isolate` (which existed only for that blend) goes with it,
+   and the seat shadow drops to just the cheap inset top highlight.
+   (Restoring the seat shadow was tried and REGRESSED the crash on a real book —
+   a blurred shadow per card is as unaffordable as the blend.) Only the desk
+   grain + lamplight remain — a handful of full-viewport layers that don't scale
+   with the book. The permanent fix that buys the lift and blend BACK is
+   windowing the render, so only the on-screen cards paint. */
 .book-card {
   isolation: auto;
+  box-shadow: inset 0 1px 0 var(--press-highlight);
 }
 /* .book-card descendant so this outranks the later `.voice-prose { multiply }`
    (same class-count would otherwise lose on source order) */
