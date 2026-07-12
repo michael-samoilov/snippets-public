@@ -482,34 +482,6 @@ function Calendar() {
   });
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
 
-  // Perf A/B (temporary): flatten the book cards' ink/layers to test whether the
-  // mix-blend compositing is what causes scroll input-lag and the pinch-zoom
-  // crash on low-power iPhones. Toggled by a pill shown with ?perfdebug; the
-  // choice rides a data attribute on <html> that globals.css keys off. Read once
-  // in the initializer (client-only render under Suspense — no hydration skew).
-  const [perfFlat, setPerfFlat] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("perfFlat") === "1",
-  );
-  const [perfDebug] = useState(() => {
-    if (typeof window === "undefined") return false;
-    if (new URLSearchParams(window.location.search).has("perfdebug")) {
-      try { localStorage.setItem("perfDebug", "1"); } catch {}
-      return true;
-    }
-    return localStorage.getItem("perfDebug") === "1";
-  });
-  useEffect(() => {
-    if (perfFlat) document.documentElement.dataset.perfFlat = "1";
-    else delete document.documentElement.dataset.perfFlat;
-  }, [perfFlat]);
-  const togglePerf = useCallback(() => {
-    setPerfFlat((v) => {
-      const next = !v;
-      try { localStorage.setItem("perfFlat", next ? "1" : "0"); } catch {}
-      return next;
-    });
-  }, []);
-
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
@@ -1872,23 +1844,6 @@ function Calendar() {
       </h1>
       {/* the `?` keyboard cheat sheet */}
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book cards'
-          ink between blended and flat to test scroll/zoom jank on-device */}
-      {perfDebug && (
-        <div className="float fixed bottom-3 left-3 z-50 flex items-center rounded-full p-0.5">
-          <button
-            type="button"
-            onClick={togglePerf}
-            aria-pressed={perfFlat}
-            className={cn(
-              "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
-              perfFlat ? "bg-wax/15 text-wax" : "text-ink-soft",
-            )}
-          >
-            {perfFlat ? "flat ink" : "blend ink"}
-          </button>
-        </div>
-      )}
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat

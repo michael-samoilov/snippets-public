@@ -509,17 +509,24 @@ textarea:focus-visible,
   position: static;
 }
 
-/* Perf A/B (toggled by the debug pill, ?perfdebug): drop the per-card ink blend
-   and the layer it forces. The book's prose normally multiplies into the paper
-   (ink-into-paper) and each card `isolate`s to bake that blend — but blending +
-   compositing hundreds of card layers is the suspect behind scroll input-lag and
-   the pinch-zoom crash on low-power iPhones. With this on, card ink is a flat
-   colour and the cards stop forcing their own layers, so the book composites
-   cheaply. Lets the owner feel the trade-off on-device before we commit. */
-[data-perf-flat] .book-card {
+/* The crash fix (confirmed on-device): the book sheds its per-card BLEND. A
+   modern iPhone shrugs off a few hundred plain sections, but a few hundred
+   cards each carrying an offscreen blend buffer (the ink-into-paper multiply)
+   plus the isolated layer that baked it is a real GPU-memory load — enough to
+   jetsam-kill a years-deep book. So the prose no longer multiplies into the
+   paper, and the `isolate` (which existed only for that blend) goes with it.
+   KEPT: the card's lift — its `--card-seat` seat shadow (owner's call: the
+   blend was the dominant cost; the shadow is affordable at real book sizes) —
+   the inset top highlight, and the desk grain + lamplight. Only the
+   paper-drinks-the-ink texture inside the strokes is gone; the text-shadow halo
+   keeps the edges soft. (The permanent fix that makes even the blend free is
+   windowing the render — only the on-screen cards paint.) */
+.book-card {
   isolation: auto;
 }
-[data-perf-flat] .book-card-prose {
+/* .book-card descendant so this outranks the later `.voice-prose { multiply }`
+   (same class-count would otherwise lose on source order) */
+.book-card .book-card-prose {
   mix-blend-mode: normal;
 }
 
