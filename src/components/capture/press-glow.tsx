@@ -157,7 +157,6 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       amb.style.height = `${d}px`;
       amb.style.filter = `blur(${rec.blur * 3}px)`;
       amb.style.background = `radial-gradient(circle closest-side, ${ink(rec.strength * rec.ambient)}, transparent 78%)`;
-      glow.style.transitionDuration = reduce ? "0ms" : "";
     };
 
     const place = () => {
@@ -176,6 +175,15 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     };
     const level = () => {
       const lit = (down || riding) && !quenched;
+      // per-direction envelopes, measured from iOS's Liquid Glass bar
+      // (30fps frame analysis): the light swells in over ~200ms and leaves
+      // on a long, near-linear ~380ms tail. One shared snappy ease-out
+      // made it flash on and cut off — the exact opposite read.
+      glow.style.transition = reduce
+        ? "opacity 0ms"
+        : lit
+          ? "opacity 200ms cubic-bezier(0.25, 0.1, 0.4, 1)"
+          : "opacity 380ms cubic-bezier(0.3, 0, 0.6, 1)";
       glow.style.opacity = lit ? "1" : "0";
       if (!lit) {
         // shed the compositor hint once the fade has finished
@@ -384,8 +392,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     >
       <div
         ref={glowRef}
-        className="absolute left-0 top-0 opacity-0 transition-opacity duration-[320ms] ease-[var(--ease-out)]"
-        style={{ willChange: "transform, opacity" }}
+        className="absolute left-0 top-0 opacity-0"
       >
         <div
           ref={ambientRef}

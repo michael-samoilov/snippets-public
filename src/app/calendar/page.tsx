@@ -1389,7 +1389,15 @@ function Calendar() {
       iOS holding handles over a view that no longer existed) */
   const selectionStands = () => {
     const sel = window.getSelection();
-    return !!sel && !sel.isCollapsed;
+    if (sel && !sel.isCollapsed) return true;
+    // a selection INSIDE a text field never shows in getSelection() — it
+    // lives in the field's own selectionStart/End. Selecting words mid-edit
+    // used to read as a back-swipe and close the entry view under the hand
+    const el = document.activeElement;
+    return (
+      (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) &&
+      el.selectionStart !== el.selectionEnd
+    );
   };
   const armSwipe = (e: React.PointerEvent, ignoreInteractive: boolean) => {
     if (e.pointerType === "mouse") return;
@@ -2259,7 +2267,9 @@ function Calendar() {
         <div
           ref={entryLayerRef}
           data-layer="entry"
-          onPointerDown={(e) => armSwipe(e, false)}
+          // ignoreInteractive: a drag that BEGINS on the rewrite field is
+          // text work (caret walks, selection), never a back-swipe
+          onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, closeEntry)}
           onPointerCancel={() => (swipe.current = null)}
           className={cn(
