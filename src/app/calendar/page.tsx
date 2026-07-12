@@ -47,7 +47,6 @@ import {
 } from "@/lib/db";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { pushUrl, replaceUrl } from "@/lib/history";
-import { bookScrolled } from "@/lib/fling-relief";
 import { enterRecoveryIfLooping } from "@/lib/crash-recovery";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
@@ -2917,10 +2916,6 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       if (!el) return;
       const top = el.scrollTop;
-      // fling relief reads every sample — a fast fling sheds the book's
-      // grace layers (see lib/fling-relief) so iOS can raster the tiles
-      // it demands without being jetsam-killed for the allocation spike
-      bookScrolled(top);
       if (progTargetRef.current !== null) {
         // a Today scroll is animating to its target — let it run, but don't let
         // the days it passes claim the header (that flashes the Today button)
