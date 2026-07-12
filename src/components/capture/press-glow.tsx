@@ -390,6 +390,10 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       aria-hidden
       className={`pointer-events-none absolute inset-0 z-[15] overflow-hidden rounded-[inherit] ${className ?? ""}`}
     >
+      {/* no standing will-change here: arm() raises the hint for the press's
+          lifetime and level() sheds it after — an inline hint would hold a
+          compositor layer per surface across the book's hundreds of tiles,
+          exactly the cost the shedding exists to avoid */}
       <div
         ref={glowRef}
         className="absolute left-0 top-0 opacity-0"

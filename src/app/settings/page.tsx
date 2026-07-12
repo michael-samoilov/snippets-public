@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTheme } from "next-themes";
@@ -24,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eraseAll } from "@/lib/db";
+import { replaceUrl } from "@/lib/history";
 import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "@/lib/e2e";
 import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
 import {
@@ -54,6 +56,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { id: "account", label: copy.settings.tabs.account },
   { id: "appearance", label: copy.settings.tabs.appearance },
+  { id: "agreement", label: copy.settings.tabs.agreement },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -67,9 +70,8 @@ type TabId = (typeof TABS)[number]["id"];
 const TAB_EVENT = "settings:tab";
 
 function readTab(): TabId {
-  return new URLSearchParams(window.location.search).get("tab") === "appearance"
-    ? "appearance"
-    : "account";
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return t === "appearance" || t === "agreement" ? t : "account";
 }
 
 function subscribeTab(onChange: () => void) {
@@ -85,7 +87,7 @@ function selectTab(id: TabId) {
   const url = new URL(window.location.href);
   if (id === "account") url.searchParams.delete("tab");
   else url.searchParams.set("tab", id);
-  window.history.replaceState(null, "", url);
+  replaceUrl(url);
   window.dispatchEvent(new Event(TAB_EVENT));
 }
 
@@ -189,14 +191,15 @@ const stripIcon = {
 
 // the Feather shield with a padlock set inside — protection that reads
 // specifically as a LOCK, not just cover (same treatment on every shield
-// in the app; see profile-menu's ShieldIcon). The Feather shield fills
-// less of its 24-box than the gear/person, so it read small in the row —
-// a viewBox zoomed 1.15 about centre grows the whole mark to the set's
-// weight within the SAME 16px footprint (no row shift), and the
-// stroke-width drops in step so the line stays the family's 1.8.
+// in the app; see profile-menu's ShieldIcon). The Feather shield's
+// silhouette fills less of its 24-box than the gear/person (2 units of
+// margin vs ~1), so at a shared 16px it read small. Rendered a touch
+// larger (18px) so its ink height matches the set; the full 0–24 viewBox
+// is kept (NOT zoomed) so the stroke halo never clips, and stroke-width
+// drops to 1.6 so the line stays the family's on-screen weight.
 function ShieldGlyph() {
   return (
-    <svg {...stripIcon} viewBox="1.565 1.565 20.87 20.87" strokeWidth={1.565}>
+    <svg {...stripIcon} width={18} height={18} strokeWidth={1.6}>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <rect x="9" y="10.6" width="6" height="3.6" rx="0.9" />
       <path d="M10.3 10.6v-1.2a1.7 1.7 0 0 1 3.4 0v1.2" />
@@ -331,7 +334,7 @@ export default function SettingsPage() {
     <PageBackHeader title={copy.settings.title}>
       <SettingsTabs tab={tab} onSelect={selectTab} />
 
-      {tab === "appearance" ? (
+      {tab === "appearance" && (
         <div
           role="tabpanel"
           id="settings-panel-appearance"
@@ -380,7 +383,9 @@ export default function SettingsPage() {
           </div>
         </section>
         </div>
-      ) : (
+      )}
+
+      {tab === "account" && (
         <div
           role="tabpanel"
           id="settings-panel-account"
@@ -430,7 +435,76 @@ export default function SettingsPage() {
         <DangerZone user={user} />
         </div>
       )}
+
+      {tab === "agreement" && (
+        <div
+          role="tabpanel"
+          id="settings-panel-agreement"
+          aria-labelledby="settings-tab-agreement"
+          className="space-y-4"
+        >
+          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+            {copy.settings.agreement.lead}
+          </p>
+          <div className="space-y-3">
+            <AgreementLink
+              href="/privacy"
+              title={copy.settings.agreement.privacy}
+              sub={copy.settings.agreement.privacySub}
+            />
+            <AgreementLink
+              href="/terms"
+              title={copy.settings.agreement.terms}
+              sub={copy.settings.agreement.termsSub}
+            />
+          </div>
+        </div>
+      )}
     </PageBackHeader>
+  );
+}
+
+/**
+ * A row in the Agreement tab: the collapsible-section look from the
+ * privacy page (bordered box, small-caps label, stroke chevron), but it
+ * navigates instead of expanding — so the chevron points the way out,
+ * held still, never turning.
+ */
+function AgreementLink({
+  href,
+  title,
+  sub,
+}: {
+  href: string;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="pressable group flex items-center justify-between gap-3 rounded-[7px] border border-rule-faint px-4 py-3 hover:border-rule"
+    >
+      <span className="min-w-0">
+        <span className="voice-label block text-[0.75rem] text-ink-soft group-hover:text-ink">
+          {title}
+        </span>
+        <span className="voice-prose mt-0.5 block text-[0.85rem] text-ink-faint">
+          {sub}
+        </span>
+      </span>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="size-[0.95em] shrink-0 text-ink-faint group-hover:text-ink-soft"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points="9 6 15 12 9 18" />
+      </svg>
+    </Link>
   );
 }
 
@@ -551,7 +625,7 @@ function SyncLines() {
           <p className="voice-prose text-[0.9rem] text-ember">
             {copy.settings.sync.outOfStep}
           </p>
-          <p className="voice-prose mt-1 max-w-[46ch] text-[0.9rem] text-ink-faint">
+          <p className="voice-prose mt-1 text-[0.9rem] text-ink-faint">
             {copy.settings.sync.reconcileHint}
           </p>
           <div className="mt-3">
@@ -589,7 +663,7 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
           formatBytes(storage.quotaBytes),
         )}
       </p>
-      <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+      <p className="voice-prose text-[0.9rem] text-ink-faint">
         {note}
       </p>
     </div>
@@ -716,7 +790,7 @@ function EncryptionSection({ email }: { email: string }) {
   );
   useEffect(() => {
     if (wantSeal && enrolled === false) {
-      window.history.replaceState(null, "", "/settings");
+      replaceUrl("/settings");
       setEnrollOpen(true);
     }
   }, [wantSeal, enrolled]);
@@ -734,7 +808,7 @@ function EncryptionSection({ email }: { email: string }) {
     if (!wantUnlock || !enrolled || hasKey !== false) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("unlock");
-    window.history.replaceState(null, "", url);
+    replaceUrl(url);
     sectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [wantUnlock, enrolled, hasKey]);
 
@@ -1106,7 +1180,7 @@ function BackupSection() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("drive") !== "connected") return;
-    window.history.replaceState(null, "", "/settings");
+    replaceUrl("/settings");
     void (async () => {
       setConnecting(true);
       try {
@@ -1237,7 +1311,7 @@ function BackupSection() {
         </p>
         {deviceHasToken === false && (
           <div className="space-y-3">
-            <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-faint">
+            <p className="voice-prose text-[0.9rem] text-ink-faint">
               {copy.settings.backup.deliversElsewhere}
             </p>
             {/* same consent, this device: Google mints it a grant of its own
