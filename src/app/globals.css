@@ -551,6 +551,25 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
+/* RICH WHEN NEAR THE VIEWPORT — the one sanctioned way to give a book card its
+   full paint back WITHOUT breaking the FLAT-BOOK LAW above. An
+   IntersectionObserver (in calendar/page.tsx) sets `data-rich` on the day
+   sections within a viewport of the screen; only those cards regain the lift
+   shadow and the ink-into-paper blend. Because it's bounded to the ~dozen cards
+   on screen — never the whole book — the per-card cost stops scaling with the
+   book, so it can't jetsam-kill. Do NOT widen this to all `.book-card` (that IS
+   the crash) and do NOT drive it from a whole-book flag (that thrashes — the
+   restyle must stay per-section). Higher specificity than the flat rules above,
+   so it wins where present. */
+[data-rich] .book-card {
+  isolation: isolate;
+  box-shadow: var(--card-seat);
+}
+/* light only — Lamplight ink is luminous and never multiplies */
+:root:not(.dark) [data-rich] .book-card .book-card-prose {
+  mix-blend-mode: multiply;
+}
+
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
    A pinch makes iOS re-rasterize the whole composited page at the magnified
    scale — and these grace layers, cheap at 1×, cost scale² when blown up: the

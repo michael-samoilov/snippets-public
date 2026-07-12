@@ -2423,6 +2423,10 @@ function ScheduleFeedBase({
   const pendingRef = useRef<string | null>(null);
   const rafRef = useRef(0);
   const didInit = useRef(false);
+  // toggles `data-rich` on day sections near the viewport, so only the ~dozen
+  // on-screen cards wear the expensive per-card paint (lift + ink-into-paper);
+  // see the rich-when-near effect below
+  const richObsRef = useRef<IntersectionObserver | null>(null);
   // a Today scroll owns the header while it animates: the days it passes must
   // not each claim the title (which flashes the Today button back in)
   const progTargetRef = useRef<number | null>(null);
@@ -2861,6 +2865,38 @@ function ScheduleFeedBase({
     };
   }, []);
 
+  // RICH WHEN NEAR THE VIEWPORT — the safe way to keep the design without
+  // reintroducing the crash (see the FLAT-BOOK LAW in globals.css). The whole
+  // book stays flat in the DOM (so the scroll stays cheap and nothing about the
+  // scroll machinery changes), but the day sections within a viewport of the
+  // screen get `data-rich`, which restores their cards' lift shadow and
+  // ink-into-paper blend. Off-screen sections stay flat, so the expensive
+  // per-card paint (blend buffer + isolation + seat blur) is bounded to the
+  // ~dozen on screen at once, NOT the whole book — it can't scale into a crash.
+  // Per-SECTION (each toggles only its own cards), never a whole-book class
+  // toggle — the exact mistake the old 'fidelity' attempt made, which forced a
+  // full-book restyle on every scroll and thrashed. rootMargin one viewport, so
+  // a card is already rich before it scrolls into view. (True DOM windowing —
+  // BACKLOG #12 — is still the fix for genuinely huge books; this is its
+  // lower-risk cousin that buys the look back at real book sizes.)
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries)
+          (e.target as HTMLElement).toggleAttribute("data-rich", e.isIntersecting);
+      },
+      { root: el, rootMargin: "100% 0px" },
+    );
+    richObsRef.current = obs;
+    for (const sec of rowRefs.current.values()) obs.observe(sec);
+    return () => {
+      obs.disconnect();
+      richObsRef.current = null;
+    };
+  }, []);
+
   const onScroll = () => {
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
@@ -2908,8 +2944,14 @@ function ScheduleFeedBase({
   };
 
   const rowRef = (day: string) => (el: HTMLElement | null) => {
-    if (el) rowRefs.current.set(day, el);
-    else rowRefs.current.delete(day);
+    if (el) {
+      rowRefs.current.set(day, el);
+      richObsRef.current?.observe(el); // start watching new sections for richness
+    } else {
+      const prev = rowRefs.current.get(day);
+      if (prev) richObsRef.current?.unobserve(prev);
+      rowRefs.current.delete(day);
+    }
   };
 
   // the book holds nothing yet — the today zone opens with a warmer first
