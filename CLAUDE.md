@@ -142,6 +142,32 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (registered in `src/components/providers.tsx`, production only).
   Bump `VERSION` in `sw.js` when changing caching behavior.
 
+## Prove the fix (do this for every nontrivial change)
+
+A change that "should" fix the bug hasn't fixed anything until you've
+*observed* it fixed. Don't ship on theory or on a proxy measurement —
+observe the actual behavior. (This repo learned it the hard way: a crash
+was "fixed" several times by reasoning about compositor cost, each raising
+the ceiling without removing it; only an on-device A/B settled it. See the
+FLAT-BOOK LAW in `globals.css`.)
+
+- **First priority — a real harness you build yourself.** Reproduce the
+  old bug, apply the change, and measure the *actual* app behavior
+  proving it's gone: real screenshots, DOM/state readouts, computed
+  styles, event traces (`webapp-testing` skill; see the section below).
+  Not "the number should be lower" — the observed thing that broke must
+  now demonstrably work. Iterate against the harness until it's solved,
+  and **write down the dead ends** (in the commit/BACKLOG/code comments)
+  so the next person doesn't re-walk them.
+- **Second priority — only when you truly cannot observe it yourself**
+  (e.g. iOS-Safari-specific memory/compositor behavior a headless
+  Chromium can't reproduce): hand the owner a testable build and be
+  precise. You MUST give **(a)** the exact commit to open (and which
+  branch/URL it's on), and **(b)** numbered, literal step-by-step actions
+  to run and what to look for — enough that the result is an unambiguous
+  yes/no, not a vibe. State plainly which claims you verified vs. which
+  depend on their device.
+
 ## Visual verification (do this for UI changes)
 
 `pnpm build`, then serve and screenshot with the `webapp-testing` skill:
