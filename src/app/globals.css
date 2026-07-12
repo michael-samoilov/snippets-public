@@ -523,6 +523,10 @@ textarea:focus-visible,
    restores the blend for an A/B — it may crash a big book, which is the point. */
 .book-card {
   isolation: auto;
+  /* keep only the cheap inset top highlight; shed the two BLURRED seat drops
+     (--card-seat) — a per-card blur raster, hundreds of them, that scales with
+     the book like the blend did and was the cost left in the "refined" flat */
+  box-shadow: inset 0 1px 0 var(--press-highlight);
 }
 /* .book-card descendant so this outranks the later `.voice-prose { multiply }`
    (same class-count would otherwise lose on source order) */
@@ -531,9 +535,18 @@ textarea:focus-visible,
 }
 [data-perf-rich] .book-card {
   isolation: isolate;
+  box-shadow: var(--card-seat);
 }
 [data-perf-rich] .book-card .book-card-prose {
   mix-blend-mode: multiply;
+}
+/* ?perfdebug 'grain off' — a safety valve: shed the two full-viewport desk
+   layers (grain + lamplight) too. They don't scale with the book, so they
+   shouldn't be the crash; this only exists so the cause can be bisected
+   on-device without another code round if the flat book still tips over. */
+[data-perf-nograin] body::before,
+[data-perf-nograin] body::after {
+  display: none;
 }
 
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).

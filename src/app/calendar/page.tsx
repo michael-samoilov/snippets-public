@@ -110,10 +110,15 @@ const YearFeed = dynamic(
     scales with the unlikelihood of needing to. */
 const ARCHIVE_YEAR = 1950;
 
-// ?perfdebug chips. The book now ships FLAT (per-card blend + isolation shed —
-// the confirmed crash cause); `rich` restores the old blended look for an
-// on-device A/B (it may crash a big book — that's the point).
-const PERF_TOGGLES = [{ key: "rich", on: "rich (old)", off: "flat (new)" }] as const;
+// ?perfdebug chips. The book ships FLAT (all per-card paint shed — blend,
+// isolation, seat-shadow blur). `rich` restores the old per-card paint for an
+// A/B (it may crash a big book — that's the point); `grain off` is a safety
+// valve to also shed the two full-viewport desk layers if the flat book still
+// tips over.
+const PERF_TOGGLES = [
+  { key: "rich", on: "rich (old)", off: "flat (new)" },
+  { key: "nograin", on: "grain off", off: "grain on" },
+] as const;
 const PERF_TOGGLE_KEYS = PERF_TOGGLES.map((t) => t.key);
 
 /** A typeface snapshot, for the date numbers that fly between altitudes. */
