@@ -121,9 +121,11 @@ const SEED_MARK = "devSeed:v1";
 
 /**
  * If the URL asks for a seed, build the book once and strip the param so a
- * reload doesn't re-run. `?seed=500` seeds 500 entries over 5 years into an
- * empty book; `?seed=500&years=3` overrides the span; `&force` reseeds even
- * if this browser was seeded before; `?seed=clear` wipes the whole table.
+ * reload doesn't re-run. `?seed=800` seeds 800 entries over 5 years; the
+ * number IS the count, so `?seed=500` then `?seed=800` cleanly replaces the
+ * first with exactly 800 (our own seed is wiped first — a real book is never
+ * touched without `&force`). `?seed=800&years=3` overrides the span;
+ * `?seed=clear` wipes the whole table.
  *
  * Returns true if it kicked off a seed/clear (the caller may skip its own
  * first-run work while the write lands — the live query repaints on its own).
@@ -166,12 +168,25 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
     }
   })();
   const existing = await db.snippets.count();
+  // a book THIS browser seeded before (the mark is set) vs. a real book we
+  // must never clobber
+  const isOurSeed = already != null && existing > 0;
 
-  // don't seed on top of a book that already holds entries (unless forced) —
-  // and don't re-seed the same signature this browser already ran
-  if (!force && (existing > 0 || already === signature)) {
+  // exactly this seed already sits in the book — nothing to do
+  if (!force && already === signature) {
     strip();
     return false;
+  }
+  // a real (never-seeded) book is sacred: don't seed over it unless forced
+  if (!force && existing > 0 && !isOurSeed) {
+    strip();
+    return false;
+  }
+
+  // replace our OWN prior seed so a new count is exact — ?seed=800 after
+  // ?seed=500 yields 800, not 1300 (a real book with &force still adds on top)
+  if (isOurSeed) {
+    await db.snippets.clear();
   }
 
   const rows = buildSeedRows(count, years, 1);
