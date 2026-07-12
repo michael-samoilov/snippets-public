@@ -110,6 +110,15 @@ const YearFeed = dynamic(
     scales with the unlikelihood of needing to. */
 const ARCHIVE_YEAR = 1950;
 
+// ?perfdebug bisect chips — order shown left→right. `key` is the data-attr
+// stem (data-perf-<key>); `on`/`off` are the chip labels per state.
+const PERF_TOGGLES = [
+  { key: "flat", on: "flat", off: "full" },
+  { key: "nosticky", on: "sticky off", off: "sticky on" },
+  { key: "nospy", on: "spy off", off: "spy on" },
+] as const;
+const PERF_TOGGLE_KEYS = PERF_TOGGLES.map((t) => t.key);
+
 /** A typeface snapshot, for the date numbers that fly between altitudes. */
 interface FlyFont {
   family: string;
@@ -482,14 +491,21 @@ function Calendar() {
   });
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
 
-  // Perf A/B (temporary): flatten the book cards' ink/layers to test whether the
-  // mix-blend compositing is what causes scroll input-lag and the pinch-zoom
-  // crash on low-power iPhones. Toggled by a pill shown with ?perfdebug; the
-  // choice rides a data attribute on <html> that globals.css keys off. Read once
-  // in the initializer (client-only render under Suspense — no hydration skew).
-  const [perfFlat, setPerfFlat] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("perfFlat") === "1",
-  );
+  // Perf A/B bisect (?perfdebug): each toggle rides a data-attr on <html> that
+  // CSS or the scroll spy keys off, so a big book's two symptoms can be pinned
+  // on-device without guessing — 'flat' sheds all per-card paint (the crash),
+  // 'sticky' unpins the margin dates (hundreds of sticky boxes can drop Safari
+  // off its fast compositor-scroll path), 'spy' silences the per-frame
+  // scroll→title/selection work. Flip each alone and see which smooths the
+  // momentum. Read once in the initializer (client-only under Suspense).
+  const perfDataKey = (key: string) =>
+    `perf${key.charAt(0).toUpperCase()}${key.slice(1)}`; // "nosticky" → dataset.perfNosticky → data-perf-nosticky
+  const [perfOn, setPerfOn] = useState<Record<string, boolean>>(() => {
+    const o: Record<string, boolean> = {};
+    if (typeof window === "undefined") return o;
+    for (const key of PERF_TOGGLE_KEYS) o[key] = localStorage.getItem(`perf:${key}`) === "1";
+    return o;
+  });
   const [perfDebug] = useState(() => {
     if (typeof window === "undefined") return false;
     if (new URLSearchParams(window.location.search).has("perfdebug")) {
@@ -499,13 +515,15 @@ function Calendar() {
     return localStorage.getItem("perfDebug") === "1";
   });
   useEffect(() => {
-    if (perfFlat) document.documentElement.dataset.perfFlat = "1";
-    else delete document.documentElement.dataset.perfFlat;
-  }, [perfFlat]);
-  const togglePerf = useCallback(() => {
-    setPerfFlat((v) => {
-      const next = !v;
-      try { localStorage.setItem("perfFlat", next ? "1" : "0"); } catch {}
+    for (const key of PERF_TOGGLE_KEYS) {
+      if (perfOn[key]) document.documentElement.dataset[perfDataKey(key)] = "1";
+      else delete document.documentElement.dataset[perfDataKey(key)];
+    }
+  }, [perfOn]);
+  const togglePerf = useCallback((key: string) => {
+    setPerfOn((p) => {
+      const next = { ...p, [key]: !p[key] };
+      try { localStorage.setItem(`perf:${key}`, next[key] ? "1" : "0"); } catch {}
       return next;
     });
   }, []);
@@ -1864,23 +1882,28 @@ function Calendar() {
       </h1>
       {/* the `?` keyboard cheat sheet */}
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book's
-          paint between full and flat to test on-device whether compositing is
-          what crashes a hundreds-deep book, with a book-size readout beside it */}
+      {/* perf bisect panel (?perfdebug) — flip each cause alone to find what
+          crashes / stutters a big book on-device: paint (flat), the sticky
+          margin dates, or the per-frame scroll spy; book size read out below */}
       {perfDebug && (
-        <div className="float fixed bottom-3 left-3 z-50 flex items-center gap-2 rounded-full py-0.5 pl-0.5 pr-2.5">
-          <button
-            type="button"
-            onClick={togglePerf}
-            aria-pressed={perfFlat}
-            className={cn(
-              "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
-              perfFlat ? "bg-wax/15 text-wax" : "text-ink-soft",
-            )}
-          >
-            {perfFlat ? "flat" : "full"}
-          </button>
-          <span className="voice-data text-[0.62rem] leading-none text-ink-soft">
+        <div className="float fixed bottom-3 left-3 z-50 flex flex-col gap-1 rounded-2xl p-1.5">
+          <div className="flex items-center gap-1">
+            {PERF_TOGGLES.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => togglePerf(t.key)}
+                aria-pressed={!!perfOn[t.key]}
+                className={cn(
+                  "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
+                  perfOn[t.key] ? "bg-wax/15 text-wax" : "text-ink-soft",
+                )}
+              >
+                {perfOn[t.key] ? t.on : t.off}
+              </button>
+            ))}
+          </div>
+          <span className="voice-data px-1 text-[0.62rem] leading-none text-ink-soft">
             {all == null
               ? "…"
               : `${all.length} entries · ${new Set(all.map((s) => s.day)).size} days`}
@@ -2913,6 +2936,10 @@ function ScheduleFeedBase({
   }, []);
 
   const onScroll = () => {
+    // ?perfdebug 'spy off': silence the per-frame scroll→title/selection work
+    // to test whether it's what stutters a big book (the title/Today button
+    // simply stop following the scroll while it's off)
+    if (document.documentElement.dataset.perfNospy) return;
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;

@@ -531,6 +531,14 @@ textarea:focus-visible,
   display: none;
 }
 
+/* ?perfdebug 'sticky off': unpin every margin date. Hundreds of position:
+   sticky boxes in one scroller can drop iOS Safari off its fast
+   compositor-scroll path onto the main thread — this tests whether that's
+   what stutters a big book's momentum. Unlayered to beat Tailwind's sticky. */
+[data-perf-nosticky] .book-margin-date {
+  position: static;
+}
+
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
    A pinch makes iOS re-rasterize the whole composited page at the magnified
    scale — and these grace layers, cheap at 1×, cost scale² when blown up: the
