@@ -509,18 +509,26 @@ textarea:focus-visible,
   position: static;
 }
 
-/* Perf A/B (toggled by the debug pill, ?perfdebug): drop the per-card ink blend
-   and the layer it forces. The book's prose normally multiplies into the paper
-   (ink-into-paper) and each card `isolate`s to bake that blend — but blending +
-   compositing hundreds of card layers is the suspect behind scroll input-lag and
-   the pinch-zoom crash on low-power iPhones. With this on, card ink is a flat
-   colour and the cards stop forcing their own layers, so the book composites
-   cheaply. Lets the owner feel the trade-off on-device before we commit. */
+/* Perf A/B (toggled by the debug pill, ?perfdebug): shed EVERY per-card paint
+   cost, to test on-device whether compositing — not DOM count — is what
+   jetsam-kills a hundreds-deep book. A modern iPhone shrugs off a few hundred
+   plain sections, but a few hundred cards each carrying an offscreen blend
+   buffer (ink-into-paper multiply), its own isolated layer, and a blurred seat
+   shadow — over a full-viewport soft-light desk grain — is a real GPU-memory
+   load. With this on the book composites as flat paper: flat ink, no per-card
+   layer, no seat blur, and the desk grain/lamplight drop too. If the crash
+   stops here, the fix is to ship the book flatter (no scroll/DOM change); if it
+   doesn't, the cause isn't paint. Lets the owner feel the trade-off first. */
 [data-perf-flat] .book-card {
   isolation: auto;
+  box-shadow: inset 0 1px 0 var(--press-highlight);
 }
 [data-perf-flat] .book-card-prose {
   mix-blend-mode: normal;
+}
+[data-perf-flat] body::before,
+[data-perf-flat] body::after {
+  display: none;
 }
 
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).

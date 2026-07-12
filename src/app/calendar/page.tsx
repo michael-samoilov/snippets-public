@@ -1864,10 +1864,11 @@ function Calendar() {
       </h1>
       {/* the `?` keyboard cheat sheet */}
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book cards'
-          ink between blended and flat to test scroll/zoom jank on-device */}
+      {/* perf A/B pill (temporary; shown with ?perfdebug) — flip the book's
+          paint between full and flat to test on-device whether compositing is
+          what crashes a hundreds-deep book, with a book-size readout beside it */}
       {perfDebug && (
-        <div className="float fixed bottom-3 left-3 z-50 flex items-center rounded-full p-0.5">
+        <div className="float fixed bottom-3 left-3 z-50 flex items-center gap-2 rounded-full py-0.5 pl-0.5 pr-2.5">
           <button
             type="button"
             onClick={togglePerf}
@@ -1877,8 +1878,13 @@ function Calendar() {
               perfFlat ? "bg-wax/15 text-wax" : "text-ink-soft",
             )}
           >
-            {perfFlat ? "flat ink" : "blend ink"}
+            {perfFlat ? "flat" : "full"}
           </button>
+          <span className="voice-data text-[0.62rem] leading-none text-ink-soft">
+            {all == null
+              ? "…"
+              : `${all.length} entries · ${new Set(all.map((s) => s.day)).size} days`}
+          </span>
         </div>
       )}
       {/* title row: the title always climbs one altitude; it follows
