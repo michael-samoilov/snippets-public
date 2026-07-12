@@ -35,6 +35,29 @@ with sync_playwright() as p:
     page.keyboard.press("Meta+Enter")
     page.wait_for_timeout(4600)
 
+    # scenario 2 first (fresh surface): a QUICK TAP (~60ms) must still play
+    # the light's full arc — swell to peak, then the long tail — like a
+    # Liquid Glass tap (measured: ~330ms of light for any tap length)
+    tap = page.evaluate(
+        """() => new Promise((resolve) => {
+      const zone = document.querySelector('[data-today-zone-box]');
+      const glow = zone.querySelector(':scope > [aria-hidden]').firstElementChild;
+      const r = zone.getBoundingClientRect();
+      const opts = {bubbles: true, clientX: r.left + r.width/2, clientY: r.top + r.height/2, pointerId: 8};
+      const out = [];
+      const t0 = performance.now();
+      zone.dispatchEvent(new PointerEvent('pointerdown', opts));
+      setTimeout(() => zone.dispatchEvent(new PointerEvent('pointerup', opts)), 60);
+      const sample = () => {
+        out.push([Math.round(performance.now() - t0), +getComputedStyle(glow).opacity]);
+        if (performance.now() - t0 < 1000) requestAnimationFrame(sample);
+        else resolve(out);
+      };
+      requestAnimationFrame(sample);
+    })"""
+    )
+    page.wait_for_timeout(400)
+
     # whole timeline in-page for clean clocks: press, sample the computed
     # opacity every rAF for 450ms, release, sample 650ms more
     result = page.evaluate(
@@ -76,7 +99,14 @@ print("measured tail (ms, opacity):", [(t, round(o, 2)) for t, o in tail[::3]])
 print("iOS reference rise @33ms steps:", IOS_RISE)
 print("iOS reference tail @33ms steps:", IOS_TAIL)
 
+tap_peak = max(o for _, o in tap)
+print("quick-tap arc (ms, opacity):", [(t, round(o, 2)) for t, o in tap[::4]])
+
 checks = [
+    # a 60ms tap still plays the whole arc: peak reached, gone by ~900ms
+    ("tap peak >= 0.95 (full swell despite 60ms press)", tap_peak >= 0.95),
+    ("tap@250ms >= 0.8 (still lit after release)", at(tap, 250) >= 0.8),
+    ("tap@900ms <= 0.08 (tail completed)", at(tap, 900) <= 0.08),
     # the swell: a soft start (near-zero is fine — the 120ms check catches a
     # dead glow), never the old flash-on, complete by ~300ms
     ("rise@60ms <= 0.65 (no flash-on)", at(rise, 60) <= 0.65),

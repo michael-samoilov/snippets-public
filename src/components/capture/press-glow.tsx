@@ -79,6 +79,12 @@ export const GLOW_LAMPLIGHT: GlowRecipe = {
 const ink = (alpha: number) =>
   `color-mix(in srgb, var(--glow-ink) ${Math.round(alpha * 100)}%, transparent)`;
 
+/* a tap plays the light's FULL arc, like Liquid Glass (measured at 60fps:
+   a native tap shows ~330ms of light no matter how briefly the finger
+   rested; ours showed ~50ms — the exit used to start from wherever the
+   rise had gotten). The exit may not begin until the swell has finished. */
+const DWELL_MS = 220;
+
 export function PressGlow({ grow = false, growWhileFocused = true, className }: {
   /** bloom the surface a hair while pressed/focused. `true` scales the host
       itself; `"parent"` scales the host's parent — for surfaces whose own
@@ -126,6 +132,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let lastScrollAt = 0;
     let scaleClear = 0;
     let stillDeath = 0;
+    let dwell = 0;
+    let litAt = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
     // the recipe in force for the current press (re-read per press: theme
@@ -220,10 +228,20 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       tx = cx - r.left;
       ty = cy - r.top;
     };
+    // run an exit only once the light has had its full swell — a quick tap
+    // still shows the whole arc (in, held, out), never a one-frame flash
+    const afterDwell = (exit: () => void) => {
+      clearTimeout(dwell);
+      const wait = Math.max(0, DWELL_MS - (performance.now() - litAt));
+      if (wait > 0) dwell = window.setTimeout(exit, wait);
+      else exit();
+    };
     const onDown = (e: PointerEvent) => {
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
+      clearTimeout(dwell);
       arm();
+      litAt = performance.now();
       down = true;
       local(e.clientX, e.clientY);
       // first light lands where the finger did — no glide-in from a stale spot
@@ -240,8 +258,10 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     };
     const onUp = () => {
       down = false;
-      level();
-      scale();
+      afterDwell(() => {
+        level();
+        scale();
+      });
     };
     /* the ride: a pointercancel means the browser took the drag for
        scrolling. iOS keeps streaming touch events to the gesture's original
@@ -273,8 +293,10 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
       host.removeEventListener("touchcancel", onRideEnd);
-      level();
-      releaseScale();
+      afterDwell(() => {
+        level();
+        releaseScale();
+      });
     };
     const onScrollRide = () => {
       lastScrollAt = performance.now();
@@ -333,6 +355,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       if (document.visibilityState !== "hidden") return;
       down = false;
       focused = false;
+      litAt = 0; // no dwell theatre with the app away — rest at once
       if (riding) settleRide();
       else {
         level();
@@ -353,6 +376,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       clearTimeout(shedWC);
       clearTimeout(scaleClear);
       clearTimeout(stillDeath);
+      clearTimeout(dwell);
       window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
