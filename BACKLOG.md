@@ -392,3 +392,46 @@ when inactive/unavailable, green only when the state is actively good.
 Open: should these show in the header, settings (account section?), both,
 or as a separate status line? Should they include tooltips or does
 presence alone suffice?
+
+## 12. Window the book render (the permanent crash fix)
+
+The schedule book renders EVERY kept entry as a live DOM card — it is not
+virtualized. A years-deep book is hundreds of cards on the page at once,
+and on iOS that overruns the GPU/compositor budget: the tab gets
+jetsam-killed ("A problem repeatedly occurred"), with scroll-momentum
+stalls as the milder form of the same memory pressure. This was hit for
+real (2026-07) on a several-hundred-entry book.
+
+The interim fix shipped: the book renders FLAT — every PER-CARD paint
+effect (the ink-into-paper `mix-blend` multiply, per-card `isolation`, the
+blurred `--card-seat` lift shadow) is shed, because each is paid once per
+card and so scales with the book. See the "FLAT-BOOK LAW" comment on
+`.book-card` in `globals.css` and the matching note on the card button in
+`src/app/calendar/page.tsx`. Flat only RAISES the ceiling, though — it does
+not remove it; a large enough book still crashes, and the cards lost their
+lift.
+
+The real fix is to **window the render**: keep only the ~10 on-screen
+cards (plus a small overscan) in the DOM, with spacers holding the scroll
+height for the rest. Then per-card cost stops scaling with the book, the
+crash goes away at ANY size, AND the full rich look comes back for free
+(lift shadow, ink-into-paper blend) because only a handful of cards ever
+paint at once.
+
+Design/implementation notes, hard-won this round:
+- **Never write `scrollTop` mid-gesture.** iOS runs momentum on its own
+  thread; a JS `scrollTop` write during a fling cancels it. The month/year
+  feeds already virtualize safely by reading scrollTop and never writing it
+  mid-flight (see `src/components/calendar/shared.ts`) — follow that.
+- The book's rows are VARIABLE height (1–6+ lines), which is the whole
+  difficulty: spacer heights must be estimated from text then corrected
+  from measurement WITHOUT shifting content above the viewport (or the
+  scroll jumps). `content-visibility: auto` was tried and rejected — on iOS
+  its reveal-time layout shifts jumped the scroll and killed momentum.
+- Preserve what already works and is delicate: the scroll spy (current-day
+  title), land-on-today foot pinning, the today zone, the dive/zoom camera
+  that measures the book, and the sticky margin dates (confirmed innocent
+  for perf — keep them). The crash-loop recovery net
+  (`src/lib/crash-recovery.ts`) and windowed deep-link first paint stay.
+- Momentum stalls and the crash are ONE symptom (memory pressure): fixing
+  the memory (windowing) fixes both. Don't chase momentum separately.

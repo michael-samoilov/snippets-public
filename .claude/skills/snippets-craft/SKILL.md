@@ -18,6 +18,10 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    `--shadow-hue` (warm, never gray on Paper). A new surface needs a
    light story — top highlight + shadow — not just a background color.
    No Tailwind palette colors, no flat hex in components.
+   *Perf exception — the book's entry cards:* they carry only the top
+   highlight, no seat shadow, because the schedule renders hundreds at once
+   (unwindowed) and a blurred shadow per card jetsam-kills iOS. See the
+   FLAT-BOOK LAW below (rule 6) and on `.book-card` in `globals.css`.
 2. **Four voices, two fonts.** `.voice-display` (Fraunces WONK,
    letterpress) · `.voice-label` (small-caps serif — section headers,
    nav, chips) · `.voice-data` (tiny lowercase mono — times, counts,
@@ -71,7 +75,14 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    passphrase strength meter ramps ember→green (`--strength-weak` …
    `--strength-strong`), the app's only green, that meter alone. Text on the sheet is real ink:
    `.voice-prose`/`.voice-display` multiply into the paper in Paper
-   mode.
+   mode — **except the book's entry cards**, whose prose is flat (no
+   multiply). THE FLAT-BOOK LAW: the schedule renders every kept entry as a
+   live card (not windowed), so any per-card paint — `mix-blend`,
+   `isolation`, a blurred shadow — is paid hundreds of times, scales with
+   the book, and jetsam-kills iOS ("A problem repeatedly occurred"). Book
+   cards therefore carry no per-card paint; the ink-into-paper look and the
+   lift shadow come back only once the render is windowed (BACKLOG.md #12).
+   Do not "restore" them onto the card — it has been tried and it crashes.
 7. **Copy voice:** quiet, literary, terse, sentence case, curly quotes,
    `…`. No exclamation marks, emoji, or sparkle-AI framing. Streaks
    past-tense; gaps blank, never red. **Name things plainly — the desk /

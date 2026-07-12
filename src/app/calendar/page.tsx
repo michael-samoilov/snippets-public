@@ -3199,16 +3199,20 @@ function ScheduleCards({
               type="button"
               data-entry={s.id}
               onClick={() => onOpen(s.id)}
-              // isolate: the card's ink multiplies into its own opaque
-              // paper (the texture is occluded), so the blend is constant
-              // — isolating it lets the browser bake it once and translate
-              // on scroll instead of re-blending the prose every frame
-              // against the fixed sheet (the book's scroll-start jank).
-              // pressable-lit: colors transition, but no :active dip — the
-              // press answers with the glow's light and bloom instead
+              // THE FLAT-BOOK LAW (full rationale on `.book-card` in
+              // globals.css): the book renders EVERY entry as a live card, so
+              // any PER-CARD paint effect — mix-blend, isolation, a blurred
+              // box-shadow — is paid hundreds of times and scales with the
+              // book, which jetsam-kills iOS on a years-deep book (the "A
+              // problem repeatedly occurred" crash). So this card carries NO
+              // per-card paint: no `isolate`, no ink-multiply, no seat-blur —
+              // its flat paint (lit top edge only) lives in `.book-card`. Don't
+              // add them back here; the lift and the ink-into-paper blend
+              // return only once the render is windowed. pressable-lit: colors
+              // transition, no :active dip — the press answers with the glow.
               className={cn(
-                "book-card pressable-lit isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
-                "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
+                "book-card pressable-lit block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                "hover:bg-paper-raised",
               )}
             >
               <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
