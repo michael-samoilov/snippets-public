@@ -509,25 +509,44 @@ textarea:focus-visible,
   position: static;
 }
 
-/* The crash fix (confirmed on-device): the book sheds EVERY per-card paint
-   cost. A modern iPhone shrugs off a few hundred plain sections, but a few
-   hundred cards each carrying an offscreen blend buffer (the ink-into-paper
-   multiply), its own isolated layer, AND two blurred drop-shadows
-   (--card-seat) is a real GPU-memory load that jetsam-kills a years-deep book.
-   All three are per-card and scale with the book. So: the prose no longer
-   multiplies, the `isolate` (which existed only for that blend) goes with it,
-   and the seat shadow drops to just the cheap inset top highlight.
-   (Restoring the seat shadow was tried and REGRESSED the crash on a real book —
-   a blurred shadow per card is as unaffordable as the blend.) Only the desk
-   grain + lamplight remain — a handful of full-viewport layers that don't scale
-   with the book. The permanent fix that buys the lift and blend BACK is
-   windowing the render, so only the on-screen cards paint. */
+/* ══ THE FLAT-BOOK LAW — read before adding ANY paint to a book card ══════
+   WHY THE BOOK CRASHES (the general rule, not one instance): the schedule
+   book renders EVERY entry the reader has ever kept as a live DOM card — it is
+   NOT virtualized/windowed. So a years-deep book is hundreds of cards on the
+   page at once. Any paint effect declared PER CARD is therefore paid hundreds
+   of times, and its cost GROWS WITH THE BOOK. On iOS each of these allocates
+   GPU/compositor memory; hundreds of them overrun a phone's budget and the
+   system jetsam-kills the tab — Safari's "A problem repeatedly occurred", and
+   (the same pressure, milder) scroll-momentum stalls. The trigger is the
+   MULTIPLICATION (per-card × book size), not any single effect being heavy.
+
+   THE PER-CARD COSTS, each confirmed on-device to move the crash:
+     · mix-blend-mode (the ink-into-paper `multiply`) — an offscreen blend
+       buffer per card. The single heaviest; the original crash.
+     · isolation: isolate — a compositing layer/stacking context per card
+       (it only ever existed to bake the blend above).
+     · a BLURRED box-shadow (the old --card-seat lift) — a blur raster per
+       card. Restoring JUST this, with the blend already gone, REGRESSED the
+       crash on a real book. A blurred shadow per card is as unaffordable as
+       the blend — do not mistake it for cheap decoration.
+   Full-viewport layers (the desk grain, the lamplight) are NOT per-card — a
+   fixed handful regardless of book size — so they stay.
+
+   THE RULE: a book card carries only paint whose cost is O(1) in book size —
+   flat fill, a hairline border, and the single non-blurred inset top highlight
+   below. No blend, no isolation, no blurred shadow. The lift and the
+   ink-into-paper look come back ONLY when the render is windowed so that just
+   the ~10 on-screen cards paint (then per-card cost stops scaling — see
+   BACKLOG.md "Window the book render"). Until then: do not add per-card paint
+   here, and do not "restore" the seat shadow — it has been tried and it
+   crashes. These rules are unlayered so they also GUARD against a stray
+   `isolate` / seat-shadow utility creeping back onto the card in the JSX. */
 .book-card {
   isolation: auto;
   box-shadow: inset 0 1px 0 var(--press-highlight);
 }
-/* .book-card descendant so this outranks the later `.voice-prose { multiply }`
-   (same class-count would otherwise lose on source order) */
+/* `.book-card` descendant so this outranks the later `.voice-prose { multiply }`
+   (equal class-count would otherwise lose on source order) */
 .book-card .book-card-prose {
   mix-blend-mode: normal;
 }

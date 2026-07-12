@@ -66,6 +66,18 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (the registry domain is blocked in some sandboxes; they're ours now
   and intentionally restyled — overlay tint, input focus, etc.). Edit
   them directly; don't re-fetch over local changes.
+- **The book renders every entry (not windowed) → cards must stay FLAT.**
+  `src/app/calendar/page.tsx`'s schedule feed mounts a live card for the
+  reader's whole history, so any PER-CARD paint effect (`mix-blend`,
+  `isolation: isolate`, a blurred `box-shadow`) is paid hundreds of times
+  and scales with the book — which jetsam-kills iOS on a years-deep book
+  ("A problem repeatedly occurred"; scroll-momentum stalls are the milder
+  form of the same memory pressure). Book cards therefore carry only
+  O(1)-in-book-size paint (flat fill, hairline, non-blurred top highlight).
+  Do NOT add per-card blend/isolation/blurred-shadow, and do NOT "restore"
+  the seat-shadow lift — it was tried and crashes. The full "FLAT-BOOK LAW"
+  lives on `.book-card` in `globals.css`; the permanent fix that buys the
+  rich look back is windowing the render (BACKLOG.md #12).
 - **Shaders:** `src/vendor/paper-shaders/` is the vendored PaperTexture
   chain from paper-design/shaders (Apache-2.0, LICENSE alongside) — no
   npm dependency, same rule as the shadcn sources. Used only by the
