@@ -110,13 +110,10 @@ const YearFeed = dynamic(
     scales with the unlikelihood of needing to. */
 const ARCHIVE_YEAR = 1950;
 
-// ?perfdebug bisect chips — order shown left→right. `key` is the data-attr
-// stem (data-perf-<key>); `on`/`off` are the chip labels per state.
-const PERF_TOGGLES = [
-  { key: "flat", on: "flat", off: "full" },
-  { key: "nosticky", on: "sticky off", off: "sticky on" },
-  { key: "nospy", on: "spy off", off: "spy on" },
-] as const;
+// ?perfdebug chips. The book now ships FLAT (per-card blend + isolation shed —
+// the confirmed crash cause); `rich` restores the old blended look for an
+// on-device A/B (it may crash a big book — that's the point).
+const PERF_TOGGLES = [{ key: "rich", on: "rich (old)", off: "flat (new)" }] as const;
 const PERF_TOGGLE_KEYS = PERF_TOGGLES.map((t) => t.key);
 
 /** A typeface snapshot, for the date numbers that fly between altitudes. */
@@ -1882,9 +1879,9 @@ function Calendar() {
       </h1>
       {/* the `?` keyboard cheat sheet */}
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      {/* perf bisect panel (?perfdebug) — flip each cause alone to find what
-          crashes / stutters a big book on-device: paint (flat), the sticky
-          margin dates, or the per-frame scroll spy; book size read out below */}
+      {/* perf A/B (?perfdebug) — the book ships FLAT; 'rich (old)' restores the
+          per-card blend that crashed a big book, to confirm the fix on-device.
+          Book size read out below. */}
       {perfDebug && (
         <div className="float fixed bottom-3 left-3 z-50 flex flex-col gap-1 rounded-2xl p-1.5">
           <div className="flex items-center gap-1">
@@ -2936,10 +2933,6 @@ function ScheduleFeedBase({
   }, []);
 
   const onScroll = () => {
-    // ?perfdebug 'spy off': silence the per-frame scroll→title/selection work
-    // to test whether it's what stutters a big book (the title/Today button
-    // simply stop following the scroll while it's off)
-    if (document.documentElement.dataset.perfNospy) return;
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;

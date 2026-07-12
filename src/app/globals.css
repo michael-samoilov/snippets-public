@@ -509,34 +509,31 @@ textarea:focus-visible,
   position: static;
 }
 
-/* Perf A/B (toggled by the debug pill, ?perfdebug): shed EVERY per-card paint
-   cost, to test on-device whether compositing — not DOM count — is what
-   jetsam-kills a hundreds-deep book. A modern iPhone shrugs off a few hundred
-   plain sections, but a few hundred cards each carrying an offscreen blend
-   buffer (ink-into-paper multiply), its own isolated layer, and a blurred seat
-   shadow — over a full-viewport soft-light desk grain — is a real GPU-memory
-   load. With this on the book composites as flat paper: flat ink, no per-card
-   layer, no seat blur, and the desk grain/lamplight drop too. If the crash
-   stops here, the fix is to ship the book flatter (no scroll/DOM change); if it
-   doesn't, the cause isn't paint. Lets the owner feel the trade-off first. */
-[data-perf-flat] .book-card {
+/* The crash fix (confirmed on-device): the book ships FLAT. A modern iPhone
+   shrugs off a few hundred plain sections, but a few hundred cards each
+   carrying an offscreen blend buffer (the ink-into-paper multiply) AND its own
+   isolated compositing layer is a real GPU-memory load — enough to jetsam-kill
+   a years-deep book. Shed exactly those two per-card costs: the prose no longer
+   multiplies (each card's `isolate` existed only to bake that blend, so it goes
+   too). DELIBERATELY KEPT: the seat shadow and inset top highlight (the card's
+   light story), and the desk grain + lamplight (the app's whole conceit) — a
+   handful of full-viewport layers, not hundreds. The book still reads as ink on
+   a lit paper tile; only the paper-drinks-the-ink texture inside the strokes is
+   gone (the text-shadow halo keeps the edge soft). `?perfdebug` → 'rich (old)'
+   restores the blend for an A/B — it may crash a big book, which is the point. */
+.book-card {
   isolation: auto;
-  box-shadow: inset 0 1px 0 var(--press-highlight);
 }
-[data-perf-flat] .book-card-prose {
+/* .book-card descendant so this outranks the later `.voice-prose { multiply }`
+   (same class-count would otherwise lose on source order) */
+.book-card .book-card-prose {
   mix-blend-mode: normal;
 }
-[data-perf-flat] body::before,
-[data-perf-flat] body::after {
-  display: none;
+[data-perf-rich] .book-card {
+  isolation: isolate;
 }
-
-/* ?perfdebug 'sticky off': unpin every margin date. Hundreds of position:
-   sticky boxes in one scroller can drop iOS Safari off its fast
-   compositor-scroll path onto the main thread — this tests whether that's
-   what stutters a big book's momentum. Unlayered to beat Tailwind's sticky. */
-[data-perf-nosticky] .book-margin-date {
-  position: static;
+[data-perf-rich] .book-card .book-card-prose {
+  mix-blend-mode: multiply;
 }
 
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
