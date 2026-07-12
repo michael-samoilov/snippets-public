@@ -47,7 +47,6 @@ import {
 } from "@/lib/db";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import { pushUrl, replaceUrl } from "@/lib/history";
-import { bookScrolled, bookSettled } from "@/lib/scroll-fidelity";
 import { enterRecoveryIfLooping } from "@/lib/crash-recovery";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
 import { copy } from "@/lib/copy";
@@ -2849,9 +2848,6 @@ function ScheduleFeedBase({
       didInit.current = true;
       scrollToRow(selected);
       pendingRef.current = null;
-      // the book opened flat (cheap first paint); once it's placed, earn the
-      // richness a beat later even if the reader never scrolls
-      bookSettled();
     } else if (pendingRef.current) {
       // one settle only — a stale pending must never replay a jump
       scrollToRow(pendingRef.current);
@@ -2887,12 +2883,7 @@ function ScheduleFeedBase({
   // it); `selected` only seeds it. Stands down if the reader has already
   // grabbed the scroll, so the mount doesn't yank them.
   useLayoutEffect(() => {
-    if (!fullBook) return;
-    // the whole ledger just mounted — the heaviest render, and it painted
-    // flat because the book isn't still yet. Re-arm the settle from HERE so
-    // the richness lands after this mount, not during it.
-    bookSettled();
-    if (tookOverRef.current) return;
+    if (!fullBook || tookOverRef.current) return;
     measureRows();
     scrollToRow(spyRef.current ?? selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2922,10 +2913,6 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       if (!el) return;
       const top = el.scrollTop;
-      // any scroll flattens the book (cards travel light, rest rich — see
-      // lib/scroll-fidelity), so the tiles a fling rushes past are cheap to
-      // raster and never overrun the compositor; richness returns at rest
-      bookScrolled();
       if (progTargetRef.current !== null) {
         // a Today scroll is animating to its target — let it run, but don't let
         // the days it passes claim the header (that flashes the Today button)

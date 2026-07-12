@@ -563,30 +563,6 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
-/* Scroll fidelity — cards travel light, rest rich (driven by
-   lib/scroll-fidelity, fed by the book's scroll spy). The book's expensive
-   paint is worn ONLY at rest; while it scrolls, and on first load until it
-   settles, it's flat. Flat is cheap to raster, so a fast flick never
-   overruns the compositor and a cold render of a years-deep book lays out
-   flat instead of painting every rich tile at once — the "A problem
-   repeatedly occurred" crash was that up-front rich render. Every rule here
-   is PAINT ONLY (isolation, blend, shadow, a grain layer's visibility): no
-   box changes size or moves, so the scroll can never shift and momentum
-   can never die — the trap content-visibility fell into on iOS.
-
-   `data-book-still` is ABSENT by default, so the server render and the whole
-   travelling state are flat; it's set a beat after the book comes to rest.
-   Scoped to `.book-card` only — the flag lives on <html>, but the desk grain
-   and lamplight are app-wide and must never blink, so they're left alone.
-   Unlayered so these beat the cards' Tailwind `isolate`/shadow utilities. */
-:root:not([data-book-still]) .book-card {
-  isolation: auto;
-  box-shadow: inset 0 1px 0 var(--press-highlight);
-}
-:root:not([data-book-still]) .book-card-prose {
-  mix-blend-mode: normal;
-}
-
 /* ── typographic voices ────────────────────────────────────────
    Layered as components so their colors are defaults: an unlayered
    rule beats every Tailwind utility, which silently ate text-wax &
