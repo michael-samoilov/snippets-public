@@ -537,7 +537,9 @@ textarea:focus-visible,
   isolation: isolate;
   box-shadow: var(--card-seat);
 }
-[data-perf-rich] .book-card .book-card-prose {
+/* light only — Lamplight prose never multiplies (its ink is luminous), so the
+   A/B must not force it dark-on-dark (matches `.dark .voice-prose { normal }`) */
+[data-perf-rich]:not(.dark) .book-card .book-card-prose {
   mix-blend-mode: multiply;
 }
 /* ?perfdebug 'grain off' — a safety valve: shed the two full-viewport desk
