@@ -509,46 +509,25 @@ textarea:focus-visible,
   position: static;
 }
 
-/* The crash fix (confirmed on-device): the book ships FLAT. A modern iPhone
-   shrugs off a few hundred plain sections, but a few hundred cards each
-   carrying an offscreen blend buffer (the ink-into-paper multiply) AND its own
-   isolated compositing layer is a real GPU-memory load — enough to jetsam-kill
-   a years-deep book. Shed exactly those two per-card costs: the prose no longer
-   multiplies (each card's `isolate` existed only to bake that blend, so it goes
-   too). DELIBERATELY KEPT: the seat shadow and inset top highlight (the card's
-   light story), and the desk grain + lamplight (the app's whole conceit) — a
-   handful of full-viewport layers, not hundreds. The book still reads as ink on
-   a lit paper tile; only the paper-drinks-the-ink texture inside the strokes is
-   gone (the text-shadow halo keeps the edge soft). `?perfdebug` → 'rich (old)'
-   restores the blend for an A/B — it may crash a big book, which is the point. */
+/* The crash fix (confirmed on-device): the book sheds its per-card BLEND. A
+   modern iPhone shrugs off a few hundred plain sections, but a few hundred
+   cards each carrying an offscreen blend buffer (the ink-into-paper multiply)
+   plus the isolated layer that baked it is a real GPU-memory load — enough to
+   jetsam-kill a years-deep book. So the prose no longer multiplies into the
+   paper, and the `isolate` (which existed only for that blend) goes with it.
+   KEPT: the card's lift — its `--card-seat` seat shadow (owner's call: the
+   blend was the dominant cost; the shadow is affordable at real book sizes) —
+   the inset top highlight, and the desk grain + lamplight. Only the
+   paper-drinks-the-ink texture inside the strokes is gone; the text-shadow halo
+   keeps the edges soft. (The permanent fix that makes even the blend free is
+   windowing the render — only the on-screen cards paint.) */
 .book-card {
   isolation: auto;
-  /* keep only the cheap inset top highlight; shed the two BLURRED seat drops
-     (--card-seat) — a per-card blur raster, hundreds of them, that scales with
-     the book like the blend did and was the cost left in the "refined" flat */
-  box-shadow: inset 0 1px 0 var(--press-highlight);
 }
 /* .book-card descendant so this outranks the later `.voice-prose { multiply }`
    (same class-count would otherwise lose on source order) */
 .book-card .book-card-prose {
   mix-blend-mode: normal;
-}
-[data-perf-rich] .book-card {
-  isolation: isolate;
-  box-shadow: var(--card-seat);
-}
-/* light only — Lamplight prose never multiplies (its ink is luminous), so the
-   A/B must not force it dark-on-dark (matches `.dark .voice-prose { normal }`) */
-[data-perf-rich]:not(.dark) .book-card .book-card-prose {
-  mix-blend-mode: multiply;
-}
-/* ?perfdebug 'grain off' — a safety valve: shed the two full-viewport desk
-   layers (grain + lamplight) too. They don't scale with the book, so they
-   shouldn't be the crash; this only exists so the cause can be bisected
-   on-device without another code round if the flat book still tips over. */
-[data-perf-nograin] body::before,
-[data-perf-nograin] body::after {
-  display: none;
 }
 
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
