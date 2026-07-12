@@ -110,17 +110,6 @@ const YearFeed = dynamic(
     scales with the unlikelihood of needing to. */
 const ARCHIVE_YEAR = 1950;
 
-// ?perfdebug chips. The book ships FLAT (all per-card paint shed — blend,
-// isolation, seat-shadow blur). `rich` restores the old per-card paint for an
-// A/B (it may crash a big book — that's the point); `grain off` is a safety
-// valve to also shed the two full-viewport desk layers if the flat book still
-// tips over.
-const PERF_TOGGLES = [
-  { key: "rich", on: "rich (old)", off: "flat (new)" },
-  { key: "nograin", on: "grain off", off: "grain on" },
-] as const;
-const PERF_TOGGLE_KEYS = PERF_TOGGLES.map((t) => t.key);
-
 /** A typeface snapshot, for the date numbers that fly between altitudes. */
 interface FlyFont {
   family: string;
@@ -492,43 +481,6 @@ function Calendar() {
     return startOfMonth(dateFromDayKey(initialDay));
   });
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
-
-  // Perf A/B bisect (?perfdebug): each toggle rides a data-attr on <html> that
-  // CSS or the scroll spy keys off, so a big book's two symptoms can be pinned
-  // on-device without guessing — 'flat' sheds all per-card paint (the crash),
-  // 'sticky' unpins the margin dates (hundreds of sticky boxes can drop Safari
-  // off its fast compositor-scroll path), 'spy' silences the per-frame
-  // scroll→title/selection work. Flip each alone and see which smooths the
-  // momentum. Read once in the initializer (client-only under Suspense).
-  const perfDataKey = (key: string) =>
-    `perf${key.charAt(0).toUpperCase()}${key.slice(1)}`; // "nosticky" → dataset.perfNosticky → data-perf-nosticky
-  const [perfOn, setPerfOn] = useState<Record<string, boolean>>(() => {
-    const o: Record<string, boolean> = {};
-    if (typeof window === "undefined") return o;
-    for (const key of PERF_TOGGLE_KEYS) o[key] = localStorage.getItem(`perf:${key}`) === "1";
-    return o;
-  });
-  const [perfDebug] = useState(() => {
-    if (typeof window === "undefined") return false;
-    if (new URLSearchParams(window.location.search).has("perfdebug")) {
-      try { localStorage.setItem("perfDebug", "1"); } catch {}
-      return true;
-    }
-    return localStorage.getItem("perfDebug") === "1";
-  });
-  useEffect(() => {
-    for (const key of PERF_TOGGLE_KEYS) {
-      if (perfOn[key]) document.documentElement.dataset[perfDataKey(key)] = "1";
-      else delete document.documentElement.dataset[perfDataKey(key)];
-    }
-  }, [perfOn]);
-  const togglePerf = useCallback((key: string) => {
-    setPerfOn((p) => {
-      const next = { ...p, [key]: !p[key] };
-      try { localStorage.setItem(`perf:${key}`, next[key] ? "1" : "0"); } catch {}
-      return next;
-    });
-  }, []);
 
   const counts = useDayCounts();
   const all = useAllSnippets();
@@ -1884,34 +1836,6 @@ function Calendar() {
       </h1>
       {/* the `?` keyboard cheat sheet */}
       <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-      {/* perf A/B (?perfdebug) — the book ships FLAT; 'rich (old)' restores the
-          per-card blend that crashed a big book, to confirm the fix on-device.
-          Book size read out below. */}
-      {perfDebug && (
-        <div className="float fixed bottom-3 left-3 z-50 flex flex-col gap-1 rounded-2xl p-1.5">
-          <div className="flex items-center gap-1">
-            {PERF_TOGGLES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => togglePerf(t.key)}
-                aria-pressed={!!perfOn[t.key]}
-                className={cn(
-                  "voice-label pressable rounded-full px-2.5 py-1 text-[0.72rem]",
-                  perfOn[t.key] ? "bg-wax/15 text-wax" : "text-ink-soft",
-                )}
-              >
-                {perfOn[t.key] ? t.on : t.off}
-              </button>
-            ))}
-          </div>
-          <span className="voice-data px-1 text-[0.62rem] leading-none text-ink-soft">
-            {all == null
-              ? "…"
-              : `${all.length} entries · ${new Set(all.map((s) => s.day)).size} days`}
-          </span>
-        </div>
-      )}
       {/* title row: the title always climbs one altitude; it follows
           whichever feed is scrolling beneath it, and stays pinned when
           the page itself has to scroll. No painted background — a flat

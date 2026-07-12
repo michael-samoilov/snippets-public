@@ -28,22 +28,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useZoomRelief();
 
   useEffect(() => {
-    // dev-only book seeder (preview branch): with ?seed=… on the URL, populate
-    // IndexedDB so the crash/scroll work can be felt on a big book without a
-    // real sign-in. Dynamic import so the corpus never rides the normal bundle;
-    // the module strips the param and no-ops on a normal load. Capture the
-    // search NOW — the calendar's own load effect rewrites the URL to ?d=… a
-    // tick later, before this dynamic import resolves.
-    if (
-      typeof window !== "undefined" &&
-      window.location.search.includes("seed=")
-    ) {
-      const search = window.location.search;
-      void import("@/lib/dev-seed")
-        .then((m) => m.runDevSeedFromUrl(search))
-        .catch(() => {});
-    }
-
     purgeOldDeleted().catch(() => {});
     // ask the browser to hold this origin's data once the book holds
     // anything; the answer (and the room left) shows in Settings
