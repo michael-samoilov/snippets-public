@@ -3462,7 +3462,17 @@ function FlowBackfillCapture({
   const sealBtnRef = useRef<HTMLButtonElement>(null);
   // the live seal-into-view settle watcher (press only once the seal is at rest)
   const settleCancel = useRef<null | (() => void)>(null);
-  useEffect(() => () => settleCancel.current?.(), []);
+  // a long entry's glide-to-top (timer that starts it + the running scroll)
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollCancel = useRef<null | (() => void)>(null);
+  useEffect(
+    () => () => {
+      settleCancel.current?.();
+      if (scrollTimer.current) clearTimeout(scrollTimer.current);
+      scrollCancel.current?.();
+    },
+    [],
+  );
   const seq = useKeepSequence(KEEP_BEATS, reduce);
   const draftStore = useKeptDraft();
   // the thumb-down dip (the seal's `pressed` feedback before release)
@@ -3527,15 +3537,27 @@ function FlowBackfillCapture({
     // keyboard finishes exiting; (2) press it; (3) it fades; (4) the entry settles
     // in; (5) the empty composer wipes back. Steps 2-5 are the keep sequence.
     setPressedDown(true);
-    // a long entry leaves the textarea scrolled to its foot; the preview card
-    // renders from the top, so scroll the held composer back up first — else the
-    // morph would jump from the last line to the first.
-    if (areaRef.current) areaRef.current.scrollTop = 0;
     areaRef.current?.blur();
     settleCancel.current?.();
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollCancel.current?.();
     const play = () => {
       settleCancel.current = null;
       setPressedDown(false);
+      // A long entry leaves the field scrolled to its foot while the settled card
+      // renders from the top. Rather than jump-cut it to the top at press-start,
+      // GLIDE it up as the seal exits — timed so the smooth scroll lands just
+      // before the CARDING hand-off, where the composer morphs into the card
+      // showing the entry's start. (No-op for a short, unscrolled entry.)
+      const ta = areaRef.current;
+      if (ta && ta.scrollTop > 1) {
+        scrollTimer.current = setTimeout(
+          () => {
+            scrollCancel.current = smoothScrollTop(ta, 0, 360);
+          },
+          Math.max(0, KEEP_BEATS.pressMs - 420),
+        );
+      }
       // the words STAY in the composer card through the seal press (composerOpen
       // includes `pressing`); they hand off to the settled card at the CARDING
       // beat — after the seal animation — not before. So the card never blinks
@@ -3812,6 +3834,33 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
  * Returns a canceller (call on unmount / any new submit). Desktop (no keyboard,
  * no scroll) rests in ~3 frames, so it's ~instant.
  */
+/** A hand-rolled smooth scroll — we drive scrollTop off an eased rAF rather than
+ *  `scrollTo({behavior:"smooth"})`, which iOS Safari honours inconsistently on a
+ *  nested scroller (in the keyboard-was-up case the smooth glide the eye sees is
+ *  really iOS's own keyboard-dismiss scroll; with the keyboard already down our
+ *  scrollTo just jump-cut). This glides identically in every case. Returns a
+ *  canceller. */
+function smoothScrollTop(el: HTMLElement, top: number, ms = 380): () => void {
+  const start = el.scrollTop;
+  const dist = top - start;
+  let raf = 0;
+  let cancelled = false;
+  if (Math.abs(dist) < 1) return () => {};
+  let t0: number | null = null;
+  const step = (now: number) => {
+    if (cancelled) return;
+    if (t0 === null) t0 = now;
+    const k = Math.min(1, (now - t0) / ms);
+    el.scrollTop = start + dist * (1 - Math.pow(1 - k, 3)); // easeOutCubic
+    if (k < 1) raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return () => {
+    cancelled = true;
+    if (raf) cancelAnimationFrame(raf);
+  };
+}
+
 function settleSealIntoView(
   btn: HTMLElement,
   onSettled: () => void,
@@ -4779,8 +4828,10 @@ function TodayZoneFill({
     // (that would inflate scrollHeight and carry the seal off the top). A no-op
     // when already at the foot.
     const sc = btn?.closest<HTMLElement>("[data-book-scroller]") ?? null;
+    // glide to the natural foot with our OWN eased scroll (not scrollTo smooth,
+    // which iOS jump-cuts here) so it's smooth whether or not the keyboard was up
     const toFoot = sc
-      ? () => sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" })
+      ? () => smoothScrollTop(sc, sc.scrollHeight - sc.clientHeight)
       : undefined;
     if (btn) settleCancel.current = settleSealIntoView(btn, playAndSweep, toFoot);
     else playAndSweep(); // no seal node — fall back to an immediate press
