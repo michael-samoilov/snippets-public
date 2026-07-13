@@ -136,22 +136,16 @@ export function useKeyboardRoom(
     };
 
     const onElScroll = () => {
-      // Cheap first, and NEVER touch layout unless we're actually pinning.
-      // Reading `el.scrollTop` forces a synchronous layout flush whenever the
-      // DOM is dirty — and the WINDOWED feed dirties it on every reshuffle, so an
-      // unconditional read here (this fires on every scroll event of a fling)
-      // thrashed layout and stalled the scroll. With nothing frozen there is
-      // nothing to correct, so record the movement and get out layout-free.
-      lastElMoveAt = performance.now();
-      if (frozenSt == null && !selLocked) return;
       const st = el.scrollTop;
       if (selLocked && frozenSt != null) {
         // during a handle drag the page holds still, full stop — the finger
         // on the handle is not a page scroll, so touchDown doesn't exempt it
         if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt;
+        lastElMoveAt = performance.now();
         return;
       }
-      if (touchDown || frozenSt == null) return;
+      lastElMoveAt = performance.now();
+      if (frozenSt == null || touchDown) return;
       if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
     };
 

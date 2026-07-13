@@ -510,14 +510,15 @@ textarea:focus-visible,
 }
 
 /* ══ THE FLAT-BOOK LAW — read before adding ANY paint to a book card ══════
-   WHY THE BOOK CRASHED (the general rule, not one instance): the schedule book
-   used to render EVERY entry the reader had ever kept as a live DOM card. So a
-   years-deep book was hundreds of cards on the page at once, and any paint
-   effect declared PER CARD was paid hundreds of times, its cost GROWING WITH THE
-   BOOK. On iOS each allocates GPU/compositor memory; hundreds overran a phone's
-   budget and the system jetsam-killed the tab — Safari's "A problem repeatedly
-   occurred", and (same pressure, milder) scroll-momentum stalls. The trigger is
-   the MULTIPLICATION (per-card × book size), not any single effect being heavy.
+   WHY THE BOOK CRASHES (the general rule, not one instance): the schedule
+   book renders EVERY entry the reader has ever kept as a live DOM card — it is
+   NOT virtualized/windowed. So a years-deep book is hundreds of cards on the
+   page at once. Any paint effect declared PER CARD is therefore paid hundreds
+   of times, and its cost GROWS WITH THE BOOK. On iOS each of these allocates
+   GPU/compositor memory; hundreds of them overrun a phone's budget and the
+   system jetsam-kills the tab — Safari's "A problem repeatedly occurred", and
+   (the same pressure, milder) scroll-momentum stalls. The trigger is the
+   MULTIPLICATION (per-card × book size), not any single effect being heavy.
 
    THE PER-CARD COSTS, each confirmed on-device to move the crash:
      · mix-blend-mode (the ink-into-paper `multiply`) — an offscreen blend
@@ -531,19 +532,15 @@ textarea:focus-visible,
    Full-viewport layers (the desk grain, the lamplight) are NOT per-card — a
    fixed handful regardless of book size — so they stay.
 
-   THE FIX (now landed): the book is WINDOWED — only the on-screen day-sections
-   plus overscan are ever in the DOM (~40 cards, never the whole book; see
-   ScheduleFeedBase in calendar/page.tsx + lib/book-window.ts). Per-card cost no
-   longer scales, so the lift and the ink-into-paper blend are back, applied via
-   `[data-rich]` below. THE RULE STILL HOLDS because `.book-card` is shared and
-   the windowing is the ONLY thing bounding the card count: the DEFAULT here
-   stays flat (O(1) paint — flat fill, hairline, one non-blurred inset
-   highlight), and the rich paint is gated behind `[data-rich]`, which is set
-   only on sections near the viewport. Do NOT move the blend/isolation/blurred
-   shadow onto the bare `.book-card` (that reintroduces the crash if windowing
-   ever regresses), and do NOT "restore" the seat shadow unconditionally. These
-   rules are unlayered so they also GUARD against a stray `isolate` / seat-shadow
-   utility creeping back onto the card in the JSX. */
+   THE RULE: a book card carries only paint whose cost is O(1) in book size —
+   flat fill, a hairline border, and the single non-blurred inset top highlight
+   below. No blend, no isolation, no blurred shadow. The lift and the
+   ink-into-paper look come back ONLY when the render is windowed so that just
+   the ~10 on-screen cards paint (then per-card cost stops scaling — see
+   BACKLOG.md "Window the book render"). Until then: do not add per-card paint
+   here, and do not "restore" the seat shadow — it has been tried and it
+   crashes. These rules are unlayered so they also GUARD against a stray
+   `isolate` / seat-shadow utility creeping back onto the card in the JSX. */
 .book-card {
   isolation: auto;
   box-shadow: inset 0 1px 0 var(--press-highlight);
@@ -552,25 +549,6 @@ textarea:focus-visible,
    (equal class-count would otherwise lose on source order) */
 .book-card .book-card-prose {
   mix-blend-mode: normal;
-}
-
-/* RICH WHEN NEAR THE VIEWPORT — the one sanctioned way to give a book card its
-   full paint back WITHOUT breaking the FLAT-BOOK LAW above. An
-   IntersectionObserver (in calendar/page.tsx) sets `data-rich` on the day
-   sections within a viewport of the screen; only those cards regain the lift
-   shadow and the ink-into-paper blend. Because it's bounded to the ~dozen cards
-   on screen — never the whole book — the per-card cost stops scaling with the
-   book, so it can't jetsam-kill. Do NOT widen this to all `.book-card` (that IS
-   the crash) and do NOT drive it from a whole-book flag (that thrashes — the
-   restyle must stay per-section). Higher specificity than the flat rules above,
-   so it wins where present. */
-[data-rich] .book-card {
-  isolation: isolate;
-  box-shadow: var(--card-seat);
-}
-/* light only — Lamplight ink is luminous and never multiplies */
-:root:not(.dark) [data-rich] .book-card .book-card-prose {
-  mix-blend-mode: multiply;
 }
 
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
