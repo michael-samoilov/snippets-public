@@ -28,6 +28,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useZoomRelief();
 
   useEffect(() => {
+    // Test book on previews/local only (permanent tooling — see lib/dev-seed):
+    // a fresh preview auto-seeds a realistic book so there's always something to
+    // test against; `?seed=N` / `?seed=clear` override. Host-gated here so the
+    // chunk never loads for real users on the prod domain; dynamically imported
+    // so the corpus never rides the normal bundle. Capture the search NOW — the
+    // calendar rewrites the URL to `?d=…` a tick later, before this resolves.
+    if (
+      typeof window !== "undefined" &&
+      !["snippets.ink", "www.snippets.ink"].includes(window.location.hostname)
+    ) {
+      const search = window.location.search;
+      void import("@/lib/dev-seed")
+        .then((m) => m.maybeSeedDevBook(search))
+        .catch(() => {});
+    }
+
     purgeOldDeleted().catch(() => {});
     // ask the browser to hold this origin's data once the book holds
     // anything; the answer (and the room left) shows in Settings
