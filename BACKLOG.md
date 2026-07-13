@@ -393,45 +393,63 @@ Open: should these show in the header, settings (account section?), both,
 or as a separate status line? Should they include tooltips or does
 presence alone suffice?
 
-## 12. Window the book render (the permanent crash fix)
+## 12. Window the book render (the permanent crash fix) — IMPLEMENTED (branch)
 
-The schedule book renders EVERY kept entry as a live DOM card — it is not
-virtualized. A years-deep book is hundreds of cards on the page at once,
-and on iOS that overruns the GPU/compositor budget: the tab gets
+**Status:** built on `claude/book-windowing`, proven in the headless
+harness (below), awaiting on-device iOS validation before it ships to prod.
+
+The schedule book used to render EVERY kept entry as a live DOM card — not
+virtualized. A years-deep book was hundreds of cards on the page at once,
+and on iOS that overran the GPU/compositor budget: the tab got
 jetsam-killed ("A problem repeatedly occurred"), with scroll-momentum
-stalls as the milder form of the same memory pressure. This was hit for
-real (2026-07) on a several-hundred-entry book.
+stalls as the milder form of the same memory pressure. Hit for real
+(2026-07) on a several-hundred-entry book. The interim fix (FLAT render)
+only raised the ceiling and cost the cards their lift.
 
-The interim fix shipped: the book renders FLAT — every PER-CARD paint
-effect (the ink-into-paper `mix-blend` multiply, per-card `isolation`, the
-blurred `--card-seat` lift shadow) is shed, because each is paid once per
-card and so scales with the book. See the "FLAT-BOOK LAW" comment on
-`.book-card` in `globals.css` and the matching note on the card button in
-`src/app/calendar/page.tsx`. Flat only RAISES the ceiling, though — it does
-not remove it; a large enough book still crashes, and the cards lost their
-lift.
+**How it was done.** `ScheduleFeedBase` (`src/app/calendar/page.tsx`) now
+renders only the on-screen day-sections plus overscan (~40 cards, never the
+whole book), with two spacer divs holding the scroll height for the rest.
+The geometry is `src/lib/book-window.ts` — pure, unit-tested including a
+violent quick-fling (`book-window.test.ts`). Per-card cost stopped scaling,
+so the lift + ink-into-paper blend are BACK (via `[data-rich]` on
+near-viewport sections). Verified in a headless harness on a seeded
+1000-entry book: DOM bounded at ~38–46 sections at every scroll position,
+**zero blank frames** through a violent instant-jump fling AND a wheel
+fling, **zero content jumps >2px** across 45k px of slow scroll through
+never-before-rendered history, correct land-on-foot and deep-link landing,
+in both themes at 390px and 1280px.
 
-The real fix is to **window the render**: keep only the ~10 on-screen
-cards (plus a small overscan) in the DOM, with spacers holding the scroll
-height for the rest. Then per-card cost stops scaling with the book, the
-crash goes away at ANY size, AND the full rich look comes back for free
-(lift shadow, ink-into-paper blend) because only a handful of cards ever
-paint at once.
+How the hard parts were solved (keep these if you touch it):
+- **Never write `scrollTop` mid-gesture** (iOS momentum killer — the
+  `shared.ts` lesson). The design writes scrollTop ONLY at rest (the
+  landing pins). During scroll, only the render window index changes.
+- **Variable heights without mid-fling compensation.** An un-rendered row
+  reserves a height ESTIMATED from its text — a canvas line-count matching
+  the real prose column's font+width (`makeLineCounter`), good to within a
+  line — then LOCKED to its exact measured height the first time it renders
+  (`measuredRef`). Locking a rendered row only changes offsets OUTSIDE the
+  window (top spacer is a sum up to the window's first row, exclusive), so
+  it never shifts the current view — which is what removes the need for any
+  scroll compensation. The estimate only ever governs a row's FIRST sighting.
+- **The month header (`July 2026`) is a `<p>` SIBLING above the section**,
+  not a child — its height must be folded into the row's reserved/measured
+  height or the fold jumps ~44px as the row crosses the window edge. (This
+  was the one real jump the harness caught; fixed.)
+- **Overscan is 3 viewports** each side: windowing re-renders async
+  (onScroll → rAF → setState → commit), so a hard native fling lands several
+  frames of scroll before the new band paints — the overscan is the margin
+  that keeps the reader over rendered rows. 2vp showed occasional blanks at
+  ~50k px/s; 3vp eliminated them while staying O(1) (~40 sections).
+- `content-visibility: auto` was tried and rejected earlier — on iOS its
+  reveal-time layout shifts jumped the scroll and killed momentum.
+- Preserved (delicate, confirmed working): the scroll spy (current-day
+  title), land-on-today foot pinning + settle/reseat observers, the today
+  zone at the tail, the dive/zoom camera, sticky margin dates, crash-loop
+  recovery, and deep-link first paint (the target row lands from the offset
+  table when it isn't mounted yet, then the DOM pin refines it).
 
-Design/implementation notes, hard-won this round:
-- **Never write `scrollTop` mid-gesture.** iOS runs momentum on its own
-  thread; a JS `scrollTop` write during a fling cancels it. The month/year
-  feeds already virtualize safely by reading scrollTop and never writing it
-  mid-flight (see `src/components/calendar/shared.ts`) — follow that.
-- The book's rows are VARIABLE height (1–6+ lines), which is the whole
-  difficulty: spacer heights must be estimated from text then corrected
-  from measurement WITHOUT shifting content above the viewport (or the
-  scroll jumps). `content-visibility: auto` was tried and rejected — on iOS
-  its reveal-time layout shifts jumped the scroll and killed momentum.
-- Preserve what already works and is delicate: the scroll spy (current-day
-  title), land-on-today foot pinning, the today zone, the dive/zoom camera
-  that measures the book, and the sticky margin dates (confirmed innocent
-  for perf — keep them). The crash-loop recovery net
-  (`src/lib/crash-recovery.ts`) and windowed deep-link first paint stay.
-- Momentum stalls and the crash are ONE symptom (memory pressure): fixing
-  the memory (windowing) fixes both. Don't chase momentum separately.
+**Remaining before prod:** on-device iOS check that the fling stays smooth
+and the crash is gone on a real years-deep book (headless Chromium can't
+reproduce iOS momentum/jetsam). The preview now auto-seeds 1000 entries
+(`src/lib/dev-seed.ts` `AUTO_SEED_COUNT`) so it opens straight onto that
+case; once the device confirms it, merge to prod.
