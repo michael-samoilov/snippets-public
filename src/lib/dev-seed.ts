@@ -227,11 +227,13 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
   return true;
 }
 
-// The default book a fresh preview seeds itself with. ~400 is a realistic
-// "hundreds" book — representative to test against, and safely under the crash
-// ceiling so the preview stays usable; use `?seed=800`/`?seed=1200` by hand to
-// stress the crash path specifically.
-const AUTO_SEED_COUNT = 400;
+// The default book a fresh preview seeds itself with. 1000 over 5 years is a
+// genuine longtime-user book — the corpus the WINDOWING work (BACKLOG #12) has
+// to stay smooth and crash-free on, so the preview opens straight onto the case
+// that matters. Before windowing this crashed and 400 was used to keep the
+// preview usable; windowing renders only the on-screen sections, so 1000 is now
+// fine. `?seed=clear` empties it for empty-state testing; `?seed=N` overrides.
+const AUTO_SEED_COUNT = 1000;
 const AUTO_SEED_YEARS = 5;
 
 /**

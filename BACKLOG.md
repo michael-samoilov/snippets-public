@@ -450,5 +450,6 @@ How the hard parts were solved (keep these if you touch it):
 
 **Remaining before prod:** on-device iOS check that the fling stays smooth
 and the crash is gone on a real years-deep book (headless Chromium can't
-reproduce iOS momentum/jetsam). Then bump the preview auto-seed to 1000
-(`src/lib/dev-seed.ts` `AUTO_SEED_COUNT`) and ship.
+reproduce iOS momentum/jetsam). The preview now auto-seeds 1000 entries
+(`src/lib/dev-seed.ts` `AUTO_SEED_COUNT`) so it opens straight onto that
+case; once the device confirms it, merge to prod.
