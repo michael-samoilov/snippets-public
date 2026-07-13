@@ -175,8 +175,10 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
 
   if (seed === "clear") {
     await db.snippets.clear();
+    // keep the mark SET (to a sentinel) so the preview auto-seed won't refill a
+    // book you cleared on purpose — e.g. to test empty states. `?seed=N` reseeds.
     try {
-      localStorage.removeItem(SEED_MARK);
+      localStorage.setItem(SEED_MARK, "cleared");
     } catch {}
     strip();
     return true;
@@ -223,4 +225,41 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
   } catch {}
   strip();
   return true;
+}
+
+// The default book a fresh preview seeds itself with. ~400 is a realistic
+// "hundreds" book — representative to test against, and safely under the crash
+// ceiling so the preview stays usable; use `?seed=800`/`?seed=1200` by hand to
+// stress the crash path specifically.
+const AUTO_SEED_COUNT = 400;
+const AUTO_SEED_YEARS = 5;
+
+/**
+ * The single entry the app calls on every load (previews/local only — inert on
+ * the prod domain via `seedingAllowedHere`). An explicit `?seed=…` always wins;
+ * otherwise a FRESH preview auto-seeds once, so there's always a realistic book
+ * to test against without anyone typing a param. Auto never fires again after a
+ * manual seed OR a `?seed=clear` (both leave SEED_MARK set), so a book you
+ * cleared to test empty states stays empty. Never touches a real signed-in book.
+ */
+export async function maybeSeedDevBook(search?: string): Promise<void> {
+  if (!seedingAllowedHere()) return;
+  const s = new URLSearchParams(
+    search ?? (typeof window !== "undefined" ? window.location.search : ""),
+  );
+  if (s.has("seed")) {
+    await runDevSeedFromUrl(search);
+    return;
+  }
+  // auto path: only an untouched (mark unset), empty book gets the default book
+  try {
+    if (localStorage.getItem(SEED_MARK)) return; // already seeded or cleared once
+  } catch {
+    return;
+  }
+  if ((await db.snippets.count()) > 0) return; // a real book is present — leave it
+  await db.snippets.bulkPut(buildSeedRows(AUTO_SEED_COUNT, AUTO_SEED_YEARS, 1));
+  try {
+    localStorage.setItem(SEED_MARK, `auto:${AUTO_SEED_COUNT}@${AUTO_SEED_YEARS}`);
+  } catch {}
 }

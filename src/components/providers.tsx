@@ -28,20 +28,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useZoomRelief();
 
   useEffect(() => {
-    // permanent dev-only book seeder (see lib/dev-seed): `?seed=800` fills
-    // IndexedDB so big-book behaviour can be tested on a preview or locally.
-    // Dynamically imported so the corpus never rides the normal bundle, and
-    // inert on the production domain (its own guard) — safe to keep shipped.
-    // Only the `?seed=` presence gates the import here; the module does the
-    // rest. Capture the search NOW — the calendar rewrites the URL to `?d=…` a
-    // tick later, before this async import resolves.
+    // Test book on previews/local only (permanent tooling — see lib/dev-seed):
+    // a fresh preview auto-seeds a realistic book so there's always something to
+    // test against; `?seed=N` / `?seed=clear` override. Host-gated here so the
+    // chunk never loads for real users on the prod domain; dynamically imported
+    // so the corpus never rides the normal bundle. Capture the search NOW — the
+    // calendar rewrites the URL to `?d=…` a tick later, before this resolves.
     if (
       typeof window !== "undefined" &&
-      window.location.search.includes("seed=")
+      !["snippets.ink", "www.snippets.ink"].includes(window.location.hostname)
     ) {
       const search = window.location.search;
       void import("@/lib/dev-seed")
-        .then((m) => m.runDevSeedFromUrl(search))
+        .then((m) => m.maybeSeedDevBook(search))
         .catch(() => {});
     }
 
