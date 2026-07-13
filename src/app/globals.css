@@ -589,24 +589,6 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
-/* Native lazy-render for the flat book (a CSS step toward BACKLOG #12's
-   windowing). The book is NOT virtualized — every day the reader has ever kept
-   is a live section — so the browser lays out and paints ALL of them. That is
-   the O(book) cost behind two things: the dive/rise stall (the transition frame
-   had to composite the whole book — ~45ms at 100 entries, ~220ms at 1200,
-   reading as the dive "waiting" before it moves) and, on iOS, the paint-memory
-   pressure the FLAT-BOOK LAW guards against. `content-visibility: auto` lets the
-   browser SKIP the layout + paint of any section that's off-screen and render it
-   only as it scrolls in — the DOM stays whole (no scroll math, no windowing
-   engine, find-in-page still works), but the on-screen cost stops scaling with
-   the book. contain-intrinsic-size gives skipped sections a placeholder height;
-   the `auto` keyword then remembers each section's REAL height once it has
-   rendered, so scrolling doesn't drift as estimates correct. This is what buys
-   the dive back and eases the crash budget at once. */
-[data-day] {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
-}
 
 /* ── typographic voices ────────────────────────────────────────
    Layered as components so their colors are defaults: an unlayered
