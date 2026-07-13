@@ -941,16 +941,25 @@ function Calendar() {
         const DUR = 440;
         moves.push(
           new Promise<void>((resolve) => {
-            // Seed the clock on the FIRST painted tick, not at setup: a heavy
-            // React commit + first raster can burn 100ms+ before frame one, and a
-            // setup-time clock would have already fast-forwarded the ease through
-            // its first half → "lag, then a jump". Seeding fixes that WITHOUT
-            // delaying the launch — so fire on the very next frame (a second
-            // deferral frame just reads as input lag, which is worse).
-            let start: number | null = null;
+            // Advance the ease by ACCUMULATED, PER-FRAME-CLAMPED time — not raw
+            // wall-clock. The first paint here rasters the full-size textured
+            // entry card (~100ms on a deep book), and any frame can stall. A
+            // wall-clock ease keeps ticking through that stall, so the first
+            // painted frame lands already 60–80% of the way through the visible
+            // range — "no dive, then a jump" opening; "skips the first half"
+            // closing (measured: open 0.87→0.95 in one step, close 1.0→0.90).
+            // Clamping each frame's delta to ~2 frames means a stall can only
+            // ever cost a slightly LONGER animation, never a fast-forward: the
+            // motion always starts from the tile and reads every frame. (Pure
+            // wall-clock was the bug; seeding the start helped the setup→frame-1
+            // gap but not the frame-1→frame-2 raster stall, which is the killer.)
+            const MAX_DT = 34; // ms — one dropped frame can't skip the ease
+            let last: number | null = null;
+            let elapsed = 0;
             const loop = (now: number) => {
-              if (start === null) start = now;
-              const k = Math.min(1, (now - start) / DUR);
+              if (last !== null) elapsed += Math.min(now - last, MAX_DT);
+              last = now;
+              const k = Math.min(1, elapsed / DUR);
               const e = 1 - Math.pow(1 - k, 3); // easeOutCubic — a clean open
               apply(deeper ? e : 1 - e);
               if (k < 1) requestAnimationFrame(loop);
@@ -3220,6 +3229,10 @@ function ScheduleCards({
       <AnimatePresence initial={false}>
         {items.map((s) => {
           const isDraft = draftPending && s.id === draft!.id;
+          // a backfill keep's card takes its composer's exact slot with NO birth
+          // wipe (the composer was already there, same size → a seamless morph);
+          // a today-zone keep still wipes in from the left.
+          const morphDraft = isDraft && !!draftStore?.morphDays.has(day);
           return (
           <motion.li
             key={s.id}
@@ -3228,7 +3241,7 @@ function ScheduleCards({
             // reshuffles around them — but never during a dive (`still`), when a
             // scroll-driven position change would otherwise animate as a slide
             layout={isDraft || still ? false : "position"}
-            initial={presentAtMount.has(s.id) ? false : sweepBirth.initial}
+            initial={presentAtMount.has(s.id) || morphDraft ? false : sweepBirth.initial}
             animate={sweepBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
             // focused card up in the entry view) — so the book behind is already
@@ -3378,10 +3391,12 @@ function FlowBackfillCapture({
     // before the press. The optimistic draft still lands the card in its final
     // slot at once (no blink) — just timed to the press, not the tap.
     const file = () => {
+      // morph=true: this backfill composer's card takes its exact slot with no
+      // birth wipe — the composer settles INTO the preview card seamlessly.
       draftStore?.set({
         id, text: trimmed, kind: null, tags: [],
         capturedAt, day, source: "typed", favorite: 0, updatedAt: capturedAt,
-      });
+      }, true);
       void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).catch(
         (error: unknown) => {
           // the keep did not take — withdraw the optimistic card, put the words
@@ -3412,6 +3427,10 @@ function FlowBackfillCapture({
     // keyboard finishes exiting; (2) press it; (3) it fades; (4) the entry settles
     // in; (5) the empty composer wipes back. Steps 2-5 are the keep sequence.
     setPressedDown(true);
+    // a long entry leaves the textarea scrolled to its foot; the preview card
+    // renders from the top, so scroll the held composer back up first — else the
+    // morph would jump from the last line to the first.
+    if (areaRef.current) areaRef.current.scrollTop = 0;
     areaRef.current?.blur();
     settleCancel.current?.();
     const play = () => {
@@ -3701,6 +3720,20 @@ function settleSealIntoView(
   let lastTop = NaN;
   let topStable = 0;
   const sealTop = () => btn.getBoundingClientRect().top;
+  // We must let the native keyboard retract + auto-reposition play out BEFORE any
+  // of our own animation — otherwise the press fires while the screen is still
+  // gliding. Two traps make a naive "view is stable" test fire too early:
+  //   1. blur() doesn't retract the keyboard instantly; for a beat the visual
+  //      viewport sits STILL at its keyboard-up height → the stability counters
+  //      trip during that quiescent lull, before the retract has even begun.
+  //   2. a fixed early timeout fires mid-glide on a slow retract.
+  // So: if the keyboard was up (visual viewport materially shorter than the
+  // layout viewport), require that we've actually SEEN it start leaving (the
+  // viewport growing back past its smallest seen height) before "settled" counts
+  // — and use maxMs only as an absolute safety, never as an early trigger.
+  const kbWasUp = !!vv && vv.height < window.innerHeight - 100;
+  let minVh = vv ? vv.height : 0; // smallest height seen = keyboard fully up
+  let sawRetract = !kbWasUp; // nothing to wait for if no keyboard was showing
   // comfortably inside the VISIBLE region (a margin clear of both ends)? Measured
   // against the visual viewport ∩ the scroller — not the scroller box alone,
   // because the scroller runs full-height UNDER iOS's bottom browser chrome, so a
@@ -3722,13 +3755,17 @@ function settleSealIntoView(
     const now = performance.now();
     if (phase === 1) {
       const vh = vv ? vv.height : 0;
+      minVh = Math.min(minVh, vh);
+      // the keyboard has begun leaving once the viewport grows back past its
+      // smallest seen height (a real retract, not measurement jitter)
+      if (kbWasUp && vh > minVh + 60) sawRetract = true;
       vvStable = Math.abs(vh - lastVh) < 1 ? vvStable + 1 : 0;
       lastVh = vh;
       const top = sealTop();
       topStable =
         Number.isFinite(lastTop) && Math.abs(top - lastTop) < 0.5 ? topStable + 1 : 0;
       lastTop = top;
-      if ((vvStable >= 3 && topStable >= 3) || now - t0 > maxMs * 0.6) {
+      if ((sawRetract && vvStable >= 3 && topStable >= 3) || now - t0 > maxMs) {
         // the view is at rest — reposition only if the seal isn't already in view
         if (!fullyIn()) {
           btn.scrollIntoView({ block: "center", behavior: "smooth" });

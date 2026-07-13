@@ -11,7 +11,12 @@ import type { Snippet } from "@/lib/types";
 
 export type KeptDraftStore = {
   drafts: Record<string, Snippet>;
-  set: (snippet: Snippet) => void;
+  // days whose current draft was born from an in-place composer (a backfill
+  // keep): its card should take the composer's exact slot with NO birth wipe —
+  // a seamless composer→card morph. A today-zone keep omits `morph`, so its
+  // card still plays the designed wipe-in from the left.
+  morphDays: ReadonlySet<string>;
+  set: (snippet: Snippet, morph?: boolean) => void;
   clear: (day: string) => void;
 };
 

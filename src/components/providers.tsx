@@ -61,13 +61,40 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // its card renders in its final slot the instant the seal lands, never
   // blinking out while the Dexie live query catches up
   const [drafts, setDrafts] = useState<Record<string, Snippet>>({});
+  // days whose live draft should render birthless (a backfill morph). Tracked
+  // alongside `drafts` and cleared in lockstep.
+  const [morphDays, setMorphDays] = useState<Set<string>>(() => new Set());
   const draftStore = useMemo<KeptDraftStore>(
     () => ({
       drafts,
-      set: (s) => setDrafts((d) => ({ ...d, [s.day]: s })),
-      clear: (day) => setDrafts((d) => { const n = { ...d }; delete n[day]; return n; }),
+      morphDays,
+      set: (s, morph) => {
+        setDrafts((d) => ({ ...d, [s.day]: s }));
+        setMorphDays((m) => {
+          const has = m.has(s.day);
+          if (morph === has) return m; // no change
+          const n = new Set(m);
+          if (morph) n.add(s.day);
+          else n.delete(s.day);
+          return n;
+        });
+      },
+      clear: (day) => {
+        setDrafts((d) => {
+          const n = { ...d };
+          delete n[day];
+          return n;
+        });
+        // drop the morph flag in lockstep (both setStates batch in one commit)
+        setMorphDays((m) => {
+          if (!m.has(day)) return m;
+          const n = new Set(m);
+          n.delete(day);
+          return n;
+        });
+      },
     }),
-    [drafts],
+    [drafts, morphDays],
   );
 
   return (
