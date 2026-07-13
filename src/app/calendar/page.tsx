@@ -192,7 +192,7 @@ const LEDGER_SHAPE: number[][] = [
 // paragraph's is. The bars shimmer while the book settles in.
 function LedgerCard({ lines }: { lines: number }) {
   return (
-    <div className="rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[0.9rem] leading-[1.42] shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
+    <div className="book-card rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[0.9rem] leading-[1.42]">
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className="flex h-[1.42em] items-center">
           <span
@@ -1721,6 +1721,15 @@ function Calendar() {
       quickCapture, stepFeed, setShortcutsOpen,
     };
   });
+  // the masthead wordmark (a global shell element) asks the calendar to glide to
+  // today when it's already the open view — same path as the Today button / `g t`.
+  // (From another page the wordmark just navigates to /calendar, which lands on
+  // today on its own; the event is only meaningful once this page is mounted.)
+  useEffect(() => {
+    const onGoToday = () => kbRef.current.goToday();
+    window.addEventListener("snippets:go-today", onGoToday);
+    return () => window.removeEventListener("snippets:go-today", onGoToday);
+  }, []);
   useEffect(() => {
     const isTyping = () => {
       const el = document.activeElement as HTMLElement | null;
@@ -3412,17 +3421,19 @@ function FlowBackfillCapture({
           // the bloom scaling up was a visible fight
           className="group relative"
         >
-          {/* the ghost's seat is a drop-shadow on this unmasked parent: the
-              face's fade mask clips outer box-shadows entirely, and filter
-              runs before mask on one element — so the shadow lives a level
-              up and dissolves with the ghost */}
-          <span aria-hidden="true" className="pointer-events-none absolute inset-0 [filter:var(--card-seat-drop)]">
-            <span className="absolute inset-0 rounded-[6px] border border-rule-faint bg-paper shadow-[inset_0_1px_0_var(--press-highlight)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised" />
+          {/* The composer wears the SAME card material as the book's entry
+              tiles — one source of truth. Its face carries `.book-card` (globals
+              css), so whatever that recipe paints (today: flat fill + hairline +
+              inset top highlight; tomorrow: a lift, a blend, whatever) lands here
+              too, with no doubling back. The empty ghost fades on the right via
+              the mask; the filled face fades in as words arrive. */}
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <span className="book-card absolute inset-0 rounded-[6px] border border-rule-faint bg-paper transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised" />
           </span>
           <span
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute inset-0 rounded-[6px] border bg-paper [box-shadow:var(--card-seat)] transition-[opacity,background-color] duration-150",
+              "book-card pointer-events-none absolute inset-0 rounded-[6px] border bg-paper transition-[opacity,background-color] duration-150",
               "border-rule-faint group-focus-within:border-rule group-hover:bg-paper-raised",
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
@@ -3455,7 +3466,7 @@ function FlowBackfillCapture({
               // textarea scrollable that's the textarea, not the whole book
               // sailing off into other days. overscroll-contain stops the
               // internal scroll from chaining out at its edges.
-              "voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+              "book-card-prose voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -4473,10 +4484,10 @@ function TodayZoneFill({
 
   // the zone's hairline blue outline (wax = recording) — it deepens while
   // the microphone is on, anchoring the wash to the frame it seeps from.
-  // transform rides the same transition (slower, per the glow's bloom):
-  // the press glow writes scale onto this box but never its transition
+  // (No transform transition anymore: the zone no longer blooms/scales on tap —
+  // its PressGlow keeps the light-under-finger but not the resize.)
   const frame = cn(
-    "border transition-[border-color,transform] [transition-duration:240ms,500ms] [transition-timing-function:var(--ease-out),var(--ease-bloom)]",
+    "border transition-[border-color] duration-[240ms] ease-[var(--ease-out)]",
     listening ? "border-wax/70" : "border-wax/45",
   );
 
@@ -4593,7 +4604,7 @@ function TodayZoneFill({
               finding their feet — light chasing the finger over the words
               is exactly the distraction those beats can't afford. It
               returns the moment the letter retires. */}
-          {!((lockedLetter || firstEver) && text.trim().length === 0) && <PressGlow grow />}
+          {!((lockedLetter || firstEver) && text.trim().length === 0) && <PressGlow />}
           {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
               px), so the ruled field and the intro keep the same visual margin
               from a narrow phone up to the wide desk — the ruled paper and the

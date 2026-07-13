@@ -545,11 +545,9 @@ textarea:focus-visible,
   isolation: auto;
   box-shadow: inset 0 1px 0 var(--press-highlight);
 }
-/* `.book-card` descendant so this outranks the later `.voice-prose { multiply }`
-   (equal class-count would otherwise lose on source order) */
-.book-card .book-card-prose {
-  mix-blend-mode: normal;
-}
+/* the prose's flat blend lives in ONE self-sufficient rule (`.book-card-prose`
+   below, after `.voice-prose`) so it also reaches the composer's textarea, which
+   isn't nested in a `.book-card` */
 
 /* Zoom relief (the permanent pinch-zoom-crash fix; driven by use-zoom-relief).
    A pinch makes iOS re-rasterize the whole composited page at the magnified
@@ -650,6 +648,16 @@ textarea:focus-visible,
 }
 .dark .voice-prose,
 .dark .voice-display {
+  mix-blend-mode: normal;
+}
+/* The one card material's prose (book tiles AND the composer) is FLAT — it never
+   multiplies into the sheet — so every card in the schedule blends the same way
+   from ONE rule, no matter where the class is used. Placed after the
+   `.voice-prose { multiply }` above so it wins on source order (both are a single
+   class), which lets it govern the composer's textarea too — it isn't nested in a
+   `.book-card`, so the old descendant selector couldn't reach it. (Book tiles are
+   flat for the FLAT-BOOK LAW; the composer follows for consistency.) */
+.book-card-prose {
   mix-blend-mode: normal;
 }
 

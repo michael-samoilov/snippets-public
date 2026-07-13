@@ -64,7 +64,17 @@ export function Wordmark() {
       ref={ref}
       href="/calendar"
       aria-label={copy.app.name}
-      onClick={() => { setPlayKey((k) => k + 1); armSettle(); }}
+      onClick={(e) => {
+        setPlayKey((k) => k + 1);
+        armSettle();
+        // already on the calendar → glide to today's zone instead of a no-op
+        // re-navigation (which wouldn't move the scroll). Elsewhere, let the Link
+        // navigate to /calendar, which opens on today on its own.
+        if (window.location.pathname === "/calendar") {
+          e.preventDefault();
+          window.dispatchEvent(new Event("snippets:go-today"));
+        }
+      }}
       className="wordmark voice-display pressable inline-flex items-center text-[1.3rem] italic tracking-tight text-ink"
     >
       <span className="relative inline-block shrink-0" style={{ width: sealPx, height: sealPx, transform: `translateY(${NUDGE * sealPx}px)` }}>
