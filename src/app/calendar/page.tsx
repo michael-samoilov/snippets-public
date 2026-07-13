@@ -48,6 +48,8 @@ import {
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
 import {
   buildOffsets,
+  COMPOSER_H,
+  dayIndexAt,
   estimateCardLines,
   estimateRowHeight,
   sameRange,
@@ -2513,29 +2515,14 @@ function ScheduleFeedBase({
   // exact measured heights, keyed by day — a row's height is LOCKED here the
   // first time it's been on screen, so its reserved space stops drifting
   const measuredRef = useRef<Map<string, number>>(new Map());
-  // bumped when a lock/counter change means the height table must rebuild
+  // bumped when a measured height LOCKS (cheap overlay rebuild — no re-estimate)
   const [measureVersion, setMeasureVersion] = useState(0);
+  // bumped only when the line-counter changes (rotate/resize) — forces the
+  // EXPENSIVE per-row estimate (canvas line-count) to recompute; kept separate
+  // from measureVersion so a lock during scroll never re-runs the canvas pass
+  const [counterVersion, setCounterVersion] = useState(0);
   const viewportHRef = useRef(0); // the scroller's client height, for the window math
   const zoneHRef = useRef(0); // measured today-zone height (≈ one viewport)
-  // the rows' geometry, read ONCE per layout and cached — the scroll
-  // spy then finds the stacked day from scrollTop alone, never reading
-  // ~90 rows' offsets on the scroll path (that first read forced the
-  // whole document's first layout — the stall on the opening scroll)
-  const rowGeomRef = useRef<
-    Array<{ day: string; top: number; bottom: number; headH: number }>
-  >([]);
-  const measureRows = useCallback(() => {
-    const geom: Array<{ day: string; top: number; bottom: number; headH: number }> =
-      [];
-    for (const [day, row] of rowRefs.current) {
-      const headH =
-        (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? 48;
-      const top = row.offsetTop;
-      geom.push({ day, top, bottom: top + row.offsetHeight, headH });
-    }
-    geom.sort((a, b) => a.top - b.top);
-    rowGeomRef.current = geom;
-  }, []);
 
   const rows = useMemo(() => {
     if (!all) return null;
@@ -2568,35 +2555,52 @@ function ScheduleFeedBase({
   }, [all, probe, todayKey, yesterdayKey]);
 
   // ── TRUE WINDOWING (BACKLOG #12) ─────────────────────────────────────────
-  // Per-row reserved heights: an estimate from the row's text (the canvas
-  // line-counter matching the real column), upgraded to the exact measured
-  // height once the row has been on screen (locked in measuredRef). Today's
-  // empty section collapses to its rule — its composer and breath live in the
-  // zone, reserved separately below — so it barely takes any height.
-  const heights = useMemo<number[]>(() => {
+  // Per-row reserved heights, in TWO layers so the scroll path stays cheap:
+  //
+  //  1. `estimates` — the EXPENSIVE layer (canvas line-count per card). This is
+  //     the SECTION's own content only (cards + month header + chrome), computed
+  //     ONCE per book/counter change. The composer and today-collapse are NOT
+  //     baked in here, so it never has to recompute when the reader navigates
+  //     (probe) or today gains an entry — only on rotate/resize (counterVersion).
+  //     Recomputing this on every measurement lock was the scroll-jank storm
+  //     (canvas run over ~1000 rows per locked row); keeping it off measureVersion
+  //     is the fix.
+  //  2. `heights` — the CHEAP overlay: measured-lock ?? estimate, plus the
+  //     composer for today/probe/empty-yesterday and the today-empty collapse.
+  //     This is all it costs to rebuild when a row locks mid-scroll.
+  const estimates = useMemo<number[]>(() => {
     if (!rows) return [];
     const count = lineCounterRef.current;
     return rows.map((r, i) => {
-      const locked = measuredRef.current.get(r.day);
-      if (locked != null) return locked;
-      const isToday = r.day === todayKey;
-      if (isToday && r.snippets.length === 0) return 1; // collapsed rule only
       const lines = r.snippets.reduce((n, s) => n + count(s.text), 0);
-      const showComposer =
-        isToday ||
-        r.day === probe ||
-        (r.day === yesterdayKey && r.snippets.length === 0);
       const prevMonth = i > 0 ? rows[i - 1].day.slice(0, 7) : null;
       return estimateRowHeight({
         lines,
         cards: r.snippets.length,
         newMonth: i === 0 || prevMonth !== r.day.slice(0, 7),
-        showComposer,
+        showComposer: false, // added per-row in the cheap overlay below
       });
     });
-    // measureVersion forces a rebuild when a lock or the counter changes (refs)
+    // counterVersion forces the canvas pass to re-run (the counter is a ref)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, probe, todayKey, yesterdayKey, measureVersion]);
+  }, [rows, counterVersion]);
+
+  const heights = useMemo<number[]>(() => {
+    if (!rows) return [];
+    return rows.map((r, i) => {
+      const locked = measuredRef.current.get(r.day);
+      if (locked != null) return locked;
+      const isToday = r.day === todayKey;
+      if (isToday && r.snippets.length === 0) return 1; // collapsed rule only
+      const showComposer =
+        isToday ||
+        r.day === probe ||
+        (r.day === yesterdayKey && r.snippets.length === 0);
+      return estimates[i] + (showComposer ? COMPOSER_H : 0);
+    });
+    // measureVersion forces the overlay to re-read the lock map (a ref)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, estimates, probe, todayKey, yesterdayKey, measureVersion]);
 
   const geom = useMemo(() => buildOffsets(heights), [heights]);
   // a ref mirror so the (deliberately stable) scrollToRow can read the current
@@ -2647,6 +2651,13 @@ function ScheduleFeedBase({
   // the FIRST paint already holds it (no blank frame before the scroll lands)
   const seedRange = useMemo(() => windowAround(selectedIdx), [windowAround, selectedIdx]);
   const effRange = range.end > range.start ? range : seedRange;
+  // a ref mirror of the live rendered range, so the scroll handler can apply
+  // HYSTERESIS: it reshuffles the window (a ~40-section re-render + card
+  // mount/unmount) only when the viewport nears the band's edge, not on every
+  // row crossed — otherwise a fast fling re-renders the feed dozens of times a
+  // second. Kept in a ref so reading it doesn't couple onScroll to render state.
+  const effRangeRef = useRef(effRange);
+  effRangeRef.current = effRange;
   const windowRows = useMemo(
     () => (rows ? rows.slice(effRange.start, effRange.end) : rows),
     [rows, effRange.start, effRange.end],
@@ -2992,6 +3003,9 @@ function ScheduleFeedBase({
         el.querySelector<HTMLElement>(".book-card-prose"),
       );
       measuredRef.current.clear();
+      // the column moved: re-run the estimate pass (counterVersion) AND drop the
+      // stale locks (measureVersion). This is the only path that re-estimates.
+      setCounterVersion((v) => v + 1);
       setMeasureVersion((v) => v + 1);
     }
   }, []);
@@ -2999,10 +3013,8 @@ function ScheduleFeedBase({
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
     if (!rows) return;
-    // cache the rows' geometry now (this is the layout pass that would
-    // otherwise be forced by the first scroll), tune the height estimate to the
-    // real column, and keep both fresh as the viewport resizes
-    measureRows();
+    // tune the height estimate to the real column now (the ResizeObserver keeps
+    // it fresh as the viewport resizes)
     rebuildMetrics();
     if (!didInit.current) {
       didInit.current = true;
@@ -3015,30 +3027,26 @@ function ScheduleFeedBase({
     }
     const el = scrollerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      measureRows();
-      rebuildMetrics();
-    });
+    const ro = new ResizeObserver(rebuildMetrics);
     ro.observe(el);
     return () => ro.disconnect();
     // `selected` only seeds the very first position
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, scrollToRow, measureRows, rebuildMetrics]);
+  }, [rows, scrollToRow, rebuildMetrics]);
 
-  // WINDOWING measure-and-lock: after every render, refresh the spy geometry for
-  // the rows now on screen and LOCK each freshly-mounted row's real height into
-  // the table. The estimate only ever governs a row's FIRST sighting; once it's
-  // been rendered its exact height is reserved, so it re-enters/leaves the window
-  // boundary with no shift — which is what lets us keep iOS fling momentum
-  // WITHOUT ever compensating scrollTop mid-gesture (the lesson in
-  // components/calendar/shared.ts). Locking a rendered row never moves the
-  // current view: it changes only the offsets OUTSIDE the window (the top spacer
-  // is a sum up to the window's first row, exclusive; the rest is below the
-  // fold). Measure-once per day — skip days already locked, so a settled scroll
-  // reads no offsets at all.
+  // WINDOWING measure-and-lock: when the rendered window changes, LOCK each
+  // freshly-mounted row's real height into the table. The estimate only ever
+  // governs a row's FIRST sighting; once it's been rendered its exact height is
+  // reserved, so it re-enters/leaves the window boundary with no shift — which is
+  // what lets us keep iOS fling momentum WITHOUT ever compensating scrollTop
+  // mid-gesture (the lesson in components/calendar/shared.ts). Locking a rendered
+  // row never moves the current view: it changes only the offsets OUTSIDE the
+  // window (the top spacer is a sum up to the window's first row, exclusive; the
+  // rest is below the fold). MEASURE-ONCE per day — days already locked are
+  // skipped, so a row is read exactly once (no per-frame layout thrash), and the
+  // effect is gated to window/lock changes rather than every render.
   useLayoutEffect(() => {
     if (!rows) return;
-    measureRows();
     let bumped = false;
     for (const [day, eln] of rowRefs.current) {
       if (measuredRef.current.has(day)) continue;
@@ -3062,7 +3070,10 @@ function ScheduleFeedBase({
       if (zh > 0 && Math.abs(zoneHRef.current - zh) > 1) zoneHRef.current = zh;
     }
     if (bumped) setMeasureVersion((v) => v + 1);
-  });
+    // gated to window/lock/estimate changes — NOT every render — so a title-only
+    // re-render (the scroll spy) never triggers a layout read
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, effRange.start, effRange.end, measureVersion, counterVersion]);
 
   // a day whose content can change under a locked height (today gains entries,
   // yesterday's invite fills, the opened probe day) must drop its lock so it
@@ -3141,10 +3152,20 @@ function ScheduleFeedBase({
       // slide the render window to cover the viewport — FIRST, so even a
       // programmatic Today glide keeps the rows it flies past painted (never a
       // blank spacer). Pure index math off the cached offset table; no scrollTop
-      // write, so momentum is untouched.
+      // write, so momentum is untouched. HYSTERESIS: the current band already
+      // carries 3 viewports of overscan each side; only reshuffle once the
+      // viewport's inner 1-viewport comfort zone is no longer covered by it, then
+      // re-center with the full overscan. So a fling re-renders the feed every
+      // ~2 viewports of travel, not every row — the difference between smooth and
+      // a mount/unmount storm.
       viewportHRef.current = el.clientHeight;
-      const next = rangeAt(top);
-      setRange((r) => (sameRange(r, next) ? r : next));
+      const offs = geomRef.current.offsets;
+      const curRange = effRangeRef.current;
+      const comfort = windowRange(offs, top, el.clientHeight, 1);
+      if (comfort.start < curRange.start || comfort.end > curRange.end) {
+        const next = windowRange(offs, top, el.clientHeight, 3);
+        setRange((r) => (sameRange(r, next) ? r : next));
+      }
       if (progTargetRef.current !== null) {
         // a Today scroll is animating to its target — let it run, but don't let
         // the days it passes claim the header (that flashes the Today button)
@@ -3164,18 +3185,16 @@ function ScheduleFeedBase({
       if (atBottom || landingTodayRef.current) {
         cur = todayKey;
       } else {
-        // the reader's day is the topmost whose margin date is still
-        // fully stacked — a row whose tail merely peeks under the rail
-        // has already handed over (its date has slid off the pin).
-        // Computed from cached geometry, so the scroll path reads only
-        // scrollTop, never the rows' offsets
-        cur = null;
-        for (const g of rowGeomRef.current) {
-          if (g.bottom >= top + g.headH) {
-            cur = g.day; // geometry is sorted by top; the first match wins
-            break;
-          }
-        }
+        // the reader's day is the topmost whose margin date is still fully
+        // stacked — a row whose tail merely peeks under the rail has already
+        // handed over (its date has slid off the pin). Read PURELY from the
+        // offset table (binary search), so the scroll path touches no DOM at all
+        // — no forced layout per frame, which is what keeps the fling smooth.
+        let i = dayIndexAt(offs, top);
+        // if this row's remaining height under the rail is less than a date
+        // block (~48px), its date has unstuck and the next row owns the title
+        if (i < (rows?.length ?? 0) - 1 && offs[i + 1] < top + 48) i += 1;
+        cur = rows?.[i]?.day ?? null;
       }
       if (cur && cur !== spyRef.current) {
         spyRef.current = cur;

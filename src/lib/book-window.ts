@@ -23,7 +23,7 @@ const CHARS_PER_LINE = 34; // ~width of the card's text column at 0.9rem
 const CARD_CHROME = 24; // a card's own padding (p-2.5) + the gap-1 below it
 const SECTION_CHROME = 21; // the section's top padding + rule
 const MONTH_HEADER = 44; // the "July 2026" band when a new month opens
-const COMPOSER_H = 96; // a BackfillCapture row (yesterday's invite / the probe)
+export const COMPOSER_H = 96; // a BackfillCapture row (yesterday's invite / the probe)
 const MIN_ROW = 44; // a collapsed/empty section still reserves a touch target
 
 export interface BookRowShape {
