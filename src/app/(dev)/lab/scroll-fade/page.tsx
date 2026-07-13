@@ -87,17 +87,33 @@ function DiyCard() {
 }
 
 /* B/C — shadcn: a scroll-driven mask on the scroller itself. No JS, no
-   overlay, no hairline. `top` swaps scroll-fade-b (foot) for scroll-fade
-   (both edges); `sized` pins the fade to 2rem to match the DIY. */
-function ShadcnCard({ sized, top }: { sized?: boolean; top?: boolean }) {
-  const edge = top ? "scroll-fade" : "scroll-fade-b";
-  const size = sized ? (top ? "scroll-fade-8" : "scroll-fade-b-8") : "";
+   overlay, no hairline. Both cards pin the fade to 2rem; the difference is
+   --scroll-fade-reveal — the scroll distance over which the fade recedes as
+   you near an edge. `top` swaps scroll-fade-b (foot) for scroll-fade (both).
+     · default (6rem ≫ fade): the fade is gone while a line is still clipped
+       → the last line can sit hard-cut with almost no fade.
+     · reveal = fade size (2rem): the fade recedes in lockstep with the last
+       line arriving, so the foot stays covered until it's fully in view. */
+function ShadcnCard({
+  top,
+  reveal,
+  label,
+}: {
+  top?: boolean;
+  reveal?: string;
+  label: string;
+}) {
+  const edge = top ? "scroll-fade scroll-fade-8" : "scroll-fade-b scroll-fade-b-8";
   return (
-    <Frame
-      label={sized ? "c · sized 2rem" : "b · default 12%"}
-      note={cn(edge, size)}
-    >
-      <div className={cn(scrollerCls, edge, size)}>
+    <Frame label={label} note={reveal ? `reveal ${reveal}` : "reveal 6rem (default)"}>
+      <div
+        className={cn(scrollerCls, edge)}
+        style={
+          reveal
+            ? ({ "--scroll-fade-reveal": reveal } as React.CSSProperties)
+            : undefined
+        }
+      >
         <p className={proseCls}>{TEXT}</p>
       </div>
       <div className="h-9 shrink-0" />
@@ -147,8 +163,8 @@ export default function ScrollFadeLab() {
         </header>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <DiyCard />
-          <ShadcnCard top={top} />
-          <ShadcnCard sized top={top} />
+          <ShadcnCard top={top} label="b · default (clips)" />
+          <ShadcnCard top={top} reveal="2rem" label="c · reveal 2rem (no clip)" />
         </div>
       </div>
     </main>
