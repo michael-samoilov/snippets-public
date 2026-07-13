@@ -46,6 +46,13 @@ import {
   StorageWriteError,
 } from "@/lib/db";
 import { dayKey, dateFromDayKey, friendlyDay } from "@/lib/dates";
+import {
+  buildOffsets,
+  estimateCardLines,
+  estimateRowHeight,
+  sameRange,
+  windowRange,
+} from "@/lib/book-window";
 import { pushUrl, replaceUrl } from "@/lib/history";
 import { enterRecoveryIfLooping } from "@/lib/crash-recovery";
 import { isIOS, isIOSStandalone, useSpeech } from "@/hooks/use-speech";
@@ -2362,6 +2369,63 @@ const LOCK_DEBUG: number | null = (() => {
 })();
 
 /**
+ * Build a line-counter that matches the prose column's REAL wrapping — the
+ * windowing estimate lives or dies on this. A day-section that hasn't rendered
+ * yet reserves height = chrome + lines×LINE_H; if the reserved `lines` is wrong
+ * when the row scrolls in from the top, the fold visibly shoves (and we must
+ * NOT chase it with scrollTop mid-fling — that kills iOS momentum, the lesson
+ * in components/calendar/shared.ts). A canvas greedy-wrap at the column's live
+ * font+width mirrors the browser's line-breaking, getting the count exact for
+ * ordinary prose (clamped at 6, matching line-clamp-6). Falls back to the pure
+ * char-count estimate when there's no DOM to read (SSR, or no sample card yet).
+ */
+function makeLineCounter(sample: HTMLElement | null): (text: string) => number {
+  if (typeof document === "undefined" || !sample) return estimateCardLines;
+  const cs = getComputedStyle(sample);
+  const ctx = document.createElement("canvas").getContext("2d");
+  const colW =
+    sample.clientWidth -
+    parseFloat(cs.paddingLeft || "0") -
+    parseFloat(cs.paddingRight || "0");
+  if (!ctx || !(colW > 0)) return estimateCardLines;
+  // canvas ignores line-height, so leave it out of the shorthand
+  ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  return (text: string) => {
+    let lines = 0;
+    for (const para of text.split("\n")) {
+      if (para === "") {
+        lines += 1; // a blank line still takes a row
+        continue;
+      }
+      let cur = 0; // width laid down on the current line
+      // split keeping the whitespace runs, so a run's width counts toward the
+      // line exactly as the browser lays it out
+      for (const tok of para.split(/(\s+)/)) {
+        if (tok === "") continue;
+        const w = ctx.measureText(tok).width;
+        if (/^\s+$/.test(tok)) {
+          cur += w;
+          continue;
+        }
+        if (cur > 0 && cur + w > colW) {
+          lines += 1; // this word won't fit — it starts a new line
+          cur = w;
+        } else {
+          cur += w;
+        }
+        // a single word wider than the whole column breaks by character
+        while (cur > colW) {
+          lines += 1;
+          cur -= colW;
+        }
+      }
+      lines += 1; // the paragraph's last (or only) line
+    }
+    return Math.min(6, Math.max(1, lines));
+  };
+}
+
+/**
  * The deepest altitude is the book itself: every day that holds
  * something, stacked in time, the dates standing in the margin like a
  * ledger. Today is always present even when blank; days between simply
@@ -2375,7 +2439,6 @@ function ScheduleFeedBase({
   today,
   selected,
   all,
-  recovery,
   onVisible,
   onOpen,
 }: {
@@ -2385,8 +2448,10 @@ function ScheduleFeedBase({
   today: Date;
   selected: string;
   all: Snippet[] | undefined;
-  // a crash-loop recovery load: keep the book light (recent days only), never
-  // auto-mount the full history — see the fullBook effect
+  // a crash-loop recovery load. Once meaningful here (it suppressed the
+  // full-book mount); now the book is always windowed-light, so the feed needs
+  // no special-casing — kept on the props/memo so the parent's deep-link
+  // disowning (see the recovery gate in CalendarView) still drives a re-render.
   recovery: boolean;
   onVisible: (day: string) => void;
   onOpen: (id: string) => void;
@@ -2400,17 +2465,15 @@ function ScheduleFeedBase({
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
   const [probe, setProbe] = useState<string | null>(selected);
-  // First paint renders only a screenful of days; the rest of the history
-  // mounts a frame later, off the critical path — so opening the book costs a
-  // constant ~screenful no matter how many years it holds. Opening at the foot
-  // (today), the window is the most recent days; a deep-link to an old day
-  // windows AROUND that day instead. The deep-link case used to render the
-  // whole ledger synchronously "so its row exists to land on" — but after a
-  // memory crash iOS reloads the crashed ?d= URL, so that full build landed
-  // exactly on the device that had just proven it couldn't afford it, and one
-  // crash became "A problem repeatedly occurred". The windowed target row
-  // exists to land on all the same.
-  const [fullBook, setFullBook] = useState(false);
+  // The book is WINDOWED: only the on-screen day-sections (plus overscan) are
+  // ever in the DOM, no matter how many years it holds — so opening it costs a
+  // constant ~screenful and per-card paint stops scaling with the book (the
+  // durable form of the FLAT-BOOK crash fix). Opening at the foot (today) the
+  // window is the most recent days; a deep-link to an old day windows AROUND it.
+  // (This replaced the old "first-paint slice, then mount the whole ledger a
+  // frame later" scheme — that full mount landed on the very device a memory
+  // crash had just reloaded the ?d= URL onto, turning one crash into "A problem
+  // repeatedly occurred". Windowing never mounts the whole book at all.)
   // a pending kept draft for today means a keep JUST happened (it's cleared once
   // the live row lands) — the only time today's date should wipe in (never on a
   // page refresh)
@@ -2443,6 +2506,17 @@ function ScheduleFeedBase({
   // true while a Today scroll is gliding to the foot: the days it passes must not
   // claim the header (which would flicker the Today button back in mid-flight)
   const landingTodayRef = useRef(false);
+  // ── WINDOWING state (see makeLineCounter above + lib/book-window.ts) ──
+  // a line-counter tuned to the live prose column, so an un-rendered row reserves
+  // the height it will paint to; rebuilt when the column resizes
+  const lineCounterRef = useRef<(t: string) => number>(estimateCardLines);
+  // exact measured heights, keyed by day — a row's height is LOCKED here the
+  // first time it's been on screen, so its reserved space stops drifting
+  const measuredRef = useRef<Map<string, number>>(new Map());
+  // bumped when a lock/counter change means the height table must rebuild
+  const [measureVersion, setMeasureVersion] = useState(0);
+  const viewportHRef = useRef(0); // the scroller's client height, for the window math
+  const zoneHRef = useRef(0); // measured today-zone height (≈ one viewport)
   // the rows' geometry, read ONCE per layout and cached — the scroll
   // spy then finds the stacked day from scrollTop alone, never reading
   // ~90 rows' offsets on the scroll path (that first read forced the
@@ -2493,26 +2567,104 @@ function ScheduleFeedBase({
     }));
   }, [all, probe, todayKey, yesterdayKey]);
 
-  // the rows actually rendered on first paint: FIRST_PAINT_DAYS around the
-  // landing day (the tail when landing on today, a centered slice for a
-  // deep-link into history) until the full book mounts a frame later
-  const FIRST_PAINT_DAYS = 35;
-  const windowRows = useMemo(() => {
-    if (!rows) return rows;
-    if (fullBook || rows.length <= FIRST_PAINT_DAYS) return rows;
-    if (selected === todayKey) return rows.slice(-FIRST_PAINT_DAYS);
+  // ── TRUE WINDOWING (BACKLOG #12) ─────────────────────────────────────────
+  // Per-row reserved heights: an estimate from the row's text (the canvas
+  // line-counter matching the real column), upgraded to the exact measured
+  // height once the row has been on screen (locked in measuredRef). Today's
+  // empty section collapses to its rule — its composer and breath live in the
+  // zone, reserved separately below — so it barely takes any height.
+  const heights = useMemo<number[]>(() => {
+    if (!rows) return [];
+    const count = lineCounterRef.current;
+    return rows.map((r, i) => {
+      const locked = measuredRef.current.get(r.day);
+      if (locked != null) return locked;
+      const isToday = r.day === todayKey;
+      if (isToday && r.snippets.length === 0) return 1; // collapsed rule only
+      const lines = r.snippets.reduce((n, s) => n + count(s.text), 0);
+      const showComposer =
+        isToday ||
+        r.day === probe ||
+        (r.day === yesterdayKey && r.snippets.length === 0);
+      const prevMonth = i > 0 ? rows[i - 1].day.slice(0, 7) : null;
+      return estimateRowHeight({
+        lines,
+        cards: r.snippets.length,
+        newMonth: i === 0 || prevMonth !== r.day.slice(0, 7),
+        showComposer,
+      });
+    });
+    // measureVersion forces a rebuild when a lock or the counter changes (refs)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, probe, todayKey, yesterdayKey, measureVersion]);
+
+  const geom = useMemo(() => buildOffsets(heights), [heights]);
+  // a ref mirror so the (deliberately stable) scrollToRow can read the current
+  // offset table without being re-created every time a measurement lands
+  const geomRef = useRef(geom);
+  geomRef.current = geom;
+  const indexByDay = useMemo(() => {
+    const m = new Map<string, number>();
+    rows?.forEach((r, i) => m.set(r.day, i));
+    return m;
+  }, [rows]);
+  const indexByDayRef = useRef(indexByDay);
+  indexByDayRef.current = indexByDay;
+
+  // the row the book is opened to (today lands at the foot; a deep-link windows
+  // around its day). Only SEEDS the first window — the scroll drives it after.
+  const selectedIdx = useMemo(() => {
+    if (!rows || rows.length === 0) return 0;
+    if (selected === todayKey) return rows.length - 1;
     const i = rows.findIndex((r) => r.day === selected);
-    if (i < 0) return rows;
-    const start = Math.max(0, i - Math.floor(FIRST_PAINT_DAYS / 2));
-    return rows.slice(start, start + FIRST_PAINT_DAYS);
-  }, [rows, fullBook, selected, todayKey]);
+    return i < 0 ? rows.length - 1 : i;
+  }, [rows, selected, todayKey]);
+
+  // a window covering the viewport at a given scrollTop, grown by overscan — the
+  // pure geometry, fling-proven in book-window.test.ts. Overscan is 3 viewports
+  // each side: windowing re-renders ASYNC (onScroll → rAF → setState → commit),
+  // so during a hard native fling several frames of scroll land before the new
+  // band paints — the overscan is the margin that keeps the reader over rendered
+  // rows until it catches up. 3vp stays O(1) (~40 sections, still bounded) while
+  // covering a ~2000px/commit fling.
+  const rangeAt = useCallback(
+    (scrollTop: number) =>
+      windowRange(geom.offsets, scrollTop, viewportHRef.current || 800, 3),
+    [geom],
+  );
+  // a window centred on a day index, for seeding/landing without a live scrollTop
+  const windowAround = useCallback(
+    (i: number) => {
+      const n = geom.offsets.length - 1;
+      if (n <= 0) return { start: 0, end: 0 };
+      return rangeAt(geom.offsets[Math.max(0, Math.min(i, n - 1))]);
+    },
+    [geom, rangeAt],
+  );
+
+  const [range, setRange] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  // a not-yet-set range (0,0) falls back to a window around the landing day, so
+  // the FIRST paint already holds it (no blank frame before the scroll lands)
+  const seedRange = useMemo(() => windowAround(selectedIdx), [windowAround, selectedIdx]);
+  const effRange = range.end > range.start ? range : seedRange;
+  const windowRows = useMemo(
+    () => (rows ? rows.slice(effRange.start, effRange.end) : rows),
+    [rows, effRange.start, effRange.end],
+  );
   // whether the window reaches the ledger's tail — only then does the today
-  // zone belong at its foot; a mid-history window must not seat today's
-  // composer under some past June for its one frame of life
-  const windowTail =
-    !rows ||
-    !windowRows ||
-    windowRows[windowRows.length - 1]?.day === rows[rows.length - 1]?.day;
+  // zone belong at its foot (and its spacer reservation drops to zero)
+  const windowTail = !rows || effRange.end >= rows.length;
+  // spacer heights holding the scroll position for the un-rendered rows. The
+  // bottom spacer also reserves the today zone (≈ a viewport) whenever the tail
+  // isn't rendered, so scrollHeight stays constant as the window slides.
+  const topSpacer = rows ? geom.offsets[effRange.start] ?? 0 : 0;
+  const botSpacer = rows
+    ? Math.max(0, geom.total - (geom.offsets[effRange.end] ?? geom.total)) +
+      // reserve the today zone (≈ a viewport) while it's off-screen; fall back to
+      // the viewport height until it's been measured, so scrollHeight is roughly
+      // right even on a deep-link that opens away from the foot
+      (windowTail ? 0 : zoneHRef.current || viewportHRef.current || 0)
+    : 0;
 
   const scrollToRow = useCallback((day: string, smooth = false) => {
     const el = scrollerRef.current;
@@ -2527,6 +2679,26 @@ function ScheduleFeedBase({
     todayRORef.current = null;
     tookOverRef.current = false;
     if (day !== todayKey) landingTodayRef.current = false;
+    // WINDOWING: pull the destination into the render window, and — if its row
+    // isn't mounted yet (a deep-link, or a Today press from deep in history) —
+    // do a gross scroll to it straight from the OFFSET TABLE. The DOM-based
+    // settle below then refines once the row mounts (onScroll fills the window
+    // as we travel). Reads refs + the pure windowRange only, so scrollToRow
+    // stays stable (goTo/effects depend on its identity).
+    const gg = geomRef.current;
+    const nRows = gg.offsets.length - 1;
+    const idx =
+      day === todayKey ? nRows - 1 : indexByDayRef.current.get(day) ?? -1;
+    if (idx >= 0) {
+      const vp = viewportHRef.current || 800;
+      const at = gg.offsets[Math.max(0, Math.min(idx, nRows - 1))];
+      setRange(windowRange(gg.offsets, day === todayKey ? gg.total : at, vp, 3));
+      if (!row) {
+        const target =
+          day === todayKey ? gg.total + zoneHRef.current : at; // foot vs row top
+        el.scrollTo({ top: Math.max(0, target), behavior: smooth ? "smooth" : "instant" });
+      }
+    }
     // "today" lives at the very foot (its fill zone fills the tail) — land on
     // the bottom so the zone is shown, not the top of today's row (and when the
     // zone stands in for a blank today there's no today row to land on anyway)
@@ -2715,23 +2887,31 @@ function ScheduleFeedBase({
       // INSTANT so the page is simply held put rather than animated. offsetTop is
       // re-read each time, so it tracks the row wherever the reflow moves it.
       const pin = () => {
-        // the reader grabbing the scroll stands the pin down outright — a
-        // small drift is indistinguishable from the start of their swipe,
-        // and writing scrollTop under a live gesture kills its momentum
+        // the reader grabbing the scroll stands the pin down outright — writing
+        // scrollTop under a live gesture kills its momentum, and tookOver (set on
+        // any wheel/touch/pointer) is what tells a real flick from a settle.
         if (tookOverRef.current) return;
         const s = scrollerRef.current;
         const r = rowRefs.current.get(day);
         if (!s || !r) return;
         const drift = Math.abs(s.scrollTop - r.offsetTop);
-        // only a reflow-sized nudge (a row or two) — leave a real flick alone, so
-        // a reader who scrolls the instant they land isn't yanked back
-        if (drift > 1 && drift < 120)
+        // Re-pin to the row's live offsetTop. WINDOWING makes the settle-shift
+        // large: a deep-link first lands on rough estimates, then the rows ABOVE
+        // the target get measured and their reserved heights lock in, sliding the
+        // target by up to a few viewports — far past the old "a row or two"
+        // nudge. tookOver already excludes a real flick, so honour the whole
+        // settle; the cap only guards against a pathological offset blow-up.
+        if (drift > 1 && drift < 6000)
           s.scrollTo({ top: r.offsetTop, behavior: "instant" });
       };
       todaySettleRef.current.push(
         setTimeout(pin, 60),
         setTimeout(pin, 180),
         setTimeout(pin, 340),
+        // the async measure-lock chain (each newly-mounted row bumps a re-render)
+        // keeps settling for a few frames past the land — pin through it
+        setTimeout(pin, 520),
+        setTimeout(pin, 800),
       );
     }
     return true;
@@ -2796,13 +2976,34 @@ function ScheduleFeedBase({
     };
   }, [handleRef, goTo]);
 
+  // re-read the viewport size and, when the COLUMN WIDTH changes (rotate /
+  // resize), rebuild the line-counter to the new column and drop every locked
+  // height — a reserved height computed at the old width is stale. A height-only
+  // change (the keyboard shrinking the viewport) just updates viewportHRef.
+  const lastWidthRef = useRef(0);
+  const rebuildMetrics = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    viewportHRef.current = el.clientHeight;
+    const w = el.clientWidth;
+    if (w > 0 && w !== lastWidthRef.current) {
+      lastWidthRef.current = w;
+      lineCounterRef.current = makeLineCounter(
+        el.querySelector<HTMLElement>(".book-card-prose"),
+      );
+      measuredRef.current.clear();
+      setMeasureVersion((v) => v + 1);
+    }
+  }, []);
+
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
     if (!rows) return;
     // cache the rows' geometry now (this is the layout pass that would
-    // otherwise be forced by the first scroll) and keep it fresh as the
-    // viewport resizes
+    // otherwise be forced by the first scroll), tune the height estimate to the
+    // real column, and keep both fresh as the viewport resizes
     measureRows();
+    rebuildMetrics();
     if (!didInit.current) {
       didInit.current = true;
       scrollToRow(selected);
@@ -2814,39 +3015,77 @@ function ScheduleFeedBase({
     }
     const el = scrollerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(measureRows);
+    const ro = new ResizeObserver(() => {
+      measureRows();
+      rebuildMetrics();
+    });
     ro.observe(el);
     return () => ro.disconnect();
     // `selected` only seeds the very first position
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, scrollToRow, measureRows]);
+  }, [rows, scrollToRow, measureRows, rebuildMetrics]);
 
-  // once the first (windowed) paint is on screen, mount the rest of the history
-  // off the critical path — a frame later, as a low-priority transition. In
-  // recovery we DON'T: mounting the whole book is the suspected crash, and a
-  // reload loop only breaks if the recovered load stays light. The recent-days
-  // window is enough to read and to capture; a later, loop-free reopen returns
-  // to the full book.
-  useEffect(() => {
-    if (fullBook || !rows || recovery) return;
-    const id = requestAnimationFrame(() =>
-      startTransition(() => setFullBook(true)),
-    );
-    return () => cancelAnimationFrame(id);
-  }, [fullBook, rows, recovery]);
-
-  // the rest of the history mounts ABOVE the landing day, growing the scroll
-  // height; with overflow-anchor off that would shove the page off-screen, so
-  // re-pin to the day the book landed on in the same commit (a layout effect,
-  // before paint — no visible jump). spyRef holds that day (the landing wrote
-  // it); `selected` only seeds it. Stands down if the reader has already
-  // grabbed the scroll, so the mount doesn't yank them.
+  // WINDOWING measure-and-lock: after every render, refresh the spy geometry for
+  // the rows now on screen and LOCK each freshly-mounted row's real height into
+  // the table. The estimate only ever governs a row's FIRST sighting; once it's
+  // been rendered its exact height is reserved, so it re-enters/leaves the window
+  // boundary with no shift — which is what lets us keep iOS fling momentum
+  // WITHOUT ever compensating scrollTop mid-gesture (the lesson in
+  // components/calendar/shared.ts). Locking a rendered row never moves the
+  // current view: it changes only the offsets OUTSIDE the window (the top spacer
+  // is a sum up to the window's first row, exclusive; the rest is below the
+  // fold). Measure-once per day — skip days already locked, so a settled scroll
+  // reads no offsets at all.
   useLayoutEffect(() => {
-    if (!fullBook || tookOverRef.current) return;
+    if (!rows) return;
     measureRows();
-    scrollToRow(spyRef.current ?? selected);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullBook]);
+    let bumped = false;
+    for (const [day, eln] of rowRefs.current) {
+      if (measuredRef.current.has(day)) continue;
+      let h = eln.offsetHeight;
+      // a month header ("July 2026") is a <p> sibling rendered just ABOVE the
+      // section, not a child — so it rides with this row's reserved height (the
+      // estimate counts MONTH_HEADER too). Without this the row reserves ~44px
+      // too little in the spacer and the fold jumps that much as it crosses the
+      // window edge.
+      const prev = eln.previousElementSibling as HTMLElement | null;
+      if (prev && prev.tagName === "P") h += prev.offsetHeight;
+      if (h > 0) {
+        measuredRef.current.set(day, h);
+        bumped = true;
+      }
+    }
+    // measure the today zone once so its off-screen spacer reservation is real
+    const zoneEl = scrollerRef.current?.querySelector<HTMLElement>("[data-today-zone]");
+    if (zoneEl) {
+      const zh = zoneEl.offsetHeight;
+      if (zh > 0 && Math.abs(zoneHRef.current - zh) > 1) zoneHRef.current = zh;
+    }
+    if (bumped) setMeasureVersion((v) => v + 1);
+  });
+
+  // a day whose content can change under a locked height (today gains entries,
+  // yesterday's invite fills, the opened probe day) must drop its lock so it
+  // re-measures — history rows never change height once loaded.
+  useEffect(() => {
+    for (const day of [todayKey, yesterdayKey, probe]) {
+      if (day) measuredRef.current.delete(day);
+    }
+    setMeasureVersion((v) => v + 1);
+  }, [all, probe, todayKey, yesterdayKey]);
+
+  // WINDOWING: a deep-link/dive target that wasn't mounted when goTo fired lands
+  // via the offset table first (a gross scroll in scrollToRow), then the window
+  // fills in around it — the instant its real row mounts, re-land for pixel
+  // precision (its DOM offset is now exact) and clear the pending. The reader
+  // grabbing the scroll first (tookOver) stands this down so it can't yank them.
+  useLayoutEffect(() => {
+    const day = pendingRef.current;
+    if (!day || tookOverRef.current) return;
+    if (!rowRefs.current.get(day)) return; // not mounted yet — wait for its render
+    scrollToRow(day);
+    pendingRef.current = null;
+  });
 
   // the moment the reader scrolls/touches the book themselves, stand down any
   // pending land-on-today re-pin (settle timers + the full-book mount) so it
@@ -2865,20 +3104,15 @@ function ScheduleFeedBase({
     };
   }, []);
 
-  // RICH WHEN NEAR THE VIEWPORT — the safe way to keep the design without
-  // reintroducing the crash (see the FLAT-BOOK LAW in globals.css). The whole
-  // book stays flat in the DOM (so the scroll stays cheap and nothing about the
-  // scroll machinery changes), but the day sections within a viewport of the
-  // screen get `data-rich`, which restores their cards' lift shadow and
-  // ink-into-paper blend. Off-screen sections stay flat, so the expensive
-  // per-card paint (blend buffer + isolation + seat blur) is bounded to the
-  // ~dozen on screen at once, NOT the whole book — it can't scale into a crash.
-  // Per-SECTION (each toggles only its own cards), never a whole-book class
-  // toggle — the exact mistake the old 'fidelity' attempt made, which forced a
-  // full-book restyle on every scroll and thrashed. rootMargin one viewport, so
-  // a card is already rich before it scrolls into view. (True DOM windowing —
-  // BACKLOG #12 — is still the fix for genuinely huge books; this is its
-  // lower-risk cousin that buys the look back at real book sizes.)
+  // RICH WHEN NEAR THE VIEWPORT — restores the lift shadow + ink-into-paper
+  // blend on the day sections within a viewport of the screen (see the FLAT-BOOK
+  // LAW in globals.css). With the book now WINDOWED, only ~40 sections exist in
+  // the DOM at all, so this is doubly bounded — but it stays per-SECTION (each
+  // toggles only its own cards), never a whole-book class toggle (the mistake the
+  // old 'fidelity' attempt made — a full-book restyle on every scroll that
+  // thrashed), and off-screen overscan rows stay flat so the rich paint tracks
+  // exactly what's visible. rootMargin one viewport, so a card is already rich
+  // before it scrolls into view.
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -2904,6 +3138,13 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       if (!el) return;
       const top = el.scrollTop;
+      // slide the render window to cover the viewport — FIRST, so even a
+      // programmatic Today glide keeps the rows it flies past painted (never a
+      // blank spacer). Pure index math off the cached offset table; no scrollTop
+      // write, so momentum is untouched.
+      viewportHRef.current = el.clientHeight;
+      const next = rangeAt(top);
+      setRange((r) => (sameRange(r, next) ? r : next));
       if (progTargetRef.current !== null) {
         // a Today scroll is animating to its target — let it run, but don't let
         // the days it passes claim the header (that flashes the Today button)
@@ -2977,9 +3218,13 @@ function ScheduleFeedBase({
   const body = useMemo(
     () =>
       windowRows?.map((row, i) => {
+        // absolute index in the whole book (the window is a slice of it), so the
+        // month header and the tail test read the TRUE neighbours, not the
+        // window's edge — a row at the top of the window still knows its month
+        const abs = effRange.start + i;
         const d = dateFromDayKey(row.day);
         const newMonth =
-          i === 0 || windowRows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
+          abs === 0 || rows![abs - 1].day.slice(0, 7) !== row.day.slice(0, 7);
         const isToday = row.day === todayKey;
         // today always invites; yesterday invites while it's still empty;
         // and the page you opened keeps its composer
@@ -2987,7 +3232,7 @@ function ScheduleFeedBase({
           isToday ||
           row.day === probe ||
           (row.day === yesterdayKey && row.snippets.length === 0);
-        const last = i === windowRows.length - 1;
+        const last = abs === rows!.length - 1;
         // in zone mode today's own section stays invisible until it holds an
         // entry — its date lives in the zone, and the kept card wipes into this
         // (already-mounted) list. Its ScheduleCards stays rendered so the
@@ -3112,7 +3357,7 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
+    [windowRows, windowTail, effRange.start, rows, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
   );
 
   return (
@@ -3142,20 +3387,29 @@ function ScheduleFeedBase({
         style={{ scrollbarWidth: "none" }}
         tabIndex={-1}
       >
-        {/* until the live query returns, `body` is undefined — hold a skeleton
-            so the wait reads as a continuous "settling in", never a blank gap
-            that then pops. Landing on today opens onto the compose zone (the
-            book's foot fills the viewport), so hold that; a deep-link into any
-            other day lands among its entries, so hold the ruled book instead. */}
-        {body ??
-          (selected !== todayKey ? (
-            <LedgerRows />
-          ) : bookEmptyHint ? (
-            // an empty book opens today onto the welcome intro, not the composer
-            <WelcomeSkeleton />
-          ) : (
-            <TodaySkeleton />
-          ))}
+        {/* WINDOWED render: two spacer divs hold the scroll height for the rows
+            NOT in the DOM (top spacer for the history above the window, bottom
+            for the future below it + the today zone when it's off-screen), so
+            only the ~dozen on-screen sections are ever live — the per-card cost
+            stops scaling with the book. See the windowing block above. */}
+        {body ? (
+          <Fragment>
+            <div data-spacer="top" aria-hidden style={{ height: topSpacer }} />
+            {body}
+            <div data-spacer="bot" aria-hidden style={{ height: botSpacer }} />
+          </Fragment>
+        ) : selected !== todayKey ? (
+          // until the live query returns, hold a skeleton so the wait reads as a
+          // continuous "settling in", never a blank gap that then pops. A
+          // deep-link into history lands among entries, so hold the ruled book…
+          <LedgerRows />
+        ) : bookEmptyHint ? (
+          // …an empty book opens today onto the welcome intro, not the composer…
+          <WelcomeSkeleton />
+        ) : (
+          // …and landing on today opens onto the compose zone (the foot).
+          <TodaySkeleton />
+        )}
       </div>
       {/* the foot rule (clips marker) — grey over the days, blue across the
           zone's straight sides, and ceding to the zone's own rounded bottom in
@@ -3242,16 +3496,18 @@ function ScheduleCards({
               data-entry={s.id}
               onClick={() => onOpen(s.id)}
               // THE FLAT-BOOK LAW (full rationale on `.book-card` in
-              // globals.css): the book renders EVERY entry as a live card, so
-              // any PER-CARD paint effect — mix-blend, isolation, a blurred
-              // box-shadow — is paid hundreds of times and scales with the
-              // book, which jetsam-kills iOS on a years-deep book (the "A
-              // problem repeatedly occurred" crash). So this card carries NO
-              // per-card paint: no `isolate`, no ink-multiply, no seat-blur —
-              // its flat paint (lit top edge only) lives in `.book-card`. Don't
-              // add them back here; the lift and the ink-into-paper blend
-              // return only once the render is windowed. pressable-lit: colors
-              // transition, no :active dip — the press answers with the glow.
+              // globals.css): a PER-CARD paint effect — mix-blend, isolation, a
+              // blurred box-shadow — scales with the book, and when the book
+              // rendered every entry that jetsam-killed iOS on a years-deep book
+              // (the "A problem repeatedly occurred" crash). The book is WINDOWED
+              // now (~40 cards live, never the whole book — see ScheduleFeedBase),
+              // so the lift + ink-into-paper blend are back, applied via
+              // `[data-rich]` on near-viewport sections. But keep the BARE card
+              // flat: no `isolate`/ink-multiply/seat-blur here (its flat paint,
+              // lit top edge only, lives in `.book-card`) — windowing is the only
+              // thing bounding the count, so an unconditional per-card effect
+              // reintroduces the crash if windowing ever regresses. pressable-lit:
+              // colors transition, no :active dip — the press answers with the glow.
               className={cn(
                 "book-card pressable-lit block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
                 "hover:bg-paper-raised",
