@@ -682,6 +682,10 @@ function Calendar() {
     let flyerBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
     const willChanged: HTMLElement[] = [];
+    // the tile the CLOSING card lands on — hidden for the flight so only ONE card
+    // is ever on stage (no retract toward a copy already seated), revealed in the
+    // same paint that clears the card in finish()
+    let closeTile: HTMLElement | null = null;
     const entryCard = entryLayerRef.current?.querySelector<HTMLElement>(
       "[data-entry-card]",
     );
@@ -699,6 +703,9 @@ function Calendar() {
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
       outgoing.style.visibility = "hidden";
+      // reveal the landing tile in this same paint — the card (below) is cleared
+      // right after, so the swap card→tile has no one-frame gap
+      if (closeTile) closeTile.style.visibility = "";
       for (const el of Object.values(layers)) {
         if (!el) continue;
         el.style.transform = "";
@@ -820,16 +827,22 @@ function Calendar() {
           // layout — which the shrinking card carries into place. The
           // stand-in wears the tile's exact classes and inner measure,
           // so the landing is pixel-identical to the real tile beneath.
+          // Hide the real tile for the flight so only the shrinking card is on
+          // stage; finish() reveals it in the swap paint.
+          closeTile = tile;
+          tile.style.visibility = "hidden";
           const tileP = tile.querySelector("p");
           if (tileP) {
             standIn = document.createElement("div");
             standIn.appendChild(tileP.cloneNode(true));
             standIn.setAttribute("aria-hidden", "true");
             standIn.setAttribute("data-stand-in", "");
+            // its own GPU layer: it scales+fades every frame, and unpromoted it
+            // repainted the textured card above it each frame
             standIn.style.cssText =
               `position:absolute;left:0;top:0;width:${t.width - 2}px;` +
               "padding:10px;box-sizing:border-box;transform-origin:0 0;" +
-              "pointer-events:none;opacity:0;";
+              "pointer-events:none;opacity:0;will-change:transform,opacity;";
             entryCard.appendChild(standIn);
           }
         }
@@ -913,27 +926,36 @@ function Calendar() {
               standIn.style.transform = `scale(${u}, ${(u * sx) / sy})`;
               standIn.style.opacity = `${Math.min(1, Math.max(0, (0.85 - open) / 0.12))}`;
             }
-            // the card's radius eases to the tile's so the landing swap
-            // has no corner pop
-            entryCard.style.borderRadius = `${6 + 4 * open}px`;
           }
           schedEl.style.opacity = `${1 - open}`;
           if (entryFoot)
             entryFoot.style.opacity = `${Math.min(1, Math.max(0, (open - 0.85) / 0.15))}`;
         };
+        // Corner radius is JUMPED once, never eased per frame: animating
+        // border-radius re-rasterizes the card's whole textured layer every
+        // frame — that was the close's chop. On close, snap to the tile's 6px up
+        // front, then shrink home with static corners for a seamless landing.
+        // (finish() clears it.)
+        if (!deeper) entryCard.style.borderRadius = "6px";
         apply(deeper ? 0 : 1);
         const DUR = 440;
-        const start = performance.now();
         moves.push(
           new Promise<void>((resolve) => {
+            // Seed the clock on the FIRST painted tick, not at setup: a heavy
+            // React commit + first raster can burn 100ms+ before frame one, and a
+            // setup-time clock would have already fast-forwarded the ease through
+            // its first half → "lag, then a jump". Launch two frames out so that
+            // first heavy frame is past before the flight starts.
+            let start: number | null = null;
             const loop = (now: number) => {
+              if (start === null) start = now;
               const k = Math.min(1, (now - start) / DUR);
               const e = 1 - Math.pow(1 - k, 3); // easeOutCubic — a clean open
               apply(deeper ? e : 1 - e);
               if (k < 1) requestAnimationFrame(loop);
               else resolve();
             };
-            requestAnimationFrame(loop);
+            requestAnimationFrame(() => requestAnimationFrame(loop));
           }),
         );
         void Promise.all(moves).then(finish, finish);
@@ -3621,6 +3643,62 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
   );
 }
 
+/**
+ * Scroll a seal button to centre, wait for BOTH the keyboard collapse AND the
+ * smooth-scroll glide to come to rest, THEN fire `onSettled` (the press). The
+ * eye should watch the seal press, so the press must never play while the view
+ * is still moving — and it can't be gated on a fixed timer, which fires mid-
+ * motion on a slow keyboard collapse and presses the seal off-screen. Returns a
+ * canceller (call on unmount / any new submit). Desktop (no visualViewport
+ * shrink, no real scroll) clears both phases in ~3 frames, so it's ~instant.
+ */
+function settleSealIntoView(
+  btn: HTMLElement,
+  onSettled: () => void,
+  maxMs = 1200,
+): () => void {
+  let raf = 0;
+  let cancelled = false;
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  const t0 = performance.now();
+  let lastVh = vv ? vv.height : 0;
+  let vvStable = 0;
+  let scrolled = false;
+  let lastTop = NaN;
+  let topStable = 0;
+  const tick = () => {
+    if (cancelled) return;
+    if (!btn.isConnected) return onSettled();
+    const now = performance.now();
+    if (!scrolled) {
+      // phase 1 — the keyboard is collapsing; wait for the visual viewport's
+      // height to stop shrinking (or a safety fraction of maxMs), THEN glide.
+      const vh = vv ? vv.height : 0;
+      vvStable = Math.abs(vh - lastVh) < 1 ? vvStable + 1 : 0;
+      lastVh = vh;
+      if (vvStable >= 3 || now - t0 > maxMs * 0.55) {
+        btn.scrollIntoView({ block: "center", behavior: "smooth" });
+        scrolled = true;
+      }
+      raf = requestAnimationFrame(tick);
+      return;
+    }
+    // phase 2 — the smooth scroll is gliding the seal to centre; wait for its
+    // top to stop moving (or maxMs), THEN press.
+    const top = btn.getBoundingClientRect().top;
+    topStable =
+      Number.isFinite(lastTop) && Math.abs(top - lastTop) < 0.5 ? topStable + 1 : 0;
+    lastTop = top;
+    if (topStable >= 3 || now - t0 > maxMs) return onSettled();
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  return () => {
+    cancelled = true;
+    if (raf) cancelAnimationFrame(raf);
+  };
+}
+
 /* The today zone: a big "add to today" panel, housing the large pre-stamp wax
    button inside a hairline blue outline. It's always a full viewport tall (its
    own min-h-full, measured against the scroller) — the same size whether today
@@ -3672,6 +3750,9 @@ function TodayZoneFill({
   const [phase, setPhase] = useState<"idle" | "pressing" | "exiting" | "filling">("idle");
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
+  // the live seal-into-view settle watcher (feature: press only once the seal has
+  // scrolled to rest); cancelled on unmount / any new submit
+  const settleCancel = useRef<null | (() => void)>(null);
   const draft = useKeptDraft();
   const router = useRouter();
   // The locked letter's inputs — it shows only on POSITIVE evidence of the
@@ -3703,7 +3784,7 @@ function TodayZoneFill({
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
-  useEffect(() => clearTimers, []);
+  useEffect(() => () => { clearTimers(); settleCancel.current?.(); }, []);
 
   // Tail anchoring. The zone's composition is fixed BY LAYOUT, identical at
   // rest and while writing, so nothing ever has to move: the date sits a fixed
@@ -4415,7 +4496,6 @@ function TodayZoneFill({
 
   // press timeline (sequential): lead (dismiss keyboard + scroll), play the
   // press, hold the settled seal a beat, then the keep animation in order.
-  const LEAD_MS = 380;
   const HOLD_MS = 1450;
   const EXIT_MS = 560;  // sweep step 1: the zone slides off right
   const ENTRY_MS = 560; // sweep step 2: the entry wipes into the schedule
@@ -4460,26 +4540,32 @@ function TodayZoneFill({
         });
     };
     // freeze the words; hold the seal pressed-down through the lead; dismiss the
-    // keyboard and bring the seal fully into view
+    // keyboard and bring the seal fully into view. The press then plays only once
+    // the seal has SETTLED at centre (keyboard collapsed + scroll at rest), so the
+    // eye watches it press — never a fixed timer that fires mid-motion.
     setPhase("pressing");
     setHoldDown(true);
     areaRef.current?.blur();
-    requestAnimationFrame(() =>
-      btnRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }),
-    );
     clearTimers();
+    settleCancel.current?.();
     const at = (ms: number, fn: () => void) => timers.current.push(setTimeout(fn, ms));
-    // release the held press exactly as the lift-off plays — the press
-    // animation continues from the user's press, no un-rotate
-    at(LEAD_MS, () => { setHoldDown(false); setPlayKey((k) => k + 1); navigator.vibrate?.(8); });
-    // sweep — three beats, IN ORDER:
-    at(LEAD_MS + HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
-    at(LEAD_MS + HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); onKept?.(id); }); // 2 entry wipes in; pan up to watch it
-    at(LEAD_MS + HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
-      setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
-      voiceUsed.current = false;
-      releaseTail();
-    });
+    const playAndSweep = () => {
+      settleCancel.current = null;
+      // release the held press exactly as the lift-off plays — the press
+      // animation continues from the user's press, no un-rotate
+      setHoldDown(false); setPlayKey((k) => k + 1); navigator.vibrate?.(8);
+      // sweep — three beats, IN ORDER, from the press (not a fixed lead):
+      at(HOLD_MS, () => setPhase("exiting"));                       // 1 zone slides off right
+      at(HOLD_MS + EXIT_MS, () => { file(); setPhase("filling"); onKept?.(id); }); // 2 entry wipes in; pan up to watch it
+      at(HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
+        setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
+        voiceUsed.current = false;
+        releaseTail();
+      });
+    };
+    const btn = btnRef.current;
+    if (btn) settleCancel.current = settleSealIntoView(btn, playAndSweep);
+    else playAndSweep(); // no seal node — fall back to an immediate press
   };
 
   // the zone's hairline blue outline (wax = recording) — it deepens while
@@ -4597,14 +4683,10 @@ function TodayZoneFill({
               </motion.div>
             )}
           </AnimatePresence>
-          {/* the press glow — light pools under a touch anywhere on the
-              paper and follows the finger; above the wash, under the words.
-              NOT while a letter is on the sheet (the first-ever introduction
-              or the locked letter): a newcomer is reading, scrolling, and
-              finding their feet — light chasing the finger over the words
-              is exactly the distraction those beats can't afford. It
-              returns the moment the letter retires. */}
-          {!((lockedLetter || firstEver) && text.trim().length === 0) && <PressGlow />}
+          {/* The today zone has no press glow: it's a large writing surface, not
+              a pressable tile, and the light-under-finger (plus the old resize
+              bloom) read as button feedback the zone shouldn't give. The seal is
+              the thing you press here; the paper just takes the pen. */}
           {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
               px), so the ruled field and the intro keep the same visual margin
               from a narrow phone up to the wide desk — the ruled paper and the

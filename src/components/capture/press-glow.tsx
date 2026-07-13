@@ -214,10 +214,20 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         // grows the same few pixels
         // the bloom TARGET declares its own `transition` for transform (the
         // glow never writes that property — the surface may be transitioning
-        // border-color or others of its own)
-        const r = bloomEl.getBoundingClientRect();
+        // border-color or others of its own).
+        // Measure the HOST (the card), never bloomEl: a "parent" wrapper can be
+        // far taller than the card it carries, which both STARVED the scale (a
+        // bigger diagonal shrinks `eff`) and floated the card upward (origin at
+        // the tall wrapper's centre, well above the card). Pin the origin to the
+        // host's centre so a tall wrapper blooms about the card itself.
+        const r = host.getBoundingClientRect();
         const diag = Math.max(120, Math.hypot(r.width, r.height));
         const eff = Math.min(1.06, 1 + (rec.grow - 1) * (525 / diag));
+        if (bloomEl !== host) {
+          const b = bloomEl.getBoundingClientRect();
+          bloomEl.style.transformOrigin =
+            `${r.left + r.width / 2 - b.left}px ${r.top + r.height / 2 - b.top}px`;
+        }
         bloomEl.style.transform = `scale(${eff})`;
       } else {
         bloomEl.style.transform = "";
@@ -349,6 +359,16 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       focused = false;
       scale();
     };
+    // iOS keeps a field focused when a tap lands on nothing focusable, so
+    // `focusout` never fires and a focus-held bloom stays lit after the hand
+    // left. A capture-phase document listener releases it on any tap outside the
+    // host. (Capture so it runs even if the target stops propagation.)
+    const onDocDown = (e: PointerEvent) => {
+      if (!focused) return;
+      if (e.target instanceof Node && host.contains(e.target)) return;
+      focused = false;
+      scale();
+    };
     // a press the browser never resolves (the app backgrounded mid-press)
     // must not strand the light or the bloom — going hidden rests everything
     const onHidden = () => {
@@ -369,6 +389,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     host.addEventListener("pointerleave", onUp);
     host.addEventListener("focusin", onFocusIn);
     host.addEventListener("focusout", onFocusOut);
+    document.addEventListener("pointerdown", onDocDown, true);
     document.addEventListener("visibilitychange", onHidden);
     return () => {
       cancelAnimationFrame(raf);
@@ -388,6 +409,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       host.removeEventListener("pointerleave", onUp);
       host.removeEventListener("focusin", onFocusIn);
       host.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("pointerdown", onDocDown, true);
       document.removeEventListener("visibilitychange", onHidden);
       // the bloom target is OUTSIDE this component (the host or its parent):
       // unmounting mid-bloom (the entry view re-keys to another entry) must
