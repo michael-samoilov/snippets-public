@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useScrollEdges } from "@/components/ui/scroll-terminus";
 import { cn } from "@/lib/utils";
 
-/* A/B: the entry card's hand-rolled foot fade vs shadcn's scroll-fade-b.
-   Scroll each card — the fade only lives while more words lie below, and
-   clears at the last line. Dev-only harness. */
+/* A/B: the entry card's hand-rolled foot fade vs shadcn's scroll-fade.
+   Scroll each card — the fade only lives while more words lie beyond an
+   edge, and clears when that edge is in view. The "top fade" toggle swaps
+   the shadcn cards between scroll-fade-b (foot only) and scroll-fade (both
+   edges). Dev-only harness. */
 
 const TEXT = `On the bus home at around 6PM, a man got on with a cello case nearly as tall as he was and looked for a spot a few seats away from me.
 
@@ -51,18 +53,18 @@ function Frame({
   );
 }
 
-const proseCls =
-  "voice-prose whitespace-pre-wrap leading-[1.5] text-[0.95rem]";
+const proseCls = "voice-prose whitespace-pre-wrap leading-[1.5] text-[0.95rem]";
 const scrollerCls =
   "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere] [scrollbar-width:none]";
 
 /* A — the current hand-rolled foot fade (overlay + paper band + hairline),
-   driven by the useScrollEdges hook. Lifted from EntryBody. */
+   driven by the useScrollEdges hook. Lifted from EntryBody. Bottom only:
+   the real entry card has never faded its head. */
 function DiyCard() {
   const ref = useRef<HTMLDivElement>(null);
   const edges = useScrollEdges(ref, [], false);
   return (
-    <Frame label="a · diy (current)" note="overlay + hairline · js">
+    <Frame label="a · diy (current)" note="foot only · js">
       <div ref={ref} className={scrollerCls}>
         <p className={proseCls}>{TEXT}</p>
       </div>
@@ -84,17 +86,18 @@ function DiyCard() {
   );
 }
 
-/* B/C — shadcn scroll-fade-b: a scroll-driven mask on the scroller itself.
-   No JS, no overlay, no hairline. Optionally sized to match the DIY 2rem. */
-function ShadcnCard({ sized }: { sized?: boolean }) {
+/* B/C — shadcn: a scroll-driven mask on the scroller itself. No JS, no
+   overlay, no hairline. `top` swaps scroll-fade-b (foot) for scroll-fade
+   (both edges); `sized` pins the fade to 2rem to match the DIY. */
+function ShadcnCard({ sized, top }: { sized?: boolean; top?: boolean }) {
+  const edge = top ? "scroll-fade" : "scroll-fade-b";
+  const size = sized ? (top ? "scroll-fade-8" : "scroll-fade-b-8") : "";
   return (
     <Frame
-      label={sized ? "c · scroll-fade-b-8" : "b · scroll-fade-b"}
-      note={sized ? "mask · 2rem (matches diy)" : "mask · default 12%"}
+      label={sized ? "c · sized 2rem" : "b · default 12%"}
+      note={cn(edge, size)}
     >
-      <div
-        className={cn(scrollerCls, "scroll-fade-b", sized && "scroll-fade-b-8")}
-      >
+      <div className={cn(scrollerCls, edge, size)}>
         <p className={proseCls}>{TEXT}</p>
       </div>
       <div className="h-9 shrink-0" />
@@ -104,6 +107,7 @@ function ShadcnCard({ sized }: { sized?: boolean }) {
 
 export default function ScrollFadeLab() {
   const [supported, setSupported] = useState<boolean | null>(null);
+  const [top, setTop] = useState(false);
   useEffect(() => {
     setSupported(
       typeof CSS !== "undefined" &&
@@ -111,26 +115,40 @@ export default function ScrollFadeLab() {
     );
   }, []);
   return (
-    <main
-      className="min-h-dvh px-5 py-10"
-      style={{ background: "var(--desk)" }}
-    >
+    <main className="min-h-dvh px-5 py-10" style={{ background: "var(--desk)" }}>
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
-        <header className="flex flex-col gap-1">
-          <h1 className="voice-display text-xl text-ink">scroll fade — a/b</h1>
-          <p className="voice-data text-ink-faint">
-            scroll each card. scroll-driven animations{" "}
-            {supported === null
-              ? "…"
-              : supported
-                ? "supported here"
-                : "NOT supported here → shadcn fades degrade to none"}
-          </p>
+        <header className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h1 className="voice-display text-xl text-ink">scroll fade — a/b</h1>
+            <p className="voice-data text-ink-faint">
+              scroll each card. scroll-driven animations{" "}
+              {supported === null
+                ? "…"
+                : supported
+                  ? "supported here"
+                  : "NOT supported here → shadcn fades degrade to none"}
+            </p>
+          </div>
+          {/* the top-fade toggle: swaps the shadcn cards between foot-only
+              and both-edges. The DIY card stays foot-only for reference. */}
+          <button
+            type="button"
+            onClick={() => setTop((t) => !t)}
+            aria-pressed={top}
+            className="voice-label pressable w-fit rounded-full border px-3.5 py-1.5"
+            style={{
+              borderColor: "var(--card-seat-border)",
+              background: top ? "var(--wax-faint)" : "var(--paper)",
+              color: "var(--ink)",
+            }}
+          >
+            top fade — {top ? "on" : "off"}
+          </button>
         </header>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <DiyCard />
-          <ShadcnCard />
-          <ShadcnCard sized />
+          <ShadcnCard top={top} />
+          <ShadcnCard sized top={top} />
         </div>
       </div>
     </main>
