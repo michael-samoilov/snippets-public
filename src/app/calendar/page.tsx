@@ -3328,7 +3328,19 @@ function ScheduleFeedBase({
                   })()}
                 </div>
                 <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
-                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} still={!active} />
+                  <ScheduleCards
+                    snippets={row.snippets}
+                    day={row.day}
+                    onOpen={onOpen}
+                    // `still` disables the cards' layout FLIP. WINDOWING makes
+                    // every scroll a re-render (the whole reason `still` exists),
+                    // and mounting a burst of layout-tracked motion.li on each
+                    // reshuffle is the ~66ms fling hitch. HISTORY days never
+                    // reorder, so they never need layout — keep it live only for
+                    // today/probe (where a keep reshuffles the stack) and only
+                    // while active (a dive still suppresses it everywhere).
+                    still={!active || (row.day !== todayKey && row.day !== probe)}
+                  />
                   {showComposer && (
                     <BackfillCapture
                       key={row.day}
@@ -3442,8 +3454,15 @@ function ScheduleFeedBase({
  * A day's entries, each a paper tile in the same material as the year
  * view's minis — text only, no clutter; everything else lives one
  * altitude deeper. Pressing a tile dives the camera into it.
+ *
+ * MEMOIZED (see the export below): the WINDOW reshuffles as the reader flings,
+ * re-rendering the ~40-section feed — but a section whose props didn't change
+ * (the ~35 that merely rode along in the new window) must NOT re-run its cards.
+ * `snippets` is a stable reference while its day's data is unchanged, so the memo
+ * hits for every retained day and only the handful of newly-entered sections do
+ * real work. This is what makes a reshuffle cheap enough to land in one frame.
  */
-function ScheduleCards({
+function ScheduleCardsBase({
   snippets,
   day,
   onOpen,
@@ -3550,6 +3569,7 @@ function ScheduleCards({
     </ul>
   );
 }
+const ScheduleCards = memo(ScheduleCardsBase);
 const ScheduleFeed = memo(
   ScheduleFeedBase,
   // `selected` only seeds the book's first position (the spy drives it
