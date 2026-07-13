@@ -131,5 +131,12 @@ export interface YearFeedHandle {
 
 export function autosizeArea(el: HTMLTextAreaElement) {
   el.style.height = "auto";
-  el.style.height = `${el.scrollHeight}px`;
+  // scrollHeight is content+padding only; on a border-box field a border would
+  // otherwise be swallowed (the box would stay content+padding tall). Add it
+  // back so a bordered composer measures the SAME height as the settled card it
+  // becomes — no 2px settle jump. Borderless fields (today zone) add nothing.
+  const cs = getComputedStyle(el);
+  const border =
+    parseFloat(cs.borderTopWidth || "0") + parseFloat(cs.borderBottomWidth || "0");
+  el.style.height = `${el.scrollHeight + border}px`;
 }

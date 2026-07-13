@@ -6,6 +6,7 @@ import {
   memo,
   startTransition,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -505,6 +506,14 @@ function Calendar() {
         : deletingSnippet,
     [all, focusedId, deletingSnippet],
   );
+  // The entry view's content is DEFERRED: on a dive the tap sets focusedId, but
+  // rendering the opened entry re-runs EntryView's scroll-edge layout effect,
+  // and that single layout read forces a full-document reflow — O(book) because
+  // the flat book carries a sticky date header per day (measured: it was the
+  // WHOLE of the tap→dive lag, ~45ms→225ms across 100→1200 entries). Deferring
+  // it lets the urgent commit (the zoom itself) land cheaply so the dive starts
+  // at once; the real words render a beat later, still fading in from open≈0.2.
+  const deferredFocused = useDeferredValue(focused);
 
   const todayStamp = dayKey();
   // one Date for the whole day: the feeds memoize their heavy windows
@@ -522,6 +531,16 @@ function Calendar() {
   const yearLayerRef = useRef<HTMLDivElement>(null);
   const scheduleLayerRef = useRef<HTMLDivElement>(null);
   const entryLayerRef = useRef<HTMLDivElement>(null);
+  // geometry captured in the TAP handler (clean layout, before any setState) so
+  // the dive's zoom effect never has to read a rect after the commit — a single
+  // post-commit read forces an O(book) reflow (sticky headers). See openEntry.
+  const zoomGeom = useRef<{
+    id: string;
+    stage: DOMRect;
+    tile: DOMRect;
+    card: DOMRect;
+    cell: DOMRect | null; // the day's margin-date cell (close only)
+  } | null>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   const yearFeedRef = useRef<YearFeedHandle | null>(null);
   const scheduleFeedRef = useRef<ScheduleFeedHandle | null>(null);
@@ -752,9 +771,20 @@ function Calendar() {
       return;
     }
 
-    const stageRect = stage.getBoundingClientRect();
     const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
+    // on an entry dive (open OR close), use the boxes measured on clean layout
+    // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
+    // post-commit — that read is what forced the O(book) reflow. Other paths read
+    // live.
+    const entryDiveCache =
+      zoomGeom.current?.id === zoom.anchor &&
+      (zoom.to === "entry" || zoom.from === "entry")
+        ? zoomGeom.current
+        : null;
+    const stageRect = entryDiveCache
+      ? entryDiveCache.stage
+      : stage.getBoundingClientRect();
     const moves: Promise<unknown>[] = [];
 
     // the painted box of an element's text, not its line box — block
@@ -807,8 +837,10 @@ function Calendar() {
         `[data-entry="${CSS.escape(zoom.anchor)}"]`,
       );
       if (entryCard && entryContent && tile) {
-        const t = tile.getBoundingClientRect();
-        const c = entryCard.getBoundingClientRect();
+        // clean-layout geometry (see entryDiveCache) for BOTH open and close, so
+        // the pose is written without a post-commit rect read — no O(book) reflow.
+        const t = entryDiveCache ? entryDiveCache.tile : tile.getBoundingClientRect();
+        const c = entryDiveCache ? entryDiveCache.card : entryCard.getBoundingClientRect();
         // the card's box mapped onto the tile's exact box (origin 0,0)
         const ox = t.left - c.left;
         const oy = t.top - c.top;
@@ -864,11 +896,11 @@ function Calendar() {
           // "Sun 21" exactly, with its real type and colour
           const cell = dateEl?.closest<HTMLElement>(".book-margin-date") ?? dateEl;
           if (day && dateEl && cell) {
-            // entry⇄schedule no longer freezes the dates (see diveFreeze), so the
-            // cell is already in its true sticky slot — measure it directly. (The
-            // schedule still fades in from nothing, which is why we lift the date
-            // into a full-opacity stand-in on top rather than let it fade up.)
-            const c = cell.getBoundingClientRect();
+            // the cell sits in its true sticky slot (dates no longer freeze — see
+            // diveFreeze); prefer the clean-layout rect measured in
+            // descendFromEntry so cloning it forces no reflow. (We still clone the
+            // live element for its type/colour; only its box comes from the cache.)
+            const c = entryDiveCache?.cell ?? cell.getBoundingClientRect();
             const clone = cell.cloneNode(true) as HTMLElement;
             clone.style.position = "absolute";
             clone.style.margin = "0";
@@ -1291,7 +1323,37 @@ function Calendar() {
   }, []);
 
   const descendFromEntry = useCallback(() => {
-    runZoom("entry", "schedule", focusedIdRef.current ?? "");
+    const id = focusedIdRef.current ?? "";
+    // Pre-measure the rise's shared-element boxes NOW — the entry view is still
+    // up and the layout is clean. Reading them inside the zoom effect (post-
+    // commit) forces an O(book) reflow (sticky headers); it was the whole of the
+    // back→rise lag (~85ms→395ms across 200→1200 entries).
+    {
+      const tileEl = scheduleLayerRef.current?.querySelector<HTMLElement>(
+        `[data-entry="${CSS.escape(id)}"]`,
+      );
+      const stageEl = stageRef.current;
+      const cardEl = entryLayerRef.current?.querySelector<HTMLElement>(
+        "[data-entry-card]",
+      );
+      const day = tileEl?.closest<HTMLElement>("[data-day]")?.dataset.day;
+      const cellEl = day
+        ? scheduleLayerRef.current
+            ?.querySelector<HTMLElement>(`[data-flydate="${CSS.escape(day)}"]`)
+            ?.closest<HTMLElement>(".book-margin-date")
+        : null;
+      zoomGeom.current =
+        tileEl && stageEl && cardEl
+          ? {
+              id,
+              stage: stageEl.getBoundingClientRect(),
+              tile: tileEl.getBoundingClientRect(),
+              card: cardEl.getBoundingClientRect(),
+              cell: cellEl ? cellEl.getBoundingClientRect() : null,
+            }
+          : null;
+    }
+    runZoom("entry", "schedule", id);
   }, [runZoom]);
 
   useEffect(() => {
@@ -1365,6 +1427,28 @@ function Calendar() {
   /** pressing a card dives the camera one altitude further, into it */
   const openEntry = useCallback(
     (id: string) => {
+      // Measure the shared-element boxes NOW, while the layout is still clean —
+      // before any setState dirties it. Reading them here costs nothing; reading
+      // them in the zoom effect (post-commit) forces an O(book) reflow.
+      {
+        const tileEl = scheduleLayerRef.current?.querySelector<HTMLElement>(
+          `[data-entry="${CSS.escape(id)}"]`,
+        );
+        const stageEl = stageRef.current;
+        const cardEl = entryLayerRef.current?.querySelector<HTMLElement>(
+          "[data-entry-card]",
+        );
+        zoomGeom.current =
+          tileEl && stageEl && cardEl
+            ? {
+                id,
+                stage: stageEl.getBoundingClientRect(),
+                tile: tileEl.getBoundingClientRect(),
+                card: cardEl.getBoundingClientRect(),
+                cell: null,
+              }
+            : null;
+      }
       navigator.vibrate?.(6);
       setFocusedId(id);
       // stand the header on the entry's own day so the month + year in
@@ -2295,7 +2379,7 @@ function Calendar() {
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
         >
-          {(view === "entry" || warm >= 2) && <EntryView snippet={focused} onLetGo={letGo} />}
+          {(view === "entry" || warm >= 2) && <EntryView snippet={deferredFocused} onLetGo={letGo} />}
           {/* the leave animation is driven by the zoom effect on the card box */}
         </div>
         {/* the filtered book: while a query stands, the stage shows the
@@ -3551,7 +3635,12 @@ function FlowBackfillCapture({
               // textarea scrollable that's the textarea, not the whole book
               // sailing off into other days. overscroll-contain stops the
               // internal scroll from chaining out at its edges.
-              "book-card-prose voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+              // a TRANSPARENT hairline border so the field's box model matches
+              // the settled preview card's (book-card p-2.5 + 1px border): same
+              // outer height and same 11px text inset, so the composer→card
+              // hand-off neither jumps 2px taller nor nudges the words sideways.
+              // autosizeArea adds the border back into the measured height.
+              "book-card-prose voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -3891,6 +3980,16 @@ function TodayZoneFill({
         : null;
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  // A callback ref that only ever LATCHES onto a live seal, never clears on
+  // unmount. The zone lives in an <AnimatePresence key={gen}>: after a keep the
+  // old generation exits and a fresh one enters, and the exiting button's ref
+  // cleanup (btnRef ← null) fires AFTER the new button mounted — clobbering it,
+  // so every keep past the first submitted with btnRef.current === null and fell
+  // to the no-settle path (the seal-into-view scroll ran exactly once per load).
+  // Ignoring the null keeps btnRef pinned to the newest real seal.
+  const setBtnRef = useCallback((el: HTMLButtonElement | null) => {
+    if (el) btnRef.current = el;
+  }, []);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
   useEffect(() => () => { clearTimers(); settleCancel.current?.(); }, []);
@@ -4973,7 +5072,7 @@ function TodayZoneFill({
               button cross-slides (left↔right carousel) on the swap. press it to
               submit (plays the corner·swell keep) */}
           <button
-            ref={btnRef}
+            ref={setBtnRef}
             type="button"
             aria-label={
               transcribing
