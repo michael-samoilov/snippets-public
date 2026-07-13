@@ -3076,7 +3076,7 @@ function ScheduleFeedBase({
                   })()}
                 </div>
                 <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
-                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} still={!active} />
+                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
                   {showComposer && (
                     <BackfillCapture
                       key={row.day}
@@ -3124,7 +3124,13 @@ function ScheduleFeedBase({
           </Fragment>
         );
       }),
-    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, active],
+    // NB: `active` is deliberately NOT a dependency. It flips on every dive
+    // (the feed goes inactive under the zoom), but it's used only by the
+    // container (onScroll, data-dive-freeze) — never inside this map. Listing it
+    // rebuilt the ENTIRE flat book's card tree on each dive: an O(book)
+    // reconcile + reflow that was the bulk of the tap→dive input lag (~0.5s on a
+    // 1000-entry book, scaling linearly). The card DOM depends only on content.
+    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry],
   );
 
   return (
@@ -3186,15 +3192,10 @@ function ScheduleCards({
   snippets,
   day,
   onOpen,
-  still,
 }: {
   snippets: Snippet[];
   day: string;
   onOpen: (id: string) => void;
-  // the feed is mid-transition (a dive in/out): suppress the cards' FLIP so a
-  // scroll-and-rerender doesn't animate them across the great distance they
-  // moved — they should simply be in their final place when the page arrives
-  still: boolean;
 }) {
   // entries already on the page at mount don't animate — only changes do
   const [presentAtMount] = useState(() => new Set(snippets.map((s) => s.id)));
@@ -3223,6 +3224,16 @@ function ScheduleCards({
     if (draft && snippets.some((s) => s.id === draft.id)) draftStore?.clear(day);
   }, [draft, snippets, day, draftStore]);
   const items = draftPending ? [...snippets, draft] : snippets;
+  // FLIP is gated on THIS key, not on every render. A dive in/out re-renders the
+  // whole book (the feed goes inactive) and scrolls it — but the order is
+  // unchanged, so the key holds and Framer skips its layout pass entirely. That
+  // matters enormously: measuring a flat book's every card on each dive was an
+  // O(book) synchronous reflow (~0.5s of input lag on a 1000-entry book before
+  // the dive even began, scaling linearly with size). Only a real reshuffle
+  // (a keep, a delete) changes the key, and only then do the cards FLIP — which
+  // also replaces the old `still` flag: an unchanged key means no slide, so a
+  // dive's scroll never animates the stack across the distance it jumped.
+  const orderKey = items.map((s) => s.id).join(",");
 
   return (
     <ul className="flex flex-col gap-1">
@@ -3238,9 +3249,14 @@ function ScheduleCards({
             key={s.id}
             // the freshly-kept card wipes in via clip only — no FLIP position
             // float; cards already present keep their layout spring as the stack
-            // reshuffles around them — but never during a dive (`still`), when a
-            // scroll-driven position change would otherwise animate as a slide
-            layout={isDraft || still ? false : "position"}
+            // reshuffles around them. layoutDependency={orderKey} is the linchpin:
+            // Framer only MEASURES (and only then can animate) when the key
+            // changes, so a dive re-render never triggers the O(book) measurement
+            // pass — and an unchanged key across a dive's scroll means no slide,
+            // which is what the old `still` flag hand-rolled at the cost of that
+            // whole-book reflow.
+            layout={isDraft ? false : "position"}
+            layoutDependency={orderKey}
             initial={presentAtMount.has(s.id) || morphDraft ? false : sweepBirth.initial}
             animate={sweepBirth.animate}
             // a deleted card is gone at once (its leave animation plays on the
@@ -3494,13 +3510,16 @@ function FlowBackfillCapture({
               too, with no doubling back. The empty ghost fades on the right via
               the mask; the filled face fades in as words arrive. */}
           <span aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className="book-card absolute inset-0 rounded-[6px] border border-rule-faint bg-paper transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised" />
+            <span className="book-card absolute inset-0 rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised" />
           </span>
           <span
             aria-hidden="true"
             className={cn(
-              "book-card pointer-events-none absolute inset-0 rounded-[6px] border bg-paper transition-[opacity,background-color] duration-150",
-              "border-rule-faint group-focus-within:border-rule group-hover:bg-paper-raised",
+              // the filled face wears the EXACT card recipe the settled preview
+              // card does — same border token (card-seat-border), same fill — so
+              // the composer→card hand-off has no border-colour step, no seam
+              "book-card pointer-events-none absolute inset-0 rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper transition-[opacity,background-color] duration-150",
+              "group-focus-within:border-rule group-hover:bg-paper-raised",
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />
@@ -3707,12 +3726,15 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
 function settleSealIntoView(
   btn: HTMLElement,
   onSettled: () => void,
+  // how to frame the seal once the view is at rest. Defaults to centring the
+  // seal; the today zone passes its own (scroll to the natural foot) so the
+  // seal lands exactly where it sits when you're fully scrolled down — no more.
+  bringIntoView?: () => void,
   maxMs = 1400,
 ): () => void {
   let raf = 0;
   let cancelled = false;
   const vv = typeof window !== "undefined" ? window.visualViewport : null;
-  const sc = btn.closest<HTMLElement>("[data-book-scroller]");
   const t0 = performance.now();
   let phase: 1 | 2 = 1;
   let lastVh = vv ? vv.height : 0;
@@ -3734,21 +3756,6 @@ function settleSealIntoView(
   const kbWasUp = !!vv && vv.height < window.innerHeight - 100;
   let minVh = vv ? vv.height : 0; // smallest height seen = keyboard fully up
   let sawRetract = !kbWasUp; // nothing to wait for if no keyboard was showing
-  // comfortably inside the VISIBLE region (a margin clear of both ends)? Measured
-  // against the visual viewport ∩ the scroller — not the scroller box alone,
-  // because the scroller runs full-height UNDER iOS's bottom browser chrome, so a
-  // seal parked at the scroll end reads as "in the scroller" while it's actually
-  // clipped by that chrome. The visual viewport excludes it.
-  const fullyIn = () => {
-    const b = btn.getBoundingClientRect();
-    const vvTop = vv ? vv.offsetTop : 0;
-    const vvBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-    const s = sc?.getBoundingClientRect();
-    const top = Math.max(vvTop, s?.top ?? vvTop);
-    const bottom = Math.min(vvBottom, s?.bottom ?? vvBottom);
-    const m = 20;
-    return b.top >= top + m && b.bottom <= bottom - m;
-  };
   const tick = () => {
     if (cancelled) return;
     if (!btn.isConnected) return onSettled();
@@ -3766,15 +3773,22 @@ function settleSealIntoView(
         Number.isFinite(lastTop) && Math.abs(top - lastTop) < 0.5 ? topStable + 1 : 0;
       lastTop = top;
       if ((sawRetract && vvStable >= 3 && topStable >= 3) || now - t0 > maxMs) {
-        // the view is at rest — reposition only if the seal isn't already in view
-        if (!fullyIn()) {
-          btn.scrollIntoView({ block: "center", behavior: "smooth" });
-          phase = 2;
-          lastTop = NaN;
-          topStable = 0;
-        } else {
-          return onSettled(); // already fully visible — press now
-        }
+        // The view is at rest — now frame the seal before the press. Do NOT gate
+        // this on a "fully in view?" test: on iOS the bottom browser chrome clips
+        // a seal parked at the scroll end while the visual viewport STILL reports
+        // it as visible, so a fullyIn() check green-lights a clipped seal and the
+        // press plays half-off-screen (this exact bug hid here three times). The
+        // reposition is caller-supplied and self-limiting — the today zone scrolls
+        // to its natural foot (a no-op when already there), which is where the
+        // seal rests clear of the chrome when fully scrolled down. Phase 2 waits
+        // for the glide.
+        (
+          bringIntoView ??
+          (() => btn.scrollIntoView({ block: "center", behavior: "smooth" }))
+        )();
+        phase = 2;
+        lastTop = NaN;
+        topStable = 0;
       }
       raf = requestAnimationFrame(tick);
       return;
@@ -3848,15 +3862,6 @@ function TodayZoneFill({
   // the live seal-into-view settle watcher (feature: press only once the seal has
   // scrolled to rest); cancelled on unmount / any new submit
   const settleCancel = useRef<null | (() => void)>(null);
-  // temporary bottom room added to the scroller during a submit, so a seal parked
-  // at the scroll end can lift clear of the browser chrome; restored on reset
-  const padSc = useRef<{ el: HTMLElement; prev: string } | null>(null);
-  const clearPad = () => {
-    if (padSc.current) {
-      padSc.current.el.style.paddingBottom = padSc.current.prev;
-      padSc.current = null;
-    }
-  };
   const draft = useKeptDraft();
   const router = useRouter();
   // The locked letter's inputs — it shows only on POSITIVE evidence of the
@@ -3888,7 +3893,7 @@ function TodayZoneFill({
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
-  useEffect(() => () => { clearTimers(); settleCancel.current?.(); clearPad(); }, []);
+  useEffect(() => () => { clearTimers(); settleCancel.current?.(); }, []);
 
   // Tail anchoring. The zone's composition is fixed BY LAYOUT, identical at
   // rest and while writing, so nothing ever has to move: the date sits a fixed
@@ -4664,20 +4669,21 @@ function TodayZoneFill({
       at(HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
         setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
         voiceUsed.current = false;
-        clearPad();
         releaseTail();
       });
     };
     const btn = btnRef.current;
-    // give a seal at the scroll end room to lift fully into view (see
-    // settleSealIntoView: it repositions only when the seal is actually clipped).
-    // Restored when the zone resets.
+    // frame the seal by scrolling to the book's NATURAL FOOT — the today zone's
+    // bottom at the scroller's bottom, exactly the state you're in when fully
+    // scrolled down, where the seal sits clear of the bottom browser chrome by
+    // its own base padding. Not centred (that over-scrolls) and no bottom spacer
+    // (that would inflate scrollHeight and carry the seal off the top). A no-op
+    // when already at the foot.
     const sc = btn?.closest<HTMLElement>("[data-book-scroller]") ?? null;
-    if (sc) {
-      padSc.current = { el: sc, prev: sc.style.paddingBottom };
-      sc.style.paddingBottom = `calc(${sc.style.paddingBottom || "0px"} + 55vh)`;
-    }
-    if (btn) settleCancel.current = settleSealIntoView(btn, playAndSweep);
+    const toFoot = sc
+      ? () => sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" })
+      : undefined;
+    if (btn) settleCancel.current = settleSealIntoView(btn, playAndSweep, toFoot);
     else playAndSweep(); // no seal node — fall back to an immediate press
   };
 
