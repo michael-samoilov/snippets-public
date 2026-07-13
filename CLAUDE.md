@@ -66,26 +66,18 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   (the registry domain is blocked in some sandboxes; they're ours now
   and intentionally restyled — overlay tint, input focus, etc.). Edit
   them directly; don't re-fetch over local changes.
-- **The book is WINDOWED; cards must still default FLAT.**
-  `src/app/calendar/page.tsx`'s schedule feed used to mount a live card for
-  the reader's *whole* history, so any PER-CARD paint effect (`mix-blend`,
-  `isolation: isolate`, a blurred `box-shadow`) was paid hundreds of times
-  and scaled with the book — which jetsam-kills iOS on a years-deep book
+- **The book renders every entry (not windowed) → cards must stay FLAT.**
+  `src/app/calendar/page.tsx`'s schedule feed mounts a live card for the
+  reader's whole history, so any PER-CARD paint effect (`mix-blend`,
+  `isolation: isolate`, a blurred `box-shadow`) is paid hundreds of times
+  and scales with the book — which jetsam-kills iOS on a years-deep book
   ("A problem repeatedly occurred"; scroll-momentum stalls are the milder
-  form of the same memory pressure). It's now virtualized: `ScheduleFeedBase`
-  renders only the on-screen day-sections plus overscan (~40 cards, never the
-  whole book), geometry in `src/lib/book-window.ts` (pure, fling-tested), with
-  spacer divs holding the scroll height for the rest. That bounds the live
-  card count, so the lift + ink-into-paper blend are back — gated behind
-  `[data-rich]` on near-viewport sections. The invariant that keeps iOS
-  momentum alive: **never write scrollTop to compensate a height change during
-  a scroll** (the lesson in `src/components/calendar/shared.ts`) — so
-  un-rendered rows reserve a height estimated from their text (canvas
-  line-count matching the real column) and locked to the exact measured height
-  once seen; corrections only ever land at rest. The `.book-card` DEFAULT stays
-  flat (windowing is the only thing bounding the count), so do NOT move
-  blend/isolation/blurred-shadow onto the bare card. The full "FLAT-BOOK LAW"
-  lives on `.book-card` in `globals.css`.
+  form of the same memory pressure). Book cards therefore carry only
+  O(1)-in-book-size paint (flat fill, hairline, non-blurred top highlight).
+  Do NOT add per-card blend/isolation/blurred-shadow, and do NOT "restore"
+  the seat-shadow lift — it was tried and crashes. The full "FLAT-BOOK LAW"
+  lives on `.book-card` in `globals.css`; the permanent fix that buys the
+  rich look back is windowing the render (BACKLOG.md #12).
 - **Shaders:** `src/vendor/paper-shaders/` is the vendored PaperTexture
   chain from paper-design/shaders (Apache-2.0, LICENSE alongside) — no
   npm dependency, same rule as the shadcn sources. Used only by the
