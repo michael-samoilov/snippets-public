@@ -35,17 +35,28 @@ export function useKeepSequence(beats: KeepBeats, reduce = false) {
   }, []);
   useEffect(() => clearAll, [clearAll]);
 
-  const start = useCallback(() => {
-    clearAll();
-    setSealKey((k) => k + 1);
-    setPhase("pressing");
-    const press = reduce ? 0 : beats.pressMs;
-    const card = reduce ? 0 : beats.cardMs;
-    const compose = reduce ? 0 : beats.composeMs;
-    timers.current.push(setTimeout(() => setPhase("carding"), press));
-    timers.current.push(setTimeout(() => setPhase("composing"), press + card));
-    timers.current.push(setTimeout(() => setPhase("idle"), press + card + compose));
-  }, [beats, reduce, clearAll]);
+  // `onCard` fires at the CARDING beat (after the seal press has played), so the
+  // caller can file the entry THEN — keeping the order strict (press → card),
+  // not the entry appearing before the press.
+  const start = useCallback(
+    (onCard?: () => void) => {
+      clearAll();
+      setSealKey((k) => k + 1);
+      setPhase("pressing");
+      const press = reduce ? 0 : beats.pressMs;
+      const card = reduce ? 0 : beats.cardMs;
+      const compose = reduce ? 0 : beats.composeMs;
+      timers.current.push(
+        setTimeout(() => {
+          setPhase("carding");
+          onCard?.();
+        }, press),
+      );
+      timers.current.push(setTimeout(() => setPhase("composing"), press + card));
+      timers.current.push(setTimeout(() => setPhase("idle"), press + card + compose));
+    },
+    [beats, reduce, clearAll],
+  );
 
   return { phase, sealKey, start };
 }

@@ -944,8 +944,9 @@ function Calendar() {
             // Seed the clock on the FIRST painted tick, not at setup: a heavy
             // React commit + first raster can burn 100ms+ before frame one, and a
             // setup-time clock would have already fast-forwarded the ease through
-            // its first half → "lag, then a jump". Launch two frames out so that
-            // first heavy frame is past before the flight starts.
+            // its first half → "lag, then a jump". Seeding fixes that WITHOUT
+            // delaying the launch — so fire on the very next frame (a second
+            // deferral frame just reads as input lag, which is worse).
             let start: number | null = null;
             const loop = (now: number) => {
               if (start === null) start = now;
@@ -955,7 +956,7 @@ function Calendar() {
               if (k < 1) requestAnimationFrame(loop);
               else resolve();
             };
-            requestAnimationFrame(() => requestAnimationFrame(loop));
+            requestAnimationFrame(loop);
           }),
         );
         void Promise.all(moves).then(finish, finish);
@@ -3345,6 +3346,10 @@ function FlowBackfillCapture({
   const reduce = useReducedMotion() ?? false;
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const sealBtnRef = useRef<HTMLButtonElement>(null);
+  // the live seal-into-view settle watcher (press only once the seal is at rest)
+  const settleCancel = useRef<null | (() => void)>(null);
+  useEffect(() => () => settleCancel.current?.(), []);
   const seq = useKeepSequence(KEEP_BEATS, reduce);
   const draftStore = useKeptDraft();
   // the thumb-down dip (the seal's `pressed` feedback before release)
@@ -3370,45 +3375,57 @@ function FlowBackfillCapture({
     // the id is minted NOW (creation order), even for a backfill whose
     // capturedAt sits in the past — so the entry sorts to the foot of its day
     const id = ulid();
-    // render the kept card optimistically in its final slot AT ONCE, so the
-    // typed words stay put instead of blinking out until the live query lands;
-    // the real row (same id) takes over seamlessly
-    draftStore?.set({
-      id,
-      text: trimmed,
-      kind: null,
-      tags: [],
-      capturedAt,
-      day,
-      source: "typed",
-      favorite: 0,
-      updatedAt: capturedAt,
-    });
-    void addSnippet({ id, text: trimmed, source: "typed", capturedAt })
-      .catch((error: unknown) => {
-        // the keep did not take — withdraw the optimistic card, put the
-        // words back, say why. Never a silent loss.
-        draftStore?.clear(day);
-        setText(trimmed);
-        if (areaRef.current) {
-          areaRef.current.value = trimmed;
-          autosizeArea(areaRef.current);
-        }
-        toast(
-          error instanceof StorageWriteError && error.full
-            ? copy.data.storageFull
-            : copy.data.keepFailed,
-        );
+    // FILE — deferred to the CARDING beat (after the seal has pressed) so the
+    // order is strict: press → the entry settles in, not the entry appearing
+    // before the press. The optimistic draft still lands the card in its final
+    // slot at once (no blink) — just timed to the press, not the tap.
+    const file = () => {
+      draftStore?.set({
+        id, text: trimmed, kind: null, tags: [],
+        capturedAt, day, source: "typed", favorite: 0, updatedAt: capturedAt,
       });
-    setText("");
-    if (areaRef.current) {
-      areaRef.current.value = "";
-      autosizeArea(areaRef.current);
-    }
+      void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).catch(
+        (error: unknown) => {
+          // the keep did not take — withdraw the optimistic card, put the words
+          // back, say why. Never a silent loss.
+          draftStore?.clear(day);
+          setText(trimmed);
+          if (areaRef.current) {
+            areaRef.current.value = trimmed;
+            autosizeArea(areaRef.current);
+          }
+          toast(
+            error instanceof StorageWriteError && error.full
+              ? copy.data.storageFull
+              : copy.data.keepFailed,
+          );
+        },
+      );
+    };
     navigator.vibrate?.(8);
-    // reduced motion: the card is already filed; skip the press theatre
-    if (reduce) return;
-    seq.start();
+    // reduced motion: file at once, no press theatre
+    if (reduce) {
+      file();
+      setText("");
+      if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
+      return;
+    }
+    // Sequence: (1) hold the seal PRESSED while it scrolls fully into view and the
+    // keyboard finishes exiting; (2) press it; (3) it fades; (4) the entry settles
+    // in; (5) the empty composer wipes back. Steps 2-5 are the keep sequence.
+    setPressedDown(true);
+    areaRef.current?.blur();
+    settleCancel.current?.();
+    const play = () => {
+      settleCancel.current = null;
+      setPressedDown(false);
+      setText("");
+      if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
+      seq.start(file); // press → (carding: file) → composing
+    };
+    const btn = sealBtnRef.current;
+    if (btn) settleCancel.current = settleSealIntoView(btn, play);
+    else play();
   };
 
   const hasText = text.trim().length > 0;
@@ -3502,6 +3519,7 @@ function FlowBackfillCapture({
       {showSeal && (
         <div className="mt-2 flex justify-end pr-px">
           <button
+            ref={sealBtnRef}
             type="button"
             aria-label={copy.keep.label}
             onClick={keep}
@@ -3644,48 +3662,73 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
 }
 
 /**
- * Scroll a seal button to centre, wait for BOTH the keyboard collapse AND the
- * smooth-scroll glide to come to rest, THEN fire `onSettled` (the press). The
- * eye should watch the seal press, so the press must never play while the view
- * is still moving — and it can't be gated on a fixed timer, which fires mid-
- * motion on a slow keyboard collapse and presses the seal off-screen. Returns a
- * canceller (call on unmount / any new submit). Desktop (no visualViewport
- * shrink, no real scroll) clears both phases in ~3 frames, so it's ~instant.
+ * Bring a seal button fully into view and fire `onSettled` (the press) only once
+ * everything is at REST — so the eye watches the seal press, never a press that
+ * plays mid-motion or off-screen. Three phases, strictly ordered:
+ *   1. Wait for the VIEW to come fully to rest: the keyboard collapse
+ *      (visualViewport height stops changing) AND any camera move it triggers
+ *      (the seal's own top stops moving — the today zone re-anchors itself as the
+ *      keyboard exits, which would otherwise place us wrongly if we measured mid-
+ *      flight). Only when both are still do we look at where the seal landed.
+ *   2. If the seal isn't comfortably inside its scroller (clipped by the scroll
+ *      end, or covered), glide it to centre. If it's already fully in view, skip
+ *      straight to the press — no gratuitous re-centre.
+ *   3. Wait for that glide to seat, THEN press.
+ * Returns a canceller (call on unmount / any new submit). Desktop (no keyboard,
+ * no scroll) rests in ~3 frames, so it's ~instant.
  */
 function settleSealIntoView(
   btn: HTMLElement,
   onSettled: () => void,
-  maxMs = 1200,
+  maxMs = 1400,
 ): () => void {
   let raf = 0;
   let cancelled = false;
   const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  const sc = btn.closest<HTMLElement>("[data-book-scroller]");
   const t0 = performance.now();
+  let phase: 1 | 2 = 1;
   let lastVh = vv ? vv.height : 0;
   let vvStable = 0;
-  let scrolled = false;
   let lastTop = NaN;
   let topStable = 0;
+  const sealTop = () => btn.getBoundingClientRect().top;
+  // comfortably inside the scroller (a margin clear of both ends)?
+  const fullyIn = () => {
+    if (!sc) return true;
+    const b = btn.getBoundingClientRect();
+    const s = sc.getBoundingClientRect();
+    const m = 20;
+    return b.top >= s.top + m && b.bottom <= s.bottom - m;
+  };
   const tick = () => {
     if (cancelled) return;
     if (!btn.isConnected) return onSettled();
     const now = performance.now();
-    if (!scrolled) {
-      // phase 1 — the keyboard is collapsing; wait for the visual viewport's
-      // height to stop shrinking (or a safety fraction of maxMs), THEN glide.
+    if (phase === 1) {
       const vh = vv ? vv.height : 0;
       vvStable = Math.abs(vh - lastVh) < 1 ? vvStable + 1 : 0;
       lastVh = vh;
-      if (vvStable >= 3 || now - t0 > maxMs * 0.55) {
-        btn.scrollIntoView({ block: "center", behavior: "smooth" });
-        scrolled = true;
+      const top = sealTop();
+      topStable =
+        Number.isFinite(lastTop) && Math.abs(top - lastTop) < 0.5 ? topStable + 1 : 0;
+      lastTop = top;
+      if ((vvStable >= 3 && topStable >= 3) || now - t0 > maxMs * 0.6) {
+        // the view is at rest — reposition only if the seal isn't already in view
+        if (!fullyIn()) {
+          btn.scrollIntoView({ block: "center", behavior: "smooth" });
+          phase = 2;
+          lastTop = NaN;
+          topStable = 0;
+        } else {
+          return onSettled(); // already fully visible — press now
+        }
       }
       raf = requestAnimationFrame(tick);
       return;
     }
-    // phase 2 — the smooth scroll is gliding the seal to centre; wait for its
-    // top to stop moving (or maxMs), THEN press.
-    const top = btn.getBoundingClientRect().top;
+    // phase 2 — wait for the centring glide to seat, THEN press
+    const top = sealTop();
     topStable =
       Number.isFinite(lastTop) && Math.abs(top - lastTop) < 0.5 ? topStable + 1 : 0;
     lastTop = top;
