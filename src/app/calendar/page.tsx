@@ -3359,12 +3359,10 @@ function FlowBackfillCapture({
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = day === dayKey(yesterday);
 
-  // refocus once the composer has wiped back, to keep typing
-  useEffect(() => {
-    if (seq.phase !== "composing") return;
-    const t = setTimeout(() => areaRef.current?.focus(), Math.max(80, KEEP_BEATS.composeMs * 0.7));
-    return () => clearTimeout(t);
-  }, [seq.phase]);
+  // NO auto-refocus after a keep: the submit blurs the field (dismissing the
+  // keyboard), and re-focusing here would both re-summon the keyboard and re-
+  // bloom the composer after the user has moved on. It stays de-focused; a fresh
+  // tap starts the next entry.
 
   const keep = () => {
     const trimmed = text.trim();
@@ -3419,9 +3417,15 @@ function FlowBackfillCapture({
     const play = () => {
       settleCancel.current = null;
       setPressedDown(false);
-      setText("");
-      if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
-      seq.start(file); // press → (carding: file) → composing
+      // the words STAY in the composer card through the seal press (composerOpen
+      // includes `pressing`); they hand off to the settled card at the CARDING
+      // beat — after the seal animation — not before. So the card never blinks
+      // out mid-press.
+      seq.start(() => {
+        file();
+        setText("");
+        if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
+      });
     };
     const btn = sealBtnRef.current;
     if (btn) settleCancel.current = settleSealIntoView(btn, play);
@@ -3430,7 +3434,11 @@ function FlowBackfillCapture({
 
   const hasText = text.trim().length > 0;
   const pressing = seq.phase === "pressing" || seq.phase === "carding";
-  const composerOpen = seq.phase === "idle" || seq.phase === "composing";
+  // the composer card stays through the PRESS with its words (so the card never
+  // blinks out mid-seal-animation); it hands off to the settled card at CARDING,
+  // where this goes false and the just-filed card takes its slot.
+  const composerOpen =
+    seq.phase === "idle" || seq.phase === "composing" || seq.phase === "pressing";
   // the seal shows at rest (typed) and through the press; it's gone once the
   // empty composer wipes back in. Reduced motion files instantly, no theatre.
   const showSeal = hasText || (pressing && !reduce);
@@ -3693,13 +3701,20 @@ function settleSealIntoView(
   let lastTop = NaN;
   let topStable = 0;
   const sealTop = () => btn.getBoundingClientRect().top;
-  // comfortably inside the scroller (a margin clear of both ends)?
+  // comfortably inside the VISIBLE region (a margin clear of both ends)? Measured
+  // against the visual viewport ∩ the scroller — not the scroller box alone,
+  // because the scroller runs full-height UNDER iOS's bottom browser chrome, so a
+  // seal parked at the scroll end reads as "in the scroller" while it's actually
+  // clipped by that chrome. The visual viewport excludes it.
   const fullyIn = () => {
-    if (!sc) return true;
     const b = btn.getBoundingClientRect();
-    const s = sc.getBoundingClientRect();
+    const vvTop = vv ? vv.offsetTop : 0;
+    const vvBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const s = sc?.getBoundingClientRect();
+    const top = Math.max(vvTop, s?.top ?? vvTop);
+    const bottom = Math.min(vvBottom, s?.bottom ?? vvBottom);
     const m = 20;
-    return b.top >= s.top + m && b.bottom <= s.bottom - m;
+    return b.top >= top + m && b.bottom <= bottom - m;
   };
   const tick = () => {
     if (cancelled) return;
@@ -3796,6 +3811,15 @@ function TodayZoneFill({
   // the live seal-into-view settle watcher (feature: press only once the seal has
   // scrolled to rest); cancelled on unmount / any new submit
   const settleCancel = useRef<null | (() => void)>(null);
+  // temporary bottom room added to the scroller during a submit, so a seal parked
+  // at the scroll end can lift clear of the browser chrome; restored on reset
+  const padSc = useRef<{ el: HTMLElement; prev: string } | null>(null);
+  const clearPad = () => {
+    if (padSc.current) {
+      padSc.current.el.style.paddingBottom = padSc.current.prev;
+      padSc.current = null;
+    }
+  };
   const draft = useKeptDraft();
   const router = useRouter();
   // The locked letter's inputs — it shows only on POSITIVE evidence of the
@@ -3827,7 +3851,7 @@ function TodayZoneFill({
   const btnRef = useRef<HTMLButtonElement>(null);
   const d = dateFromDayKey(day);
   const frozen = phase !== "idle";
-  useEffect(() => () => { clearTimers(); settleCancel.current?.(); }, []);
+  useEffect(() => () => { clearTimers(); settleCancel.current?.(); clearPad(); }, []);
 
   // Tail anchoring. The zone's composition is fixed BY LAYOUT, identical at
   // rest and while writing, so nothing ever has to move: the date sits a fixed
@@ -4603,10 +4627,19 @@ function TodayZoneFill({
       at(HOLD_MS + EXIT_MS + ENTRY_MS, () => {                       // 3 fresh zone fades in
         setText(""); setPhase("idle"); setGen((g) => g + 1); keeping.current = false;
         voiceUsed.current = false;
+        clearPad();
         releaseTail();
       });
     };
     const btn = btnRef.current;
+    // give a seal at the scroll end room to lift fully into view (see
+    // settleSealIntoView: it repositions only when the seal is actually clipped).
+    // Restored when the zone resets.
+    const sc = btn?.closest<HTMLElement>("[data-book-scroller]") ?? null;
+    if (sc) {
+      padSc.current = { el: sc, prev: sc.style.paddingBottom };
+      sc.style.paddingBottom = `calc(${sc.style.paddingBottom || "0px"} + 55vh)`;
+    }
     if (btn) settleCancel.current = settleSealIntoView(btn, playAndSweep);
     else playAndSweep(); // no seal node — fall back to an immediate press
   };
