@@ -740,12 +740,16 @@ function Calendar() {
   const pick = useCallback(
     (key: string) => {
       liveDayRef.current = key;
-      setSelected(key);
       navigator.vibrate?.(6);
       if (urlTimer.current) clearTimeout(urlTimer.current);
       pushUrl(`${pathname}?d=${key}`);
       scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
       runZoom("month", "schedule", key);
+      // `selected` only drives the outgoing month grid's highlight and a
+      // windowRows recompute — neither is needed for the dive's first frame.
+      // Defer it past the camera launch. (Proven safe: the blank-card bug that
+      // once appeared alongside this was the stale-placeholder bug, not this.)
+      requestAnimationFrame(() => setSelected(key));
     },
     [pathname, runZoom],
   );
@@ -908,6 +912,32 @@ function Calendar() {
     }
 
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
+
+    // Band the book BEFORE the first geometry read below (stageRect). A
+    // month→schedule commit leaves the book's layout dirty; the first
+    // getBoundingClientRect flushes it. If we band FIRST (cv:hidden for every
+    // off-stage section, established here as writes), that flush renders only the
+    // ~1.5-viewport on-stage band — not the whole freshly-committed book, then a
+    // second relayout to hide it (the old order paid stageRect's full flush AND
+    // markOnStage's re-flush back to back). markOnStage keeps the on-screen band
+    // rendered and sends the rest to cv:hidden, ESTABLISHING that state before
+    // Motion applies the scale below — so no whole-book render and no
+    // under-transform relayout is ever forced. finish() clears it. Marks from
+    // cached geometry at the current / destination scroll (pick() has already
+    // scrolled the page behind a month→schedule dive).
+    if (zoom.from === "schedule" || zoom.to === "schedule") {
+      scheduleFeedRef.current?.markOnStage();
+      // Descent: pick() set scrollTop against the book's --cis placeholders,
+      // which are stale whenever the webfonts swapped after the book measured.
+      // markOnStage just rendered the band at real heights, so re-land on the
+      // tapped row's TRUE top now — before the flight measures or anything
+      // paints. The landing is then exact by construction, not a pin-timer
+      // correction the reader watches the dates skip through. (Ascent has no
+      // target row; a plain goTo keeps its own settle pins.)
+      if (zoom.to === "schedule")
+        scheduleFeedRef.current?.relandOnRow(zoom.anchor);
+    }
+
     // on an entry dive (open OR close), use the boxes measured on clean layout
     // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
     // post-commit — that read is what forced the O(book) reflow. Other paths read
@@ -1181,31 +1211,6 @@ function Calendar() {
       return;
     }
 
-    // hold the arriving layer dark until the animation's first tick owns it
-    incoming.style.opacity = "0";
-
-    // a camera-scale climb that involves the book TRANSFORMS the schedule layer,
-    // and content-visibility:auto re-evaluates every section under a transformed
-    // ancestor each frame (which balloons the climb to seconds). markOnStage
-    // keeps only an on-screen band rendered and sends the rest to cv:hidden,
-    // ESTABLISHING that state now — before Motion applies the scale below — so no
-    // whole-book render (cv:visible) and no under-transform relayout is ever
-    // forced. finish() clears it. Mark from cached geometry at the current /
-    // destination scroll (pick() has already scrolled the page behind a
-    // month→schedule dive).
-    if (zoom.from === "schedule" || zoom.to === "schedule") {
-      scheduleFeedRef.current?.markOnStage();
-      // Descent: pick() set scrollTop against the book's --cis placeholders,
-      // which are stale whenever the webfonts swapped after the book measured.
-      // markOnStage just rendered the band at real heights, so re-land on the
-      // tapped row's TRUE top now — before the flight measures or anything
-      // paints. The landing is then exact by construction, not a pin-timer
-      // correction the reader watches the dates skip through. (Ascent has no
-      // target row; a plain goTo keeps its own settle pins.)
-      if (zoom.to === "schedule")
-        scheduleFeedRef.current?.relandOnRow(zoom.anchor);
-    }
-
     // where the chosen slot sits. Year⇄month is a literal camera move
     // (the mini becomes the canvas), so it uses the true slot ratio;
     // month⇄book keeps the grammar with a tamed factor — the literal
@@ -1224,6 +1229,9 @@ function Calendar() {
       : "50% 30%";
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
+
+    // hold the arriving layer dark until the animation's first tick owns it
+    incoming.style.opacity = "0";
 
     // diving: the departing view blows up past its slot; pulling back: it
     // shrinks toward it — and the arriving view does the inverse.
@@ -3203,11 +3211,13 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       const row = rowRefs.current.get(day);
       if (!el || !row) return;
+      let corrected = false;
       for (let i = 0; i < 3; i++) {
         const drift = row.offsetTop - el.scrollTop;
         if (Math.abs(drift) <= 1) break;
         el.scrollTop = row.offsetTop;
         markOnStage(); // band shifted with the scroll — re-flip cv states + flush
+        corrected = true;
       }
       // Heal the band's placeholders to their rendered heights and refresh the
       // cached geometry against the landed truth: a band section reverting to
@@ -3216,7 +3226,13 @@ function ScheduleFeedBase({
       // late-rendering section. measureRows writes --cis = clientHeight (a no-op
       // for still-skipped sections, the real height for the rendered band) and
       // rebuilds rowGeomRef; the ResizeObserver it would wake is climb-guarded.
-      measureRows();
+      // Only needed when the reland actually CORRECTED a drift — now that fonts
+      // re-measure the whole book up front (see remeasurePlaceholders), the
+      // landing is usually exact on the first check, so skip the O(book) sweep
+      // off the dive's critical path. (Proven safe: the blank-card bug that once
+      // appeared alongside this cut was the stale-placeholder bug, since fixed
+      // unconditionally in 32ba372 — not this.)
+      if (corrected) measureRows();
     },
     [markOnStage, measureRows],
   );
