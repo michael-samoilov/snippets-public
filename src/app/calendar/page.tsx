@@ -3199,6 +3199,16 @@ function ScheduleFeedBase({
   // generous ±1.5-viewport band keeps a dormant section from being revealed as
   // the layer scales during the move.
   const onStageRef = useRef<Set<HTMLElement>>(new Set());
+  // Device A/B: skip the O(book) content-visibility flip during climbs (see
+  // markOnStage). Read once at mount; owner sets localStorage 'noclimb'='1'.
+  const noClimbRef = useRef(false);
+  useEffect(() => {
+    try {
+      noClimbRef.current = localStorage.getItem("noclimb") === "1";
+    } catch {
+      /* private mode / SSR guard */
+    }
+  }, []);
   const markOnStage = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -3214,7 +3224,17 @@ function ScheduleFeedBase({
     // that renders anything is the offsetHeight below, over the on-stage band
     // alone. (Flipping cv here, un-transformed, is also what keeps the move off
     // the ~5s under-transform intrinsic-size thrash — see the offsetHeight note.)
-    el.setAttribute("data-climbing", "");
+    // DEVICE A/B (default off): with the scaled layer now GPU-promoted
+    // (will-change:transform on the zoom layers), a compositor transform may no
+    // longer trigger the per-frame content-visibility:auto re-evaluation this
+    // flip exists to prevent — headless shows no thrash and slightly SMOOTHER
+    // gaps without it, and cv:auto already bounds rendered content to the
+    // viewport. If that holds on iOS (the only judge that matters — this branch
+    // is named for an iOS jetsam crash headless can't reproduce), the whole
+    // O(book) climb machinery is unnecessary and the descent's setup/teardown
+    // become O(1). Gated so the owner can A/B on-device without risking the
+    // default: localStorage.setItem('noclimb','1') + reload to try it.
+    if (!noClimbRef.current) el.setAttribute("data-climbing", "");
     const top = el.scrollTop;
     const band = el.clientHeight * 1.5;
     const lo = top - band;
