@@ -3715,6 +3715,100 @@ function ScheduleFeedBase({
     return () => cancelAnimationFrame(raf);
   }, [fullBook, measureRows]);
 
+  // Re-measure EVERY placeholder against its real height. The initial measure
+  // above runs the instant the book mounts — often BEFORE the display:swap
+  // webfonts settle. When a webfont then swaps, every rendered card grows a few
+  // px per line, but each OFF-SCREEN section keeps its now-too-short --cis; as
+  // the reader flings up into that history the sections cross skipped→rendered
+  // and jump to their real height, shoving the content below them down. iOS has
+  // no scroll anchoring and the heal can't write scrollTop mid-fling (it kills
+  // momentum), so nothing absorbs it — the view "skips back" under the reader.
+  // The cure is accurate placeholders BEFORE they render: re-measure once the
+  // fonts are ready (and on a width change, which reflows the cards). It must
+  // lift data-lazy so the skipped sections lay out for real — an O(book) paint —
+  // so it runs ONLY when the book is quiet (never under a live fling) and it
+  // ANCHORS: the growth of sections above the viewport is added back to
+  // scrollTop in the same frame, so what the reader sees never moves.
+  const remeasurePlaceholders = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el || !el.hasAttribute("data-lazy") || climbingRef.current) return;
+    const st = el.scrollTop;
+    let anchor: HTMLElement | null = null;
+    for (const g of rowGeomRef.current) {
+      if (g.bottom > st) {
+        anchor = rowRefs.current.get(g.day) ?? null;
+        break;
+      }
+    }
+    const anchorBefore = anchor ? anchor.offsetTop : 0;
+    el.removeAttribute("data-lazy"); // render the skipped sections for real
+    requestAnimationFrame(() => {
+      const s = scrollerRef.current;
+      if (!s) return;
+      // a dive or a fling can begin in the ~16ms between the idle check and this
+      // frame. If a climb started, restore data-lazy and bail WITHOUT measuring —
+      // running measureRows/leaving data-lazy off under the zoom's transform is
+      // the multi-second under-transform stall this book guards against.
+      if (climbingRef.current) {
+        s.setAttribute("data-lazy", "");
+        return;
+      }
+      measureRows(); // --cis now equals each section's true (post-swap) height
+      // pin the reader: add back the growth of everything above the anchor —
+      // but only if still quiet; a fling that just started keeps its momentum
+      // (the placeholders are healed either way, so it can't skip again).
+      if (anchor && performance.now() - lastScrollTsRef.current > 200)
+        s.scrollTop = st + (anchor.offsetTop - anchorBefore);
+      s.setAttribute("data-lazy", "");
+    });
+  }, [measureRows]);
+  // run the re-measure only when the book is quiet — lifting data-lazy is an
+  // O(book) paint that must never land mid-fling
+  const remeasureWhenIdle = useCallback(() => {
+    let tries = 0;
+    const attempt = () => {
+      if (!scrollerRef.current) return;
+      if (performance.now() - lastScrollTsRef.current < 250) {
+        if (tries++ < 60) setTimeout(attempt, 250);
+        return;
+      }
+      remeasurePlaceholders();
+    };
+    attempt();
+  }, [remeasurePlaceholders]);
+  // trigger 1: the webfonts have settled — the common case the skip came from
+  useEffect(() => {
+    if (!fullBook || typeof document === "undefined" || !document.fonts) return;
+    // fonts already loaded when the book measured (cached — the repeat-visit
+    // case) → the placeholders are already post-swap; skip the redundant
+    // O(book) re-measure. Only a load that measured on the fallback font needs it.
+    if (document.fonts.status === "loaded") return;
+    let cancelled = false;
+    document.fonts.ready.then(() => {
+      if (!cancelled) remeasureWhenIdle();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fullBook, remeasureWhenIdle]);
+  // trigger 2: the scroller's WIDTH changed (rotation, split-view) — text
+  // reflows, so every card height (and its placeholder) is now stale
+  useEffect(() => {
+    if (!fullBook) return;
+    const el = scrollerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let lastW = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (w !== lastW) {
+        lastW = w;
+        remeasureWhenIdle();
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fullBook, remeasureWhenIdle]);
+
   // the moment the reader scrolls/touches the book themselves, stand down any
   // pending land-on-today re-pin (settle timers + the full-book mount) so it
   // can't reset them to the foot mid-scroll
