@@ -618,7 +618,14 @@ function Calendar() {
     id: string;
     stage: DOMRect;
     tile: DOMRect;
-    card: DOMRect;
+    // null on a COLD open: before the first entry is opened, EntryView is
+    // mounted with a null (placeholder) snippet, so the card measured at tap
+    // time is a ~57px stub — far shorter than the real card. Caching it made
+    // the first open's morph compute osy = tileH/57 ≈ 2.5 and balloon the card
+    // to full-length before relaxing (the "first-open overshoot"). When null,
+    // the zoom effect reads the card's REAL box live (content has committed by
+    // then). Warm opens keep the cheap cached box — they don't overshoot.
+    card: DOMRect | null;
     cell: DOMRect | null; // the day's margin-date cell (close only)
   } | null>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
@@ -637,11 +644,17 @@ function Calendar() {
   const viewRef = useRef(view);
   const selectedRef = useRef(selected);
   const focusedIdRef = useRef(focusedId);
+  // the ACTUAL mounted snippet (null → EntryView shows the placeholder stub) —
+  // the true "is the card real" signal for the cold-open cache (see openEntry).
+  // focusedId alone is never reset, so it stays truthy after a delete-then-open
+  // while `focused` correctly goes null.
+  const focusedRef = useRef(focused);
   const visibleMonthRef = useRef(visibleMonth);
   useEffect(() => {
     viewRef.current = view;
     selectedRef.current = selected;
     focusedIdRef.current = focusedId;
+    focusedRef.current = focused;
     visibleMonthRef.current = visibleMonth;
   });
   // The day the book is currently on, written SYNCHRONOUSLY (unlike `selected`,
@@ -979,7 +992,11 @@ function Calendar() {
         // clean-layout geometry (see entryDiveCache) for BOTH open and close, so
         // the pose is written without a post-commit rect read — no O(book) reflow.
         const t = entryDiveCache ? entryDiveCache.tile : tile.getBoundingClientRect();
-        const c = entryDiveCache ? entryDiveCache.card : entryCard.getBoundingClientRect();
+        // entryDiveCache.card is null on a cold open (its cached box was the
+        // null-snippet stub) — read the card's REAL box live then. The real
+        // content has committed by the time this effect runs, so the box is
+        // correct and the morph maps tile→card without ballooning.
+        const c = entryDiveCache?.card ?? entryCard.getBoundingClientRect();
         // the card's box mapped onto the tile's exact box (origin 0,0)
         const ox = t.left - c.left;
         const oy = t.top - c.top;
@@ -1685,13 +1702,21 @@ function Calendar() {
         const cardEl = entryLayerRef.current?.querySelector<HTMLElement>(
           "[data-entry-card]",
         );
+        // The mounted card is a real, correctly-sized box only if EntryView is
+        // showing a real snippet right now. `focused` (not focusedId, which is
+        // never reset) is that truth: it's null on a cold open AND after a
+        // delete-then-open, both of which mount the ~57px placeholder stub.
+        // Caching that stub made the first morph balloon the card to full-length
+        // (osy = tileH/57 ≈ 2.5); null instead → the effect reads the real card
+        // box live. Warm opens keep the cheap cached box (they don't overshoot).
+        const cardValid = focusedRef.current != null;
         zoomGeom.current =
           tileEl && stageEl && cardEl
             ? {
                 id,
                 stage: stageEl.getBoundingClientRect(),
                 tile: tileEl.getBoundingClientRect(),
-                card: cardEl.getBoundingClientRect(),
+                card: cardValid ? cardEl.getBoundingClientRect() : null,
                 cell: null,
               }
             : null;
