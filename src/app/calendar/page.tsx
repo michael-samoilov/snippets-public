@@ -2773,6 +2773,176 @@ const LOCK_DEBUG: number | null = (() => {
 })();
 
 /**
+ * One day's section in the book: its margin date + entry stack (+ the opened
+ * page's composer). MEMOIZED so that opening a page — a `probe` change — no
+ * longer re-renders the whole flat book. The row map used to rebuild all ~1200
+ * sections' subtrees on every dive (each running two date-fns format() calls
+ * and creating fresh JSX): an O(book) reconcile that was the ~175ms the
+ * month→schedule descent began LATER than the ascent (which renders a 12-cell
+ * grid). Now the map only recomputes cheap per-row flags and hands them here;
+ * every row whose props are unchanged bails, so a probe change re-renders just
+ * the one day whose composer toggled. All props are primitives or refs stable
+ * across a dive (snippet arrays are stable per day — see dayGroups; today,
+ * onOpen, rowRef, scrollToNewEntry are memoized), so the shallow compare holds.
+ * A keep/delete changes that day's snippet-array identity and re-renders it, as
+ * before. rowRef is passed (not a pre-bound ref) so a bailed row never mints a
+ * new ref closure — the node, and its heal listener, stay put.
+ */
+const BookRow = memo(function BookRow({
+  day,
+  snippets,
+  newMonth,
+  isToday,
+  showComposer,
+  last,
+  windowTail,
+  hideToday,
+  bookEmpty,
+  today,
+  todayKey,
+  todayJustKept,
+  onOpen,
+  scrollToNewEntry,
+  rowRef,
+}: {
+  day: string;
+  snippets: Snippet[];
+  newMonth: boolean;
+  isToday: boolean;
+  showComposer: boolean;
+  last: boolean;
+  windowTail: boolean;
+  hideToday: boolean;
+  bookEmpty: boolean;
+  today: Date;
+  todayKey: string;
+  todayJustKept: boolean;
+  onOpen: (id: string) => void;
+  scrollToNewEntry: (id: string) => void;
+  rowRef: (day: string) => (el: HTMLElement | null) => void;
+}) {
+  const d = dateFromDayKey(day);
+  const pageRow = (
+    <section
+      ref={rowRef(day)}
+      data-day={day}
+      aria-label={friendlyDay(day)}
+      className={cn(
+        "grid grid-cols-[2.1rem_1fr] gap-x-2",
+        // every day rules off from the one above. Today's empty section
+        // collapses to nothing but KEEPS the rule (once the book holds
+        // anything) — so a hairline still marks where the prior days end
+        // and today's zone begins; only the first-ever, empty book has none.
+        (!hideToday || !bookEmpty) && "border-t border-rule-faint",
+      )}
+    >
+      {/* the date stands in the margin and holds its ground
+          while its day's entries scroll past. Empty today drops the
+          padding too, so its section collapses to the bare rule and
+          the zone below fills the viewport right up to it. */}
+      <div className={cn(
+        "book-margin-date sticky top-0 self-start text-center",
+        // today's section cedes its bottom padding to the zone below
+        // (the zone owns the whole 26px gap — see TodayZoneFill), so
+        // the full breath is visible when the book rests at its foot
+        !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"),
+      )}>
+        {!hideToday && (() => {
+          const dateInner = (
+            // py-[3.5px] sizes the block to exactly a single-line
+            // card's height (42.5px: its 35.4px of text + 7.1px), so
+            // the date reads centre-aligned beside a one-line entry —
+            // and a single-line day has zero sticky travel, killing
+            // the tiny header-crawl while scrolling past it
+            <div className="py-[3.5px]">
+              <span
+                className={cn(
+                  "voice-label block text-[0.62rem] leading-tight",
+                  isToday ? "text-wax" : "text-ink-faint",
+                )}
+              >
+                {format(d, "EEE")}
+              </span>
+              <span
+                data-flydate={day}
+                className={cn(
+                  "voice-display block text-[1.15rem] leading-tight tabular-nums",
+                  isToday && "text-wax",
+                )}
+              >
+                {format(d, "d")}
+              </span>
+            </div>
+          );
+          // today's date sticky-header populates as the first entry
+          // arrives — wipe it in from the left to lead the kept card,
+          // but ONLY on a fresh keep (todayJustKept), never on a page
+          // refresh; fast (the first fifth of the sweep) so date+card
+          // read as one sweep across the row
+          return isToday ? (
+            <motion.div
+              initial={todayJustKept ? { opacity: 0, clipPath: "inset(-50% 100% -50% -10%)" } : false}
+              animate={{ opacity: 1, clipPath: "inset(-50% -10% -50% -10%)" }}
+              transition={{ duration: 0.1, ease: "easeInOut" }}
+            >
+              {dateInner}
+            </motion.div>
+          ) : (
+            dateInner
+          );
+        })()}
+      </div>
+      <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
+        <ScheduleCards snippets={snippets} day={day} onOpen={onOpen} />
+        {showComposer && (
+          <BackfillCapture
+            key={day}
+            day={day}
+            follows={snippets.length > 0}
+          />
+        )}
+      </div>
+    </section>
+  );
+  return (
+    <>
+      {newMonth && !hideToday && (
+        <p
+          className={cn(
+            "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
+            isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
+          )}
+        >
+          {format(d, "MMMM yyyy")}
+        </p>
+      )}
+      {last && windowTail ? (
+        // pageRow and the zone are siblings under the scroller (no wrapper),
+        // so the zone's own min-h-full resolves against the scroller — it's
+        // always a full viewport tall regardless of what today holds above
+        // it, never shrunk to share the fold with today's entries. (It also
+        // still guarantees a viewport of room below the final row, so a
+        // shrinking row can't dip scrollHeight and clamp the reader.)
+        <>
+          {pageRow}
+          {/* the zone always carries today's big date — even once today
+              also owns a page above — so the composer always names its day */}
+          <TodayZoneFill
+            day={todayKey}
+            firstEver={bookEmpty}
+            hasEntry={snippets.length > 0}
+            onKept={scrollToNewEntry}
+            className="min-h-full"
+          />
+        </>
+      ) : (
+        pageRow
+      )}
+    </>
+  );
+});
+
+/**
  * The deepest altitude is the book itself: every day that holds
  * something, stacked in time, the dates standing in the margin like a
  * ledger. Today is always present even when blank; days between simply
@@ -3626,8 +3796,13 @@ function ScheduleFeedBase({
   // out of the whole book instead of reconciling it
   const body = useMemo(
     () =>
+      // Per-row work here is only the CHEAP flags (string slices + booleans) +
+      // one <BookRow> element each — no date formatting, no section subtree. The
+      // memoized BookRow does the heavy render and bails when its props are
+      // unchanged, so a probe change reconciles ~1200 elements but re-renders
+      // only the one day whose composer toggled (was an O(book) subtree rebuild
+      // — the descent's ~175ms tap lag). See BookRow.
       windowRows?.map((row, i) => {
-        const d = dateFromDayKey(row.day);
         const newMonth =
           i === 0 || windowRows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
         const isToday = row.day === todayKey;
@@ -3643,123 +3818,25 @@ function ScheduleFeedBase({
         // (already-mounted) list. Its ScheduleCards stays rendered so the
         // AnimatePresence is live to animate that card in.
         const hideToday = isToday && row.snippets.length === 0;
-        const pageRow = (
-          <section
-            ref={rowRef(row.day)}
-            data-day={row.day}
-            aria-label={friendlyDay(row.day)}
-            className={cn(
-              "grid grid-cols-[2.1rem_1fr] gap-x-2",
-              // every day rules off from the one above. Today's empty section
-              // collapses to nothing but KEEPS the rule (once the book holds
-              // anything) — so a hairline still marks where the prior days end
-              // and today's zone begins; only the first-ever, empty book has none.
-              (!hideToday || !bookEmpty) && "border-t border-rule-faint",
-            )}
-          >
-                {/* the date stands in the margin and holds its ground
-                    while its day's entries scroll past. Empty today drops the
-                    padding too, so its section collapses to the bare rule and
-                    the zone below fills the viewport right up to it. */}
-                <div className={cn(
-                  "book-margin-date sticky top-0 self-start text-center",
-                  // today's section cedes its bottom padding to the zone below
-                  // (the zone owns the whole 26px gap — see TodayZoneFill), so
-                  // the full breath is visible when the book rests at its foot
-                  !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"),
-                )}>
-                  {!hideToday && (() => {
-                    const dateInner = (
-                      // py-[3.5px] sizes the block to exactly a single-line
-                      // card's height (42.5px: its 35.4px of text + 7.1px), so
-                      // the date reads centre-aligned beside a one-line entry —
-                      // and a single-line day has zero sticky travel, killing
-                      // the tiny header-crawl while scrolling past it
-                      <div className="py-[3.5px]">
-                        <span
-                          className={cn(
-                            "voice-label block text-[0.62rem] leading-tight",
-                            isToday ? "text-wax" : "text-ink-faint",
-                          )}
-                        >
-                          {format(d, "EEE")}
-                        </span>
-                        <span
-                          data-flydate={row.day}
-                          className={cn(
-                            "voice-display block text-[1.15rem] leading-tight tabular-nums",
-                            isToday && "text-wax",
-                          )}
-                        >
-                          {format(d, "d")}
-                        </span>
-                      </div>
-                    );
-                    // today's date sticky-header populates as the first entry
-                    // arrives — wipe it in from the left to lead the kept card,
-                    // but ONLY on a fresh keep (todayJustKept), never on a page
-                    // refresh; fast (the first fifth of the sweep) so date+card
-                    // read as one sweep across the row
-                    return isToday ? (
-                      <motion.div
-                        initial={todayJustKept ? { opacity: 0, clipPath: "inset(-50% 100% -50% -10%)" } : false}
-                        animate={{ opacity: 1, clipPath: "inset(-50% -10% -50% -10%)" }}
-                        transition={{ duration: 0.1, ease: "easeInOut" }}
-                      >
-                        {dateInner}
-                      </motion.div>
-                    ) : (
-                      dateInner
-                    );
-                  })()}
-                </div>
-                <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
-                  <ScheduleCards snippets={row.snippets} day={row.day} onOpen={onOpen} />
-                  {showComposer && (
-                    <BackfillCapture
-                      key={row.day}
-                      day={row.day}
-                      follows={row.snippets.length > 0}
-                    />
-                  )}
-                </div>
-          </section>
-        );
         return (
-          <Fragment key={row.day}>
-            {newMonth && !hideToday && (
-              <p
-                className={cn(
-                  "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
-                  isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
-                )}
-              >
-                {format(d, "MMMM yyyy")}
-              </p>
-            )}
-            {last && windowTail ? (
-              // pageRow and the zone are siblings under the scroller (no wrapper),
-              // so the zone's own min-h-full resolves against the scroller — it's
-              // always a full viewport tall regardless of what today holds above
-              // it, never shrunk to share the fold with today's entries. (It also
-              // still guarantees a viewport of room below the final row, so a
-              // shrinking row can't dip scrollHeight and clamp the reader.)
-              <Fragment>
-                {pageRow}
-                {/* the zone always carries today's big date — even once today
-                    also owns a page above — so the composer always names its day */}
-                <TodayZoneFill
-                  day={todayKey}
-                  firstEver={bookEmpty}
-                  hasEntry={row.snippets.length > 0}
-                  onKept={scrollToNewEntry}
-                  className="min-h-full"
-                />
-              </Fragment>
-            ) : (
-              pageRow
-            )}
-          </Fragment>
+          <BookRow
+            key={row.day}
+            day={row.day}
+            snippets={row.snippets}
+            newMonth={newMonth}
+            isToday={isToday}
+            showComposer={showComposer}
+            last={last}
+            windowTail={windowTail}
+            hideToday={hideToday}
+            bookEmpty={bookEmpty}
+            today={today}
+            todayKey={todayKey}
+            todayJustKept={todayJustKept}
+            onOpen={onOpen}
+            scrollToNewEntry={scrollToNewEntry}
+            rowRef={rowRef}
+          />
         );
       }),
     // NB: `active` is deliberately NOT a dependency. It flips on every dive
