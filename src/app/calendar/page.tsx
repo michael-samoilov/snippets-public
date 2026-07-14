@@ -907,7 +907,6 @@ function Calendar() {
       return;
     }
 
-    const spring = { type: "spring", stiffness: 320, damping: 34 } as const;
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
     // on an entry dive (open OR close), use the boxes measured on clean layout
     // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
@@ -1226,19 +1225,40 @@ function Calendar() {
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
 
+    // diving: the departing view blows up past its slot; pulling back: it
+    // shrinks toward it — and the arriving view does the inverse.
+    const outFrom = 1;
+    const outTo = deeper ? factor : 1 / factor;
+    const inFrom = deeper ? 1 / factor : factor;
+    const inTo = 1;
+    // The SCALE driver is started BELOW, AFTER the shared-element flight has
+    // measured its rects — because driveFlightSpring paints its start frame
+    // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
+    // flight reads textRect(toEl) would measure the date at its shrunk-in
+    // position and fly the number to the wrong spot. (The old wall-clock motion
+    // spring applied its initial scale a frame later, on rAF, so it dodged this
+    // by luck; we make the ordering explicit.)
+    const startCameraScale = () =>
+      // SCALE rides the same per-frame-CLAMPED spring as the date flyers
+      // (driveFlightSpring), NOT a wall-clock motion spring. On a deep book the
+      // dive/rise setup frame can stall (markOnStage + reland + flight measure);
+      // a wall-clock spring keeps ticking through that stall and lands the scale
+      // most of the way in its first visible frame — the camera "snaps" instead
+      // of gliding, which is why the altitude move read as less smooth than the
+      // entry-card morph (that morph already rides a clamped rAF). Clamping each
+      // frame's dt makes a stall only lengthen the glide, never skip it — same
+      // 320/34 spring, so the settle is unchanged. It also keeps the camera
+      // frame-locked with the flyers (both on the clamped clock), so under a
+      // stall the numbers and the view can't drift apart.
+      driveFlightSpring((t) => {
+        outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
+        incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
+      });
     moves.push(
-      // diving: the departing view blows up past its slot; pulling back:
-      // it shrinks toward it — and the arriving view does the inverse
-      animate(
-        outgoing,
-        { scale: [1, deeper ? factor : 1 / factor], opacity: [1, 0] },
-        { scale: spring, opacity: { duration: 0.18, ease: "easeOut" } },
-      ).finished,
-      animate(
-        incoming,
-        { scale: [deeper ? 1 / factor : factor, 1], opacity: [0, 1] },
-        { scale: spring, opacity: { duration: 0.16, ease: "easeOut" } },
-      ).finished,
+      // opacity keeps its own short crossfade — a fade fast-forwarding through a
+      // stall is invisible (unlike a scale jump), so a plain tween is fine.
+      animate(outgoing, { opacity: [1, 0] }, { duration: 0.18, ease: "easeOut" }).finished,
+      animate(incoming, { opacity: [0, 1] }, { duration: 0.16, ease: "easeOut" }).finished,
     );
 
     // shared-element flight: a date standing in both altitudes travels
@@ -1447,6 +1467,9 @@ function Calendar() {
       }
     }
 
+    // start the camera scale NOW — after every flight rect has been read
+    // (see startCameraScale): its synchronous start frame may scale the layers.
+    moves.push(startCameraScale());
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled is set once at mount and never changes without a reload
   }, [zoom, reduceMotion, freezeEnabled]);
