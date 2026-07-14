@@ -6,7 +6,6 @@ import {
   memo,
   startTransition,
   useCallback,
-  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -401,6 +400,13 @@ const DEPTH: Record<View, number> = { year: 0, month: 1, schedule: 2, entry: 3 }
 
 interface ScheduleFeedHandle {
   goTo: (day: string, smooth?: boolean) => void;
+  // an altitude climb transforms the whole book layer; the zoom effect calls
+  // these to keep only an on-screen band rendered for the move (the rest go
+  // content-visibility:hidden — no render, no per-frame re-eval under the
+  // transform). Reads use cached geometry (rowGeomRef) + one scroll read; never
+  // interleaves layout reads with the attribute writes. See [data-climbing].
+  markOnStage: () => void;
+  clearOnStage: () => void;
 }
 
 /**
@@ -506,14 +512,14 @@ function Calendar() {
         : deletingSnippet,
     [all, focusedId, deletingSnippet],
   );
-  // The entry view's content is DEFERRED: on a dive the tap sets focusedId, but
-  // rendering the opened entry re-runs EntryView's scroll-edge layout effect,
-  // and that single layout read forces a full-document reflow — O(book) because
-  // the flat book carries a sticky date header per day (measured: it was the
-  // WHOLE of the tap→dive lag, ~45ms→225ms across 100→1200 entries). Deferring
-  // it lets the urgent commit (the zoom itself) land cheaply so the dive starts
-  // at once; the real words render a beat later, still fading in from open≈0.2.
-  const deferredFocused = useDeferredValue(focused);
+  // NB: the entry content is rendered SYNCHRONOUSLY (no useDeferredValue). The
+  // deferral once dodged an O(book) reflow from EntryView's scroll-edge layout
+  // effect — but lazy-render (content-visibility) has since made that reflow
+  // cheap, and the deferral itself caused the "first-morph squish": the tapped
+  // snippet landed a beat late, EntryView remounted [data-entry-card-content]
+  // MID-DIVE, and the zoom's per-frame inverse-scale rode the detached old node
+  // while the live one had none. Rendering it in the urgent commit means the
+  // zoom effect captures the final node from the first frame.
 
   const todayStamp = dayKey();
   // one Date for the whole day: the feeds memoize their heavy windows
@@ -738,17 +744,28 @@ function Calendar() {
           .querySelectorAll("[data-stand-in]")
           .forEach((el) => el.remove());
       }
-      if (entryContent) {
-        entryContent.style.opacity = "";
-        entryContent.style.transform = "";
+      // clear the LIVE content node (apply() may have written to a remounted one,
+      // not the setup-time capture) plus the original, so neither keeps a stale
+      // transform/opacity after the move lands
+      for (const el of [
+        entryContent,
+        entryLayerRef.current?.querySelector<HTMLElement>(
+          "[data-entry-card-content]",
+        ),
+      ]) {
+        if (!el) continue;
+        el.style.opacity = "";
+        el.style.transform = "";
       }
       if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
-      // an altitude climb turned lazy-render off (it transforms the layer); the
-      // move has landed, so let the browser skip the off-screen sections again
+      // the climb kept only an on-screen band rendered (the rest cv:hidden); the
+      // move has landed, so drop the band markers and let cv:auto skip off-screen
+      // sections again
       scheduleLayerRef.current
         ?.querySelector("[data-book-scroller]")
         ?.removeAttribute("data-climbing");
+      scheduleFeedRef.current?.clearOnStage();
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       setZoom(null);
@@ -937,10 +954,20 @@ function Calendar() {
         // a single frame here, alone among the transitions)
         const lerp = (a: number, bb: number, k: number) => a + (bb - a) * k;
         entryContent.style.transformOrigin = "0 0";
+        // re-resolve the content node EACH frame (not the setup-time capture): if
+        // EntryView remounts [data-entry-card-content] mid-flight (a live-query
+        // update, a text-keyed re-key), the inverse-scale must ride the node
+        // that's actually on screen — else the words render squashed by the box
+        // scale on the detached old node. Falls back to the initial capture.
+        const contentNow = (): HTMLElement =>
+          entryLayerRef.current?.querySelector<HTMLElement>(
+            "[data-entry-card-content]",
+          ) ?? entryContent;
         const apply = (open: number) => {
           // open: 0 = sitting on the tile, 1 = filling the stage
           const sx = lerp(osx, 1, open);
           const sy = lerp(osy, 1, open);
+          const ct = contentNow();
           entryCard.style.transform = `translate(${lerp(ox, 0, open)}px, ${lerp(
             oy,
             0,
@@ -950,14 +977,15 @@ function Calendar() {
             // opening: the content holds its natural size against the
             // growing box (a window opening over the words) while the
             // full text fades in
-            entryContent.style.transform = `scale(${1 / sx}, ${1 / sy})`;
-            entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`;
+            ct.style.transformOrigin = "0 0"; // in case ct is a fresh node
+            ct.style.transform = `scale(${1 / sx}, ${1 / sy})`;
+            ct.style.opacity = `${Math.min(1, Math.max(0, (open - 0.2) / 0.6))}`;
           } else {
             // closing: the entry text bows out in the first beat (the
             // flash), and the tile-configured stand-in takes the stage,
             // width-locked to the card at a uniform scale so its right
             // edge can never clip and it lands at exactly natural size
-            entryContent.style.opacity = `${Math.min(1, Math.max(0, (open - 0.85) / 0.15))}`;
+            ct.style.opacity = `${Math.min(1, Math.max(0, (open - 0.85) / 0.15))}`;
             if (standIn) {
               const u = (c.width - 2) / (t.width - 2);
               standIn.style.transform = `scale(${u}, ${(u * sx) / sy})`;
@@ -1022,13 +1050,16 @@ function Calendar() {
     incoming.style.opacity = "0";
 
     // a camera-scale climb that involves the book TRANSFORMS the schedule layer,
-    // and content-visibility re-evaluates every section under a transformed
-    // ancestor each frame (which balloons the climb to seconds) — so stand
-    // lazy-render down for the move; finish() turns it back on.
+    // and content-visibility:auto re-evaluates every section under a transformed
+    // ancestor each frame (which balloons the climb to seconds). markOnStage
+    // keeps only an on-screen band rendered and sends the rest to cv:hidden,
+    // ESTABLISHING that state now — before Motion applies the scale below — so no
+    // whole-book render (cv:visible) and no under-transform relayout is ever
+    // forced. finish() clears it. Mark from cached geometry at the current /
+    // destination scroll (pick() has already scrolled the page behind a
+    // month→schedule dive).
     if (zoom.from === "schedule" || zoom.to === "schedule") {
-      scheduleLayerRef.current
-        ?.querySelector("[data-book-scroller]")
-        ?.setAttribute("data-climbing", "");
+      scheduleFeedRef.current?.markOnStage();
     }
 
     // where the chosen slot sits. Year⇄month is a literal camera move
@@ -1072,9 +1103,22 @@ function Calendar() {
       (zoom.from === "month" && zoom.to === "schedule") ||
       (zoom.from === "schedule" && zoom.to === "month");
     if (dayPair) {
+      // Only on-screen dates can fly, so only measure on-screen flydates. In the
+      // BOOK layer that matters for correctness AND cost: the climb has sent its
+      // off-screen day sections to content-visibility:hidden, and calling
+      // getBoundingClientRect on a flydate inside a skipped section forces that
+      // subtree to lay out — over the whole book that's the ~5.5s spike the climb
+      // showed. The on-stage band (marked by markOnStage) is exactly the rendered
+      // region, and it already covers everything on screen, so scoping the book's
+      // query to it drops the hidden sections without dropping any real flyer.
+      const schedEl = scheduleLayerRef.current;
       const collect = (root: HTMLElement) => {
+        const sel =
+          root === schedEl
+            ? "[data-day][data-onstage] [data-flydate]"
+            : "[data-flydate]";
         const found = new Map<string, HTMLElement>();
-        for (const el of root.querySelectorAll<HTMLElement>("[data-flydate]")) {
+        for (const el of root.querySelectorAll<HTMLElement>(sel)) {
           const r = el.getBoundingClientRect();
           const y = r.top - stageRect.top;
           if (y > -r.height && y < stageRect.height)
@@ -2394,7 +2438,7 @@ function Calendar() {
             (zoom || !showEntryLayer) && "pointer-events-none",
           )}
         >
-          {(view === "entry" || warm >= 2) && <EntryView snippet={deferredFocused} onLetGo={letGo} />}
+          {(view === "entry" || warm >= 2) && <EntryView snippet={focused} onLetGo={letGo} />}
           {/* the leave animation is driven by the zoom effect on the card box */}
         </div>
         {/* the filtered book: while a query stands, the stage shows the
@@ -2599,28 +2643,107 @@ function ScheduleFeedBase({
   const rowGeomRef = useRef<
     Array<{ day: string; top: number; bottom: number; headH: number }>
   >([]);
+  // set for the span of an altitude climb: measureRows stands down then (see
+  // the ResizeObserver below). The climb sends off-screen sections to
+  // content-visibility:hidden, which nudges the book's scrollHeight a hair — and
+  // that would wake the ResizeObserver, whose measureRows reads every row's
+  // offset UNDER the transformed layer (each read a forced layout) and thrashes
+  // to multiple seconds. The geometry doesn't meaningfully change across the
+  // move, so skipping the re-measure is correct as well as necessary.
+  const climbingRef = useRef(false);
   const measureRows = useCallback(() => {
-    const geom: Array<{ day: string; top: number; bottom: number; headH: number }> =
-      [];
-    for (const [day, row] of rowRefs.current) {
-      const headH =
-        (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? 48;
+    const el = scrollerRef.current;
+    const st = el ? el.scrollTop : 0;
+    const ch = el ? el.clientHeight : 0;
+    // READ every row's geometry FIRST, then WRITE every --cis — never interleave
+    // (a write invalidates layout, so a following offset read forces a fresh one;
+    // interleaved over ~700 sections that's the multi-second thrash the climb hit).
+    // A section's OWN box (offsetTop/offsetHeight) is cheap even when
+    // content-visibility has skipped it — the intrinsic-size placeholder answers.
+    // But its HEADER child's offsetHeight is NOT: reaching into a skipped
+    // section's subtree forces that subtree to lay out just to measure it, and
+    // over ~700 skipped sections that was the ~6s month→schedule descent stall
+    // (measureRows re-runs when the opened page joins the rows). So read the
+    // header only within the rendered band; day headers are uniform, so an
+    // off-screen section inherits a measured on-screen header height (the scroll
+    // spy's only use of headH is coarse — a few px of title-handover timing).
+    let sampleHeadH = 48; // until an on-screen header is measured (uniform anyway)
+    const read = Array.from(rowRefs.current, ([day, row]) => {
       const top = row.offsetTop;
       const h = row.offsetHeight;
-      geom.push({ day, top, bottom: top + h, headH });
-      // feed each section its OWN measured height as the lazy-render placeholder,
-      // so a skipped (off-screen) section reserves exactly its real space and the
-      // book's total height can't drift (see [data-day] in globals.css). Reading
-      // offsetHeight here returns the real height while lazy is off, and the
-      // already-set --cis (identical) once it's on — so this stays self-consistent
-      // and only a genuinely-changed, on-screen section moves its own placeholder.
-      row.style.setProperty("--cis", `${h}px`);
-    }
-    geom.sort((a, b) => a.top - b.top);
+      const onScreen = top + h > st - ch && top < st + 2 * ch;
+      let headH: number | null = null;
+      if (onScreen) {
+        headH = (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? null;
+        if (headH != null) sampleHeadH = headH;
+      }
+      return { day, row, headH, top, h };
+    });
+    // feed each section its OWN measured height as the lazy-render placeholder,
+    // so a skipped (off-screen) section reserves exactly its real space and the
+    // book's total height can't drift (see [data-day] in globals.css). Reading
+    // offsetHeight above returns the real height while lazy is off, and the
+    // already-set --cis (identical) once it's on — so this stays self-consistent
+    // and only a genuinely-changed, on-screen section moves its own placeholder.
+    for (const r of read) r.row.style.setProperty("--cis", `${r.h}px`);
+    const geom = read
+      .map((r) => ({
+        day: r.day,
+        top: r.top,
+        bottom: r.top + r.h,
+        headH: r.headH ?? sampleHeadH,
+      }))
+      .sort((a, b) => a.top - b.top);
     rowGeomRef.current = geom;
   }, []);
 
-  const rows = useMemo(() => {
+  // Mark the day sections within an on-screen band [data-onstage] so the climb
+  // can send the rest to content-visibility:hidden (see [data-climbing] in
+  // globals.css). ONE scroll read, then writes — no interleaving (interleaving
+  // reads/writes over ~90 sections thrashed to seconds in the probe); the band
+  // geometry is the already-cached rowGeomRef, never fresh offset reads. A
+  // generous ±1.5-viewport band keeps a dormant section from being revealed as
+  // the layer scales during the move.
+  const markOnStage = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    climbingRef.current = true; // measureRows stands down for the move
+    const top = el.scrollTop;
+    const band = el.clientHeight * 1.5;
+    const lo = top - band;
+    const hi = top + el.clientHeight + band;
+    for (const g of rowGeomRef.current) {
+      const row = rowRefs.current.get(g.day);
+      if (!row) continue;
+      if (g.bottom > lo && g.top < hi) row.setAttribute("data-onstage", "");
+      else row.removeAttribute("data-onstage");
+    }
+    // Flip to the climb's content-visibility NOW — while the layer is still
+    // un-transformed — and force the auto→hidden relayout in THIS pass. Doing it
+    // here costs a transform-free ~40ms; letting it land on the first transformed
+    // frame instead (Motion applies the scale later in the same zoom effect) made
+    // the browser recompute every section's intrinsic-size box UNDER the moving
+    // transform, which thrashed to ~5s. Establishing it first means the transform
+    // then rides a book whose off-screen sections are already dormant.
+    el.setAttribute("data-climbing", "");
+    void el.offsetHeight; // sync layout flush: pay the hidden transition now
+  }, []);
+  const clearOnStage = useCallback(() => {
+    for (const row of rowRefs.current.values())
+      row.removeAttribute("data-onstage");
+    climbingRef.current = false;
+  }, []);
+
+  // The per-day grouping, split OUT of `rows` so it does NOT depend on `probe`.
+  // Opening a page (a dive to a day) only adds a composer to that ONE row, but
+  // it used to churn this whole map — a fresh snippets array for every day — so
+  // every ScheduleCards saw a new `snippets` prop and the WHOLE flat book
+  // re-rendered: an O(book) React reconcile that was the schedule-dive stall
+  // (~5.5s at 1200 entries, the "tremendously delayed" month→schedule descent).
+  // Keeping the arrays referentially stable across a probe change lets the
+  // memoized ScheduleCards bail on every day but the one whose composer toggled.
+  const EMPTY_SNIPPETS = useMemo<Snippet[]>(() => [], []);
+  const dayGroups = useMemo(() => {
     if (!all) return null;
     const groups = groupByDay([...all].reverse()); // oldest → newest
     // within a day, order by id (a ULID minted at creation) so the newest-kept
@@ -2643,12 +2766,21 @@ function ScheduleFeedBase({
     if (all.length > 0 && !map.has(yesterdayKey)) {
       days.add(yesterdayKey);
     }
+    return { map, days };
+  }, [all, todayKey, yesterdayKey]);
+
+  const rows = useMemo(() => {
+    if (!dayGroups) return null;
+    const days = new Set(dayGroups.days);
+    // the one page the reader explicitly opened joins the ledger (so an empty
+    // day still has a row to land on + offer its composer). This is the ONLY
+    // probe-driven change; the snippet arrays come from the stable map above.
     if (probe) days.add(probe);
     return [...days].sort().map((day) => ({
       day,
-      snippets: map.get(day) ?? ([] as Snippet[]),
+      snippets: dayGroups.map.get(day) ?? EMPTY_SNIPPETS,
     }));
-  }, [all, probe, todayKey, yesterdayKey]);
+  }, [dayGroups, probe, EMPTY_SNIPPETS]);
 
   // the rows actually rendered on first paint: FIRST_PAINT_DAYS around the
   // landing day (the tail when landing on today, a centered slice for a
@@ -2947,11 +3079,11 @@ function ScheduleFeedBase({
     [scrollToRow],
   );
   useLayoutEffect(() => {
-    handleRef.current = { goTo };
+    handleRef.current = { goTo, markOnStage, clearOnStage };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo]);
+  }, [handleRef, goTo, markOnStage, clearOnStage]);
 
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
@@ -2971,7 +3103,13 @@ function ScheduleFeedBase({
     }
     const el = scrollerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(measureRows);
+    // stand down during a climb: the content-visibility toggle nudges scrollHeight
+    // (waking this RO), and re-measuring every row's offset under the transformed
+    // layer thrashes to seconds — the geometry is stable across the move anyway
+    const ro = new ResizeObserver(() => {
+      if (climbingRef.current) return;
+      measureRows();
+    });
     ro.observe(el);
     return () => ro.disconnect();
     // `selected` only seeds the very first position
@@ -3311,7 +3449,12 @@ function ScheduleFeedBase({
  * view's minis — text only, no clutter; everything else lives one
  * altitude deeper. Pressing a tile dives the camera into it.
  */
-function ScheduleCards({
+// memoized: opening a page (a probe change) re-runs the book's row map, but the
+// snippet arrays are now referentially stable per day (see dayGroups), so this
+// bails on every day except one whose composer toggles — turning the O(book)
+// reconcile that stalled the month→schedule descent into an O(1) update. A keep
+// or delete changes the day's array identity, which re-renders that day as before.
+const ScheduleCards = memo(function ScheduleCards({
   snippets,
   day,
   onOpen,
@@ -3429,7 +3572,7 @@ function ScheduleCards({
       </AnimatePresence>
     </ul>
   );
-}
+});
 const ScheduleFeed = memo(
   ScheduleFeedBase,
   // `selected` only seeds the book's first position (the spy drives it

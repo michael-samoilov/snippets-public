@@ -605,16 +605,32 @@ textarea:focus-visible,
    only set once the full book has mounted and measured (so the measurements are
    real, not estimates).
 
-   And it's disabled for the span of an altitude climb ([data-climbing]): that
-   transition TRANSFORMS the whole schedule layer, and content-visibility
-   re-evaluates every section's on-screen-ness each frame of a transformed
-   ancestor — which balloons the climb to seconds. A dive only fades the layer
-   (opacity, positions still), so cv stays on and fast there. */
+   The climb ([data-climbing]) TRANSFORMS the whole schedule layer, and
+   `content-visibility: auto` re-evaluates every section's on-screen-ness each
+   frame of a transformed ancestor — which balloons the climb to seconds. We do
+   NOT cure that by flipping the book to `visible` (that's a synchronous O(book)
+   render at climb start — the whole flat book, ~717ms at 1200). Instead, for the
+   span of the move we send OFF-STAGE sections to `content-visibility: hidden` —
+   which skips render AND never re-evaluates under the transform — and keep only
+   the on-stage band (marked [data-onstage] from cached geometry in markOnStage,
+   which establishes this state transform-free BEFORE Motion scales the layer)
+   rendered. This cuts the climb's render from whole-book to band-only.
+   CAUTION: this toggle is necessary but NOT sufficient, and it's a trap to
+   "verify" it in isolation — a bare toggle measures ~37ms with no transform
+   running, but under the live climb `hidden` was WORSE than `visible` until the
+   three real O(book) stalls were also fixed (a flydate flight + measureRows both
+   measuring INTO skipped sections, and a probe-driven React reconcile — see the
+   zoom effect, measureRows, and dayGroups in page.tsx, and LAZYRENDER-HANDOFF).
+   A dive only fades the layer (opacity, positions still), so cv `auto` stays on
+   and fast there. */
 [data-book-scroller][data-lazy] [data-day] {
   content-visibility: auto;
   contain-intrinsic-size: auto var(--cis, 240px);
 }
 [data-book-scroller][data-lazy][data-climbing] [data-day] {
+  content-visibility: hidden;
+}
+[data-book-scroller][data-lazy][data-climbing] [data-day][data-onstage] {
   content-visibility: visible;
 }
 
