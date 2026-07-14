@@ -740,16 +740,12 @@ function Calendar() {
   const pick = useCallback(
     (key: string) => {
       liveDayRef.current = key;
+      setSelected(key);
       navigator.vibrate?.(6);
       if (urlTimer.current) clearTimeout(urlTimer.current);
       pushUrl(`${pathname}?d=${key}`);
       scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
       runZoom("month", "schedule", key);
-      // `selected` only drives the month-grid highlight (the view we're leaving)
-      // and a windowRows recompute — neither is needed for the dive's first
-      // frame. Defer it past the camera launch so the descent's first paint
-      // isn't spent re-rendering the outgoing month + recomputing the book list.
-      requestAnimationFrame(() => setSelected(key));
     },
     [pathname, runZoom],
   );
@@ -3207,23 +3203,20 @@ function ScheduleFeedBase({
       const el = scrollerRef.current;
       const row = rowRefs.current.get(day);
       if (!el || !row) return;
-      let corrected = false;
       for (let i = 0; i < 3; i++) {
         const drift = row.offsetTop - el.scrollTop;
         if (Math.abs(drift) <= 1) break;
         el.scrollTop = row.offsetTop;
         markOnStage(); // band shifted with the scroll — re-flip cv states + flush
-        corrected = true;
       }
       // Heal the band's placeholders to their rendered heights and refresh the
       // cached geometry against the landed truth: a band section reverting to
       // cv:hidden as the climb ends (or the reader scrolls) then keeps its real
       // size, so the exact landing holds instead of drifting a few px per
-      // late-rendering section. Only needed when the reland actually CORRECTED a
-      // drift (stale placeholders) — now that fonts re-measure the whole book up
-      // front (see remeasurePlaceholders), the landing is usually exact on the
-      // first check, so skip the O(book) row sweep off the dive's critical path.
-      if (corrected) measureRows();
+      // late-rendering section. measureRows writes --cis = clientHeight (a no-op
+      // for still-skipped sections, the real height for the rendered band) and
+      // rebuilds rowGeomRef; the ResizeObserver it would wake is climb-guarded.
+      measureRows();
     },
     [markOnStage, measureRows],
   );
