@@ -3776,19 +3776,28 @@ function ScheduleFeedBase({
     };
     attempt();
   }, [remeasurePlaceholders]);
-  // trigger 1: the webfonts have settled — the common case the skip came from
+  // trigger 1: ALWAYS re-verify the placeholders a beat after the book mounts.
+  // The initial measure runs the instant fullBook commits — the fonts may not be
+  // painted onto the freshly-mounted deep sections yet even when they're
+  // "loaded" (cached), so a section can carry a --cis a whole card too short.
+  // On the first fling into that history it renders at its real height and jumps
+  // ~a card (the ~110px skip the owner sees; the same stale geometry also makes
+  // the dive's on-stage band miss a section → the blank-card bug). So re-measure
+  // unconditionally once fonts.ready resolves AND again on a fixed delay (belt
+  // and braces for the cached-font path where ready resolves before the paint).
   useEffect(() => {
-    if (!fullBook || typeof document === "undefined" || !document.fonts) return;
-    // fonts already loaded when the book measured (cached — the repeat-visit
-    // case) → the placeholders are already post-swap; skip the redundant
-    // O(book) re-measure. Only a load that measured on the fallback font needs it.
-    if (document.fonts.status === "loaded") return;
+    if (!fullBook || typeof document === "undefined") return;
     let cancelled = false;
-    document.fonts.ready.then(() => {
+    const fire = () => {
       if (!cancelled) remeasureWhenIdle();
-    });
+    };
+    if (document.fonts) document.fonts.ready.then(fire);
+    // unconditional safety net — runs even on a cached-font repeat visit, where
+    // fonts.ready resolves instantly (before the deep sections have painted)
+    const t = setTimeout(fire, 1200);
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
   }, [fullBook, remeasureWhenIdle]);
   // trigger 2: the scroller's WIDTH changed (rotation, split-view) — text
