@@ -414,6 +414,15 @@ interface ScheduleFeedHandle {
   // this to fly from/to where the pinned date actually rests. Cached geometry
   // + one scroll read; no layout forced in skipped sections.
   stickyDeltaFor: (day: string) => number;
+  // Re-land the scroll on a day's TRUE top. pick() set scrollTop against the
+  // book's --cis placeholders, which go stale when the webfonts swap after the
+  // book measured (every rendered card grows; skipped sections keep the short
+  // estimate). markOnStage has since rendered the band at real heights, so the
+  // tapped row's real offsetTop no longer equals scrollTop — this reads it and
+  // re-scrolls, iterating to convergence, and heals the band's placeholders so
+  // the landing can't drift as the climb ends. Pre-paint, O(band). Call right
+  // after markOnStage, before the flight measures anything.
+  relandOnRow: (day: string) => void;
 }
 
 /**
@@ -1108,6 +1117,15 @@ function Calendar() {
     // month→schedule dive).
     if (zoom.from === "schedule" || zoom.to === "schedule") {
       scheduleFeedRef.current?.markOnStage();
+      // Descent: pick() set scrollTop against the book's --cis placeholders,
+      // which are stale whenever the webfonts swapped after the book measured.
+      // markOnStage just rendered the band at real heights, so re-land on the
+      // tapped row's TRUE top now — before the flight measures or anything
+      // paints. The landing is then exact by construction, not a pin-timer
+      // correction the reader watches the dates skip through. (Ascent has no
+      // target row; a plain goTo keeps its own settle pins.)
+      if (zoom.to === "schedule")
+        scheduleFeedRef.current?.relandOnRow(zoom.anchor);
     }
 
     // where the chosen slot sits. Year⇄month is a literal camera move
@@ -2853,6 +2871,93 @@ function ScheduleFeedBase({
     const stuck = Math.min(Math.max(g.top, el.scrollTop), g.bottom - g.headH);
     return Math.max(0, stuck - g.top);
   }, []);
+  // See ScheduleFeedHandle.relandOnRow. markOnStage has just rendered the band
+  // at REAL heights; the tapped row's offsetTop is now truth, but scrollTop was
+  // set (in scrollToRow) against stale placeholders above it — so re-scroll onto
+  // the row's real top. Each pass may shift band membership (a section entering
+  // the render margin swaps its placeholder for real height), so re-mark and
+  // repeat; the drift shrinks an order of magnitude per pass (a fresh world is a
+  // single no-op read, a late-font-swap world converges in ~2). Bounded to 3.
+  const relandOnRow = useCallback(
+    (day: string) => {
+      const el = scrollerRef.current;
+      const row = rowRefs.current.get(day);
+      if (!el || !row) return;
+      for (let i = 0; i < 3; i++) {
+        const drift = row.offsetTop - el.scrollTop;
+        if (Math.abs(drift) <= 1) break;
+        el.scrollTop = row.offsetTop;
+        markOnStage(); // band shifted with the scroll — re-flip cv states + flush
+      }
+      // Heal the band's placeholders to their rendered heights and refresh the
+      // cached geometry against the landed truth: a band section reverting to
+      // cv:hidden as the climb ends (or the reader scrolls) then keeps its real
+      // size, so the exact landing holds instead of drifting a few px per
+      // late-rendering section. measureRows writes --cis = clientHeight (a no-op
+      // for still-skipped sections, the real height for the rendered band) and
+      // rebuilds rowGeomRef; the ResizeObserver it would wake is climb-guarded.
+      measureRows();
+    },
+    [markOnStage, measureRows],
+  );
+
+  // ── placeholder healing ──────────────────────────────────────────────────
+  // A section's --cis is measured once, but the display:swap webfonts reflow
+  // every rendered card AFTER the book has measured — so a section skipped at
+  // that moment keeps a too-short placeholder until it next renders. When
+  // cv:auto renders it (contentvisibilityautostatechange, skipped→rendered),
+  // heal the placeholder to its real height. If it sits ABOVE the viewport, the
+  // growth would shove the visible content down (the descent's "settle drift",
+  // and scroll jumps far from a landing) — so add it to scrollTop, hand-rolled
+  // scroll anchoring, since the scroller opts out of the browser's and iOS has
+  // none. NEVER write scrollTop while the book is actively scrolling (kills iOS
+  // momentum): a scroll event within ~120ms means a live gesture/fling, so heal
+  // the placeholder (stops future drift) but let this one delta slide.
+  const lastScrollTsRef = useRef(0);
+  const healQueueRef = useRef<Set<HTMLElement>>(new Set());
+  const healRafRef = useRef(0);
+  const flushHeal = useCallback(() => {
+    healRafRef.current = 0;
+    const el = scrollerRef.current;
+    if (!el) return;
+    const queued = [...healQueueRef.current];
+    healQueueRef.current.clear();
+    const st = el.scrollTop;
+    // PHASE 1 — read each queued section's top, rendered height, current stamp
+    const read = queued.map((row) => ({
+      row,
+      top: row.offsetTop,
+      real: row.clientHeight,
+      cis: parseFloat(row.style.getPropertyValue("--cis")) || 0,
+    }));
+    // PHASE 2 — heal stamps; sum the growth of sections ENTIRELY above the
+    // scroll top (their bottom, using the OLD stamp, at or above it)
+    let above = 0;
+    for (const r of read) {
+      const delta = r.real - r.cis;
+      if (Math.abs(delta) <= 1) continue;
+      r.row.style.setProperty("--cis", `${r.real}px`);
+      if (r.top + r.cis <= st) above += delta;
+    }
+    if (above !== 0 && performance.now() - lastScrollTsRef.current > 120)
+      el.scrollTop = st + above; // quiet: anchor the viewport against the growth
+    // healed heights moved the tops below them — rebuild the cached geometry
+    // (cheap own-box reads; the RO it might wake is climb-guarded)
+    measureRows();
+  }, [measureRows]);
+  const onRowAutoState = useCallback(
+    (e: Event) => {
+      const t = e.target;
+      // only the skipped→rendered edge carries a fresh real height to heal
+      if (!(t instanceof HTMLElement) || (e as { skipped?: boolean }).skipped)
+        return;
+      healQueueRef.current.add(t);
+      if (!healRafRef.current)
+        healRafRef.current = requestAnimationFrame(flushHeal);
+    },
+    [flushHeal],
+  );
+  const healBoundRef = useRef<WeakSet<HTMLElement>>(new WeakSet());
 
   // The per-day grouping, split OUT of `rows` so it does NOT depend on `probe`.
   // Opening a page (a dive to a day) only adds a composer to that ONE row, but
@@ -3128,6 +3233,11 @@ function ScheduleFeedBase({
         // small drift is indistinguishable from the start of their swipe,
         // and writing scrollTop under a live gesture kills its momentum
         if (tookOverRef.current) return;
+        // a climb has its own exact re-land (relandOnRow) BEFORE first paint,
+        // so a pin firing mid-flight would only be seen as the dates skipping
+        // into place — exactly the bug. Stand down for the span of the move;
+        // clearOnStage (finish) drops climbingRef and the landing is already true.
+        if (climbingRef.current) return;
         const s = scrollerRef.current;
         const r = rowRefs.current.get(day);
         if (!s || !r) return;
@@ -3199,11 +3309,17 @@ function ScheduleFeedBase({
     [scrollToRow],
   );
   useLayoutEffect(() => {
-    handleRef.current = { goTo, markOnStage, clearOnStage, stickyDeltaFor };
+    handleRef.current = {
+      goTo,
+      markOnStage,
+      clearOnStage,
+      stickyDeltaFor,
+      relandOnRow,
+    };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor]);
+  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow]);
 
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
@@ -3297,6 +3413,9 @@ function ScheduleFeedBase({
   }, []);
 
   const onScroll = () => {
+    // stamp every scroll event (incl. fling frames) so the heal's scroll
+    // anchoring can tell a live gesture from a quiet post-dive frame
+    lastScrollTsRef.current = performance.now();
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -3343,8 +3462,16 @@ function ScheduleFeedBase({
   };
 
   const rowRef = (day: string) => (el: HTMLElement | null) => {
-    if (el) rowRefs.current.set(day, el);
-    else rowRefs.current.delete(day);
+    if (el) {
+      rowRefs.current.set(day, el);
+      // one heal listener per DOM node (React reuses the node across the ref
+      // churn its per-render closure causes; the WeakSet dedupes and lets the
+      // listener die with the node — no leak, no double-fire)
+      if (!healBoundRef.current.has(el)) {
+        healBoundRef.current.add(el);
+        el.addEventListener("contentvisibilityautostatechange", onRowAutoState);
+      }
+    } else rowRefs.current.delete(day);
   };
 
   // the book holds nothing yet — the today zone opens with a warmer first
