@@ -4586,14 +4586,10 @@ function TodayZoneFill({
               </motion.div>
             )}
           </AnimatePresence>
-          {/* the press glow — light pools under a touch anywhere on the
-              paper and follows the finger; above the wash, under the words.
-              NOT while a letter is on the sheet (the first-ever introduction
-              or the locked letter): a newcomer is reading, scrolling, and
-              finding their feet — light chasing the finger over the words
-              is exactly the distraction those beats can't afford. It
-              returns the moment the letter retires. */}
-          {!((lockedLetter || firstEver) && text.trim().length === 0) && <PressGlow grow />}
+          {/* The today zone has no press glow: it's a large writing surface, not
+              a pressable tile, and the light-under-finger (plus the old resize
+              bloom) read as button feedback the zone shouldn't give. The seal is
+              the thing you press here; the paper just takes the pen. */}
           {/* horizontal inset is a PROPORTION of the sheet width (not a fixed
               px), so the ruled field and the intro keep the same visual margin
               from a narrow phone up to the wide desk — the ruled paper and the
