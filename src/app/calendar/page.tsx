@@ -161,6 +161,51 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
   return g;
 }
 
+/**
+ * Drive a value 0→1 along the date-flight spring (stiffness 320, damping 34,
+ * mass 1) from a hand-rolled, PER-FRAME-CLAMPED integrator — never a wall-clock
+ * spring — and call `onUpdate(t)` each frame until it settles.
+ *
+ * Why not motion's `animate(0, 1, { type: "spring" })` (what this replaced):
+ * that ticks on the WALL CLOCK, so when the descent's setup frame stalls
+ * (relandOnRow + placeholder heal + measureRows — ~300–750ms on a deep book)
+ * the spring fast-forwards to nearly its end before its first visible frame, and
+ * the date numbers arrive at their schedule-margin slot in a single jump. They
+ * then read as "already planted" at the destination for the whole move instead
+ * of flying between altitudes (measured: 0 mid-flight frames on every leg,
+ * scripts/measure-flight-travel.py — the "planted dates" regression).
+ *
+ * Clamping each frame's dt (MAX_DT) caps how far ONE stalled frame can advance
+ * the integration, so a stall can only ever make the flight slightly longer,
+ * never skip it — the exact guard the entry-card morph uses (its MAX_DT ease),
+ * kept here as a real spring (semi-implicit Euler; the tiny overshoot is the
+ * settle the number always had). dt·√stiffness ≈ 0.6 ≪ 2, so the integrator is
+ * stable at the clamp.
+ */
+function driveFlightSpring(onUpdate: (t: number) => void): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const STIFF = 320;
+    const DAMP = 34;
+    const MAX_DT = 0.034; // s — one dropped frame can't fast-forward the flight
+    let p = 0;
+    let v = 0;
+    let last: number | null = null;
+    onUpdate(0); // paint the source position before the first tick
+    const loop = (now: number) => {
+      const dt = last === null ? 0 : Math.min((now - last) / 1000, MAX_DT);
+      last = now;
+      const a = -STIFF * (p - 1) - DAMP * v; // toward the target (1), mass 1
+      v += a * dt;
+      p += v * dt;
+      const settled = Math.abs(p - 1) < 0.001 && Math.abs(v) < 0.02;
+      onUpdate(settled ? 1 : p);
+      if (settled) resolve();
+      else requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  });
+}
+
 // The book's faint days — shown while the real entries are still loading so the
 // ledger reads as "settling in" rather than blank. Shared by the SSR Suspense
 // fallback AND the in-feed loading state, so the paper stays put continuously
@@ -1308,27 +1353,26 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
+        // clamped-dt spring (driveFlightSpring) — NOT motion's wall-clock
+        // `animate(0, 1, { spring })`, which fast-forwarded on the descent's
+        // setup stall and planted the number at its destination (bug: dates
+        // teleport instead of fly). The clamp guarantees every frame is read.
         moves.push(
-          animate(0, 1, {
-            type: "spring",
-            stiffness: 320,
-            damping: 34,
-            onUpdate: (t) => {
-              point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-                ay + (by - ay) * t
-              }px)`;
-              const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-              const tf = `translate(-50%,-50%) scale(${sc})`;
-              gFrom.style.transform = tf;
-              gTo.style.transform = tf;
-              // crossover centred on t=0.5 — the flight's midpoint, so
-              // the swap is never seen sitting at the origin or the
-              // destination (no blur: the flight is too quick to read one)
-              const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
-              gFrom.style.opacity = `${1 - k}`;
-              gTo.style.opacity = `${k}`;
-            },
-          }).finished,
+          driveFlightSpring((t) => {
+            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
+              ay + (by - ay) * t
+            }px)`;
+            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
+            const tf = `translate(-50%,-50%) scale(${sc})`;
+            gFrom.style.transform = tf;
+            gTo.style.transform = tf;
+            // crossover centred on t=0.5 — the flight's midpoint, so
+            // the swap is never seen sitting at the origin or the
+            // destination (no blur: the flight is too quick to read one)
+            const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
+            gFrom.style.opacity = `${1 - k}`;
+            gTo.style.opacity = `${k}`;
+          }),
         );
       }
     }
@@ -1373,19 +1417,15 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
+        // clamped-dt spring, same stall-proof driver as the date flyers
         moves.push(
-          animate(0, 1, {
-            type: "spring",
-            stiffness: 320,
-            damping: 34,
-            onUpdate: (t) => {
-              point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-                ay + (by - ay) * t
-              }px)`;
-              const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-              glyph.style.transform = `translate(-50%,-50%) scale(${sc})`;
-            },
-          }).finished,
+          driveFlightSpring((t) => {
+            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
+              ay + (by - ay) * t
+            }px)`;
+            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
+            glyph.style.transform = `translate(-50%,-50%) scale(${sc})`;
+          }),
         );
       }
     }
