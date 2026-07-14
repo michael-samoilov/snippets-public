@@ -142,6 +142,17 @@ function readFont(el: HTMLElement): FlyFont {
   };
 }
 
+// the painted box of an element's text, not its line box — block boxes carry
+// leading the glyphs don't, and the difference reads as a flyer landing low,
+// then skipping into place. Module-level so the tap handler can capture flight
+// takeoff rects on clean pre-commit layout (see descentGeom).
+function textRectOf(el: HTMLElement): DOMRect {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const r = range.getBoundingClientRect();
+  return r.width > 0 ? r : el.getBoundingClientRect();
+}
+
 function readColor(el: HTMLElement): string {
   return getComputedStyle(el).color;
 }
@@ -628,6 +639,16 @@ function Calendar() {
     card: DOMRect | null;
     cell: DOMRect | null; // the day's margin-date cell (close only)
   } | null>(null);
+  // month→schedule descent takeoff geometry, captured in pick() on the clean
+  // pre-commit layout. The month grid is static through the dive (only the
+  // camera transforms it), so its flydate boxes never change — reading them in
+  // the zoom effect instead forced an O(month) reflow (the setZoom commit dirties
+  // the month layer's layout; the flight's first getBoundingClientRect flushed
+  // it, ~28ms on the setup frame). Same trick as zoomGeom for entry dives.
+  const descentGeom = useRef<{
+    anchor: string;
+    cells: Map<string, DOMRect>;
+  } | null>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   const yearFeedRef = useRef<YearFeedHandle | null>(null);
   const scheduleFeedRef = useRef<ScheduleFeedHandle | null>(null);
@@ -741,6 +762,26 @@ function Calendar() {
     (key: string) => {
       liveDayRef.current = key;
       navigator.vibrate?.(6);
+      // Capture the flight's takeoff rects NOW, on the clean month layout —
+      // before goTo/runZoom commit and dirty it. The month grid is static
+      // through the dive, so these boxes are the truth the whole move; reading
+      // them here (a handful of cheap reads against up-to-date layout) spares
+      // the zoom effect an O(month) reflow (a single post-commit
+      // getBoundingClientRect on the month re-flushes its whole layout).
+      const stageEl = stageRef.current;
+      const monthEl = monthLayerRef.current;
+      if (stageEl && monthEl) {
+        const sr = stageEl.getBoundingClientRect();
+        const cells = new Map<string, DOMRect>();
+        for (const el of monthEl.querySelectorAll<HTMLElement>("[data-flydate]")) {
+          const r = textRectOf(el);
+          const y = r.top - sr.top;
+          if (y > -r.height && y < sr.height) cells.set(el.dataset.flydate!, r);
+        }
+        descentGeom.current = { anchor: key, cells };
+      } else {
+        descentGeom.current = null;
+      }
       if (urlTimer.current) clearTimeout(urlTimer.current);
       pushUrl(`${pathname}?d=${key}`);
       scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
@@ -952,15 +993,7 @@ function Calendar() {
       : stage.getBoundingClientRect();
     const moves: Promise<unknown>[] = [];
 
-    // the painted box of an element's text, not its line box — block
-    // boxes carry leading the glyphs don't, and the difference reads as
-    // a flyer landing low, then skipping into place
-    const textRect = (el: HTMLElement) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const r = range.getBoundingClientRect();
-      return r.width > 0 ? r : el.getBoundingClientRect();
-    };
+    const textRect = textRectOf;
     const ensureFlyerBox = () => {
       if (flyerBox) return flyerBox;
       flyerBox = document.createElement("div");
@@ -1323,7 +1356,33 @@ function Calendar() {
         }
         return found;
       };
-      const fromEls = collect(outgoing);
+      // Descent from the month: take the flight's takeoff boxes from the
+      // clean-layout capture in pick() (descentGeom) instead of measuring the
+      // month live — a single post-commit getBoundingClientRect on the month
+      // re-flushes its whole layout (~28ms on the setup frame). We still resolve
+      // the live element (a cheap querySelector, no layout) to hide it and read
+      // its font. Other paths (ascent, freeze off) measure live as before.
+      const descentCache =
+        zoom.from === "month" &&
+        zoom.to === "schedule" &&
+        descentGeom.current?.anchor === zoom.anchor
+          ? descentGeom.current
+          : null;
+      let fromEls: Map<string, HTMLElement>;
+      let fromRectFor: (day: string, el: HTMLElement) => DOMRect;
+      if (descentCache) {
+        fromEls = new Map();
+        for (const day of descentCache.cells.keys()) {
+          const el = outgoing.querySelector<HTMLElement>(
+            `[data-flydate="${CSS.escape(day)}"]`,
+          );
+          if (el) fromEls.set(day, el);
+        }
+        fromRectFor = (day, el) => descentCache.cells.get(day) ?? textRect(el);
+      } else {
+        fromEls = collect(outgoing);
+        fromRectFor = (_day, el) => textRect(el);
+      }
       const toEls = collect(incoming);
       // pulling back, only the day the reader stood on travels — the
       // other visible dates belong to the page being closed
@@ -1352,7 +1411,7 @@ function Calendar() {
           day,
           fromEl,
           toEl,
-          a: textRect(fromEl),
+          a: fromRectFor(day, fromEl),
           b: textRect(toEl),
           fromFont: readFont(fromEl),
           toFont: readFont(toEl),
