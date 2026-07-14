@@ -3194,6 +3194,18 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     if (!el) return;
     climbingRef.current = true; // measureRows stands down for the move
+    // Establish the climb's content-visibility BEFORE the first geometry read
+    // below. data-climbing sends every section that lacks data-onstage to
+    // cv:hidden; on the dive's first mark nothing is on-stage yet, so the whole
+    // book goes dormant. That matters for COST: reading el.scrollTop forces a
+    // layout flush, and if the book were still cv:auto that flush would lay out
+    // the visible viewport's PROSE — the descent's dominant setup cost — only for
+    // this same call to then hide most of it (render-then-drop). With the book
+    // already dormant, the scrollTop flush lays out nothing, and the single flush
+    // that renders anything is the offsetHeight below, over the on-stage band
+    // alone. (Flipping cv here, un-transformed, is also what keeps the move off
+    // the ~5s under-transform intrinsic-size thrash — see the offsetHeight note.)
+    el.setAttribute("data-climbing", "");
     const top = el.scrollTop;
     const band = el.clientHeight * 1.5;
     const lo = top - band;
@@ -3212,15 +3224,7 @@ function ScheduleFeedBase({
     for (const row of cur) if (!next.has(row)) row.removeAttribute("data-onstage");
     for (const row of next) if (!cur.has(row)) row.setAttribute("data-onstage", "");
     onStageRef.current = next;
-    // Flip to the climb's content-visibility NOW — while the layer is still
-    // un-transformed — and force the auto→hidden relayout in THIS pass. Doing it
-    // here costs a transform-free ~40ms; letting it land on the first transformed
-    // frame instead (Motion applies the scale later in the same zoom effect) made
-    // the browser recompute every section's intrinsic-size box UNDER the moving
-    // transform, which thrashed to ~5s. Establishing it first means the transform
-    // then rides a book whose off-screen sections are already dormant.
-    el.setAttribute("data-climbing", "");
-    void el.offsetHeight; // sync layout flush: pay the hidden transition now
+    void el.offsetHeight; // sync layout flush: render the on-stage band now
   }, []);
   const clearOnStage = useCallback(() => {
     // only the band carries data-onstage (markOnStage keeps the set exact), so
