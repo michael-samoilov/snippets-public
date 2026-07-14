@@ -3204,6 +3204,12 @@ function ScheduleFeedBase({
   const noClimbRef = useRef(false);
   useEffect(() => {
     try {
+      // ?noclimb=1 (or =0) flips it and STICKS via localStorage, so the choice
+      // survives the URL changing on the first dive — easy to toggle on a phone
+      // where the console isn't handy. Bare localStorage still works too.
+      const q = new URLSearchParams(window.location.search).get("noclimb");
+      if (q === "1") localStorage.setItem("noclimb", "1");
+      else if (q === "0") localStorage.removeItem("noclimb");
       noClimbRef.current = localStorage.getItem("noclimb") === "1";
     } catch {
       /* private mode / SSR guard */
