@@ -733,6 +733,16 @@ function Calendar() {
     // the previous finish left the departed layer inline-hidden
     for (const el of Object.values(layers)) if (el) el.style.visibility = "";
 
+    // Belt-and-braces: sweep any orphaned flyer glyph from a prior move before
+    // this one launches. The deferred finish cleanup removes each move's own
+    // flyer box, so a leak needs a torn-down teardown (a throw between finish
+    // and its rAF) — never seen in the adversarial probes, but a stray monotype
+    // number surviving into the next dive is exactly the reported ghost, so make
+    // it impossible rather than merely unlikely.
+    stage
+      .querySelectorAll("[data-fly], [data-flymonth-fly]")
+      .forEach((el) => el.remove());
+
     let flyerBox: HTMLDivElement | null = null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
@@ -792,31 +802,38 @@ function Calendar() {
       }
       if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
-      // the climb kept only an on-screen band rendered (the rest cv:hidden); the
-      // move has landed, so drop the band markers and let cv:auto skip off-screen
-      // sections again
-      scheduleLayerRef.current
-        ?.querySelector("[data-book-scroller]")
-        ?.removeAttribute("data-climbing");
-      scheduleFeedRef.current?.clearOnStage();
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       setZoom(null);
       zooming.current = false;
-      // Hand the stand-ins back to the real elements ONE FRAME LATER — after the
-      // setZoom(null) commit has restored the real book (its layer opacity clears
-      // to full). Revealing the real cell and removing the stand-in together, on
-      // the next frame, overlaps them for the swap instead of leaving a one-frame
-      // gap where the date blinks out.
-      if (flyerBox || underBox || hiddenNumbers.length || repinned.length) {
+      // Everything heavy — dropping the band's content-visibility (flips ~720
+      // sections cv:hidden→auto, a big style invalidation) AND handing the
+      // stand-ins back — runs ONE FRAME LATER, off the visible settle frame.
+      // Removing data-climbing here (with the setZoom(null) React commit) was the
+      // finish "spike" (~67–83ms). The move has landed at scale 1 with the
+      // viewport fully inside the still-rendered band, so the off-screen sections
+      // staying hidden for one extra frame is invisible; and the setZoom(null)
+      // commit has by then restored the real book so the stand-in→real swap
+      // overlaps instead of blinking.
+      const climbed =
+        zoom.from !== "entry" &&
+        zoom.to !== "entry" &&
+        (zoom.from === "schedule" || zoom.to === "schedule");
+      if (climbed || flyerBox || underBox || hiddenNumbers.length || repinned.length) {
         const fb = flyerBox;
         const ub = underBox;
         const reals = hiddenNumbers;
         requestAnimationFrame(() => {
+          if (climbed) {
+            scheduleLayerRef.current
+              ?.querySelector("[data-book-scroller]")
+              ?.removeAttribute("data-climbing");
+            scheduleFeedRef.current?.clearOnStage();
+          }
           for (const el of reals) el.style.visibility = "";
-          // the setZoom(null) commit has removed data-dive-freeze by now, so
-          // dropping the inline sticky hands over to the class's own sticky —
-          // same computed position, no one-frame pop
+          // data-dive-freeze is gone (setZoom(null)), so dropping the inline
+          // sticky hands over to the class's own sticky — same computed
+          // position, no one-frame pop
           for (const el of repinned) el.style.position = "";
           fb?.remove();
           ub?.remove();
@@ -1270,11 +1287,22 @@ function Calendar() {
         point.dataset.fly = day;
         point.style.cssText =
           `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
+        // TRANSFORM-ONLY flight: the glyphs render ONCE at the larger of the
+        // two sizes and ride a `scale` (always ≤1, so downscaling — sharp, no
+        // upscale blur) instead of re-setting fontSize each frame. fontSize is
+        // a layout write; over the flight × every visible flyer that was the
+        // mid-flight chop. scale is compositor-only. transform-origin is the
+        // glyph's centre (it wears translate(-50%,-50%)), so scaling holds it
+        // centred on the travelling point.
+        const baseSize = Math.max(fromFont.size, toFont.size);
         const gFrom = flyGlyph(num, fromFont, color);
         const gTo = flyGlyph(num, toFont, color);
-        gFrom.style.fontSize = `${fromFont.size}px`;
-        gTo.style.fontSize = `${fromFont.size}px`;
+        gFrom.style.fontSize = `${baseSize}px`;
+        gTo.style.fontSize = `${baseSize}px`;
+        gFrom.style.willChange = "transform, opacity";
+        gTo.style.willChange = "transform, opacity";
         gTo.style.opacity = "0";
+        point.style.willChange = "transform";
         point.append(gFrom, gTo);
         box!.appendChild(point);
         fromEl.style.visibility = "hidden";
@@ -1289,9 +1317,10 @@ function Calendar() {
               point.style.transform = `translate(${ax + (bx - ax) * t}px,${
                 ay + (by - ay) * t
               }px)`;
-              const fs = fromFont.size + (toFont.size - fromFont.size) * t;
-              gFrom.style.fontSize = `${fs}px`;
-              gTo.style.fontSize = `${fs}px`;
+              const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
+              const tf = `translate(-50%,-50%) scale(${sc})`;
+              gFrom.style.transform = tf;
+              gTo.style.transform = tf;
               // crossover centred on t=0.5 — the flight's midpoint, so
               // the swap is never seen sitting at the origin or the
               // destination (no blur: the flight is too quick to read one)
@@ -1331,9 +1360,14 @@ function Calendar() {
         point.dataset.flymonthFly = zoom.anchor;
         point.style.cssText = `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
         // same voice in both places, so one glyph that only travels and
-        // resizes — colour copied so the current month keeps its wax
+        // resizes — colour copied so the current month keeps its wax. Rendered
+        // once at the larger size and scaled (compositor-only, always ≤1 so
+        // sharp), never re-laid-out per frame.
+        const baseSize = Math.max(fromFont.size, toFont.size);
         const glyph = flyGlyph(fromEl.textContent ?? "", fromFont, readColor(fromEl));
-        glyph.style.fontSize = `${fromFont.size}px`;
+        glyph.style.fontSize = `${baseSize}px`;
+        glyph.style.willChange = "transform";
+        point.style.willChange = "transform";
         point.appendChild(glyph);
         box.appendChild(point);
         fromEl.style.visibility = "hidden";
@@ -1348,7 +1382,8 @@ function Calendar() {
               point.style.transform = `translate(${ax + (bx - ax) * t}px,${
                 ay + (by - ay) * t
               }px)`;
-              glyph.style.fontSize = `${fromFont.size + (toFont.size - fromFont.size) * t}px`;
+              const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
+              glyph.style.transform = `translate(-50%,-50%) scale(${sc})`;
             },
           }).finished,
         );
@@ -2829,6 +2864,7 @@ function ScheduleFeedBase({
   // geometry is the already-cached rowGeomRef, never fresh offset reads. A
   // generous ±1.5-viewport band keeps a dormant section from being revealed as
   // the layer scales during the move.
+  const onStageRef = useRef<Set<HTMLElement>>(new Set());
   const markOnStage = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -2837,12 +2873,20 @@ function ScheduleFeedBase({
     const band = el.clientHeight * 1.5;
     const lo = top - band;
     const hi = top + el.clientHeight + band;
+    const next = new Set<HTMLElement>();
     for (const g of rowGeomRef.current) {
-      const row = rowRefs.current.get(g.day);
-      if (!row) continue;
-      if (g.bottom > lo && g.top < hi) row.setAttribute("data-onstage", "");
-      else row.removeAttribute("data-onstage");
+      if (g.bottom > lo && g.top < hi) {
+        const row = rowRefs.current.get(g.day);
+        if (row) next.add(row);
+      }
     }
+    // touch ONLY the rows whose membership changed: a re-land (relandOnRow)
+    // re-marks a near-identical band, and a full re-stamp of ~720 rows × up to
+    // 3 passes was pure style-invalidation churn on the setup frame.
+    const cur = onStageRef.current;
+    for (const row of cur) if (!next.has(row)) row.removeAttribute("data-onstage");
+    for (const row of next) if (!cur.has(row)) row.setAttribute("data-onstage", "");
+    onStageRef.current = next;
     // Flip to the climb's content-visibility NOW — while the layer is still
     // un-transformed — and force the auto→hidden relayout in THIS pass. Doing it
     // here costs a transform-free ~40ms; letting it land on the first transformed
@@ -2854,8 +2898,10 @@ function ScheduleFeedBase({
     void el.offsetHeight; // sync layout flush: pay the hidden transition now
   }, []);
   const clearOnStage = useCallback(() => {
-    for (const row of rowRefs.current.values())
-      row.removeAttribute("data-onstage");
+    // only the band carries data-onstage (markOnStage keeps the set exact), so
+    // clearing it is O(band), not a ~720-row sweep on the teardown frame
+    for (const row of onStageRef.current) row.removeAttribute("data-onstage");
+    onStageRef.current = new Set();
     climbingRef.current = false;
   }, []);
   // See ScheduleFeedHandle: how far below its section top a day's margin date
@@ -2863,10 +2909,26 @@ function ScheduleFeedBase({
   // section bottom - cell height)); nonzero only for the section straddling the
   // scroll top. Cached geometry + one scroll read — nothing is measured inside
   // a content-visibility-skipped section.
+  // day → geom lookup, rebuilt only when rowGeomRef is replaced (once per
+  // measureRows). The zoom effect calls stickyDeltaFor once per on-stage
+  // section back-to-back; a linear .find over ~720 rows each time was ~40ms of
+  // the dive's setup frame.
+  const geomMapRef = useRef<{
+    src: unknown;
+    map: Map<string, { day: string; top: number; bottom: number; headH: number }>;
+  }>({ src: null, map: new Map() });
+  const geomMap = () => {
+    if (geomMapRef.current.src !== rowGeomRef.current)
+      geomMapRef.current = {
+        src: rowGeomRef.current,
+        map: new Map(rowGeomRef.current.map((g) => [g.day, g])),
+      };
+    return geomMapRef.current.map;
+  };
   const stickyDeltaFor = useCallback((day: string) => {
     const el = scrollerRef.current;
     if (!el) return 0;
-    const g = rowGeomRef.current.find((r) => r.day === day);
+    const g = geomMap().get(day);
     if (!g) return 0;
     const stuck = Math.min(Math.max(g.top, el.scrollTop), g.bottom - g.headH);
     return Math.max(0, stuck - g.top);
@@ -3461,18 +3523,21 @@ function ScheduleFeedBase({
     });
   };
 
-  const rowRef = (day: string) => (el: HTMLElement | null) => {
-    if (el) {
-      rowRefs.current.set(day, el);
-      // one heal listener per DOM node (React reuses the node across the ref
-      // churn its per-render closure causes; the WeakSet dedupes and lets the
-      // listener die with the node — no leak, no double-fire)
-      if (!healBoundRef.current.has(el)) {
-        healBoundRef.current.add(el);
-        el.addEventListener("contentvisibilityautostatechange", onRowAutoState);
-      }
-    } else rowRefs.current.delete(day);
-  };
+  const rowRef = useCallback(
+    (day: string) => (el: HTMLElement | null) => {
+      if (el) {
+        rowRefs.current.set(day, el);
+        // one heal listener per DOM node (React reuses the node across the ref
+        // churn its per-render closure causes; the WeakSet dedupes and lets the
+        // listener die with the node — no leak, no double-fire)
+        if (!healBoundRef.current.has(el)) {
+          healBoundRef.current.add(el);
+          el.addEventListener("contentvisibilityautostatechange", onRowAutoState);
+        }
+      } else rowRefs.current.delete(day);
+    },
+    [onRowAutoState],
+  );
 
   // the book holds nothing yet — the today zone opens with a warmer first
   // invitation (and there's no yesterday to review above it)
@@ -3638,7 +3703,7 @@ function ScheduleFeedBase({
     // rebuilt the ENTIRE flat book's card tree on each dive: an O(book)
     // reconcile + reflow that was the bulk of the tap→dive input lag (~0.5s on a
     // 1000-entry book, scaling linearly). The card DOM depends only on content.
-    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry],
+    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, rowRef],
   );
 
   return (
