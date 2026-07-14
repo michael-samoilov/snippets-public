@@ -94,6 +94,42 @@ def main() -> int:
         pg.goto(BASE, wait_until="load")
         pg.wait_for_timeout(5000)
         out = pg.evaluate(MEASURE)
+
+        # ── DESCENT leg: month → schedule into a FAR (never-rendered) day.
+        # This is the flow whose first frame paid the flight's interleaved
+        # rect-reads (~750ms measured before the batch-reads fix). The month
+        # feed scrolls back ~3 months and a VISIBLE, enabled cell is tapped —
+        # exactly a reader descending into history.
+        descent = {"error": "descent: setup failed"}
+        if "error" not in out:
+            pg.wait_for_timeout(800)  # let the ascent settle fully
+            pg.evaluate(r"""() => {
+              const m = document.querySelector('[data-layer="month"]');
+              const sc = [...m.querySelectorAll('*')].find(
+                e => e.scrollHeight > e.clientHeight + 100);
+              if (sc) sc.scrollTop -= sc.clientHeight * 3;
+            }""")
+            pg.wait_for_timeout(900)
+            descent = pg.evaluate(r"""() => new Promise(res => {
+              const st = document.querySelector('[data-layer="month"]').getBoundingClientRect();
+              const cells = [...document.querySelectorAll(
+                  '[data-layer="month"] button[data-day-key]:not([disabled])')]
+                .map(b => ({ b, r: b.getBoundingClientRect() }))
+                .filter(x => x.r.top > st.top + 80 && x.r.bottom < st.bottom - 80 && x.r.height > 0);
+              const pick = cells[Math.floor(cells.length / 2)];
+              if (!pick) { res({ error: "descent: no visible month cell" }); return; }
+              pick.b.click();
+              const gaps = [];
+              let n = 0, prev = null;
+              const loop = (now) => {
+                n++;
+                if (prev !== null) gaps.push(Math.round(now - prev));
+                prev = now;
+                if (n < 60) requestAnimationFrame(loop);
+                else res({ max_early_gap_ms: Math.max(...gaps.slice(0, __EARLY__)) });
+              };
+              requestAnimationFrame(loop);
+            })""".replace("__EARLY__", str(EARLY_FRAMES)))
         ctx.close()
         browser.close()
 
@@ -104,9 +140,15 @@ def main() -> int:
     gap = out["max_early_gap_ms"]
     settle_ok = ms <= BUDGET_MS
     stall_ok = gap <= STALL_MS
-    ok = settle_ok and stall_ok
+    d_gap = descent.get("max_early_gap_ms")
+    d_ok = d_gap is not None and d_gap <= STALL_MS
+    ok = settle_ok and stall_ok and d_ok
     print(f"  schedule → month climb settled in {ms}ms   budget ≤ {BUDGET_MS}ms   {'ok' if settle_ok else 'TOO LONG'}")
     print(f"  worst rAF gap in first {EARLY_FRAMES} frames: {gap}ms   budget ≤ {STALL_MS}ms   {'ok' if stall_ok else 'STALLED AT START'}")
+    if d_gap is None:
+        print(f"  descent: {descent.get('error', 'no measurement')}")
+    else:
+        print(f"  month → far schedule descent, worst early gap: {d_gap}ms   budget ≤ {STALL_MS}ms   {'ok' if d_ok else 'STALLED AT START'}")
     print("\n", "ALTITUDE CLIMB SNAPPY ✓" if ok else "ALTITUDE CLIMB REGRESSED ✗")
     return 0 if ok else 1
 

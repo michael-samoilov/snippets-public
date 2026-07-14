@@ -407,6 +407,13 @@ interface ScheduleFeedHandle {
   // interleaves layout reads with the attribute writes. See [data-climbing].
   markOnStage: () => void;
   clearOnStage: () => void;
+  // how far a day's margin date sits BELOW its section top at rest — nonzero
+  // only for the section straddling the scroll top, whose date pins to the
+  // viewport (sticky). The month⇄schedule zooms measure flyer rects under
+  // data-dive-freeze (dates static, at their section tops), so the flight adds
+  // this to fly from/to where the pinned date actually rests. Cached geometry
+  // + one scroll read; no layout forced in skipped sections.
+  stickyDeltaFor: (day: string) => number;
 }
 
 /**
@@ -492,6 +499,19 @@ function Calendar() {
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
+  // Device A/B toggle for the dive freeze (see data-dive-freeze in globals.css):
+  // `localStorage.setItem('nofreeze','1')` + reload runs the month⇄schedule
+  // moves with the margin dates genuinely sticky the whole way (no freeze, no
+  // sticky-delta compensation — measured rects are then already the truth).
+  // The freeze exists for a suspected iOS sticky-under-transform artifact that
+  // headless Chromium can't reproduce; whichever the owner's device pass picks,
+  // the loser gets deleted. Read once per mount (lazy state initializer — it
+  // deliberately never changes without a reload).
+  const [freezeEnabled] = useState(
+    () =>
+      typeof window === "undefined" ||
+      window.localStorage?.getItem("nofreeze") !== "1",
+  );
   // a deletion closes the entry by dissolving the card in place, not the
   // shared-element shrink back to its (vanishing) book slot — this flag marks
   // the next close as a deletion so it plays the dissolve.
@@ -705,7 +725,11 @@ function Calendar() {
     for (const el of Object.values(layers)) if (el) el.style.visibility = "";
 
     let flyerBox: HTMLDivElement | null = null;
+    let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
+    // the straddling day's margin cell, held sticky through a frozen move
+    // (inline style beats [data-dive-freeze]) — cleared a frame after finish
+    const repinned: HTMLElement[] = [];
     const willChanged: HTMLElement[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
@@ -775,12 +799,18 @@ function Calendar() {
       // to full). Revealing the real cell and removing the stand-in together, on
       // the next frame, overlaps them for the swap instead of leaving a one-frame
       // gap where the date blinks out.
-      if (flyerBox || hiddenNumbers.length) {
+      if (flyerBox || underBox || hiddenNumbers.length || repinned.length) {
         const fb = flyerBox;
+        const ub = underBox;
         const reals = hiddenNumbers;
         requestAnimationFrame(() => {
           for (const el of reals) el.style.visibility = "";
+          // the setZoom(null) commit has removed data-dive-freeze by now, so
+          // dropping the inline sticky hands over to the class's own sticky —
+          // same computed position, no one-frame pop
+          for (const el of repinned) el.style.position = "";
           fb?.remove();
+          ub?.remove();
         });
       }
     };
@@ -829,6 +859,22 @@ function Calendar() {
         "position:absolute;inset:0;pointer-events:none;z-index:45;transform:translateZ(0);";
       stage.appendChild(flyerBox);
       return flyerBox;
+    };
+    // a box UNDER the entry layer (inserted before it, no z) for stand-ins that
+    // belong to the BOOK — the close's held margin date. In the flyer box (above
+    // everything) the date painted OVER the card shrinking home, breaking the
+    // book's own order: cards read as higher than the margin dates. Here it
+    // covers the fading book but still passes under the card.
+    const ensureUnderBox = () => {
+      if (underBox) return underBox;
+      underBox = document.createElement("div");
+      underBox.style.cssText =
+        "position:absolute;inset:0;pointer-events:none;transform:translateZ(0);";
+      const entryLayer = entryLayerRef.current;
+      if (entryLayer && entryLayer.parentElement === stage)
+        stage.insertBefore(underBox, entryLayer);
+      else stage.appendChild(underBox);
+      return underBox;
     };
 
     // book⇄entry is not a camera scale but a shared element: the tapped
@@ -931,7 +977,9 @@ function Calendar() {
             clone.style.width = `${c.width}px`;
             clone.style.opacity = "1";
             clone.style.visibility = "visible";
-            ensureFlyerBox().appendChild(clone);
+            // UNDER the entry layer: the held date belongs to the book, so the
+            // card shrinking home must pass OVER it (cards outrank margin dates)
+            ensureUnderBox().appendChild(clone);
             // hide the real cell (the whole sticky margin block) until the finish,
             // so the only date on screen is the stand-in held over the fading book
             cell.style.visibility = "hidden";
@@ -1103,6 +1151,30 @@ function Calendar() {
       (zoom.from === "month" && zoom.to === "schedule") ||
       (zoom.from === "schedule" && zoom.to === "month");
     if (dayPair) {
+      // The dive freeze (data-dive-freeze) parks every margin date at its
+      // section top for the move — but the date whose section STRADDLES the
+      // scroll top rests PINNED (sticky), so frozen it sits in the wrong place
+      // (often off-viewport): flyers measured against it flew to/from the wrong
+      // spot and the date itself popped in only when the freeze lifted. Pin
+      // THAT ONE cell through the move with inline position:sticky (inline
+      // beats the freeze rule): it rides the scaling book exactly as at rest,
+      // every measured rect below is simply the truth, and the restick is a
+      // no-op. stickyDeltaFor (cached geometry) finds the straddler; the
+      // on-stage band is the only place it can live, so the scan is O(band).
+      if (freezeEnabled) {
+        for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
+          "[data-day][data-onstage]",
+        ) ?? []) {
+          const day = sec.dataset.day;
+          if (!day || !(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0))
+            continue;
+          const cell = sec.querySelector<HTMLElement>(".book-margin-date");
+          if (cell) {
+            cell.style.position = "sticky";
+            repinned.push(cell);
+          }
+        }
+      }
       // Only on-screen dates can fly, so only measure on-screen flydates. In the
       // BOOK layer that matters for correctness AND cost: the climb has sent its
       // off-screen day sections to content-visibility:hidden, and calling
@@ -1134,18 +1206,40 @@ function Calendar() {
         for (const day of [...fromEls.keys()])
           if (day !== zoom.anchor) fromEls.delete(day);
       }
-      const box = ensureFlyerBox();
+      // READ PHASE — measure every pair before a single style write. Each
+      // hide/append below invalidates layout, so interleaving measurement with
+      // the writes forced a fresh relayout per flyer (profiled at ~250ms of
+      // textRect alone on a far-day descent); batched, the whole flight
+      // measures against one layout.
+      const pairs: Array<{
+        day: string;
+        fromEl: HTMLElement;
+        toEl: HTMLElement;
+        a: DOMRect;
+        b: DOMRect;
+        fromFont: FlyFont;
+        toFont: FlyFont;
+      }> = [];
       for (const [day, fromEl] of fromEls) {
         const toEl = toEls.get(day);
         if (!toEl) continue;
-        const a = textRect(fromEl);
-        const b = textRect(toEl);
+        pairs.push({
+          day,
+          fromEl,
+          toEl,
+          a: textRect(fromEl),
+          b: textRect(toEl),
+          fromFont: readFont(fromEl),
+          toFont: readFont(toEl),
+        });
+      }
+      // WRITE PHASE — glyphs, hides, springs
+      const box = pairs.length ? ensureFlyerBox() : null;
+      for (const { day, fromEl, toEl, a, b, fromFont, toFont } of pairs) {
         const ax = a.left + a.width / 2 - stageRect.left;
         const ay = a.top + a.height / 2 - stageRect.top;
         const bx = b.left + b.width / 2 - stageRect.left;
         const by = b.top + b.height / 2 - stageRect.top;
-        const fromFont = readFont(fromEl);
-        const toFont = readFont(toEl);
         const num = String(Number(day.slice(8)));
         const color = day === dayKey() ? "var(--wax)" : "var(--ink)";
 
@@ -1164,7 +1258,7 @@ function Calendar() {
         gTo.style.fontSize = `${fromFont.size}px`;
         gTo.style.opacity = "0";
         point.append(gFrom, gTo);
-        box.appendChild(point);
+        box!.appendChild(point);
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
@@ -1244,7 +1338,8 @@ function Calendar() {
     }
 
     void Promise.all(moves).then(finish, finish);
-  }, [zoom, reduceMotion]);
+    // freezeEnabled is set once at mount and never changes without a reload
+  }, [zoom, reduceMotion, freezeEnabled]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
@@ -2405,6 +2500,7 @@ function Calendar() {
               // or the focused day's number jumps from its pinned slot to its
               // section top for the length of the card animation.
               diveFreeze={
+                freezeEnabled &&
                 !!zoom &&
                 zoom.from !== "entry" &&
                 zoom.to !== "entry" &&
@@ -2671,21 +2767,32 @@ function ScheduleFeedBase({
     const read = Array.from(rowRefs.current, ([day, row]) => {
       const top = row.offsetTop;
       const h = row.offsetHeight;
+      // content-box height (see the --cis stamp below); clientHeight excludes
+      // the border and costs nothing extra — same layout pass as offsetHeight
+      const contentH = row.clientHeight;
       const onScreen = top + h > st - ch && top < st + 2 * ch;
       let headH: number | null = null;
       if (onScreen) {
         headH = (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? null;
         if (headH != null) sampleHeadH = headH;
       }
-      return { day, row, headH, top, h };
+      return { day, row, headH, top, h, contentH };
     });
     // feed each section its OWN measured height as the lazy-render placeholder,
     // so a skipped (off-screen) section reserves exactly its real space and the
-    // book's total height can't drift (see [data-day] in globals.css). Reading
-    // offsetHeight above returns the real height while lazy is off, and the
-    // already-set --cis (identical) once it's on — so this stays self-consistent
-    // and only a genuinely-changed, on-screen section moves its own placeholder.
-    for (const r of read) r.row.style.setProperty("--cis", `${r.h}px`);
+    // book's total height can't drift (see [data-day] in globals.css).
+    // CONTENT-BOX, not offsetHeight: contain-intrinsic-size sizes the CONTENT
+    // box, and the browser adds the section's border-top hairline on top — a
+    // border-box stamp left every skipped section exactly 1px too tall, so each
+    // section rendering/skipping as you scroll shifted the book 1px (the scroll
+    // "rubberband"; overflow-anchor is off, nothing absorbed it) and every
+    // climb's hidden⇄auto toggle swung the whole book by ~1px × ~720 sections
+    // (~750px), landing descents askew. clientHeight = content box here because
+    // the sections carry no vertical padding (it lives on their children) — if
+    // padding is ever added to [data-day] itself, subtract it here too.
+    // Self-consistent while skipped: offsetHeight reads back cis + border, and
+    // clientHeight reads back cis — the stamp never drifts.
+    for (const r of read) r.row.style.setProperty("--cis", `${r.contentH}px`);
     const geom = read
       .map((r) => ({
         day: r.day,
@@ -2732,6 +2839,19 @@ function ScheduleFeedBase({
     for (const row of rowRefs.current.values())
       row.removeAttribute("data-onstage");
     climbingRef.current = false;
+  }, []);
+  // See ScheduleFeedHandle: how far below its section top a day's margin date
+  // RESTS. Sticky top-0 pins the cell at max(section top, min(scroll top,
+  // section bottom - cell height)); nonzero only for the section straddling the
+  // scroll top. Cached geometry + one scroll read — nothing is measured inside
+  // a content-visibility-skipped section.
+  const stickyDeltaFor = useCallback((day: string) => {
+    const el = scrollerRef.current;
+    if (!el) return 0;
+    const g = rowGeomRef.current.find((r) => r.day === day);
+    if (!g) return 0;
+    const stuck = Math.min(Math.max(g.top, el.scrollTop), g.bottom - g.headH);
+    return Math.max(0, stuck - g.top);
   }, []);
 
   // The per-day grouping, split OUT of `rows` so it does NOT depend on `probe`.
@@ -3079,11 +3199,11 @@ function ScheduleFeedBase({
     [scrollToRow],
   );
   useLayoutEffect(() => {
-    handleRef.current = { goTo, markOnStage, clearOnStage };
+    handleRef.current = { goTo, markOnStage, clearOnStage, stickyDeltaFor };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo, markOnStage, clearOnStage]);
+  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor]);
 
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
