@@ -1262,6 +1262,15 @@ function Calendar() {
       : "50% 30%";
     outgoing.style.transformOrigin = origin;
     incoming.style.transformOrigin = origin;
+    // Promote both layers to their OWN compositor layer for the move. Without
+    // this the browser re-rasterizes the whole layer each frame as its scale
+    // changes (a big, text-heavy grid/book repainting every frame) — the reason
+    // the altitude camera felt choppy while the entry morph, whose card IS
+    // promoted (below), stays buttery. will-change:transform rasters each layer
+    // once and lets the GPU composite the scale. finish() clears it (willChanged).
+    outgoing.style.willChange = "transform";
+    incoming.style.willChange = "transform";
+    willChanged.push(outgoing, incoming);
 
     // hold the arriving layer dark until the animation's first tick owns it
     incoming.style.opacity = "0";
