@@ -589,6 +589,35 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
+/* Lazy-render the flat book (the honest fix for the dive/rise input lag — a CSS
+   route to BACKLOG #12's windowing that keeps the DOM whole). The book is NOT
+   virtualized, so diving into an entry made the browser lay out + composite ALL
+   the day sections on the transition frame — an O(book) stall (~45ms at 100
+   entries, ~190ms at 1000+) felt as the dive "waiting" before it moves.
+   content-visibility lets the browser SKIP the layout+paint of off-screen
+   sections; the transition then costs only the on-screen handful.
+
+   The catch that sank the naive version: a fixed intrinsic-size estimate is
+   wrong per day, so the book's total height drifts and scrolling jitters. The
+   cure is `--cis`, set on EACH section to its own MEASURED height (from
+   measureRows), so a skipped section reserves exactly its real space — total
+   height stays accurate, scroll stays exact. Gated behind [data-lazy], which is
+   only set once the full book has mounted and measured (so the measurements are
+   real, not estimates).
+
+   And it's disabled for the span of an altitude climb ([data-climbing]): that
+   transition TRANSFORMS the whole schedule layer, and content-visibility
+   re-evaluates every section's on-screen-ness each frame of a transformed
+   ancestor — which balloons the climb to seconds. A dive only fades the layer
+   (opacity, positions still), so cv stays on and fast there. */
+[data-book-scroller][data-lazy] [data-day] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--cis, 240px);
+}
+[data-book-scroller][data-lazy][data-climbing] [data-day] {
+  content-visibility: visible;
+}
+
 
 /* ── typographic voices ────────────────────────────────────────
    Layered as components so their colors are defaults: an unlayered

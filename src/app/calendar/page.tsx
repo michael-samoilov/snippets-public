@@ -744,6 +744,11 @@ function Calendar() {
       }
       if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
+      // an altitude climb turned lazy-render off (it transforms the layer); the
+      // move has landed, so let the browser skip the off-screen sections again
+      scheduleLayerRef.current
+        ?.querySelector("[data-book-scroller]")
+        ?.removeAttribute("data-climbing");
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       setZoom(null);
@@ -1015,6 +1020,16 @@ function Calendar() {
 
     // hold the arriving layer dark until the animation's first tick owns it
     incoming.style.opacity = "0";
+
+    // a camera-scale climb that involves the book TRANSFORMS the schedule layer,
+    // and content-visibility re-evaluates every section under a transformed
+    // ancestor each frame (which balloons the climb to seconds) — so stand
+    // lazy-render down for the move; finish() turns it back on.
+    if (zoom.from === "schedule" || zoom.to === "schedule") {
+      scheduleLayerRef.current
+        ?.querySelector("[data-book-scroller]")
+        ?.setAttribute("data-climbing", "");
+    }
 
     // where the chosen slot sits. Year⇄month is a literal camera move
     // (the mini becomes the canvas), so it uses the true slot ratio;
@@ -2591,7 +2606,15 @@ function ScheduleFeedBase({
       const headH =
         (row.firstElementChild as HTMLElement | null)?.offsetHeight ?? 48;
       const top = row.offsetTop;
-      geom.push({ day, top, bottom: top + row.offsetHeight, headH });
+      const h = row.offsetHeight;
+      geom.push({ day, top, bottom: top + h, headH });
+      // feed each section its OWN measured height as the lazy-render placeholder,
+      // so a skipped (off-screen) section reserves exactly its real space and the
+      // book's total height can't drift (see [data-day] in globals.css). Reading
+      // offsetHeight here returns the real height while lazy is off, and the
+      // already-set --cis (identical) once it's on — so this stays self-consistent
+      // and only a genuinely-changed, on-screen section moves its own placeholder.
+      row.style.setProperty("--cis", `${h}px`);
     }
     geom.sort((a, b) => a.top - b.top);
     rowGeomRef.current = geom;
@@ -2981,6 +3004,22 @@ function ScheduleFeedBase({
     scrollToRow(spyRef.current ?? selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBook]);
+
+  // Turn lazy-render ON only once the WHOLE book has mounted and been measured —
+  // so every section carries its real --cis placeholder before content-visibility
+  // starts skipping off-screen ones (measuring a skipped section would read the
+  // placeholder, not its true height). Until then the book renders flat (the one
+  // O(book) paint, at load, off the interaction path). See [data-day] in globals.
+  useEffect(() => {
+    if (!fullBook) return;
+    const el = scrollerRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => {
+      measureRows();
+      el.setAttribute("data-lazy", "");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [fullBook, measureRows]);
 
   // the moment the reader scrolls/touches the book themselves, stand down any
   // pending land-on-today re-pin (settle timers + the full-book mount) so it
