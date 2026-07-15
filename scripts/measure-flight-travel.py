@@ -44,9 +44,14 @@ TRACK = r"""(clickSel) => new Promise(res => {
     n++;
     const flys = document.querySelectorAll('[data-fly]');
     for (const p of flys) {
-      const m = (p.style.transform || '').match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+      // COMPUTED transform, not inline: the flight rides a compositor (WAAPI)
+      // animation now, whose effect never touches el.style — inline holds the
+      // start pose for the whole move (reading it here reported "teleported"
+      // for a flyer that was visibly flying). matrix(a,b,c,d,tx,ty) → tx,ty.
+      const m = (getComputedStyle(p).transform || '').match(/matrix\(([^)]+)\)/);
       if (!m) continue;
-      (paths[p.dataset.fly] ||= []).push({ x: +m[1], y: +m[2] });
+      const parts = m[1].split(',').map(parseFloat);
+      (paths[p.dataset.fly] ||= []).push({ x: parts[4], y: parts[5] });
     }
     const had = flys.length > 0;
     // stop a few frames after the last flyer disappears

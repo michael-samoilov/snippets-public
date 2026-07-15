@@ -172,35 +172,6 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
   return g;
 }
 
-/**
- * Drive 0→1 along a FIXED-DURATION easeOutCubic — the SAME curve and clamped-dt
- * rAF the entry-card morph rides (see the `apply`/DUR loop in the zoom effect).
- * The altitude camera + date flyers use this (not a physics spring) so the
- * dive/rise share the morph's motion character exactly, and — unlike the spring —
- * END at a known time with no asymptotic tail: finish() then runs at a
- * deterministic moment (no dead window where the move looks done but scroll is
- * still frozen), and there's no long low-velocity crawl. Clamping each frame's dt
- * to MAX_DT keeps it stall-proof (a dropped frame lengthens the move, never
- * fast-forwards it — the "planted dates" guard) exactly as the spring did.
- */
-function driveEase(onUpdate: (t: number) => void, dur = 440): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const MAX_DT = 34; // ms — one dropped frame can't fast-forward the move
-    let last: number | null = null;
-    let elapsed = 0;
-    onUpdate(0); // paint the source position before the first tick
-    const loop = (now: number) => {
-      if (last !== null) elapsed += Math.min(now - last, MAX_DT);
-      last = now;
-      const k = Math.min(1, elapsed / dur);
-      const e = 1 - Math.pow(1 - k, 3); // easeOutCubic — the morph's curve
-      onUpdate(k >= 1 ? 1 : e);
-      if (k < 1) requestAnimationFrame(loop);
-      else resolve();
-    };
-    requestAnimationFrame(loop);
-  });
-}
 
 // The book's faint days — shown while the real entries are still loading so the
 // ledger reads as "settling in" rather than blank. Shared by the SSR Suspense
@@ -853,6 +824,10 @@ function Calendar() {
     // (inline style beats [data-dive-freeze]) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
     const willChanged: HTMLElement[] = [];
+    // every compositor animation this move starts (camera, fades, flyers) —
+    // finish() commits their final values and cancels them (a forwards-filling
+    // animation would otherwise override the inline resets below forever)
+    const anims: Animation[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
     // same paint that clears the card in finish()
@@ -870,6 +845,19 @@ function Calendar() {
     );
 
     const finish = () => {
+      // Land every compositor animation FIRST: commit its final value to inline
+      // style (so nothing jumps back to its start pose for the frame between
+      // this and the deferred cleanup), then cancel — a forwards-filling
+      // animation would override the inline resets below forever. The layer
+      // resets right after overwrite the committed values with rest state.
+      for (const a of anims) {
+        try {
+          a.commitStyles();
+        } catch {
+          /* not rendered (already torn down) — cancel alone is fine */
+        }
+        a.cancel();
+      }
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
@@ -1317,34 +1305,58 @@ function Calendar() {
     const outTo = deeper ? factor : 1 / factor;
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
-    // The SCALE driver is started BELOW, AFTER the shared-element flight has
-    // measured its rects — because driveEase paints its start frame
-    // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
-    // flight reads textRect(toEl) would measure the date at its shrunk-in
-    // position and fly the number to the wrong spot. (The old wall-clock motion
-    // spring applied its initial scale a frame later, on rAF, so it dodged this
-    // by luck; we make the ordering explicit.)
-    const startCameraScale = () =>
-      // SCALE rides the same per-frame-CLAMPED spring as the date flyers
-      // (driveEase), NOT a wall-clock motion spring. On a deep book the
-      // dive/rise setup frame can stall (markOnStage + reland + flight measure);
-      // a wall-clock spring keeps ticking through that stall and lands the scale
-      // most of the way in its first visible frame — the camera "snaps" instead
-      // of gliding, which is why the altitude move read as less smooth than the
-      // entry-card morph (that morph already rides a clamped rAF). Clamping each
-      // frame's dt makes a stall only lengthen the glide, never skip it — same
-      // 320/34 spring, so the settle is unchanged. It also keeps the camera
-      // frame-locked with the flyers (both on the clamped clock), so under a
-      // stall the numbers and the view can't drift apart.
-      driveEase((t) => {
-        outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
-        incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
-      });
+    // ── COMPOSITOR-THREADED MOVE ──────────────────────────────────────────
+    // The camera, crossfade, and flyers ride Web Animations (transform/opacity
+    // on promoted elements), NOT a rAF loop. A real move lands heavy main-thread
+    // work mid-flight — the probe/selected commits, the destination band's first
+    // render, heals — and a rAF-driven animation freezes for every one of them
+    // (the device-recorded 4–5-frame hops; a clamped-dt driver resumes without
+    // skipping, but the freeze is the choppiness). The compositor paints its own
+    // frames on another thread, so these animations hold 60fps THROUGH the
+    // stalls — the same reason the entry morph feels smooth: it simply has no
+    // heavy commit to block it. Same curve (easeOutCubic) and length as before;
+    // all started in one JS turn, so the compositor frame-locks them together.
+    // The old planted-dates failure (wall-clock springs fast-forwarding through
+    // the SETUP stall) can't return: time zero is the style resolution AFTER
+    // setup, and the compositor paints every intermediate frame itself.
+    const EASE_CSS = "cubic-bezier(0.215, 0.61, 0.355, 1)"; // easeOutCubic
+    const FLIGHT_MS = 440;
+    const glide = (el: Element, keyframes: Keyframe[], ms = FLIGHT_MS) => {
+      const a = el.animate(keyframes, { duration: ms, easing: EASE_CSS, fill: "forwards" });
+      anims.push(a);
+      return a;
+    };
+    // The SCALE animation is started BELOW, AFTER the shared-element flight has
+    // measured its rects — a started transform animation applies from the next
+    // style resolution, so any getBoundingClientRect after it would measure the
+    // arriving layer at its shrunk-in scale and fly the numbers to the wrong
+    // spot. (Same ordering rule the rAF driver had.)
+    const startCameraScale = () => {
+      const o = glide(outgoing, [
+        { transform: `scale(${outFrom})` },
+        { transform: `scale(${outTo})` },
+      ]);
+      const i = glide(incoming, [
+        { transform: `scale(${inFrom})` },
+        { transform: `scale(${inTo})` },
+      ]);
+      return Promise.all([o.finished, i.finished]).catch(() => {});
+    };
+    // opacity keeps its own short crossfade (also compositor-threaded)
+    const fadeOut = outgoing.animate([{ opacity: 1 }, { opacity: 0 }], {
+      duration: 180,
+      easing: "ease-out",
+      fill: "forwards",
+    });
+    const fadeIn = incoming.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 160,
+      easing: "ease-out",
+      fill: "forwards",
+    });
+    anims.push(fadeOut, fadeIn);
     moves.push(
-      // opacity keeps its own short crossfade — a fade fast-forwarding through a
-      // stall is invisible (unlike a scale jump), so a plain tween is fine.
-      animate(outgoing, { opacity: [1, 0] }, { duration: 0.18, ease: "easeOut" }).finished,
-      animate(incoming, { opacity: [0, 1] }, { duration: 0.16, ease: "easeOut" }).finished,
+      fadeOut.finished.catch(() => {}),
+      fadeIn.finished.catch(() => {}),
     );
 
     // shared-element flight: a date standing in both altitudes travels
@@ -1524,27 +1536,36 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
-        // clamped-dt ease (driveEase) — NOT motion's wall-clock
-        // `animate(0, 1, { spring })`, which fast-forwarded on the descent's
-        // setup stall and planted the number at its destination (bug: dates
-        // teleport instead of fly). The clamp guarantees every frame is read.
-        moves.push(
-          driveEase((t) => {
-            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-              ay + (by - ay) * t
-            }px)`;
-            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-            const tf = `translate(-50%,-50%) scale(${sc})`;
-            gFrom.style.transform = tf;
-            gTo.style.transform = tf;
-            // crossover centred on t=0.5 — the flight's midpoint, so
-            // the swap is never seen sitting at the origin or the
-            // destination (no blur: the flight is too quick to read one)
-            const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
-            gFrom.style.opacity = `${1 - k}`;
-            gTo.style.opacity = `${k}`;
-          }),
-        );
+        // compositor-threaded (see the COMPOSITOR-THREADED MOVE note): travel,
+        // glyph scale, and the crossfade are three property tracks on the same
+        // eased clock — a main-thread stall can't freeze any of them, and they
+        // stay frame-locked with the camera (same timeline, same start tick).
+        const travel = glide(point, [
+          { transform: `translate(${ax}px,${ay}px)` },
+          { transform: `translate(${bx}px,${by}px)` },
+        ]);
+        const glyphScale = [
+          { transform: `translate(-50%,-50%) scale(${fromFont.size / baseSize})` },
+          { transform: `translate(-50%,-50%) scale(${toFont.size / baseSize})` },
+        ];
+        glide(gFrom, glyphScale);
+        glide(gTo, glyphScale);
+        // crossover centred on the flight's midpoint (offsets live in the EASED
+        // progress domain, exactly the old (t-0.4)/0.2 window) — the swap is
+        // never seen sitting at the origin or the destination
+        glide(gFrom, [
+          { opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.4 },
+          { opacity: 0, offset: 0.6 },
+          { opacity: 0, offset: 1 },
+        ]);
+        glide(gTo, [
+          { opacity: 0, offset: 0 },
+          { opacity: 0, offset: 0.4 },
+          { opacity: 1, offset: 0.6 },
+          { opacity: 1, offset: 1 },
+        ]);
+        moves.push(travel.finished.catch(() => {}));
       }
     }
 
@@ -1588,16 +1609,16 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
-        // clamped-dt spring, same stall-proof driver as the date flyers
-        moves.push(
-          driveEase((t) => {
-            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-              ay + (by - ay) * t
-            }px)`;
-            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-            glyph.style.transform = `translate(-50%,-50%) scale(${sc})`;
-          }),
-        );
+        // compositor-threaded, same tracks as the date flyers
+        const travel = glide(point, [
+          { transform: `translate(${ax}px,${ay}px)` },
+          { transform: `translate(${bx}px,${by}px)` },
+        ]);
+        glide(glyph, [
+          { transform: `translate(-50%,-50%) scale(${fromFont.size / baseSize})` },
+          { transform: `translate(-50%,-50%) scale(${toFont.size / baseSize})` },
+        ]);
+        moves.push(travel.finished.catch(() => {}));
       }
     }
 
