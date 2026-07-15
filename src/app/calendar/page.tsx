@@ -916,6 +916,16 @@ function Calendar() {
       for (const el of willChanged) el.style.willChange = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
+      // Make the LANDED layer scrollable NOW, synchronously — don't wait for the
+      // setZoom(null) React commit to drop its pointer-events:none class (that
+      // commit lands ~80ms later, and a touchstart in that gap — the reader's
+      // natural post-landing swipe — is eaten, costing them a whole swipe). Inline
+      // pointer-events:auto beats the class; the deferred cleanup clears it once
+      // the commit has removed the class, so the NEXT move's pointer-events:none
+      // still holds. (data-climbing lifts one frame later as before; a fling in
+      // that single frame scrolls within the still-rendered band.)
+      const restoreScroll = zoom.from !== "entry" && zoom.to !== "entry";
+      if (restoreScroll) incoming.style.pointerEvents = "auto";
       setZoom(null);
       zooming.current = false;
       // Everything heavy — dropping the band's content-visibility (flips ~720
@@ -931,7 +941,7 @@ function Calendar() {
         zoom.from !== "entry" &&
         zoom.to !== "entry" &&
         (zoom.from === "schedule" || zoom.to === "schedule");
-      if (climbed || flyerBox || underBox || hiddenNumbers.length || repinned.length) {
+      if (climbed || restoreScroll || flyerBox || underBox || hiddenNumbers.length || repinned.length) {
         const fb = flyerBox;
         const ub = underBox;
         const reals = hiddenNumbers;
@@ -942,6 +952,10 @@ function Calendar() {
               ?.removeAttribute("data-climbing");
             scheduleFeedRef.current?.clearOnStage();
           }
+          // the setZoom(null) commit has landed by now, so its className no longer
+          // carries pointer-events:none for this (shown) layer — drop the inline
+          // override so a future move's class can re-disable it
+          if (restoreScroll) incoming.style.pointerEvents = "";
           for (const el of reals) el.style.visibility = "";
           // data-dive-freeze is gone (setZoom(null)), so dropping the inline
           // sticky hands over to the class's own sticky — same computed
@@ -1290,6 +1304,7 @@ function Calendar() {
     const outTo = deeper ? factor : 1 / factor;
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
+    let scrollHandedBack = false; // scroll re-enabled once, at visual landing
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
     // measured its rects — because driveFlightSpring paints its start frame
     // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
@@ -1312,6 +1327,19 @@ function Calendar() {
       driveFlightSpring((t) => {
         outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
         incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
+        // Hand scrolling back the instant the camera is VISUALLY landed — not
+        // when the spring mathematically resolves (~85ms later) and finish()
+        // runs. The reader's post-landing swipe arrives right at the visual
+        // stop; if pointer-events:none (from `zoom`) is still up, that whole
+        // swipe is eaten. Inline pointer-events:auto on the landed layer beats
+        // the class; finish()'s deferred cleanup clears it. Altitude moves only
+        // (an entry open/close has no scroll to resume). data-climbing still
+        // lifts at finish — a fling in that gap scrolls within the rendered band.
+        if (t >= 0.97 && !scrollHandedBack) {
+          scrollHandedBack = true;
+          if (zoom.from !== "entry" && zoom.to !== "entry")
+            incoming.style.pointerEvents = "auto";
+        }
       });
     moves.push(
       // opacity keeps its own short crossfade — a fade fast-forwarding through a
