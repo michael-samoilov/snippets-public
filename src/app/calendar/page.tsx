@@ -956,19 +956,20 @@ function Calendar() {
 
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
 
-    // Band the book BEFORE the first geometry read below (stageRect). A
-    // month→schedule commit leaves the book's layout dirty; the first
-    // getBoundingClientRect flushes it. If we band FIRST (cv:hidden for every
-    // off-stage section, established here as writes), that flush renders only the
-    // ~1.5-viewport on-stage band — not the whole freshly-committed book, then a
-    // second relayout to hide it (the old order paid stageRect's full flush AND
-    // markOnStage's re-flush back to back). markOnStage keeps the on-screen band
-    // rendered and sends the rest to cv:hidden, ESTABLISHING that state before
-    // Motion applies the scale below — so no whole-book render and no
-    // under-transform relayout is ever forced. finish() clears it. Marks from
-    // cached geometry at the current / destination scroll (pick() has already
-    // scrolled the page behind a month→schedule dive).
-    if (zoom.from === "schedule" || zoom.to === "schedule") {
+    // Warm + flush the (destination) band BEFORE the first geometry read below
+    // (stageRect), so that flush renders only the band — never band-render then
+    // re-band (the old double flush). ONLY for real altitude CLIMBS — this
+    // condition must stay EXACTLY symmetric with finish()'s `climbed`, which is
+    // what calls clearOnStage: an entry open/close reaching markOnStage latches
+    // climbingRef with no finish-side release, and a stuck latch stands the warm
+    // observer down FOREVER — the reader then scrolls into permanently blank
+    // paper (device recording, 2026-07-15; entry moves never needed the band
+    // work anyway — pre-6ae01f7 this block sat below their early return).
+    if (
+      (zoom.from === "schedule" || zoom.to === "schedule") &&
+      zoom.from !== "entry" &&
+      zoom.to !== "entry"
+    ) {
       scheduleFeedRef.current?.markOnStage();
       // Descent: pick() set scrollTop against the book's --cis placeholders,
       // which are stale whenever the webfonts swapped after the book measured.
@@ -3158,6 +3159,7 @@ function ScheduleFeedBase({
   // to multiple seconds. The geometry doesn't meaningfully change across the
   // move, so skipping the re-measure is correct as well as necessary.
   const climbingRef = useRef(false);
+  const climbLatchTsRef = useRef(0); // when climbingRef last latched (self-heal)
   const measureRows = useCallback(() => {
     const el = scrollerRef.current;
     const st = el ? el.scrollTop : 0;
@@ -3253,6 +3255,7 @@ function ScheduleFeedBase({
     const el = scrollerRef.current;
     if (!el) return;
     climbingRef.current = true; // measureRows + the observer stand down
+    climbLatchTsRef.current = performance.now(); // onScroll's stale-latch self-heal
     el.setAttribute("data-climbing", ""); // no CSS — a latch for probes/debugging
     // At rest the off-band book is ALREADY hidden (globals.css), so a climb has
     // nothing to flip off-band: warm the (destination) band — pick() has already
@@ -4001,6 +4004,17 @@ function ScheduleFeedBase({
     // stamp every scroll event (incl. fling frames) so the heal's scroll
     // anchoring can tell a live gesture from a quiet post-dive frame
     lastScrollTsRef.current = performance.now();
+    // SELF-HEAL a stale climb latch. climbingRef stands the warm observer down
+    // for the span of a move; if any path ever latches without a matching
+    // clearOnStage (the entry-move asymmetry did exactly this), the observer
+    // would stay down forever and the reader scrolls into permanently blank
+    // paper. No climb lasts ~1.5s — a user scroll against a latch that old
+    // means the release was missed: drop it and re-prime the observer.
+    if (
+      climbingRef.current &&
+      performance.now() - climbLatchTsRef.current > 1500
+    )
+      clearOnStage();
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
