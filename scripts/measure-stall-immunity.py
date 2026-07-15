@@ -1,25 +1,24 @@
 """
-Guard the altitude camera's 60fps: the move must keep ADVANCING even while the
-main thread stalls (a React commit, the destination band's first render, a heal
-— all of which land DURING a real dive/rise).
+REPORT-ONLY (not a gate) — and a documented DEAD END.
 
-Device recordings showed the camera updating in 4-5-frame hops: the animation
-was rAF-driven on the main thread, so every mid-move stall froze it (the
-clamped-dt driver then resumed without skipping — correct, but visibly choppy).
-A compositor-threaded animation (WAAPI transform/opacity on a promoted layer)
-paints its frames on another thread: a main-thread stall cannot freeze it.
+Measures whether the altitude camera keeps ADVANCING while the main thread
+stalls mid-flight (a 220ms busy-loop injected 60ms after motion begins; scale
+progress read 360ms after motion start). The rAF clamped-dt driver scores
+~0.76-0.87 here (the stall freezes it — the on-device choppiness); a compositor
+(WAAPI) camera scored 0.99.
 
-This injects a deliberate ~220ms synchronous busy-loop ~120ms into a descent,
-then reads how far the incoming layer's scale actually travelled by a fixed
-wall-clock checkpoint. Main-thread-driven: the stall freezes the scale AND the
-clamp forgives at most one frame, so progress lags far behind. Compositor:
-progress tracks the wall clock regardless.
+We SHIPPED the WAAPI camera (9ff8f7c) and REVERTED it: on the owner's device the
+dive showed no animation at all (instant cut) and the rise wiggled/skipped back.
+WAAPI runs on the wall clock from ~creation; the device's setup stall (probe
+commit + destination band raster, far bigger than headless) ate the move before
+its first paintable frame — the wall-clock planted-dates bug at the platform
+level. See driveEase's header comment in calendar/page.tsx. Compositor
+animation becomes viable only once setup fits inside one frame; until then this
+script just reports the number.
 
     python3 .claude/skills/webapp-testing/scripts/with_server.py \
       --server "node_modules/.bin/next start" --port 3000 \
       -- python3 scripts/measure-stall-immunity.py
-
-FAILS on a main-thread (rAF) camera; passes when the camera rides the compositor.
 """
 import sys
 from playwright.sync_api import sync_playwright
@@ -94,10 +93,9 @@ def main() -> int:
             # back to month for next round handled by loop top
         ctx.close(); b.close()
     best = max(results) if results else 0
-    ok = best >= MIN_PROGRESS
-    print(f"\n  best progress {best:.2f}  (need ≥{MIN_PROGRESS} — a camera the stall can't freeze)")
-    print("\n", "CAMERA RIDES THROUGH STALLS ✓" if ok else "CAMERA FREEZES WITH THE MAIN THREAD ✗")
-    return 0 if ok else 1
+    print(f"\n  best progress {best:.2f}  (compositor reference: 0.99 · rAF clamped: ~0.8)")
+    print("\n  REPORT ONLY — see docstring for why this is not a gate.")
+    return 0
 
 
 if __name__ == "__main__":
