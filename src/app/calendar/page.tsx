@@ -577,6 +577,27 @@ function Calendar() {
       typeof window === "undefined" ||
       window.localStorage?.getItem("nofreeze") !== "1",
   );
+  // Device A/B (default OFF): drive the dive/rise on the COMPOSITOR (WAAPI)
+  // instead of the clamped rAF loop. Round 1 (9ff8f7c, reverted) lost on device
+  // because the animations' wall clock started at creation and the setup stall
+  // ate the move (no dive animation; rise wiggle). Round 2 pins frame 0 to the
+  // first PAINTABLE frame: animations are created PAUSED (start pose applied)
+  // and play()ed in the first rAF — the stall can only delay the start, never
+  // consume the motion; the compositor then holds 60fps through any mid-flight
+  // main-thread work (the choppiness rAF fundamentally can't avoid).
+  // ?waapi=1 enables + sticks (localStorage); ?waapi=0 clears. Loser gets
+  // deleted after the owner's device pass.
+  const [waapiEnabled] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const q = new URLSearchParams(window.location.search).get("waapi");
+      if (q === "1") localStorage.setItem("waapi", "1");
+      else if (q === "0") localStorage.removeItem("waapi");
+      return localStorage.getItem("waapi") === "1";
+    } catch {
+      return false;
+    }
+  });
   // a deletion closes the entry by dissolving the card in place, not the
   // shared-element shrink back to its (vanishing) book slot — this flag marks
   // the next close as a deletion so it plays the dissolve.
@@ -867,6 +888,10 @@ function Calendar() {
     // (inline style beats [data-dive-freeze]) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
     const willChanged: HTMLElement[] = [];
+    // compositor animations (the ?waapi=1 A/B path) — created PAUSED, played in
+    // the first rAF; finish() commits their final values and cancels them (a
+    // forwards-fill would otherwise override the inline resets forever)
+    const anims: Animation[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
     // same paint that clears the card in finish()
@@ -884,6 +909,18 @@ function Calendar() {
     );
 
     const finish = () => {
+      // land the compositor animations first (waapi path; no-op otherwise):
+      // commit each one's final value to inline style so nothing snaps back to
+      // its start pose in the frame before the deferred cleanup, then cancel
+      // so the forwards-fill can't override the resets below
+      for (const a of anims) {
+        try {
+          a.commitStyles();
+        } catch {
+          /* not rendered — cancel alone is fine */
+        }
+        a.cancel();
+      }
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
@@ -1331,35 +1368,69 @@ function Calendar() {
     const outTo = deeper ? factor : 1 / factor;
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
+    // ── the ?waapi=1 A/B: compositor-threaded move ────────────────────────
+    // Animations are created PAUSED — the start pose applies immediately, like
+    // driveEase's synchronous onUpdate(0) — and play()ed together in the first
+    // rAF after setup (see the pending flush below). Frame 0 of the motion is
+    // therefore the first frame the browser can PAINT: a long setup stall can
+    // only delay the start, never consume the move (round 1 started the wall
+    // clock at creation and the device's stall ate the whole animation — the
+    // no-dive-animation / rise-wiggle report). Once running, the compositor
+    // paints every frame on its own thread, so mid-flight main-thread work
+    // (the selected commit, heals) can't drop a single frame of the motion —
+    // the choppiness the rAF path fundamentally cannot avoid.
+    const useWaapi =
+      waapiEnabled && typeof outgoing.animate === "function" && !reduceMotion;
+    const EASE_CSS = "cubic-bezier(0.215, 0.61, 0.355, 1)"; // easeOutCubic
+    const FLIGHT_MS = 440;
+    const pending: Animation[] = [];
+    const glide = (el: Element, keyframes: Keyframe[], ms = FLIGHT_MS) => {
+      const a = el.animate(keyframes, { duration: ms, easing: EASE_CSS, fill: "forwards" });
+      a.pause();
+      anims.push(a);
+      pending.push(a);
+      return a;
+    };
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
-    // measured its rects — because driveEase paints its start frame
-    // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
-    // flight reads textRect(toEl) would measure the date at its shrunk-in
-    // position and fly the number to the wrong spot. (The old wall-clock motion
-    // spring applied its initial scale a frame later, on rAF, so it dodged this
-    // by luck; we make the ordering explicit.)
-    const startCameraScale = () =>
-      // SCALE rides the same per-frame-CLAMPED spring as the date flyers
-      // (driveEase), NOT a wall-clock motion spring. On a deep book the
-      // dive/rise setup frame can stall (markOnStage + reland + flight measure);
-      // a wall-clock spring keeps ticking through that stall and lands the scale
-      // most of the way in its first visible frame — the camera "snaps" instead
-      // of gliding, which is why the altitude move read as less smooth than the
-      // entry-card morph (that morph already rides a clamped rAF). Clamping each
-      // frame's dt makes a stall only lengthen the glide, never skip it — same
-      // 320/34 spring, so the settle is unchanged. It also keeps the camera
-      // frame-locked with the flyers (both on the clamped clock), so under a
-      // stall the numbers and the view can't drift apart.
-      driveEase((t) => {
+    // measured its rects — its start pose applies synchronously on both paths,
+    // and scaling the arriving layer before the flight reads textRect(toEl)
+    // would measure the date at its shrunk-in position and fly the number to
+    // the wrong spot.
+    const startCameraScale = () => {
+      if (useWaapi) {
+        const o = glide(outgoing, [
+          { transform: `scale(${outFrom})` },
+          { transform: `scale(${outTo})` },
+        ]);
+        const i = glide(incoming, [
+          { transform: `scale(${inFrom})` },
+          { transform: `scale(${inTo})` },
+        ]);
+        return Promise.all([o.finished, i.finished]).catch(() => {});
+      }
+      // default: the per-frame-CLAMPED rAF ease — a stall can only lengthen
+      // the glide, never skip it (see driveEase's header for the whole story,
+      // including why the compositor variant is an A/B and not the default)
+      return driveEase((t) => {
         outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
         incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
       });
-    moves.push(
-      // opacity keeps its own short crossfade — a fade fast-forwarding through a
-      // stall is invisible (unlike a scale jump), so a plain tween is fine.
-      animate(outgoing, { opacity: [1, 0] }, { duration: 0.18, ease: "easeOut" }).finished,
-      animate(incoming, { opacity: [0, 1] }, { duration: 0.16, ease: "easeOut" }).finished,
-    );
+    };
+    if (useWaapi) {
+      const fadeOut = glide(outgoing, [{ opacity: 1 }, { opacity: 0 }], 180);
+      const fadeIn = glide(incoming, [{ opacity: 0 }, { opacity: 1 }], 160);
+      moves.push(
+        fadeOut.finished.catch(() => {}),
+        fadeIn.finished.catch(() => {}),
+      );
+    } else {
+      moves.push(
+        // opacity keeps its own short crossfade — a fade fast-forwarding through
+        // a stall is invisible (unlike a scale jump), so a plain tween is fine.
+        animate(outgoing, { opacity: [1, 0] }, { duration: 0.18, ease: "easeOut" }).finished,
+        animate(incoming, { opacity: [0, 1] }, { duration: 0.16, ease: "easeOut" }).finished,
+      );
+    }
 
     // shared-element flight: a date standing in both altitudes travels
     // from its grid cell to its ledger slot (and back) instead of
@@ -1538,27 +1609,57 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
-        // clamped-dt ease (driveEase) — NOT motion's wall-clock
-        // `animate(0, 1, { spring })`, which fast-forwarded on the descent's
-        // setup stall and planted the number at its destination (bug: dates
-        // teleport instead of fly). The clamp guarantees every frame is read.
-        moves.push(
-          driveEase((t) => {
-            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-              ay + (by - ay) * t
-            }px)`;
-            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-            const tf = `translate(-50%,-50%) scale(${sc})`;
-            gFrom.style.transform = tf;
-            gTo.style.transform = tf;
-            // crossover centred on t=0.5 — the flight's midpoint, so
-            // the swap is never seen sitting at the origin or the
-            // destination (no blur: the flight is too quick to read one)
-            const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
-            gFrom.style.opacity = `${1 - k}`;
-            gTo.style.opacity = `${k}`;
-          }),
-        );
+        if (useWaapi) {
+          // compositor tracks: travel, glyph scale, midpoint crossover — same
+          // eased clock, frame-locked with the camera (same timeline, same
+          // play() tick). Keyframe offsets live in the eased progress domain,
+          // exactly the rAF path's (t-0.4)/0.2 window.
+          const travel = glide(point, [
+            { transform: `translate(${ax}px,${ay}px)` },
+            { transform: `translate(${bx}px,${by}px)` },
+          ]);
+          const glyphScale = [
+            { transform: `translate(-50%,-50%) scale(${fromFont.size / baseSize})` },
+            { transform: `translate(-50%,-50%) scale(${toFont.size / baseSize})` },
+          ];
+          glide(gFrom, glyphScale);
+          glide(gTo, glyphScale);
+          glide(gFrom, [
+            { opacity: 1, offset: 0 },
+            { opacity: 1, offset: 0.4 },
+            { opacity: 0, offset: 0.6 },
+            { opacity: 0, offset: 1 },
+          ]);
+          glide(gTo, [
+            { opacity: 0, offset: 0 },
+            { opacity: 0, offset: 0.4 },
+            { opacity: 1, offset: 0.6 },
+            { opacity: 1, offset: 1 },
+          ]);
+          moves.push(travel.finished.catch(() => {}));
+        } else {
+          // clamped-dt ease (driveEase) — NOT motion's wall-clock
+          // `animate(0, 1, { spring })`, which fast-forwarded on the descent's
+          // setup stall and planted the number at its destination (bug: dates
+          // teleport instead of fly). The clamp guarantees every frame is read.
+          moves.push(
+            driveEase((t) => {
+              point.style.transform = `translate(${ax + (bx - ax) * t}px,${
+                ay + (by - ay) * t
+              }px)`;
+              const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
+              const tf = `translate(-50%,-50%) scale(${sc})`;
+              gFrom.style.transform = tf;
+              gTo.style.transform = tf;
+              // crossover centred on t=0.5 — the flight's midpoint, so
+              // the swap is never seen sitting at the origin or the
+              // destination (no blur: the flight is too quick to read one)
+              const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
+              gFrom.style.opacity = `${1 - k}`;
+              gTo.style.opacity = `${k}`;
+            }),
+          );
+        }
       }
     }
 
@@ -1602,25 +1703,45 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
-        // clamped-dt spring, same stall-proof driver as the date flyers
-        moves.push(
-          driveEase((t) => {
-            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-              ay + (by - ay) * t
-            }px)`;
-            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-            glyph.style.transform = `translate(-50%,-50%) scale(${sc})`;
-          }),
-        );
+        if (useWaapi) {
+          const travel = glide(point, [
+            { transform: `translate(${ax}px,${ay}px)` },
+            { transform: `translate(${bx}px,${by}px)` },
+          ]);
+          glide(glyph, [
+            { transform: `translate(-50%,-50%) scale(${fromFont.size / baseSize})` },
+            { transform: `translate(-50%,-50%) scale(${toFont.size / baseSize})` },
+          ]);
+          moves.push(travel.finished.catch(() => {}));
+        } else {
+          // clamped-dt ease, same stall-proof driver as the date flyers
+          moves.push(
+            driveEase((t) => {
+              point.style.transform = `translate(${ax + (bx - ax) * t}px,${
+                ay + (by - ay) * t
+              }px)`;
+              const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
+              glyph.style.transform = `translate(-50%,-50%) scale(${sc})`;
+            }),
+          );
+        }
       }
     }
 
     // start the camera scale NOW — after every flight rect has been read
     // (see startCameraScale): its synchronous start frame may scale the layers.
     moves.push(startCameraScale());
+    // waapi path: press play on EVERY paused animation together, in the first
+    // rAF — the first frame the browser can actually paint. Whatever setup
+    // stalled before this tick delayed only the start; the move then plays its
+    // full course from frame 0, compositor-threaded.
+    if (pending.length)
+      requestAnimationFrame(() => {
+        for (const a of pending) a.play();
+      });
     void Promise.all(moves).then(finish, finish);
-    // freezeEnabled is set once at mount and never changes without a reload
-  }, [zoom, reduceMotion, freezeEnabled]);
+    // freezeEnabled/waapiEnabled are set once at mount, never change in-session
+  }, [zoom, reduceMotion, freezeEnabled, waapiEnabled]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
