@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import {
   eachDayOfInterval,
@@ -79,7 +80,7 @@ function buildYearGeom(
 
 function YearFeedBase({
   handleRef,
-  active,
+  activeRef,
   today,
   years,
   counts,
@@ -87,7 +88,10 @@ function YearFeedBase({
   onVisible,
 }: {
   handleRef: React.MutableRefObject<YearFeedHandle | null>;
-  active: boolean;
+  /** interactivity gate, read at event time — a REF so the zoom's start/finish
+      commits (which flip it) never re-render this whole feed (that re-render +
+      its layout was the dive/rise's front-loaded stall) */
+  activeRef: RefObject<boolean>;
   today: Date;
   /** the lived years, ascending and ending at today's — gaps of five
       or more dormant years are already folded out of the list */
@@ -221,6 +225,7 @@ function YearFeedBase({
   }, [handleRef, goTo, originFor]);
 
   const onScroll = () => {
+    if (!activeRef.current) return; // inactive altitude — same as the old detached listener
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -321,7 +326,7 @@ function YearFeedBase({
   return (
     <div
       ref={scrollerRef}
-      onScroll={active ? onScroll : undefined}
+      onScroll={onScroll}
       className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}

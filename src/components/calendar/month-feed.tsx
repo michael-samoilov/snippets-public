@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import {
   eachDayOfInterval,
@@ -40,7 +41,7 @@ import type { MonthGeom, MonthFeedHandle } from "./shared";
 
 function MonthFeedBase({
   handleRef,
-  active,
+  activeRef,
   today,
   span,
   counts,
@@ -49,7 +50,10 @@ function MonthFeedBase({
   onVisible,
 }: {
   handleRef: React.MutableRefObject<MonthFeedHandle | null>;
-  active: boolean;
+  /** interactivity gate, read at event time — a REF so the zoom's start/finish
+      commits (which flip it) never re-render this whole feed (that re-render +
+      its layout was the dive/rise's front-loaded stall) */
+  activeRef: RefObject<boolean>;
   today: Date;
   /** how many months the canvas reaches back (shared with the glance) */
   span: number;
@@ -213,6 +217,7 @@ function MonthFeedBase({
   }, [handleRef, goTo, originFor]);
 
   const onScroll = () => {
+    if (!activeRef.current) return; // inactive altitude — same as the old detached listener
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0;
@@ -321,7 +326,7 @@ function MonthFeedBase({
   return (
     <div
       ref={scrollerRef}
-      onScroll={active ? onScroll : undefined}
+      onScroll={onScroll}
       className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]"
       style={{ scrollbarWidth: "none" }}
       tabIndex={-1}

@@ -636,6 +636,20 @@ function Calendar() {
     cells: Map<string, DOMRect>;
   } | null>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
+  // Each feed's interactivity gate as a REF, not a prop: `view/zoom` flip at the
+  // start AND end of every altitude move, and as props they re-rendered all
+  // three feeds on both commits — the biggest slice of the move's front-loaded
+  // main-thread stall (the choppiness). The feeds read these at event time
+  // (scroll handlers), so an effect-synced ref is always current where it
+  // matters and never re-renders anything.
+  const monthActiveRef = useRef(false);
+  const yearActiveRef = useRef(false);
+  const schedActiveRef = useRef(false);
+  useLayoutEffect(() => {
+    monthActiveRef.current = view === "month" && !zoom;
+    yearActiveRef.current = view === "year" && !zoom;
+    schedActiveRef.current = view === "schedule" && !zoom;
+  }, [view, zoom]);
   const yearFeedRef = useRef<YearFeedHandle | null>(null);
   const scheduleFeedRef = useRef<ScheduleFeedHandle | null>(null);
   const zooming = useRef(false);
@@ -903,6 +917,13 @@ function Calendar() {
       // that single frame scrolls within the still-rendered band.)
       const restoreScroll = zoom.from !== "entry" && zoom.to !== "entry";
       if (restoreScroll) incoming.style.pointerEvents = "auto";
+      // drop the dive freeze with the landing paint (it's imperative now, not a
+      // prop riding the setZoom(null) commit) — the straddler's inline sticky
+      // (repinned) is still up, so the restick stays a no-op until the deferred
+      // handover below
+      scheduleLayerRef.current
+        ?.querySelector("[data-book-scroller]")
+        ?.removeAttribute("data-dive-freeze");
       setZoom(null);
       zooming.current = false;
       // Everything heavy — dropping the band's content-visibility (flips ~720
@@ -936,7 +957,7 @@ function Calendar() {
           // override so a future move's class can re-disable it
           if (restoreScroll) incoming.style.pointerEvents = "";
           for (const el of reals) el.style.visibility = "";
-          // data-dive-freeze is gone (setZoom(null)), so dropping the inline
+          // data-dive-freeze is gone (finish removed it), so dropping the inline
           // sticky hands over to the class's own sticky — same computed
           // position, no one-frame pop
           for (const el of repinned) el.style.position = "";
@@ -970,6 +991,18 @@ function Calendar() {
       zoom.from !== "entry" &&
       zoom.to !== "entry"
     ) {
+      // Un-stick the margin dates ONLY while the book is being scaled as a
+      // rigid block (this branch: month/year⇄schedule, never entry moves — an
+      // entry move just fades the book, and un-sticking there jumped the
+      // focused day's number to its section top for the whole card animation).
+      // Set imperatively (React doesn't manage this attribute) BEFORE the
+      // band flush below, so the flight measures under the frozen truth;
+      // finish() removes it. As a prop this rode the zoom commit and
+      // re-rendered the whole feed at both ends of every move.
+      if (freezeEnabled)
+        scheduleLayerRef.current
+          ?.querySelector("[data-book-scroller]")
+          ?.setAttribute("data-dive-freeze", "");
       scheduleFeedRef.current?.markOnStage();
       // Descent: pick() set scrollTop against the book's --cis placeholders,
       // which are stale whenever the webfonts swapped after the book measured.
@@ -2676,7 +2709,7 @@ function Calendar() {
           {(view === "month" || warm >= 1) && (
             <MonthFeed
               handleRef={monthFeedRef}
-              active={view === "month" && !zoom}
+              activeRef={monthActiveRef}
               frozen={!showMonthLayer}
               today={today}
               span={monthSpan}
@@ -2702,7 +2735,7 @@ function Calendar() {
           {(view === "year" || warm >= 3) && (
             <YearFeed
               handleRef={yearFeedRef}
-              active={view === "year" && !zoom}
+              activeRef={yearActiveRef}
               frozen={!showYearLayer}
               today={today}
               years={glanceYears}
@@ -2735,19 +2768,7 @@ function Calendar() {
           {(view === "schedule" || warm >= 1) && (
             <ScheduleFeed
               handleRef={scheduleFeedRef}
-              active={view === "schedule" && !zoom}
-              // un-stick the margin dates ONLY while the book is being scaled as
-              // a rigid block (month/year⇄schedule). An entry⇄schedule move just
-              // fades the book — no scale — so the dates must stay sticky there,
-              // or the focused day's number jumps from its pinned slot to its
-              // section top for the length of the card animation.
-              diveFreeze={
-                freezeEnabled &&
-                !!zoom &&
-                zoom.from !== "entry" &&
-                zoom.to !== "entry" &&
-                (zoom.from === "schedule" || zoom.to === "schedule")
-              }
+              activeRef={schedActiveRef}
               today={today}
               selected={selected}
               all={all}
@@ -3075,8 +3096,7 @@ const BookRow = memo(function BookRow({
  */
 function ScheduleFeedBase({
   handleRef,
-  active,
-  diveFreeze,
+  activeRef,
   today,
   selected,
   all,
@@ -3085,8 +3105,11 @@ function ScheduleFeedBase({
   onOpen,
 }: {
   handleRef: React.MutableRefObject<ScheduleFeedHandle | null>;
-  active: boolean;
-  diveFreeze: boolean;
+  // interactivity gate, read at event time — a REF so the zoom's start/finish
+  // commits (which flip it) never re-render the whole feed (that re-render +
+  // its layout flush was the dive/rise's front-loaded stall). data-dive-freeze
+  // is likewise set imperatively by the zoom effect now, not a prop.
+  activeRef: React.RefObject<boolean>;
   today: Date;
   selected: string;
   all: Snippet[] | undefined;
@@ -3122,7 +3145,10 @@ function ScheduleFeedBase({
   const todayJustKept = !!useKeptDraft()?.drafts[todayKey];
   const scrollerRef = useRef<HTMLDivElement>(null);
   // keep a focused composer/editor clear of the keyboard and its floating pills
-  useKeyboardRoom(scrollerRef, active);
+  // always armed: it only acts while a field INSIDE this scroller is focused,
+  // which can't happen while the feed is inactive — no need to re-render the
+  // feed just to flip it
+  useKeyboardRoom(scrollerRef);
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const spyRef = useRef<string | null>(null);
   const pendingRef = useRef<string | null>(null);
@@ -4001,6 +4027,7 @@ function ScheduleFeedBase({
   }, []);
 
   const onScroll = () => {
+    if (!activeRef.current) return; // inactive/zooming — as the old detached listener
     // stamp every scroll event (incl. fling frames) so the heal's scroll
     // anchoring can tell a live gesture from a quiet post-dive frame
     lastScrollTsRef.current = performance.now();
@@ -4161,13 +4188,12 @@ function ScheduleFeedBase({
       <div
         ref={scrollerRef}
         data-book-scroller=""
-        onScroll={active ? onScroll : undefined}
+        onScroll={onScroll}
         // while the book is SCALED as a rigid block (month/year⇄schedule) un-stick
         // the margin dates (see globals.css), or they'd stay pinned while the cards
         // scale under them. Not during an entry⇄schedule move, which only fades the
         // book — there the dates must stay sticky so the focused day's number holds
         // its pinned slot instead of jumping to its section top.
-        data-dive-freeze={diveFreeze || undefined}
         // overflow-x hidden: the book never scrolls sideways. With only
         // overflow-y set, the x-axis COMPUTES to auto (spec), and the today
         // zone's press bloom — a couple of px of transform ink past the
@@ -4337,8 +4363,7 @@ const ScheduleFeed = memo(
   // past — needn't re-render the whole book; the title alone re-renders
   (p, n) =>
     p.handleRef === n.handleRef &&
-    p.active === n.active &&
-    p.diveFreeze === n.diveFreeze &&
+
     p.today === n.today &&
     p.all === n.all &&
     p.recovery === n.recovery &&
