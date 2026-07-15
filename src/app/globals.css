@@ -627,6 +627,14 @@ textarea:focus-visible,
   content-visibility: auto;
   contain-intrinsic-size: auto var(--cis, 240px);
 }
+/* Render-ahead overscan: a fat-rootMargin IntersectionObserver (see the schedule
+   feed's warmObsRef) flags sections within ~1.2 viewports of the fold [data-warm]
+   so they PAINT before they scroll in — otherwise content-visibility:auto only
+   renders at the fold and a fast fling outruns it, so cards pop in blank. Gated
+   OUT during a climb, where markOnStage owns content-visibility. */
+[data-book-scroller][data-lazy]:not([data-climbing]) [data-day][data-warm] {
+  content-visibility: visible;
+}
 [data-book-scroller][data-lazy][data-climbing] [data-day] {
   content-visibility: hidden;
 }

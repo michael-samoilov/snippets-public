@@ -3404,6 +3404,57 @@ function ScheduleFeedBase({
   );
   const healBoundRef = useRef<WeakSet<HTMLElement>>(new WeakSet());
 
+  // ── scroll overscan (render-ahead) ───────────────────────────────────────
+  // content-visibility:auto only renders a section once it's ~at the viewport,
+  // so a fast fling outruns the render and cards "appear" (blank → pop) instead
+  // of scrolling in. Warm a ~1.2-viewport margin ABOVE and BELOW the viewport:
+  // an IntersectionObserver rooted on the scroller with a fat rootMargin flags
+  // approaching sections [data-warm], and the CSS renders them (content-
+  // visibility:visible) before they arrive — so by the time they scroll in
+  // they're already painted. Bounded to the margin (never the whole book, so no
+  // flat-book memory blow-up), off the scroll critical path (IO is async), and
+  // stood down during a climb (markOnStage owns cv then; the warm rule is
+  // [data-climbing]-gated too). --cis stays accurate (the heal fires as each
+  // warmed section renders), so warming can't shift layout under the reader.
+  // Device A/B (default off): the overscan renders a margin AHEAD so a fast
+  // fling can't outrun content-visibility:auto (cards pop in blank). Verified
+  // headless not to destabilize scrolling (skip/stability/drift green), but the
+  // pop itself only reproduces on device, and warming a stale-`--cis` section
+  // can momentarily shove a landing in the brief pre-remeasure window — so it's
+  // gated for an on-device confirm before becoming the default. ?warm=1 sticks.
+  const warmEnabledRef = useRef(false);
+  const warmObsRef = useRef<IntersectionObserver | null>(null);
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("warm");
+      if (q === "1") localStorage.setItem("warm", "1");
+      else if (q === "0") localStorage.removeItem("warm");
+      warmEnabledRef.current = localStorage.getItem("warm") === "1";
+    } catch {
+      /* SSR / private mode */
+    }
+    if (!warmEnabledRef.current) return;
+    const root = scrollerRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (climbingRef.current) return; // the climb drives cv itself
+        for (const e of entries) {
+          const el = e.target as HTMLElement;
+          if (e.isIntersecting) el.setAttribute("data-warm", "");
+          else el.removeAttribute("data-warm");
+        }
+      },
+      { root, rootMargin: "120% 0px 120% 0px", threshold: 0 },
+    );
+    warmObsRef.current = io;
+    for (const el of rowRefs.current.values()) io.observe(el);
+    return () => {
+      io.disconnect();
+      warmObsRef.current = null;
+    };
+  }, []);
+
   // The per-day grouping, split OUT of `rows` so it does NOT depend on `probe`.
   // Opening a page (a dive to a day) only adds a composer to that ONE row, but
   // it used to churn this whole map — a fresh snippets array for every day — so
@@ -4020,6 +4071,7 @@ function ScheduleFeedBase({
           healBoundRef.current.add(el);
           el.addEventListener("contentvisibilityautostatechange", onRowAutoState);
         }
+        warmObsRef.current?.observe(el); // render-ahead overscan
       } else rowRefs.current.delete(day);
     },
     [onRowAutoState],
