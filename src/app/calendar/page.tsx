@@ -173,54 +173,30 @@ function flyGlyph(text: string, font: FlyFont, color: string): HTMLSpanElement {
 }
 
 /**
- * Drive a value 0→1 along the date-flight spring (stiffness 320, damping 34,
- * mass 1) from a hand-rolled, PER-FRAME-CLAMPED integrator — never a wall-clock
- * spring — and call `onUpdate(t)` each frame until it settles.
- *
- * Why not motion's `animate(0, 1, { type: "spring" })` (what this replaced):
- * that ticks on the WALL CLOCK, so when the descent's setup frame stalls
- * (relandOnRow + placeholder heal + measureRows — ~300–750ms on a deep book)
- * the spring fast-forwards to nearly its end before its first visible frame, and
- * the date numbers arrive at their schedule-margin slot in a single jump. They
- * then read as "already planted" at the destination for the whole move instead
- * of flying between altitudes (measured: 0 mid-flight frames on every leg,
- * scripts/measure-flight-travel.py — the "planted dates" regression).
- *
- * Clamping each frame's dt (MAX_DT) caps how far ONE stalled frame can advance
- * the integration, so a stall can only ever make the flight slightly longer,
- * never skip it — the exact guard the entry-card morph uses (its MAX_DT ease),
- * kept here as a real spring (semi-implicit Euler; the tiny overshoot is the
- * settle the number always had). dt·√stiffness ≈ 0.6 ≪ 2, so the integrator is
- * stable at the clamp.
+ * Drive 0→1 along a FIXED-DURATION easeOutCubic — the SAME curve and clamped-dt
+ * rAF the entry-card morph rides (see the `apply`/DUR loop in the zoom effect).
+ * The altitude camera + date flyers use this (not a physics spring) so the
+ * dive/rise share the morph's motion character exactly, and — unlike the spring —
+ * END at a known time with no asymptotic tail: finish() then runs at a
+ * deterministic moment (no dead window where the move looks done but scroll is
+ * still frozen), and there's no long low-velocity crawl. Clamping each frame's dt
+ * to MAX_DT keeps it stall-proof (a dropped frame lengthens the move, never
+ * fast-forwards it — the "planted dates" guard) exactly as the spring did.
  */
-function driveFlightSpring(onUpdate: (t: number) => void): Promise<void> {
+function driveEase(onUpdate: (t: number) => void, dur = 440): Promise<void> {
   return new Promise<void>((resolve) => {
-    const STIFF = 320;
-    const DAMP = 34;
-    const MAX_DT = 0.034; // s — one dropped frame can't fast-forward the flight
-    let p = 0;
-    let v = 0;
+    const MAX_DT = 34; // ms — one dropped frame can't fast-forward the move
     let last: number | null = null;
+    let elapsed = 0;
     onUpdate(0); // paint the source position before the first tick
     const loop = (now: number) => {
-      const dt = last === null ? 0 : Math.min((now - last) / 1000, MAX_DT);
+      if (last !== null) elapsed += Math.min(now - last, MAX_DT);
       last = now;
-      const a = -STIFF * (p - 1) - DAMP * v; // toward the target (1), mass 1
-      v += a * dt;
-      p += v * dt;
-      // Resolve when the motion is VISUALLY landed, not when it's mathematically
-      // asymptotic. The old 0.001 epsilon kept ticking ~230ms past the point the
-      // scale reached ~1 — and finish() (which clears the zoom, restores the
-      // schedule layer's pointer-events, and lifts data-climbing so the book can
-      // scroll again) only runs once EVERY spring resolves. That tail was a dead
-      // window where the dive/rise looked done but scrolling was still frozen.
-      // The overshoot happens early (large |p-1|, high |v|) so this doesn't cut
-      // it; only the final sub-pixel crawl is dropped, and onUpdate(1) still snaps
-      // the exact landing. ~0.6% of the scale / <1px of a flyer's travel.
-      const settled = Math.abs(p - 1) < 0.006 && Math.abs(v) < 0.1;
-      onUpdate(settled ? 1 : p);
-      if (settled) resolve();
-      else requestAnimationFrame(loop);
+      const k = Math.min(1, elapsed / dur);
+      const e = 1 - Math.pow(1 - k, 3); // easeOutCubic — the morph's curve
+      onUpdate(k >= 1 ? 1 : e);
+      if (k < 1) requestAnimationFrame(loop);
+      else resolve();
     };
     requestAnimationFrame(loop);
   });
@@ -1307,7 +1283,7 @@ function Calendar() {
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
-    // measured its rects — because driveFlightSpring paints its start frame
+    // measured its rects — because driveEase paints its start frame
     // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
     // flight reads textRect(toEl) would measure the date at its shrunk-in
     // position and fly the number to the wrong spot. (The old wall-clock motion
@@ -1315,7 +1291,7 @@ function Calendar() {
     // by luck; we make the ordering explicit.)
     const startCameraScale = () =>
       // SCALE rides the same per-frame-CLAMPED spring as the date flyers
-      // (driveFlightSpring), NOT a wall-clock motion spring. On a deep book the
+      // (driveEase), NOT a wall-clock motion spring. On a deep book the
       // dive/rise setup frame can stall (markOnStage + reland + flight measure);
       // a wall-clock spring keeps ticking through that stall and lands the scale
       // most of the way in its first visible frame — the camera "snaps" instead
@@ -1325,7 +1301,7 @@ function Calendar() {
       // 320/34 spring, so the settle is unchanged. It also keeps the camera
       // frame-locked with the flyers (both on the clamped clock), so under a
       // stall the numbers and the view can't drift apart.
-      driveFlightSpring((t) => {
+      driveEase((t) => {
         outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
         incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
       });
@@ -1513,12 +1489,12 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
-        // clamped-dt spring (driveFlightSpring) — NOT motion's wall-clock
+        // clamped-dt ease (driveEase) — NOT motion's wall-clock
         // `animate(0, 1, { spring })`, which fast-forwarded on the descent's
         // setup stall and planted the number at its destination (bug: dates
         // teleport instead of fly). The clamp guarantees every frame is read.
         moves.push(
-          driveFlightSpring((t) => {
+          driveEase((t) => {
             point.style.transform = `translate(${ax + (bx - ax) * t}px,${
               ay + (by - ay) * t
             }px)`;
@@ -1579,7 +1555,7 @@ function Calendar() {
         hiddenNumbers.push(fromEl, toEl);
         // clamped-dt spring, same stall-proof driver as the date flyers
         moves.push(
-          driveFlightSpring((t) => {
+          driveEase((t) => {
             point.style.transform = `translate(${ax + (bx - ax) * t}px,${
               ay + (by - ay) * t
             }px)`;
