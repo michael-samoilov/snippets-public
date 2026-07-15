@@ -208,7 +208,16 @@ function driveFlightSpring(onUpdate: (t: number) => void): Promise<void> {
       const a = -STIFF * (p - 1) - DAMP * v; // toward the target (1), mass 1
       v += a * dt;
       p += v * dt;
-      const settled = Math.abs(p - 1) < 0.001 && Math.abs(v) < 0.02;
+      // Resolve when the motion is VISUALLY landed, not when it's mathematically
+      // asymptotic. The old 0.001 epsilon kept ticking ~230ms past the point the
+      // scale reached ~1 — and finish() (which clears the zoom, restores the
+      // schedule layer's pointer-events, and lifts data-climbing so the book can
+      // scroll again) only runs once EVERY spring resolves. That tail was a dead
+      // window where the dive/rise looked done but scrolling was still frozen.
+      // The overshoot happens early (large |p-1|, high |v|) so this doesn't cut
+      // it; only the final sub-pixel crawl is dropped, and onUpdate(1) still snaps
+      // the exact landing. ~0.6% of the scale / <1px of a flyer's travel.
+      const settled = Math.abs(p - 1) < 0.006 && Math.abs(v) < 0.1;
       onUpdate(settled ? 1 : p);
       if (settled) resolve();
       else requestAnimationFrame(loop);
@@ -3199,22 +3208,6 @@ function ScheduleFeedBase({
   // generous ±1.5-viewport band keeps a dormant section from being revealed as
   // the layer scales during the move.
   const onStageRef = useRef<Set<HTMLElement>>(new Set());
-  // Device A/B: skip the O(book) content-visibility flip during climbs (see
-  // markOnStage). Read once at mount; owner sets localStorage 'noclimb'='1'.
-  const noClimbRef = useRef(false);
-  useEffect(() => {
-    try {
-      // ?noclimb=1 (or =0) flips it and STICKS via localStorage, so the choice
-      // survives the URL changing on the first dive — easy to toggle on a phone
-      // where the console isn't handy. Bare localStorage still works too.
-      const q = new URLSearchParams(window.location.search).get("noclimb");
-      if (q === "1") localStorage.setItem("noclimb", "1");
-      else if (q === "0") localStorage.removeItem("noclimb");
-      noClimbRef.current = localStorage.getItem("noclimb") === "1";
-    } catch {
-      /* private mode / SSR guard */
-    }
-  }, []);
   const markOnStage = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -3230,17 +3223,7 @@ function ScheduleFeedBase({
     // that renders anything is the offsetHeight below, over the on-stage band
     // alone. (Flipping cv here, un-transformed, is also what keeps the move off
     // the ~5s under-transform intrinsic-size thrash — see the offsetHeight note.)
-    // DEVICE A/B (default off): with the scaled layer now GPU-promoted
-    // (will-change:transform on the zoom layers), a compositor transform may no
-    // longer trigger the per-frame content-visibility:auto re-evaluation this
-    // flip exists to prevent — headless shows no thrash and slightly SMOOTHER
-    // gaps without it, and cv:auto already bounds rendered content to the
-    // viewport. If that holds on iOS (the only judge that matters — this branch
-    // is named for an iOS jetsam crash headless can't reproduce), the whole
-    // O(book) climb machinery is unnecessary and the descent's setup/teardown
-    // become O(1). Gated so the owner can A/B on-device without risking the
-    // default: localStorage.setItem('noclimb','1') + reload to try it.
-    if (!noClimbRef.current) el.setAttribute("data-climbing", "");
+    el.setAttribute("data-climbing", "");
     const top = el.scrollTop;
     const band = el.clientHeight * 1.5;
     const lo = top - band;
