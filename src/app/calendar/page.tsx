@@ -857,9 +857,6 @@ function Calendar() {
 
     let flyerBox: HTMLDivElement | null = null;
     let underBox: HTMLDivElement | null = null;
-    // set once the camera visually lands (landView) — the book is then already
-    // at rest + rendered + scrollable, so finish() must NOT repeat that teardown
-    let landed = false;
     const hiddenNumbers: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
     // (inline style beats [data-dive-freeze]) — cleared a frame after finish
@@ -1309,26 +1306,6 @@ function Calendar() {
     const outTo = deeper ? factor : 1 / factor;
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
-    // At visual landing, bring the layers to REST and hand scrolling back — but
-    // touch NOTHING that reflows the book. The reader's immediate swipe is killed
-    // by two things, and this fixes exactly those two: (1) a layer transform that
-    // keeps TICKING each frame yanks iOS momentum back — so snap both layers to
-    // identity AND stop re-animating them (the spring keeps running only for the
-    // flyers); (2) pointer-events:none (from `zoom`) eats the touch — so restore
-    // it inline. data-climbing is deliberately NOT lifted here: that flip is an
-    // O(book) style recalc, and doing it now (a) lands right as the reader starts
-    // scrolling (a second momentum-kill) and (b) reflows the book BEFORE the
-    // flyers land, so the numbers settle to a pre-reflow spot and read as landing
-    // off. It stays in finish()'s deferred frame, in lockstep with the flyer
-    // reveal, exactly as before — so the numbers land true and the recalc is off
-    // the reader's scroll.
-    const landView = () => {
-      if (landed || zoom.from === "entry" || zoom.to === "entry") return;
-      landed = true;
-      outgoing.style.transform = ""; // snap both layers to rest — stop animating
-      incoming.style.transform = "";
-      incoming.style.pointerEvents = "auto"; // beats the zoom pointer-events:none
-    };
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
     // measured its rects — because driveFlightSpring paints its start frame
     // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
@@ -1349,14 +1326,6 @@ function Calendar() {
       // frame-locked with the flyers (both on the clamped clock), so under a
       // stall the numbers and the view can't drift apart.
       driveFlightSpring((t) => {
-        // Once visually landed, bring the book to rest and STOP re-setting the
-        // transform below — leaving the layers static so the reader's fresh
-        // scroll keeps its momentum. The last ~1.5% snaps to identity; the
-        // flyers keep resolving on their own spring for the exact date landing.
-        if (t >= 0.985) {
-          landView();
-          return;
-        }
         outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
         incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
       });
@@ -1407,26 +1376,43 @@ function Calendar() {
       // region, and it already covers everything on screen, so scoping the book's
       // query to it drops the hidden sections without dropping any real flyer.
       const schedEl = scheduleLayerRef.current;
-      const collect = (root: HTMLElement) => {
-        const sel =
-          root === schedEl
-            ? "[data-day][data-onstage] [data-flydate]"
-            : "[data-flydate]";
+      const inView = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        const y = r.top - stageRect.top;
+        return y > -r.height && y < stageRect.height;
+      };
+      // A date can only fly if it stands in BOTH altitudes, so the flight only
+      // ever needs the CANDIDATE days — the anchor on a rise, the days the month
+      // grid shows on a dive. The old collect() getBoundingClientRect'd EVERY
+      // on-stage flydate in the book's band (~122 on a dense book) just to throw
+      // all but a handful away — ~70ms of the setup stall that made the clamped
+      // camera spring jump. Query only the candidates (onstage-scoped on the book
+      // side so a cv:hidden section is never forced to lay out).
+      const collectDays = (root: HTMLElement, days: Iterable<string>) => {
+        const scoped = root === schedEl;
         const found = new Map<string, HTMLElement>();
-        for (const el of root.querySelectorAll<HTMLElement>(sel)) {
-          const r = el.getBoundingClientRect();
-          const y = r.top - stageRect.top;
-          if (y > -r.height && y < stageRect.height)
-            found.set(el.dataset.flydate!, el);
+        for (const day of days) {
+          const el = root.querySelector<HTMLElement>(
+            scoped
+              ? `[data-day][data-onstage] [data-flydate="${CSS.escape(day)}"]`
+              : `[data-flydate="${CSS.escape(day)}"]`,
+          );
+          if (el && inView(el)) found.set(day, el);
         }
+        return found;
+      };
+      // all flydates in a small grid (the month/year side of a DIVE, whose
+      // candidate set isn't known yet) — bounded to the ~35 visible cells
+      const collectAll = (root: HTMLElement) => {
+        const found = new Map<string, HTMLElement>();
+        for (const el of root.querySelectorAll<HTMLElement>("[data-flydate]"))
+          if (inView(el)) found.set(el.dataset.flydate!, el);
         return found;
       };
       // Descent from the month: take the flight's takeoff boxes from the
       // clean-layout capture in pick() (descentGeom) instead of measuring the
       // month live — a single post-commit getBoundingClientRect on the month
-      // re-flushes its whole layout (~28ms on the setup frame). We still resolve
-      // the live element (a cheap querySelector, no layout) to hide it and read
-      // its font. Other paths (ascent, freeze off) measure live as before.
+      // re-flushes its whole layout (~28ms on the setup frame).
       const descentCache =
         zoom.from === "month" &&
         zoom.to === "schedule" &&
@@ -1434,26 +1420,31 @@ function Calendar() {
           ? descentGeom.current
           : null;
       let fromEls: Map<string, HTMLElement>;
+      let toEls: Map<string, HTMLElement>;
       let fromRectFor: (day: string, el: HTMLElement) => DOMRect;
-      if (descentCache) {
-        fromEls = new Map();
-        for (const day of descentCache.cells.keys()) {
-          const el = outgoing.querySelector<HTMLElement>(
-            `[data-flydate="${CSS.escape(day)}"]`,
-          );
-          if (el) fromEls.set(day, el);
-        }
-        fromRectFor = (day, el) => descentCache.cells.get(day) ?? textRect(el);
-      } else {
-        fromEls = collect(outgoing);
-        fromRectFor = (_day, el) => textRect(el);
-      }
-      const toEls = collect(incoming);
-      // pulling back, only the day the reader stood on travels — the
-      // other visible dates belong to the page being closed
       if (zoom.from === "schedule") {
-        for (const day of [...fromEls.keys()])
-          if (day !== zoom.anchor) fromEls.delete(day);
+        // RISE: only the day the reader stood on travels — the other visible
+        // dates belong to the page being closed. Both sides are just the anchor.
+        fromEls = collectDays(outgoing, [zoom.anchor]);
+        toEls = collectDays(incoming, [zoom.anchor]);
+        fromRectFor = (_day, el) => textRect(el);
+      } else {
+        // DIVE (month→schedule): the month side names the candidates; the book
+        // side is then queried for only those days.
+        if (descentCache) {
+          fromEls = new Map();
+          for (const day of descentCache.cells.keys()) {
+            const el = outgoing.querySelector<HTMLElement>(
+              `[data-flydate="${CSS.escape(day)}"]`,
+            );
+            if (el) fromEls.set(day, el);
+          }
+          fromRectFor = (day, el) => descentCache.cells.get(day) ?? textRect(el);
+        } else {
+          fromEls = collectAll(outgoing);
+          fromRectFor = (_day, el) => textRect(el);
+        }
+        toEls = collectDays(incoming, fromEls.keys());
       }
       // READ PHASE — measure every pair before a single style write. Each
       // hide/append below invalidates layout, so interleaving measurement with
