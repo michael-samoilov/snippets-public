@@ -857,6 +857,9 @@ function Calendar() {
 
     let flyerBox: HTMLDivElement | null = null;
     let underBox: HTMLDivElement | null = null;
+    // set once the camera visually lands (landView) — the book is then already
+    // at rest + rendered + scrollable, so finish() must NOT repeat that teardown
+    let landed = false;
     const hiddenNumbers: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
     // (inline style beats [data-dive-freeze]) — cleared a frame after finish
@@ -946,7 +949,10 @@ function Calendar() {
         const ub = underBox;
         const reals = hiddenNumbers;
         requestAnimationFrame(() => {
-          if (climbed) {
+          if (climbed && !landed) {
+            // landView() already lifted these at visual landing on a normal move;
+            // this is the fallback (reduce-motion, or a move that never reached
+            // the camera's landing tick)
             scheduleLayerRef.current
               ?.querySelector("[data-book-scroller]")
               ?.removeAttribute("data-climbing");
@@ -1304,7 +1310,32 @@ function Calendar() {
     const outTo = deeper ? factor : 1 / factor;
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
-    let scrollHandedBack = false; // scroll re-enabled once, at visual landing
+    // Bring the book to a genuine REST at visual landing (once), so the reader's
+    // immediate post-landing scroll actually takes — decoupled from the spring's
+    // mathematical settle ~85ms later. Three things have to be true for a fling
+    // to work, and all three used to wait for finish(): (1) the layer transform
+    // must STOP — an ancestor whose transform is still ticking each frame yanks
+    // iOS scroll momentum back (this was the "momentum killed" regression); (2)
+    // data-climbing must lift so the book is fully rendered (not band-only) —
+    // safe to do here precisely because we cleared the transform first, so no
+    // cv:auto-under-transform thrash; (3) pointer-events must return so the
+    // touch registers. finish() still runs at spring-settle for the rest
+    // (opacity, flyer cleanup, setZoom); it checks `landed` to not repeat this.
+    const landView = () => {
+      if (landed || zoom.from === "entry" || zoom.to === "entry") return;
+      landed = true;
+      outgoing.style.transform = ""; // snap both layers to rest — stop animating
+      incoming.style.transform = "";
+      incoming.style.pointerEvents = "auto"; // beats the zoom pointer-events:none
+      const climb =
+        zoom.from === "schedule" || zoom.to === "schedule";
+      if (climb) {
+        scheduleLayerRef.current
+          ?.querySelector("[data-book-scroller]")
+          ?.removeAttribute("data-climbing");
+        scheduleFeedRef.current?.clearOnStage();
+      }
+    };
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
     // measured its rects — because driveFlightSpring paints its start frame
     // (onUpdate(0)) SYNCHRONOUSLY, and scaling the arriving layer before the
@@ -1325,21 +1356,16 @@ function Calendar() {
       // frame-locked with the flyers (both on the clamped clock), so under a
       // stall the numbers and the view can't drift apart.
       driveFlightSpring((t) => {
+        // Once visually landed, bring the book to rest and STOP re-setting the
+        // transform below — leaving the layers static so the reader's fresh
+        // scroll keeps its momentum. The last ~1.5% snaps to identity; the
+        // flyers keep resolving on their own spring for the exact date landing.
+        if (t >= 0.985) {
+          landView();
+          return;
+        }
         outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
         incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
-        // Hand scrolling back the instant the camera is VISUALLY landed — not
-        // when the spring mathematically resolves (~85ms later) and finish()
-        // runs. The reader's post-landing swipe arrives right at the visual
-        // stop; if pointer-events:none (from `zoom`) is still up, that whole
-        // swipe is eaten. Inline pointer-events:auto on the landed layer beats
-        // the class; finish()'s deferred cleanup clears it. Altitude moves only
-        // (an entry open/close has no scroll to resume). data-climbing still
-        // lifts at finish — a fling in that gap scrolls within the rendered band.
-        if (t >= 0.97 && !scrollHandedBack) {
-          scrollHandedBack = true;
-          if (zoom.from !== "entry" && zoom.to !== "entry")
-            incoming.style.pointerEvents = "auto";
-        }
       });
     moves.push(
       // opacity keeps its own short crossfade — a fade fast-forwarding through a
@@ -3416,20 +3442,19 @@ function ScheduleFeedBase({
   // stood down during a climb (markOnStage owns cv then; the warm rule is
   // [data-climbing]-gated too). --cis stays accurate (the heal fires as each
   // warmed section renders), so warming can't shift layout under the reader.
-  // Device A/B (default off): the overscan renders a margin AHEAD so a fast
-  // fling can't outrun content-visibility:auto (cards pop in blank). Verified
-  // headless not to destabilize scrolling (skip/stability/drift green), but the
-  // pop itself only reproduces on device, and warming a stale-`--cis` section
-  // can momentarily shove a landing in the brief pre-remeasure window — so it's
-  // gated for an on-device confirm before becoming the default. ?warm=1 sticks.
-  const warmEnabledRef = useRef(false);
+  // Render-ahead overscan (ON by default — owner-confirmed on device): render a
+  // margin AHEAD of the fold so a fast fling can't outrun content-visibility:auto
+  // (cards pop in blank otherwise). Bounded to the margin, off the scroll
+  // critical path, stood down during a climb. ?warm=0 is an escape hatch (sticks;
+  // ?warm=1 restores the default) in case a deep book shows memory pressure.
+  const warmEnabledRef = useRef(true);
   const warmObsRef = useRef<IntersectionObserver | null>(null);
   useEffect(() => {
     try {
       const q = new URLSearchParams(window.location.search).get("warm");
-      if (q === "1") localStorage.setItem("warm", "1");
-      else if (q === "0") localStorage.removeItem("warm");
-      warmEnabledRef.current = localStorage.getItem("warm") === "1";
+      if (q === "0") localStorage.setItem("warm", "0");
+      else if (q === "1") localStorage.removeItem("warm");
+      warmEnabledRef.current = localStorage.getItem("warm") !== "0";
     } catch {
       /* SSR / private mode */
     }
