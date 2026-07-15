@@ -949,10 +949,9 @@ function Calendar() {
         const ub = underBox;
         const reals = hiddenNumbers;
         requestAnimationFrame(() => {
-          if (climbed && !landed) {
-            // landView() already lifted these at visual landing on a normal move;
-            // this is the fallback (reduce-motion, or a move that never reached
-            // the camera's landing tick)
+          if (climbed) {
+            // the O(book) cv flip stays here, in lockstep with the flyer reveal
+            // below — off the reader's scroll and after the numbers have landed
             scheduleLayerRef.current
               ?.querySelector("[data-book-scroller]")
               ?.removeAttribute("data-climbing");
@@ -1310,31 +1309,25 @@ function Calendar() {
     const outTo = deeper ? factor : 1 / factor;
     const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
-    // Bring the book to a genuine REST at visual landing (once), so the reader's
-    // immediate post-landing scroll actually takes — decoupled from the spring's
-    // mathematical settle ~85ms later. Three things have to be true for a fling
-    // to work, and all three used to wait for finish(): (1) the layer transform
-    // must STOP — an ancestor whose transform is still ticking each frame yanks
-    // iOS scroll momentum back (this was the "momentum killed" regression); (2)
-    // data-climbing must lift so the book is fully rendered (not band-only) —
-    // safe to do here precisely because we cleared the transform first, so no
-    // cv:auto-under-transform thrash; (3) pointer-events must return so the
-    // touch registers. finish() still runs at spring-settle for the rest
-    // (opacity, flyer cleanup, setZoom); it checks `landed` to not repeat this.
+    // At visual landing, bring the layers to REST and hand scrolling back — but
+    // touch NOTHING that reflows the book. The reader's immediate swipe is killed
+    // by two things, and this fixes exactly those two: (1) a layer transform that
+    // keeps TICKING each frame yanks iOS momentum back — so snap both layers to
+    // identity AND stop re-animating them (the spring keeps running only for the
+    // flyers); (2) pointer-events:none (from `zoom`) eats the touch — so restore
+    // it inline. data-climbing is deliberately NOT lifted here: that flip is an
+    // O(book) style recalc, and doing it now (a) lands right as the reader starts
+    // scrolling (a second momentum-kill) and (b) reflows the book BEFORE the
+    // flyers land, so the numbers settle to a pre-reflow spot and read as landing
+    // off. It stays in finish()'s deferred frame, in lockstep with the flyer
+    // reveal, exactly as before — so the numbers land true and the recalc is off
+    // the reader's scroll.
     const landView = () => {
       if (landed || zoom.from === "entry" || zoom.to === "entry") return;
       landed = true;
       outgoing.style.transform = ""; // snap both layers to rest — stop animating
       incoming.style.transform = "";
       incoming.style.pointerEvents = "auto"; // beats the zoom pointer-events:none
-      const climb =
-        zoom.from === "schedule" || zoom.to === "schedule";
-      if (climb) {
-        scheduleLayerRef.current
-          ?.querySelector("[data-book-scroller]")
-          ?.removeAttribute("data-climbing");
-        scheduleFeedRef.current?.clearOnStage();
-      }
     };
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
     // measured its rects — because driveFlightSpring paints its start frame
