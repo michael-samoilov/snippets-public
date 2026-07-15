@@ -441,11 +441,12 @@ const DEPTH: Record<View, number> = { year: 0, month: 1, schedule: 2, entry: 3 }
 
 interface ScheduleFeedHandle {
   goTo: (day: string, smooth?: boolean) => void;
-  // an altitude climb transforms the whole book layer; the zoom effect calls
-  // these to keep only an on-screen band rendered for the move (the rest go
-  // content-visibility:hidden — no render, no per-frame re-eval under the
-  // transform). Reads use cached geometry (rowGeomRef) + one scroll read; never
-  // interleaves layout reads with the attribute writes. See [data-climbing].
+  // The book rests windowed: only the [data-warm] band renders; everything else
+  // is content-visibility:hidden (see globals.css). markOnStage warms the
+  // (destination) band synchronously + flushes it, and latches climbingRef so
+  // the observer/measure stand down for the move — O(band), nothing off-band to
+  // touch, and with zero cv:auto elements a transformed ancestor re-evaluates
+  // nothing. clearOnStage drops the latch and re-primes the observer.
   markOnStage: () => void;
   clearOnStage: () => void;
   // how far a day's margin date sits BELOW its section top at rest — nonzero
@@ -1331,7 +1332,7 @@ function Calendar() {
       // on-stage band is the only place it can live, so the scan is O(band).
       if (freezeEnabled) {
         for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
-          "[data-day][data-onstage]",
+          "[data-day][data-warm]",
         ) ?? []) {
           const day = sec.dataset.day;
           if (!day || !(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0))
@@ -1370,7 +1371,7 @@ function Calendar() {
         for (const day of days) {
           const el = root.querySelector<HTMLElement>(
             scoped
-              ? `[data-day][data-onstage] [data-flydate="${CSS.escape(day)}"]`
+              ? `[data-day][data-warm] [data-flydate="${CSS.escape(day)}"]`
               : `[data-flydate="${CSS.escape(day)}"]`,
           );
           if (el && inView(el)) found.set(day, el);
@@ -3214,31 +3215,22 @@ function ScheduleFeedBase({
     rowGeomRef.current = geom;
   }, []);
 
-  // Mark the day sections within an on-screen band [data-onstage] so the climb
-  // can send the rest to content-visibility:hidden (see [data-climbing] in
-  // globals.css). ONE scroll read, then writes — no interleaving (interleaving
-  // reads/writes over ~90 sections thrashed to seconds in the probe); the band
-  // geometry is the already-cached rowGeomRef, never fresh offset reads. A
-  // generous ±1.5-viewport band keeps a dormant section from being revealed as
-  // the layer scales during the move.
-  const onStageRef = useRef<Set<HTMLElement>>(new Set());
-  const markOnStage = useCallback(() => {
+  // THE RENDER WINDOW's synchronous half (see globals.css [data-day]): mark the
+  // sections within a band around a scroll position [data-warm] so they render,
+  // and un-mark the previous band. ONE scroll read, then writes — no
+  // interleaving (interleaving reads/writes over ~90 sections thrashed to
+  // seconds in the probe); the band geometry is the already-cached rowGeomRef,
+  // never fresh offset reads. A generous ±1.5-viewport band (a hair wider than
+  // the observer's ±1.2 margin) keeps a dormant section from being revealed as
+  // the layer scales during a move. warmSetRef is the ONE ledger of warm rows,
+  // shared with the scroll-time IntersectionObserver below — both reconcile
+  // against it, so marks never leak or fight.
+  const warmSetRef = useRef<Set<HTMLElement>>(new Set());
+  const warmObsRef = useRef<IntersectionObserver | null>(null);
+  const warmBand = useCallback((at?: number) => {
     const el = scrollerRef.current;
     if (!el) return;
-    climbingRef.current = true; // measureRows stands down for the move
-    // Establish the climb's content-visibility BEFORE the first geometry read
-    // below. data-climbing sends every section that lacks data-onstage to
-    // cv:hidden; on the dive's first mark nothing is on-stage yet, so the whole
-    // book goes dormant. That matters for COST: reading el.scrollTop forces a
-    // layout flush, and if the book were still cv:auto that flush would lay out
-    // the visible viewport's PROSE — the descent's dominant setup cost — only for
-    // this same call to then hide most of it (render-then-drop). With the book
-    // already dormant, the scrollTop flush lays out nothing, and the single flush
-    // that renders anything is the offsetHeight below, over the on-stage band
-    // alone. (Flipping cv here, un-transformed, is also what keeps the move off
-    // the ~5s under-transform intrinsic-size thrash — see the offsetHeight note.)
-    el.setAttribute("data-climbing", "");
-    const top = el.scrollTop;
+    const top = at ?? el.scrollTop;
     const band = el.clientHeight * 1.5;
     const lo = top - band;
     const hi = top + el.clientHeight + band;
@@ -3252,18 +3244,36 @@ function ScheduleFeedBase({
     // touch ONLY the rows whose membership changed: a re-land (relandOnRow)
     // re-marks a near-identical band, and a full re-stamp of ~720 rows × up to
     // 3 passes was pure style-invalidation churn on the setup frame.
-    const cur = onStageRef.current;
-    for (const row of cur) if (!next.has(row)) row.removeAttribute("data-onstage");
-    for (const row of next) if (!cur.has(row)) row.setAttribute("data-onstage", "");
-    onStageRef.current = next;
-    void el.offsetHeight; // sync layout flush: render the on-stage band now
+    const cur = warmSetRef.current;
+    for (const row of cur) if (!next.has(row)) row.removeAttribute("data-warm");
+    for (const row of next) if (!cur.has(row)) row.setAttribute("data-warm", "");
+    warmSetRef.current = next;
   }, []);
+  const markOnStage = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    climbingRef.current = true; // measureRows + the observer stand down
+    el.setAttribute("data-climbing", ""); // no CSS — a latch for probes/debugging
+    // At rest the off-band book is ALREADY hidden (globals.css), so a climb has
+    // nothing to flip off-band: warm the (destination) band — pick() has already
+    // scrolled there — and force its render in THIS pass, before Motion
+    // transforms the layer. O(band); the old design's O(book) auto→hidden recalc
+    // (the front-loaded setup/teardown stall) is gone by construction.
+    warmBand();
+    void el.offsetHeight; // sync layout flush: render the warm band now
+  }, [warmBand]);
   const clearOnStage = useCallback(() => {
-    // only the band carries data-onstage (markOnStage keeps the set exact), so
-    // clearing it is O(band), not a ~720-row sweep on the teardown frame
-    for (const row of onStageRef.current) row.removeAttribute("data-onstage");
-    onStageRef.current = new Set();
     climbingRef.current = false;
+    // the landing band must STAY warm — the reader is looking at it. But the
+    // observer missed every crossing during the climb (its callback stands down
+    // mid-move, and misses are never re-delivered: IO only reports CHANGES) — so
+    // re-prime it: after disconnect+observe it reports current intersection for
+    // every row in one async batch, reconciling any mark the climb left stale.
+    const io = warmObsRef.current;
+    if (io) {
+      io.disconnect();
+      for (const row of rowRefs.current.values()) io.observe(row);
+    }
   }, []);
   // See ScheduleFeedHandle: how far below its section top a day's margin date
   // RESTS. Sticky top-0 pins the cell at max(section top, min(scroll top,
@@ -3376,58 +3386,38 @@ function ScheduleFeedBase({
     // (cheap own-box reads; the RO it might wake is climb-guarded)
     measureRows();
   }, [measureRows]);
-  const onRowAutoState = useCallback(
-    (e: Event) => {
-      const t = e.target;
-      // only the skipped→rendered edge carries a fresh real height to heal
-      if (!(t instanceof HTMLElement) || (e as { skipped?: boolean }).skipped)
-        return;
-      healQueueRef.current.add(t);
-      if (!healRafRef.current)
-        healRafRef.current = requestAnimationFrame(flushHeal);
-    },
-    [flushHeal],
-  );
-  const healBoundRef = useRef<WeakSet<HTMLElement>>(new WeakSet());
-
-  // ── scroll overscan (render-ahead) ───────────────────────────────────────
-  // content-visibility:auto only renders a section once it's ~at the viewport,
-  // so a fast fling outruns the render and cards "appear" (blank → pop) instead
-  // of scrolling in. Warm a ~1.2-viewport margin ABOVE and BELOW the viewport:
-  // an IntersectionObserver rooted on the scroller with a fat rootMargin flags
-  // approaching sections [data-warm], and the CSS renders them (content-
-  // visibility:visible) before they arrive — so by the time they scroll in
-  // they're already painted. Bounded to the margin (never the whole book, so no
-  // flat-book memory blow-up), off the scroll critical path (IO is async), and
-  // stood down during a climb (markOnStage owns cv then; the warm rule is
-  // [data-climbing]-gated too). --cis stays accurate (the heal fires as each
-  // warmed section renders), so warming can't shift layout under the reader.
-  // Render-ahead overscan (ON by default — owner-confirmed on device): render a
-  // margin AHEAD of the fold so a fast fling can't outrun content-visibility:auto
-  // (cards pop in blank otherwise). Bounded to the margin, off the scroll
-  // critical path, stood down during a climb. ?warm=0 is an escape hatch (sticks;
-  // ?warm=1 restores the default) in case a deep book shows memory pressure.
-  const warmEnabledRef = useRef(true);
-  const warmObsRef = useRef<IntersectionObserver | null>(null);
+  // ── the render window's scroll-time half ─────────────────────────────────
+  // At rest the book is content-visibility:hidden except the [data-warm] band
+  // (globals.css). While the reader scrolls, this IntersectionObserver — rooted
+  // on the scroller with a ±1.2-viewport rootMargin — warms approaching sections
+  // BEFORE they reach the fold and un-warms departed ones, so a fling scrolls
+  // into already-painted paper. Async, off the scroll critical path, never
+  // touches scrollTop (momentum-safe by construction). Newly warmed sections
+  // queue into the placeholder heal (their --cis may be stale from a font swap;
+  // flushHeal trues it up and anchors the viewport). Stands down during a climb
+  // — markOnStage owns the band then; clearOnStage re-primes it (misses during
+  // the stand-down are never re-delivered, IO only reports changes).
+  // (warmObsRef is declared up with warmSetRef, above clearOnStage's use.)
   useEffect(() => {
-    try {
-      const q = new URLSearchParams(window.location.search).get("warm");
-      if (q === "0") localStorage.setItem("warm", "0");
-      else if (q === "1") localStorage.removeItem("warm");
-      warmEnabledRef.current = localStorage.getItem("warm") !== "0";
-    } catch {
-      /* SSR / private mode */
-    }
-    if (!warmEnabledRef.current) return;
     const root = scrollerRef.current;
     if (!root || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (climbingRef.current) return; // the climb drives cv itself
+        if (climbingRef.current) return; // the climb owns the band
         for (const e of entries) {
           const el = e.target as HTMLElement;
-          if (e.isIntersecting) el.setAttribute("data-warm", "");
-          else el.removeAttribute("data-warm");
+          if (e.isIntersecting) {
+            if (!warmSetRef.current.has(el)) {
+              warmSetRef.current.add(el);
+              el.setAttribute("data-warm", "");
+              healQueueRef.current.add(el);
+              if (!healRafRef.current)
+                healRafRef.current = requestAnimationFrame(flushHeal);
+            }
+          } else if (warmSetRef.current.has(el)) {
+            warmSetRef.current.delete(el);
+            el.removeAttribute("data-warm");
+          }
         }
       },
       { root, rootMargin: "120% 0px 120% 0px", threshold: 0 },
@@ -3438,7 +3428,7 @@ function ScheduleFeedBase({
       io.disconnect();
       warmObsRef.current = null;
     };
-  }, []);
+  }, [flushHeal]);
 
   // The per-day grouping, split OUT of `rows` so it does NOT depend on `probe`.
   // Opening a page (a dive to a day) only adds a composer to that ONE row, but
@@ -3528,6 +3518,9 @@ function ScheduleFeedBase({
     if (day === todayKey) {
       spyRef.current = day;
       progTargetRef.current = null;
+      // warm the tail band NOW — a hidden-at-rest destination would land the
+      // glide on bare paper until the observer catches up (see warmBand)
+      warmBand(el.scrollHeight - el.clientHeight);
       // hold the header on today the whole way down (cleared on arrival / by the
       // backup timer), so passing days don't flicker the Today button back in
       landingTodayRef.current = true;
@@ -3701,6 +3694,10 @@ function ScheduleFeedBase({
     } else {
       progTargetRef.current = null;
     }
+    // destination band first (synchronous, from cached geometry): the section
+    // being jumped to is hidden at rest — without this, a deep link / search
+    // jump / dive's goTo lands on bare paper until the observer's async catch-up
+    warmBand(row.offsetTop);
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     if (!smooth) {
       // a dive lands here against a layout that's still settling — the opened
@@ -3735,7 +3732,7 @@ function ScheduleFeedBase({
       );
     }
     return true;
-  }, [todayKey]);
+  }, [todayKey, warmBand]);
 
   // After a keep, pan up from the today zone so the new card can be watched
   // wiping into the schedule. Land on today's date — unless today's stack is so
@@ -3871,10 +3868,14 @@ function ScheduleFeedBase({
     if (!el) return;
     const raf = requestAnimationFrame(() => {
       measureRows();
+      // warm the viewport band IN THE SAME PASS as the lazy flip: attribute +
+      // marks land in one style/paint, so the sections the reader is looking at
+      // never see a hidden frame as the rest of the book goes cold
+      warmBand();
       el.setAttribute("data-lazy", "");
     });
     return () => cancelAnimationFrame(raf);
-  }, [fullBook, measureRows]);
+  }, [fullBook, measureRows, warmBand]);
 
   // Re-measure EVERY placeholder against its real height. The initial measure
   // above runs the instant the book mounts — often BEFORE the display:swap
@@ -4049,17 +4050,17 @@ function ScheduleFeedBase({
     (day: string) => (el: HTMLElement | null) => {
       if (el) {
         rowRefs.current.set(day, el);
-        // one heal listener per DOM node (React reuses the node across the ref
-        // churn its per-render closure causes; the WeakSet dedupes and lets the
-        // listener die with the node — no leak, no double-fire)
-        if (!healBoundRef.current.has(el)) {
-          healBoundRef.current.add(el);
-          el.addEventListener("contentvisibilityautostatechange", onRowAutoState);
+        warmObsRef.current?.observe(el); // join the render window
+      } else {
+        const old = rowRefs.current.get(day);
+        if (old) {
+          warmObsRef.current?.unobserve(old);
+          warmSetRef.current.delete(old); // don't retain an unmounted node
         }
-        warmObsRef.current?.observe(el); // render-ahead overscan
-      } else rowRefs.current.delete(day);
+        rowRefs.current.delete(day);
+      }
     },
-    [onRowAutoState],
+    [],
   );
 
   // the book holds nothing yet — the today zone opens with a warmer first

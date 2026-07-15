@@ -605,40 +605,34 @@ textarea:focus-visible,
    only set once the full book has mounted and measured (so the measurements are
    real, not estimates).
 
-   The climb ([data-climbing]) TRANSFORMS the whole schedule layer, and
-   `content-visibility: auto` re-evaluates every section's on-screen-ness each
-   frame of a transformed ancestor — which balloons the climb to seconds. We do
-   NOT cure that by flipping the book to `visible` (that's a synchronous O(book)
-   render at climb start — the whole flat book, ~717ms at 1200). Instead, for the
-   span of the move we send OFF-STAGE sections to `content-visibility: hidden` —
-   which skips render AND never re-evaluates under the transform — and keep only
-   the on-stage band (marked [data-onstage] from cached geometry in markOnStage,
-   which establishes this state transform-free BEFORE Motion scales the layer)
-   rendered. This cuts the climb's render from whole-book to band-only.
-   CAUTION: this toggle is necessary but NOT sufficient, and it's a trap to
-   "verify" it in isolation — a bare toggle measures ~37ms with no transform
-   running, but under the live climb `hidden` was WORSE than `visible` until the
-   three real O(book) stalls were also fixed (a flydate flight + measureRows both
-   measuring INTO skipped sections, and a probe-driven React reconcile — see the
-   zoom effect, measureRows, and dayGroups in page.tsx, and LAZYRENDER-HANDOFF).
-   A dive only fades the layer (opacity, positions still), so cv `auto` stays on
-   and fast there. */
+   THE RENDER WINDOW (BACKLOG #12's windowing, done in CSS state — the DOM stays
+   whole so scroll physics/momentum are untouched). At rest every section is
+   `content-visibility: hidden`; only the sections carrying [data-warm] — a
+   ±1.2-viewport band — are rendered. The band is maintained two ways:
+   · while SCROLLING, a fat-rootMargin IntersectionObserver (warmObsRef in
+     page.tsx) warms approaching sections asynchronously, ahead of the fold, so
+     a fling scrolls into already-painted paper (owner-device-validated: this is
+     what fixed the fast-fling "cards pop in blank");
+   · on PROGRAMMATIC moves (a dive's goTo, deep links, search jumps, climbs),
+     warmBand() marks the destination band synchronously from cached geometry
+     (rowGeomRef) before the scroll is seen, so a jump never lands on blank.
+   Why hidden-at-rest instead of `auto` (the previous design): every climb had
+   to flip ~720 auto sections to hidden before transforming the layer (else
+   `auto` re-evaluates each section EVERY frame under a transformed ancestor —
+   the multi-second thrash) — an O(book) style recalc paid at every dive/rise
+   setup AND teardown, felt as the front-loaded choppiness. Hidden-at-rest means
+   a climb changes NOTHING off-band: setup/teardown are O(band), and with zero
+   `auto` elements the under-transform re-evaluation cannot happen at all.
+   Trade-offs, accepted deliberately: off-band history is out of find-in-page
+   and the a11y tree while cold (the app's own search reads Dexie, not the DOM),
+   and a fling that outruns the warm band shows bare paper until the observer
+   catches up (~1.2 viewports of runway) rather than cv:auto's synchronous
+   render-at-fold. */
 [data-book-scroller][data-lazy] [data-day] {
-  content-visibility: auto;
+  content-visibility: hidden;
   contain-intrinsic-size: auto var(--cis, 240px);
 }
-/* Render-ahead overscan: a fat-rootMargin IntersectionObserver (see the schedule
-   feed's warmObsRef) flags sections within ~1.2 viewports of the fold [data-warm]
-   so they PAINT before they scroll in — otherwise content-visibility:auto only
-   renders at the fold and a fast fling outruns it, so cards pop in blank. Gated
-   OUT during a climb, where markOnStage owns content-visibility. */
-[data-book-scroller][data-lazy]:not([data-climbing]) [data-day][data-warm] {
-  content-visibility: visible;
-}
-[data-book-scroller][data-lazy][data-climbing] [data-day] {
-  content-visibility: hidden;
-}
-[data-book-scroller][data-lazy][data-climbing] [data-day][data-onstage] {
+[data-book-scroller][data-lazy] [data-day][data-warm] {
   content-visibility: visible;
 }
 
