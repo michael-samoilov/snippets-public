@@ -1416,10 +1416,14 @@ function Calendar() {
     // start, mid-move lurch) on every run. (camAnims is declared with the
     // teardown lists above — finish() can run before this line via the
     // reduced-motion path.)
-    const compositorMove = (el: HTMLElement, keyframes: Keyframe[]) => {
+    const compositorMove = (
+      el: HTMLElement,
+      keyframes: Keyframe[],
+      opts?: { duration?: number; easing?: string },
+    ) => {
       const a = el.animate(keyframes, {
-        duration: 440, // driveEase's fixed duration
-        easing: "cubic-bezier(0.33, 1, 0.68, 1)", // easeOutCubic — the morph's curve
+        duration: opts?.duration ?? 440, // driveEase's fixed duration
+        easing: opts?.easing ?? "cubic-bezier(0.33, 1, 0.68, 1)", // easeOutCubic — the morph's curve
         fill: "forwards",
       });
       a.pause();
@@ -1745,10 +1749,19 @@ function Calendar() {
         ]),
       ]);
     moves.push(
-      // opacity keeps its own short crossfade — a fade fast-forwarding through
-      // a stall is invisible (unlike a scale jump), so a plain tween is fine.
-      animate(outgoing, { opacity: [1, 0] }, { duration: 0.18, ease: "easeOut" }).finished,
-      animate(incoming, { opacity: [0, 1] }, { duration: 0.16, ease: "easeOut" }).finished,
+      // the crossfade rides the SAME paused-create/rebase driver as the
+      // camera: as a wall-clock Motion tween it fast-forwarded through the
+      // device's expensive first frame — the schedule was simply GONE by the
+      // second frame of a rise instead of fading (device recording,
+      // 2026-07-16)
+      compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
+        duration: 180,
+        easing: "ease-out",
+      }),
+      compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
+        duration: 160,
+        easing: "ease-out",
+      }),
     );
 
     // shared-element flight: a date standing in both altitudes travels
@@ -2033,6 +2046,26 @@ function Calendar() {
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
+      // START-SYNC: the device's FIRST moving frame can take 100-200ms (the
+      // revealed layer's raster) and the wall clock runs through it — the
+      // camera then skips forward and the flyers appear mid-flight (device
+      // recording, 2026-07-16: exactly round 2's failure, shrunk). Round 3's
+      // mistake was WAITING for a clean pipeline before playing — laggy.
+      // Instead: play promptly (above), and if the next frame arrives late,
+      // snap every clock back to zero — the start pose shows for one extra
+      // frame and the full curve then plays from its true start. At most two
+      // rebases, so a genuinely busy device can never hold the move hostage.
+      let base = performance.now();
+      let rebases = 0;
+      const startSync = (now: number) => {
+        if (now - base > 40 && rebases < 2) {
+          rebases++;
+          base = now;
+          for (const a of camAnims) a.currentTime = 0;
+          requestAnimationFrame(startSync);
+        }
+      };
+      requestAnimationFrame(startSync);
     });
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled/flatCamera are set once at mount, never change in-session
