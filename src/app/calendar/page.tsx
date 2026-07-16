@@ -887,11 +887,30 @@ function Calendar() {
   // paint it under the finger; the zoom effect's start clears the inline
   // visibility and owns opacity from there. A timeout restores rest state if
   // the tap aborts.
+  //
+  // THE FLIP MUST HAPPEN OUTSIDE THE INPUT EVENT (hence the rAF): revealing
+  // hidden content from inside a touchstart/pointerdown handler trips WebKit's
+  // ContentChangeObserver — iOS decides the tap was a hover that opened a menu
+  // and SUPPRESSES the synthesized click. Device recording 2026-07-16: every
+  // FIRST tap was dead (no dive/rise at all); the SECOND tap worked only
+  // because the layer was by then already visible (dive: stagedDescentRef
+  // deduped the restage; rise: same inline style twice = no change to
+  // observe), and a >2.5s pause re-armed the trap via the abort restore —
+  // "second or third tap". Headless Chromium has no such heuristic, so no
+  // harness saw it; scripts/measure-tap-reveal.py now pins the law itself
+  // (no hidden layer may become visible synchronously under pointerdown).
+  // One frame later is still early in the tap's ~100ms dwell, so the raster
+  // still completes under the finger.
   const preRasterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const preRasterRafRef = useRef(0);
   const preRaster = useCallback((layer: HTMLDivElement | null) => {
     if (!layer) return;
-    layer.style.visibility = "visible";
-    layer.style.opacity = "0";
+    cancelAnimationFrame(preRasterRafRef.current);
+    preRasterRafRef.current = requestAnimationFrame(() => {
+      if (zooming.current) return; // a live move owns the layers now
+      layer.style.visibility = "visible";
+      layer.style.opacity = "0";
+    });
     if (preRasterTimerRef.current) clearTimeout(preRasterTimerRef.current);
     preRasterTimerRef.current = setTimeout(() => {
       if (!zooming.current) {
