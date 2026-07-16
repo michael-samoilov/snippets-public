@@ -520,12 +520,19 @@ function PerfHud() {
     let raf = 0;
     let last = performance.now();
     let lastDraw = 0;
+    let touching = false; // no DOM writes while a finger is down — iOS watches
+    // for content changing under a touch, and a poisoned tap loses its click
+    const down = () => (touching = true);
+    const up = () => (touching = false);
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
     const gaps: { t: number; g: number }[] = [];
     const loop = (now: number) => {
       gaps.push({ t: now, g: now - last });
       last = now;
       while (gaps.length && gaps[0].t < now - 2000) gaps.shift();
-      if (now - lastDraw > 250 && boxRef.current) {
+      if (!touching && now - lastDraw > 250 && boxRef.current) {
         lastDraw = now;
         let worst = 0;
         let jank = 0;
@@ -880,46 +887,24 @@ function Calendar() {
       free time in which the browser lays out the destination band while the
       finger is still down) and again from pick() as the fallback for
       keyboard/programmatic picks, where it runs on the tap frame as before. */
-  // PRE-RASTER a hidden layer during the tap's dwell: the layers rest
-  // visibility:hidden, which skips painting entirely — so the incoming layer's
-  // first raster used to happen ON the move's first frames (device-only cost;
-  // headless never shows it). Inline visible+opacity:0 lets the compositor
-  // paint it under the finger; the zoom effect's start clears the inline
-  // visibility and owns opacity from there. A timeout restores rest state if
-  // the tap aborts.
-  //
-  // THE FLIP MUST HAPPEN OUTSIDE THE INPUT EVENT (hence the rAF): revealing
-  // hidden content from inside a touchstart/pointerdown handler trips WebKit's
-  // ContentChangeObserver — iOS decides the tap was a hover that opened a menu
-  // and SUPPRESSES the synthesized click. Device recording 2026-07-16: every
-  // FIRST tap was dead (no dive/rise at all); the SECOND tap worked only
-  // because the layer was by then already visible (dive: stagedDescentRef
-  // deduped the restage; rise: same inline style twice = no change to
-  // observe), and a >2.5s pause re-armed the trap via the abort restore —
-  // "second or third tap". Headless Chromium has no such heuristic, so no
-  // harness saw it; scripts/measure-tap-reveal.py now pins the law itself
-  // (no hidden layer may become visible synchronously under pointerdown).
-  // One frame later is still early in the tap's ~100ms dwell, so the raster
-  // still completes under the finger.
-  const preRasterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const preRasterRafRef = useRef(0);
-  const preRaster = useCallback((layer: HTMLDivElement | null) => {
-    if (!layer) return;
-    cancelAnimationFrame(preRasterRafRef.current);
-    preRasterRafRef.current = requestAnimationFrame(() => {
-      if (zooming.current) return; // a live move owns the layers now
-      layer.style.visibility = "visible";
-      layer.style.opacity = "0";
-    });
-    if (preRasterTimerRef.current) clearTimeout(preRasterTimerRef.current);
-    preRasterTimerRef.current = setTimeout(() => {
-      if (!zooming.current) {
-        layer.style.visibility = "";
-        layer.style.opacity = "";
-      }
-    }, 2500);
-  }, []);
-
+  // DEAD END — "pre-raster during the dwell" (tried twice, 2026-07-16; DO NOT
+  // RE-ADD IN ANY TIMING). The idea: the layers rest visibility:hidden (skips
+  // painting), so the incoming layer's first raster lands on the move's opening
+  // frames — flip it to inline visible+opacity:0 from the trigger's pointerdown
+  // so the compositor paints it under the finger instead. iOS KILLS THE TAP:
+  // revealing hidden content at the touch point while the finger is down trips
+  // WebKit's content observation (the hover-menu heuristic) and Safari
+  // SUPPRESSES the synthesized click — every FIRST tap went dead; the second
+  // worked only because the layer was by then already visible (nothing left to
+  // observe). Round 1 flipped synchronously inside pointerdown; round 2
+  // deferred the flip one rAF, still within the dwell — BOTH failed the same
+  // way on device, so the observation window spans the whole touch, not just
+  // the handler. Headless Chromium has no such heuristic (all harnesses were
+  // green both rounds); scripts/measure-tap-reveal.py now pins the law itself:
+  // NOTHING that rests hidden may become visible between pointerdown and the
+  // move actually starting. If the first-raster cost must die someday, it needs
+  // a mechanism that never reveals under a live touch (e.g. View Transitions
+  // snapshots, or rastering at idle after landing on the month).
   const stageDescent = useCallback((key: string) => {
     if (stagedDescentRef.current === key) return;
     if (zooming.current) return; // never restage under a live move
@@ -939,8 +924,7 @@ function Calendar() {
       descentGeom.current = null;
     }
     scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
-    preRaster(scheduleLayerRef.current); // textures ready before the move
-  }, [preRaster]);
+  }, []);
 
   /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
@@ -2628,14 +2612,11 @@ function Calendar() {
                   : closeEntry
             }
             // the rise's stage-on-dwell hint (see riseStaged): the month feed
-            // re-renders + lays out while the finger is still down
+            // re-renders + lays out while the finger is still down — into a
+            // layer that STAYS hidden (revealing it here killed the tap; see
+            // the pre-raster dead end above stageDescent)
             onPointerDown={
-              view === "schedule"
-                ? () => {
-                    setRiseStaged(true); // unfreeze + mount the month feed
-                    preRaster(monthLayerRef.current); // textures under the finger
-                  }
-                : undefined
+              view === "schedule" ? () => setRiseStaged(true) : undefined
             }
             aria-label={
               view === "month"

@@ -1,25 +1,30 @@
 """
-Guard against the iOS DEAD-FIRST-TAP trap (device recording 2026-07-16): if an
-input handler reveals hidden content at the touch point — e.g. flipping an
-altitude layer from visibility:hidden to visible inside pointerdown, as the
-pre-raster staging first did — WebKit's ContentChangeObserver decides the tap
-was a hover that opened a menu and SUPPRESSES the synthesized click. The first
-tap then does nothing; the second works only because the layer is already
-visible (nothing left to observe). Headless Chromium has no such heuristic, so
-the move harnesses stayed green while every first tap on device was dead.
+Guard against the iOS DEAD-FIRST-TAP trap (device recordings 2026-07-16, two
+rounds): if hidden content becomes visible at the touch point while a finger
+is down, WebKit's content observation (the hover-menu heuristic) decides the
+tap was a hover and SUPPRESSES the synthesized click. The first tap then does
+nothing; the second works only because the content is already visible
+(nothing left to observe).
 
-This harness pins the LAW rather than the symptom (which headless cannot
-reproduce): dispatch a bare pointerdown on the dive and rise triggers and
-assert SYNCHRONOUSLY — before any rAF can run — that every resting-hidden
-layer still computes visibility:hidden. Then it confirms the staging isn't
-simply gone (the incoming layer must be pre-rastering, i.e. visible, a couple
-frames into the dwell) and that a full tap still runs the move.
+The "pre-raster during the dwell" staging tripped this TWICE: round 1 flipped
+an altitude layer visibility:hidden->visible synchronously inside pointerdown;
+round 2 deferred the flip one rAF — still within the touch — and the device
+verdict was identical. So the law this harness pins is the strict form:
+
+    NOTHING that rests hidden may become visible between pointerdown and the
+    move actually starting (i.e. through the tap's whole dwell).
+
+Headless Chromium has no such heuristic — taps work here regardless — so this
+harness asserts the LAW, not the symptom: dispatch a bare pointerdown on the
+dive and rise triggers, hold the dwell with no pointerup, and require every
+resting-hidden layer to still compute visibility:hidden both synchronously and
+150ms into the dwell. Then a full tap must still run the move.
 
     python3 .claude/skills/webapp-testing/scripts/with_server.py \
       --server "node_modules/.bin/next start" --port 3000 \
       -- python3 scripts/measure-tap-reveal.py
 
-FAILS on any synchronous hidden->visible flip inside the input event.
+FAILS on any hidden->visible flip during the dwell (either round's regression).
 """
 
 import os
@@ -29,10 +34,10 @@ from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
 SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))
+DWELL_MS = 150  # longer than a real tap's ~100ms pointerdown->click gap
 
 # dispatch pointerdown on a target, then read layer visibilities in the SAME
-# synchronous task (no rAF, no timeout has run yet — exactly what WebKit's
-# observer sees during the handler)
+# synchronous task (no rAF, no timeout has run yet)
 POINTERDOWN_SYNC = r"""(sel) => {
   const el = document.querySelector(sel);
   if (!el) return { error: 'no target ' + sel };
@@ -47,24 +52,45 @@ POINTERDOWN_SYNC = r"""(sel) => {
   return { before, after: vis() };
 }"""
 
+ALL_VIS = r"""() => Object.fromEntries(
+  [...document.querySelectorAll('[data-layer]')].map(l =>
+    [l.dataset.layer, getComputedStyle(l).visibility]))"""
+
 LAYER_VIS = r"""(name) => {
   const l = document.querySelector(`[data-layer="${name}"]`);
   return l ? getComputedStyle(l).visibility : 'missing';
 }"""
 
 
-def check_sync(tag, out, errors):
+def check_still_hidden(tag, before, now, errors):
+    for layer, v in before.items():
+        if v == "hidden" and now.get(layer) != "hidden":
+            errors.append(
+                f"{tag}: layer '{layer}' flipped {v} -> {now.get(layer)} while the "
+                f"finger is down — iOS will suppress the click (dead first tap)")
+
+
+def leg(pg, tag, trigger_sel, dest_layer, errors):
+    out = pg.evaluate(POINTERDOWN_SYNC, trigger_sel)
     if "error" in out:
         errors.append(f"{tag}: {out['error']}")
         return
-    for layer, v in out["before"].items():
-        if v == "hidden" and out["after"].get(layer) != "hidden":
-            errors.append(
-                f"{tag}: layer '{layer}' flipped {v} -> {out['after'].get(layer)} "
-                f"SYNCHRONOUSLY inside pointerdown — iOS will suppress the click "
-                f"(dead first tap)")
-    print(f"  {tag}: layers under pointerdown "
-          + ", ".join(f"{k}={v}" for k, v in out["after"].items()))
+    check_still_hidden(f"{tag} pointerdown(sync)", out["before"], out["after"], errors)
+    # hold the dwell — no pointerup yet — and re-check: a deferred reveal
+    # (rAF, timer) is just as fatal on device as a synchronous one
+    pg.wait_for_timeout(DWELL_MS)
+    mid = pg.evaluate(ALL_VIS)
+    check_still_hidden(f"{tag} dwell+{DWELL_MS}ms", out["before"], mid, errors)
+    print(f"  {tag}: layers through the dwell "
+          + ", ".join(f"{k}={v}" for k, v in mid.items()))
+    # the full tap must still run the move
+    pg.evaluate(f"() => document.querySelector('{trigger_sel}').click()")
+    pg.wait_for_timeout(1500)
+    v = pg.evaluate(LAYER_VIS, dest_layer)
+    if v != "visible":
+        errors.append(f"{tag}: tap did not land on {dest_layer} (layer {v})")
+    else:
+        print(f"  {tag}: full tap landed on {dest_layer} ✓")
 
 
 def main() -> int:
@@ -77,26 +103,10 @@ def main() -> int:
         pg.goto(f"{BASE}?seed={SEED}", wait_until="load"); pg.wait_for_timeout(4500)
         pg.goto(BASE, wait_until="load"); pg.wait_for_timeout(5000)
 
-        # ---- RISE: pointerdown on the title. The app BOOTS on schedule
-        # view (today's page), so this leg runs first from rest state ------
-        out = pg.evaluate(POINTERDOWN_SYNC, "[data-cal-title]")
-        check_sync("rise pointerdown", out, errors)
-        pg.wait_for_timeout(120)
-        v = pg.evaluate(LAYER_VIS, "month")
-        print(f"  rise dwell+120ms: month layer = {v}")
-        if v != "visible":
-            errors.append(f"rise: month layer '{v}' 120ms into the dwell — "
-                          "pre-raster staging is gone (raster lands on the move again)")
-        pg.evaluate("() => document.querySelector('[data-cal-title]').click()")
-        pg.wait_for_timeout(1500)
-        v = pg.evaluate(LAYER_VIS, "month")
-        if v != "visible":
-            errors.append(f"rise: tap did not land on month (layer {v})")
-            print("  rise: tap FAILED to land on month ✗")
-        else:
-            print("  rise: full tap landed on month ✓")
+        # the app BOOTS on schedule view (today's page): rise leg first
+        leg(pg, "rise", "[data-cal-title]", "month", errors)
 
-        # ---- DIVE: pointerdown on a visible month cell -------------------
+        # now on month view: dive leg on a visible cell
         pg.wait_for_timeout(800)
         day = pg.evaluate(r"""() => {
           const st = document.querySelector('[data-layer="month"]').getBoundingClientRect();
@@ -109,25 +119,8 @@ def main() -> int:
         if not day:
             errors.append("dive: no visible cell")
         else:
-            sel = f'[data-layer="month"] button[data-day-key="{day}"]'
-            out = pg.evaluate(POINTERDOWN_SYNC, sel)
-            check_sync("dive pointerdown", out, errors)
-            # the staging must still pre-raster: a couple frames into the
-            # dwell the schedule layer should be painting (inline visible)
-            pg.wait_for_timeout(120)
-            v = pg.evaluate(LAYER_VIS, "schedule")
-            print(f"  dive dwell+120ms: schedule layer = {v}")
-            if v != "visible":
-                errors.append(f"dive: schedule layer '{v}' 120ms into the dwell — "
-                              "pre-raster staging is gone (raster lands on the move again)")
-            # the full tap must still dive
-            pg.evaluate(f"() => document.querySelector('{sel}').click()")
-            pg.wait_for_timeout(1500)
-            v = pg.evaluate(LAYER_VIS, "schedule")
-            if v != "visible":
-                errors.append(f"dive: tap did not land on schedule (layer {v})")
-            else:
-                print("  dive: full tap landed on schedule ✓")
+            leg(pg, "dive", f'[data-layer="month"] button[data-day-key="{day}"]',
+                "schedule", errors)
 
         browser.close()
 
