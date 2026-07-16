@@ -539,12 +539,44 @@ function PerfHud() {
       last = now;
       while (gaps.length && gaps[0].t < now - 2000) gaps.shift();
       // the zoom effect marks its first painting frame; paired with the last
-      // pointerdown that's the full input delay the finger felt
-      const marks = performance.getEntriesByName("zoom-motion");
-      const m = marks[marks.length - 1];
+      // pointerdown that's the full input delay the finger felt. The span
+      // marks then split that delay into its three fix classes: dwn→run =
+      // input dispatch + staging spillover, run→fx0 = the React commit,
+      // fx0→fx1 = zoom setup JS, fx1→mv = the browser's first styled/painted
+      // frame (style+layout+paint+raster commit — the part no JS profiler
+      // sees). st = the staged goTo's duration and whether it ran in the
+      // dwell or had to be flushed at click.
+      const lastMark = (n: string) => {
+        const e = performance.getEntriesByName(n);
+        return e[e.length - 1];
+      };
+      const m = lastMark("zoom-motion");
       if (m && m.startTime > seenMotion && lastDown) {
         seenMotion = m.startTime;
-        tapLine = ` · tap→move ${Math.round(m.startTime - lastDown)}ms`;
+        const run = lastMark("zoom-run");
+        const fx0 = lastMark("zoom-fx0");
+        const fx1 = lastMark("zoom-fx1");
+        let spans = "";
+        if (
+          run && fx0 && fx1 &&
+          lastDown <= run.startTime &&
+          run.startTime <= fx0.startTime &&
+          fx0.startTime <= fx1.startTime &&
+          fx1.startTime <= m.startTime
+        ) {
+          const r = (a: number, b: number) => Math.round(b - a);
+          const st = lastMark("stage:goTo");
+          // only this tap's staging — a rise (no staging) must not show a
+          // stale dive's entry
+          const stLine =
+            st && st.startTime >= lastDown - 50
+              ? ` · st ${Math.round(st.duration)}ms@${st.startTime < run.startTime ? "dwell" : "click"}`
+              : "";
+          spans =
+            ` · dwn→run ${r(lastDown, run.startTime)} · cm ${r(run.startTime, fx0.startTime)}` +
+            ` · fx ${r(fx0.startTime, fx1.startTime)} · pt ${r(fx1.startTime, m.startTime)}${stLine}`;
+        }
+        tapLine = ` · tap→move ${Math.round(m.startTime - lastDown)}ms${spans}`;
       }
       if (!touching && now - lastDraw > 250 && boxRef.current) {
         lastDraw = now;
@@ -793,6 +825,8 @@ function Calendar() {
   // the weekday rail (S M T W T F S) — held frozen through a move's setup so
   // its fold rides the move, not the commit paint (see the rail's JSX comment)
   const weekdayRailRef = useRef<HTMLDivElement | null>(null);
+  // the rail's pre-commit fold, read cheaply in runZoom for the effect's hold
+  const railHoldRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     monthActiveRef.current = view === "month" && !zoom;
     yearActiveRef.current = view === "year" && !zoom;
@@ -899,6 +933,19 @@ function Calendar() {
 
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
     if (zooming.current) return;
+    performance.mark("zoom-run"); // click-task start — PerfHud span breakdown
+    // Read the weekday rail's CURRENT fold now, against the still-clean
+    // pre-commit tree, for the zoom effect's rail hold. The effect used to
+    // getComputedStyle here-after-commit, which forced a full style recalc of
+    // the just-invalidated app subtree — ~200-260ms of the setup at 6x
+    // throttle, the single biggest block of the move's input delay. Pre-commit
+    // the tree is clean and the read is ~free; the value is identical (a fold
+    // transition triggered by this commit hasn't started, so post-commit
+    // computed style still reports the pre-move fold).
+    const rail = weekdayRailRef.current;
+    railHoldRef.current = rail
+      ? getComputedStyle(rail).gridTemplateRows
+      : null;
     setWarm(3); // a camera move needs every layer mounted now
     zooming.current = true;
     setZoom({ from, to, anchor });
@@ -1055,8 +1102,20 @@ function Calendar() {
       return;
     }
 
-    // the previous finish left the departed layer inline-hidden
-    for (const el of Object.values(layers)) if (el) el.style.visibility = "";
+    performance.mark("zoom-fx0"); // commit done, setup begins (PerfHud spans)
+    // Wake the layers (the previous finish left the departed one
+    // inline-hidden) and take input away for the move IMPERATIVELY — the
+    // pointer-events used to ride a `zoom &&` class on all four layers, and
+    // that commit-time className change invalidated every layer's whole
+    // subtree: the setup flush then re-styled the entire app (~200ms of the
+    // 6x-throttle setup). Inline style touches only these four nodes; finish()
+    // clears it synchronously, so the landed layer is interactive instantly
+    // (which also retires the old inline pointer-events:auto handback hack).
+    for (const el of Object.values(layers)) {
+      if (!el) continue;
+      el.style.visibility = "";
+      el.style.pointerEvents = "none";
+    }
 
     // HOLD the weekday rail at its current fold through setup: the commit just
     // flipped `view`, and without the hold the rail's 260ms fold/unfold starts
@@ -1065,8 +1124,11 @@ function Calendar() {
     // releaseRail() (the play tick / first motion frame) lets the class value
     // take over, so the fold travels WITH the camera. Freezing it also keeps
     // the stage's height stable while the flight measures its rects.
+    // The fold VALUE was read in runZoom, pre-commit, where the tree was still
+    // clean — reading computed style here forced a ~200ms full recalc at 6x.
     const rail = weekdayRailRef.current;
-    if (rail) rail.style.gridTemplateRows = getComputedStyle(rail).gridTemplateRows;
+    if (rail && railHoldRef.current !== null)
+      rail.style.gridTemplateRows = railHoldRef.current;
     let railReleased = false;
     const releaseRail = () => {
       if (railReleased) return;
@@ -1146,16 +1208,15 @@ function Calendar() {
       for (const el of willChanged) el.style.willChange = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
-      // Make the LANDED layer scrollable NOW, synchronously — don't wait for the
-      // setZoom(null) React commit to drop its pointer-events:none class (that
-      // commit lands ~80ms later, and a touchstart in that gap — the reader's
-      // natural post-landing swipe — is eaten, costing them a whole swipe). Inline
-      // pointer-events:auto beats the class; the deferred cleanup clears it once
-      // the commit has removed the class, so the NEXT move's pointer-events:none
-      // still holds. (data-climbing lifts one frame later as before; a fling in
-      // that single frame scrolls within the still-rendered band.)
-      const restoreScroll = zoom.from !== "entry" && zoom.to !== "entry";
-      if (restoreScroll) incoming.style.pointerEvents = "auto";
+      // Hand input back NOW, synchronously: pointer-events is inline-only
+      // during a move (see the wake loop — no class rides the zoom commit),
+      // so clearing it makes the landed layer scrollable in this same frame;
+      // the hidden layers' own !show classes keep them inert. A touchstart in
+      // the old ~80ms class-drop gap used to eat the reader's first swipe.
+      // (data-climbing lifts one frame later as before; a fling in that
+      // single frame scrolls within the still-rendered band.)
+      for (const el of Object.values(layers))
+        if (el) el.style.pointerEvents = "";
       // drop the dive freeze with the landing paint (it's imperative now, not a
       // prop riding the setZoom(null) commit) — the straddler's inline sticky
       // (repinned) is still up, so the restick stays a no-op until the deferred
@@ -1186,7 +1247,7 @@ function Calendar() {
         zoom.from !== "entry" &&
         zoom.to !== "entry" &&
         (zoom.from === "schedule" || zoom.to === "schedule");
-      if (climbed || restoreScroll || flyerBox || underBox || hiddenNumbers.length || repinned.length) {
+      if (climbed || flyerBox || underBox || hiddenNumbers.length || repinned.length) {
         const fb = flyerBox;
         const ub = underBox;
         const reals = hiddenNumbers;
@@ -1199,10 +1260,6 @@ function Calendar() {
               ?.removeAttribute("data-climbing");
             scheduleFeedRef.current?.clearOnStage();
           }
-          // the setZoom(null) commit has landed by now, so its className no longer
-          // carries pointer-events:none for this (shown) layer — drop the inline
-          // override so a future move's class can re-disable it
-          if (restoreScroll) incoming.style.pointerEvents = "";
           for (const el of reals) el.style.visibility = "";
           // data-dive-freeze is gone (finish removed it), so dropping the inline
           // sticky hands over to the class's own sticky — same computed
@@ -1246,11 +1303,37 @@ function Calendar() {
       // band flush below, so the flight measures under the frozen truth;
       // finish() removes it. As a prop this rode the zoom commit and
       // re-rendered the whole feed at both ends of every move.
-      if (freezeEnabled)
+      performance.mark("zoom-fx-wake"); // wake + rail hold done
+      if (freezeEnabled) {
         scheduleLayerRef.current
           ?.querySelector("[data-book-scroller]")
           ?.setAttribute("data-dive-freeze", "");
+        // Repin the straddler NOW, before markOnStage's flush, so the ONE
+        // flush covers it (see the dayPair block for why the straddling
+        // section's margin date keeps inline sticky through the freeze).
+        // Written after the flush, this invalidated the scroller again and
+        // the flight's first rect read re-laid it out (~150ms of the setup
+        // at 6x). stickyDeltaFor is pure cached-geometry math — no reads.
+        if (
+          (zoom.from === "month" && zoom.to === "schedule") ||
+          (zoom.from === "schedule" && zoom.to === "month")
+        ) {
+          for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
+            "[data-day][data-warm]",
+          ) ?? []) {
+            const day = sec.dataset.day;
+            if (!day || !(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0))
+              continue;
+            const cell = sec.querySelector<HTMLElement>(".book-margin-date");
+            if (cell) {
+              cell.style.position = "sticky";
+              repinned.push(cell);
+            }
+          }
+        }
+      }
       scheduleFeedRef.current?.markOnStage();
+      performance.mark("zoom-fx-stage"); // freeze + band warm/flush done
       // Descent: pick() set scrollTop against the book's --cis placeholders,
       // which are stale whenever the webfonts swapped after the book measured.
       // markOnStage just rendered the band at real heights, so re-land on the
@@ -1261,6 +1344,7 @@ function Calendar() {
       if (zoom.to === "schedule")
         scheduleFeedRef.current?.relandOnRow(zoom.anchor);
     }
+    performance.mark("zoom-fx-band"); // climb-band warm/flush + re-land done
 
     // on an entry dive (open OR close), use the boxes measured on clean layout
     // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
@@ -1606,26 +1690,11 @@ function Calendar() {
       // section top for the move — but the date whose section STRADDLES the
       // scroll top rests PINNED (sticky), so frozen it sits in the wrong place
       // (often off-viewport): flyers measured against it flew to/from the wrong
-      // spot and the date itself popped in only when the freeze lifted. Pin
-      // THAT ONE cell through the move with inline position:sticky (inline
-      // beats the freeze rule): it rides the scaling book exactly as at rest,
-      // every measured rect below is simply the truth, and the restick is a
-      // no-op. stickyDeltaFor (cached geometry) finds the straddler; the
-      // on-stage band is the only place it can live, so the scan is O(band).
-      if (freezeEnabled) {
-        for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
-          "[data-day][data-warm]",
-        ) ?? []) {
-          const day = sec.dataset.day;
-          if (!day || !(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0))
-            continue;
-          const cell = sec.querySelector<HTMLElement>(".book-margin-date");
-          if (cell) {
-            cell.style.position = "sticky";
-            repinned.push(cell);
-          }
-        }
-      }
+      // spot and the date itself popped in only when the freeze lifted. THAT
+      // ONE cell was repinned with inline position:sticky up in the climb-band
+      // block (with the freeze, BEFORE the one flush): it rides the scaling
+      // book exactly as at rest, every rect measured below is simply the
+      // truth, and the restick is a no-op.
       // Only on-screen dates can fly, so only measure on-screen flydates. In the
       // BOOK layer that matters for correctness AND cost: the climb has sent its
       // off-screen day sections to content-visibility:hidden, and calling
@@ -1796,6 +1865,7 @@ function Calendar() {
       }
     }
 
+    performance.mark("zoom-fx-pair"); // date-flight collect + build done
     // the month's abbreviation morphs between its year-view mini label
     // and its hand-over label over the first of the month — one small
     // caps tag flying and resizing across the camera move
@@ -1852,6 +1922,8 @@ function Calendar() {
     // start the camera scale NOW — after every flight rect has been read
     // (see startCameraScale): its synchronous start frame may scale the layers.
     moves.push(startCameraScale());
+    performance.mark("zoom-fx1"); // setup JS done — what follows is the
+    // browser's first styled/painted frame (style+layout+paint+raster commit)
     // the weekday rail's fold joins driveEase's first moving frame
     requestAnimationFrame(() => {
       releaseRail();
@@ -2974,7 +3046,7 @@ function Calendar() {
           className={cn(
             "absolute inset-0 px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
-            (zoom || !showMonthLayer) && "pointer-events-none",
+            !showMonthLayer && "pointer-events-none",
           )}
         >
           {(view === "month" || warm >= 1 || riseStaged) && (
@@ -2998,7 +3070,7 @@ function Calendar() {
           className={cn(
             "absolute inset-0",
             !showYearLayer && "invisible",
-            (zoom || !showYearLayer) && "pointer-events-none",
+            !showYearLayer && "pointer-events-none",
           )}
         >
           {(view === "year" || warm >= 3) && (
@@ -3031,7 +3103,7 @@ function Calendar() {
           className={cn(
             "absolute inset-0 px-2 [touch-action:pan-y]",
             !showScheduleLayer && "invisible",
-            (zoom || !showScheduleLayer) && "pointer-events-none",
+            !showScheduleLayer && "pointer-events-none",
           )}
         >
           {(view === "schedule" || warm >= 1) && (
@@ -3063,7 +3135,7 @@ function Calendar() {
             // breathing room mirrors what pt-2 already gives the top
             "absolute inset-0 px-2 pb-1.5 pt-2 [touch-action:pan-y]",
             !showEntryLayer && "invisible",
-            (zoom || !showEntryLayer) && "pointer-events-none",
+            !showEntryLayer && "pointer-events-none",
           )}
         >
           {(view === "entry" || warm >= 2) && <EntryView snippet={focused} onLetGo={letGo} />}
