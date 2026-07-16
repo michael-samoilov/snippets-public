@@ -2037,36 +2037,36 @@ function Calendar() {
     // durable fix is a rail that overlays the stage instead of sizing it,
     // so the fold never relayouts the layers at all. Until then it rides
     // the move, where the camera's motion masks it.)
-    requestAnimationFrame(() => {
-      // one shared play tick: every paused compositor animation starts on
-      // this same frame — the setup/commit frame has painted, so the wall
-      // clock starts with the first visible frame, not before it
+    // Play on the SECOND rAF. The first rAF fires BEFORE the expensive frame
+    // that paints the revealed layer — a clock started there runs through
+    // that frame and the move's start is eaten (dates mid-flight, the fade
+    // already over: round 2's failure, re-seen on device 2026-07-16). The
+    // second rAF fires right AFTER that frame — and since nothing can visibly
+    // move before it completes anyway, starting there adds no perceived
+    // latency and the full curve plays from its true start pose (which the
+    // paused animations are already holding on screen). The timeout is the
+    // backstop: a main thread held busy by deferred work can't postpone the
+    // start beyond ~150ms.
+    //
+    // DEAD END (device recording, same day — do not re-add): a START-SYNC
+    // rebase that snapped currentTime back to 0 when a main-thread rAF
+    // arrived late. These animations run on the COMPOSITOR, which keeps
+    // painting while the main thread is busy — a late main-thread frame says
+    // nothing about what the screen has shown, so the snap visibly RESTARTED
+    // half-played moves ("replaying midway"). Any start correction must
+    // happen BEFORE play(), never after.
+    let played = false;
+    const playAll = () => {
+      if (played) return;
+      played = true;
       for (const a of camAnims) a.play();
       releaseRail();
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
-      // START-SYNC: the device's FIRST moving frame can take 100-200ms (the
-      // revealed layer's raster) and the wall clock runs through it — the
-      // camera then skips forward and the flyers appear mid-flight (device
-      // recording, 2026-07-16: exactly round 2's failure, shrunk). Round 3's
-      // mistake was WAITING for a clean pipeline before playing — laggy.
-      // Instead: play promptly (above), and if the next frame arrives late,
-      // snap every clock back to zero — the start pose shows for one extra
-      // frame and the full curve then plays from its true start. At most two
-      // rebases, so a genuinely busy device can never hold the move hostage.
-      let base = performance.now();
-      let rebases = 0;
-      const startSync = (now: number) => {
-        if (now - base > 40 && rebases < 2) {
-          rebases++;
-          base = now;
-          for (const a of camAnims) a.currentTime = 0;
-          requestAnimationFrame(startSync);
-        }
-      };
-      requestAnimationFrame(startSync);
-    });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(playAll));
+    setTimeout(playAll, 150);
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled/flatCamera are set once at mount, never change in-session
   }, [zoom, reduceMotion, freezeEnabled, flatCamera]);
