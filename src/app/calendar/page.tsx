@@ -1025,6 +1025,15 @@ function Calendar() {
       stagedRunRef.current = null;
       performance.mark("stage:1");
       scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
+      // FLUSH the staged layout NOW, under the finger. Blink flushes layout
+      // inside scrollTo so this was implicit there — WebKit does NOT: the
+      // band's fresh layout stayed dirty through the dwell and the CLICK
+      // frame paid it (the dive's whole point of staging, silently defeated
+      // on the only engine that matters). One forced read makes it
+      // engine-agnostic; the click then finds the destination laid out.
+      void scheduleLayerRef.current?.querySelector<HTMLElement>(
+        "[data-book-scroller]",
+      )?.offsetHeight;
       performance.mark("stage:goTo");
       performance.measure("stage:goTo", "stage:1", "stage:goTo");
     };
@@ -1115,19 +1124,22 @@ function Calendar() {
     }
 
     performance.mark("zoom-fx0"); // commit done, setup begins (PerfHud spans)
-    // Wake the layers (the previous finish left the departed one
-    // inline-hidden) and take input away for the move IMPERATIVELY — the
-    // pointer-events used to ride a `zoom &&` class on all four layers, and
-    // that commit-time className change invalidated every layer's whole
-    // subtree: the setup flush then re-styled the entire app (~200ms of the
-    // 6x-throttle setup). Inline style touches only these four nodes; finish()
-    // clears it synchronously, so the landed layer is interactive instantly
-    // (which also retires the old inline pointer-events:auto handback hack).
-    for (const el of Object.values(layers)) {
-      if (!el) continue;
-      el.style.visibility = "";
-      el.style.pointerEvents = "none";
-    }
+    // Wake the layers — the previous finish left the departed one
+    // inline-hidden. NEVER write pointer-events on a layer here (inline OR
+    // class): it's an INHERITED property, and WebKit propagates the change
+    // through the layer's entire subtree INCLUDING content-visibility:hidden
+    // sections — on a 1200-entry book that one write measured 250-340ms on
+    // WebKitGTK (~115ms on the phone), and it was the constant `s` block in
+    // both directions' device HUD lines. Input is taken away by the SHIELD
+    // below instead — one empty div on top of everything, O(1) to add and
+    // remove. Hidden layers need no pointer-events at all: visibility:hidden
+    // already excludes them from hit-testing.
+    for (const el of Object.values(layers)) if (el) el.style.visibility = "";
+    // the shield: swallows every tap/scroll for the move's duration (the
+    // flyer box sits at z-45; this must cover it and everything else)
+    const shield = document.createElement("div");
+    shield.style.cssText = "position:absolute;inset:0;z-index:60;";
+    stage.appendChild(shield);
 
     // HOLD the weekday rail at its current fold through setup: the commit just
     // flipped `view`, and without the hold the rail's 260ms fold/unfold starts
@@ -1225,15 +1237,14 @@ function Calendar() {
       for (const el of willChanged) el.style.willChange = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
-      // Hand input back NOW, synchronously: pointer-events is inline-only
-      // during a move (see the wake loop — no class rides the zoom commit),
-      // so clearing it makes the landed layer scrollable in this same frame;
-      // the hidden layers' own !show classes keep them inert. A touchstart in
-      // the old ~80ms class-drop gap used to eat the reader's first swipe.
-      // (data-climbing lifts one frame later as before; a fling in that
-      // single frame scrolls within the still-rendered band.)
-      for (const el of Object.values(layers))
-        if (el) el.style.pointerEvents = "";
+      // Hand input back NOW, synchronously: the shield goes and the landed
+      // layer is hittable in this same frame (hidden layers stay inert via
+      // visibility:hidden alone — no pointer-events writes anywhere, see the
+      // shield comment at setup). A touchstart in the old ~80ms class-drop
+      // gap used to eat the reader's first swipe. (data-climbing lifts one
+      // frame later as before; a fling in that single frame scrolls within
+      // the still-rendered band.)
+      shield.remove();
       // drop the dive freeze with the landing paint — the band cells' inline
       // static comes off here (the same moment the old CSS rule used to
       // lift); the straddler's inline sticky (repinned) is still up, so the
@@ -1739,15 +1750,31 @@ function Calendar() {
       // all but a handful away — ~70ms of the setup stall that made the clamped
       // camera spring jump. Query only the candidates (onstage-scoped on the book
       // side so a cv:hidden section is never forced to lay out).
+      // BOOK-side flydates come from ONE pass over the ~7 warm sections (each
+      // tiny), never from per-day descendant queries: on WebKit each
+      // `[data-day][data-warm] [data-flydate=…]` query re-scanned the whole
+      // 50k-node book DOM, and the dive's ~35 candidates cost ~350ms of pure
+      // selector time (measured on WebKitGTK; Blink's selector engine hid it).
+      let bookFly: Map<string, HTMLElement> | null = null;
+      const bookFlyMap = () => {
+        if (bookFly) return bookFly;
+        bookFly = new Map();
+        for (const sec of schedEl?.querySelectorAll<HTMLElement>(
+          "[data-day][data-warm]",
+        ) ?? [])
+          for (const el of sec.querySelectorAll<HTMLElement>("[data-flydate]"))
+            bookFly.set(el.dataset.flydate!, el);
+        return bookFly;
+      };
       const collectDays = (root: HTMLElement, days: Iterable<string>) => {
         const scoped = root === schedEl;
         const found = new Map<string, HTMLElement>();
         for (const day of days) {
-          const el = root.querySelector<HTMLElement>(
-            scoped
-              ? `[data-day][data-warm] [data-flydate="${CSS.escape(day)}"]`
-              : `[data-flydate="${CSS.escape(day)}"]`,
-          );
+          const el = scoped
+            ? (bookFlyMap().get(day) ?? null)
+            : root.querySelector<HTMLElement>(
+                `[data-flydate="${CSS.escape(day)}"]`,
+              );
           if (el && inView(el)) found.set(day, el);
         }
         return found;
@@ -2783,9 +2810,18 @@ function Calendar() {
             // the rise's stage-on-dwell hint (see riseStaged): the month feed
             // re-renders + lays out while the finger is still down — into a
             // layer that STAYS hidden (revealing it here killed the tap; see
-            // the pre-raster dead end above stageDescent)
+            // the pre-raster dead end above stageDescent). The rAF flush makes
+            // the layout actually HAPPEN in the dwell on WebKit, which never
+            // flushes it on its own (reads only — nothing is revealed).
             onPointerDown={
-              view === "schedule" ? () => setRiseStaged(true) : undefined
+              view === "schedule"
+                ? () => {
+                    setRiseStaged(true);
+                    requestAnimationFrame(() => {
+                      void monthLayerRef.current?.offsetHeight;
+                    });
+                  }
+                : undefined
             }
             aria-label={
               view === "month"
@@ -3069,7 +3105,6 @@ function Calendar() {
           className={cn(
             "absolute inset-0 px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
-            !showMonthLayer && "pointer-events-none",
           )}
         >
           {(view === "month" || warm >= 1 || riseStaged) && (
@@ -3101,7 +3136,6 @@ function Calendar() {
             // end). Year is never staged into mid-move, so nothing needs its
             // geometry while hidden.
             !showYearLayer && "invisible [content-visibility:hidden]",
-            !showYearLayer && "pointer-events-none",
           )}
         >
           {(view === "year" || warm >= 3) && (
@@ -3134,7 +3168,6 @@ function Calendar() {
           className={cn(
             "absolute inset-0 px-2 [touch-action:pan-y]",
             !showScheduleLayer && "invisible",
-            !showScheduleLayer && "pointer-events-none",
           )}
         >
           {(view === "schedule" || warm >= 1) && (
@@ -3170,7 +3203,6 @@ function Calendar() {
             // the entry morph reads its rects post-commit, when the layer is
             // revealed.
             !showEntryLayer && "invisible [content-visibility:hidden]",
-            !showEntryLayer && "pointer-events-none",
           )}
         >
           {(view === "entry" || warm >= 2) && <EntryView snippet={focused} onLetGo={letGo} />}
@@ -3680,8 +3712,23 @@ function ScheduleFeedBase({
     // re-marks a near-identical band, and a full re-stamp of ~720 rows × up to
     // 3 passes was pure style-invalidation churn on the setup frame.
     const cur = warmSetRef.current;
-    for (const row of cur) if (!next.has(row)) row.removeAttribute("data-warm");
-    for (const row of next) if (!cur.has(row)) row.setAttribute("data-warm", "");
+    let churnOff = 0;
+    let churnOn = 0;
+    for (const row of cur)
+      if (!next.has(row)) {
+        row.removeAttribute("data-warm");
+        churnOff++;
+      }
+    for (const row of next)
+      if (!cur.has(row)) {
+        row.setAttribute("data-warm", "");
+        churnOn++;
+      }
+    (window as unknown as { __warmChurn?: object }).__warmChurn = {
+      off: churnOff,
+      on: churnOn,
+      size: next.size,
+    };
     warmSetRef.current = next;
   }, []);
   const markOnStage = useCallback(() => {
@@ -3695,8 +3742,13 @@ function ScheduleFeedBase({
     // scrolled there — and force its render in THIS pass, before Motion
     // transforms the layer. O(band); the old design's O(book) auto→hidden recalc
     // (the front-loaded setup/teardown stall) is gone by construction.
+    performance.mark("mos:0");
     warmBand();
+    performance.mark("mos:warm");
     void el.offsetHeight; // sync layout flush: render the warm band now
+    performance.mark("mos:flush");
+    performance.measure("mos:warm", "mos:0", "mos:warm");
+    performance.measure("mos:flush", "mos:warm", "mos:flush");
   }, [warmBand]);
   const clearOnStage = useCallback(() => {
     climbingRef.current = false;
@@ -4144,7 +4196,13 @@ function ScheduleFeedBase({
     warmBand(row.offsetTop, 0.35);
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     requestAnimationFrame(() => {
-      if (!climbingRef.current) warmBand();
+      if (climbingRef.current) return;
+      warmBand();
+      // flush the widened band's layout HERE (still in the tap's dwell) —
+      // WebKit never flushes on its own, so without this read the CLICK
+      // frame paid the whole band render (~370ms at 1200 entries on
+      // WebKitGTK; Blink flushed it incidentally and hid the difference)
+      void el.offsetHeight;
     });
     if (!smooth) {
       // a dive lands here against a layout that's still settling — the opened
