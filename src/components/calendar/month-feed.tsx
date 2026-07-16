@@ -404,7 +404,23 @@ function MonthFeedBase({
 }
 export const MonthFeed = memo(
   MonthFeedBase,
-  (p, n) => p.frozen === true && n.frozen === true,
+  // bail while hidden (frozen both sides) — a book scroll never re-renders the
+  // invisible canvas — AND bail when every prop is unchanged: the rise's zoom
+  // commit re-rendered the whole feed for nothing exactly on the move's first
+  // frame (the ascent's setup stall). All props are stable/memoized in the
+  // parent, so this holds precisely when nothing real changed.
+  (p, n) =>
+    (p.frozen === true && n.frozen === true) ||
+    (p.frozen === n.frozen &&
+      p.handleRef === n.handleRef &&
+      p.activeRef === n.activeRef &&
+      p.today === n.today &&
+      p.span === n.span &&
+      p.counts === n.counts &&
+      p.selected === n.selected &&
+      p.onPick === n.onPick &&
+      p.onPickHint === n.onPickHint &&
+      p.onVisible === n.onVisible),
 );
 
 const MonthBlock = memo(function MonthBlock({

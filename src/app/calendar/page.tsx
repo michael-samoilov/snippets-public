@@ -571,6 +571,13 @@ function Calendar() {
   // repainted. Staggered + inside startTransition, no one commit blocks long
   // enough to drop a frame. A zoom still forces all layers at once (runZoom).
   const [warm, setWarm] = useState(0);
+  // Title-pointerdown hint for the RISE (the dive's stageDescent twin): the tap
+  // dwell unfreezes — and if needed, mounts — the month feed while its layer is
+  // still invisible, so its re-render + layout happen under the finger instead
+  // of on the rise's first frame (profiled: the ascent's ~117ms setup was the
+  // month unfreeze-render + the flush of its freshly dirtied layout). Cleared
+  // when the move finishes.
+  const [riseStaged, setRiseStaged] = useState(false);
   const [selected, setSelected] = useState(initialDay);
   /** what the title shows — follows the feeds' scroll */
   const [visibleMonth, setVisibleMonth] = useState(() => {
@@ -583,6 +590,11 @@ function Calendar() {
     return startOfMonth(dateFromDayKey(initialDay));
   });
   const [visibleYear, setVisibleYear] = useState(() => visibleMonth.getFullYear());
+  // stable identity so MonthFeed's memo can bail on the rise's zoom commit
+  const onMonthVisible = useCallback((m: Date) => {
+    setVisibleMonth(m);
+    setVisibleYear(m.getFullYear());
+  }, []);
 
   const counts = useDayCounts();
   const all = useAllSnippets();
@@ -887,6 +899,7 @@ function Calendar() {
     const incoming = layers[zoom.to];
     if (!stage || !outgoing || !incoming) {
       setZoom(null);
+      setRiseStaged(false); // consumed (or aborted) — refreeze the hidden month
       // the dive's held selection lands with this same teardown commit — the
       // month layer is hidden after a dive, so its re-render is off-screen and
       // off the move (it used to hop the camera one rAF after the tap)
@@ -1007,6 +1020,7 @@ function Calendar() {
         ?.querySelector("[data-book-scroller]")
         ?.removeAttribute("data-dive-freeze");
       setZoom(null);
+      setRiseStaged(false); // consumed (or aborted) — refreeze the hidden month
       // the dive's held selection lands with this same teardown commit — the
       // month layer is hidden after a dive, so its re-render is off-screen and
       // off the move (it used to hop the camera one rAF after the tap)
@@ -2507,6 +2521,11 @@ function Calendar() {
                   ? closeSchedule
                   : closeEntry
             }
+            // the rise's stage-on-dwell hint (see riseStaged): the month feed
+            // re-renders + lays out while the finger is still down
+            onPointerDown={
+              view === "schedule" ? () => setRiseStaged(true) : undefined
+            }
             aria-label={
               view === "month"
                 ? copy.calendar.backToGlance(visibleMonth.getFullYear())
@@ -2792,21 +2811,18 @@ function Calendar() {
             (zoom || !showMonthLayer) && "pointer-events-none",
           )}
         >
-          {(view === "month" || warm >= 1) && (
+          {(view === "month" || warm >= 1 || riseStaged) && (
             <MonthFeed
               handleRef={monthFeedRef}
               activeRef={monthActiveRef}
               onPickHint={stageDescent}
-              frozen={!showMonthLayer}
+              frozen={!showMonthLayer && !riseStaged}
               today={today}
               span={monthSpan}
               counts={counts}
               selected={selected}
               onPick={pick}
-              onVisible={(m) => {
-                setVisibleMonth(m);
-                setVisibleYear(m.getFullYear());
-              }}
+              onVisible={onMonthVisible}
             />
           )}
         </div>
