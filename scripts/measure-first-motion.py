@@ -13,8 +13,10 @@ CPU (the closest headless gets to the device):
 
 Also reports the sampled frame cadence (share of ≤25ms gaps) for the record.
 Samples the incoming layer's computed scale AND the anchor flyer's computed
-translate each rAF through a dive and a rise, with the ?waapi=1 compositor path
-enabled (the path being iterated toward 60fps; localStorage seeded pre-load).
+translate each rAF through a dive and a rise, on the default clamped-rAF driver
+(the WAAPI compositor path was tried three ways and reverted — see driveEase's
+header in calendar/page.tsx; this guard holds the start-true/no-lurch property
+for whatever driver ships).
 
 HONEST LIMIT: the device failure this guards against was driven by the RASTER
 pipeline stalling after play() — CPU throttling cannot reproduce that (headless
@@ -123,7 +125,6 @@ def main() -> int:
         b = p.chromium.launch(headless=True)
         ctx = b.new_context(viewport={"width": 393, "height": 852}, device_scale_factor=2)
         pg = ctx.new_page()
-        pg.add_init_script("try{localStorage.setItem('waapi','1')}catch(e){}")
         pg.goto(f"{BASE}?seed={SEED}", wait_until="load"); pg.wait_for_timeout(4500)
         pg.goto(BASE, wait_until="load"); pg.wait_for_timeout(5000)
         pg.wait_for_selector("[data-cal-title]", timeout=8000)
