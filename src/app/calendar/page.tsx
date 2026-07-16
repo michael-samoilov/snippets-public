@@ -680,6 +680,9 @@ function Calendar() {
   const monthActiveRef = useRef(false);
   const yearActiveRef = useRef(false);
   const schedActiveRef = useRef(false);
+  // the weekday rail (S M T W T F S) — held frozen through a move's setup so
+  // its fold rides the move, not the commit paint (see the rail's JSX comment)
+  const weekdayRailRef = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     monthActiveRef.current = view === "month" && !zoom;
     yearActiveRef.current = view === "year" && !zoom;
@@ -871,6 +874,22 @@ function Calendar() {
     // the previous finish left the departed layer inline-hidden
     for (const el of Object.values(layers)) if (el) el.style.visibility = "";
 
+    // HOLD the weekday rail at its current fold through setup: the commit just
+    // flipped `view`, and without the hold the rail's 260ms fold/unfold starts
+    // at the commit PAINT — one to several frames before the animations play —
+    // so the reader saw the S-M-T-W-T-F-S bar change as the only moving thing.
+    // releaseRail() (the play tick / first motion frame) lets the class value
+    // take over, so the fold travels WITH the camera. Freezing it also keeps
+    // the stage's height stable while the flight measures its rects.
+    const rail = weekdayRailRef.current;
+    if (rail) rail.style.gridTemplateRows = getComputedStyle(rail).gridTemplateRows;
+    let railReleased = false;
+    const releaseRail = () => {
+      if (railReleased) return;
+      railReleased = true;
+      if (rail) rail.style.gridTemplateRows = "";
+    };
+
     // Belt-and-braces: sweep any orphaned flyer glyph from a prior move before
     // this one launches. The deferred finish cleanup removes each move's own
     // flyer box, so a leak needs a torn-down teardown (a throw between finish
@@ -909,6 +928,7 @@ function Calendar() {
     );
 
     const finish = () => {
+      releaseRail(); // safety — normally released when the move began
       // land the compositor animations first (waapi path; no-op otherwise):
       // commit each one's final value to inline style so nothing snaps back to
       // its start pose in the frame before the deferred cleanup, then cancel
@@ -1731,14 +1751,42 @@ function Calendar() {
     // start the camera scale NOW — after every flight rect has been read
     // (see startCameraScale): its synchronous start frame may scale the layers.
     moves.push(startCameraScale());
-    // waapi path: press play on EVERY paused animation together, in the first
-    // rAF — the first frame the browser can actually paint. Whatever setup
-    // stalled before this tick delayed only the start; the move then plays its
-    // full course from frame 0, compositor-threaded.
-    if (pending.length)
-      requestAnimationFrame(() => {
+    // waapi path: press play on EVERY paused animation together — but only on a
+    // SETTLED frame pipeline. Round 2 played on the first rAF, and the device
+    // showed the flyers/camera already partway along at their first visible
+    // frame plus a mid-move lurch: the frame AFTER play() was itself delayed by
+    // the fresh layers' raster, and the wall clock ran through that delay. So:
+    // wait for the first normal-length frame gap (<25ms — the raster is done
+    // and the pipeline is beating at 60fps), capped at 6 frames; the rail's
+    // fold releases in the same tick so everything moves as one. One frame
+    // after play, if that frame ALSO stalled (>40ms), rebase every animation
+    // to t=0 — the move then starts whole on the next beat instead of a chunk
+    // of it having been eaten. The reader sees a still frame for the wait
+    // (nothing partially changing), then one clean 60fps move.
+    if (pending.length) {
+      let last: number | null = null;
+      let waited = 0;
+      const playAll = () => {
+        releaseRail();
         for (const a of pending) a.play();
-      });
+        const playedAt = performance.now();
+        requestAnimationFrame(() => {
+          if (performance.now() - playedAt > 40)
+            for (const a of pending) a.currentTime = 0;
+        });
+      };
+      const tick = (now: number) => {
+        const gap = last === null ? Infinity : now - last;
+        last = now;
+        waited++;
+        if (gap < 25 || waited > 6) playAll();
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    } else {
+      // rAF path: the fold joins driveEase's first moving frame
+      requestAnimationFrame(releaseRail);
+    }
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled/waapiEnabled are set once at mount, never change in-session
   }, [zoom, reduceMotion, freezeEnabled, waapiEnabled]);
@@ -2769,8 +2817,14 @@ function Calendar() {
       {/* the weekday rail exists only at the month altitude; elsewhere
           it folds shut so content sits flush under the title, and its
           hairline — the line where the scroll area terminates — rides
-          along to sit beneath the month header */}
+          along to sit beneath the month header. The zoom effect HOLDS it
+          (inline grid-template-rows) through a move's setup and releases it
+          when the camera starts, so the fold rides the move — without the
+          hold it began folding at the COMMIT paint, a frame (or three, under
+          device raster) before the animations played: the reader saw the
+          weekday bar change as the ONLY thing moving. */}
       <div
+        ref={weekdayRailRef}
         className={cn(
           "mt-5 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
           view === "month" && !searchActive
