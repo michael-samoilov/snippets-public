@@ -1974,9 +1974,14 @@ function Calendar() {
     moves.push(startCameraScale());
     performance.mark("zoom-fx1"); // setup JS done — what follows is the
     // browser's first styled/painted frame (style+layout+paint+raster commit)
-    // the weekday rail's fold joins driveEase's first moving frame
+    // The rail STAYS HELD through the whole move now — finish() releases it,
+    // so the 260ms fold plays after landing. Folding WITH the camera animated
+    // grid-template-rows — a LAYOUT property — over the stage: every frame of
+    // the fold re-laid both full layers, and the WebKit frame trace showed
+    // exactly that as the rise's mid-move chop (160-230ms engine frames
+    // through the move's first half, zero JS). A post-landing fold costs one
+    // layout per frame too, but over a settled, unanimated stage.
     requestAnimationFrame(() => {
-      releaseRail();
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
@@ -5175,10 +5180,25 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     const line = lineRef.current;
     if (!sc || !line) return;
     let raf = 0;
+    let observedBox: Element | null = null;
     const update = () => {
       raf = 0;
+      // Stand down while a camera move owns the stage: this pass reads
+      // getBoundingClientRect against whatever the move/teardown just
+      // invalidated — the WebKit frame trace caught one such pass costing
+      // 365ms right after a rise landed. The line is cosmetic; the retry
+      // fires once the climb latch is down.
+      if (sc.hasAttribute("data-climbing")) {
+        setTimeout(onScroll, 250);
+        return;
+      }
       const vpBottom = sc.getBoundingClientRect().bottom;
-      const box = sc.querySelector<HTMLElement>("[data-today-zone-box]");
+      // the CACHED box (trackBox keeps it fresh) — querySelector over the
+      // whole book subtree on every pass was a full-tree scan on WebKit
+      const box =
+        observedBox instanceof HTMLElement && observedBox.isConnected
+          ? observedBox
+          : null;
       const busy = box?.getAttribute("data-zone-busy") === "1";
       let show = false;
       let blue = false;
@@ -5224,15 +5244,19 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
     // so observing it is what keeps the rule from caching a stale edge
     const ro = new ResizeObserver(onScroll);
     ro.observe(sc);
-    let observedBox: Element | null = null;
     const trackBox = () => {
       // the box is replaced on each keep (a new generation), so re-point the
-      // observer whenever the live one changes
+      // observer whenever the live one changes. The full-tree query runs ONLY
+      // when the tracked box is gone — running it on every subtree mutation
+      // re-scanned the entire book each time anything anywhere churned
+      // (~350ms per scan on WebKit during a move's teardown).
+      if (observedBox?.isConnected) return;
       const box = sc.querySelector("[data-today-zone-box]");
       if (box === observedBox) return;
       if (observedBox) ro.unobserve(observedBox);
       if (box) ro.observe(box);
       observedBox = box;
+      onScroll(); // a fresh box needs a fresh pass (the old cached one is gone)
     };
     const mo = new MutationObserver(trackBox);
     mo.observe(sc, { childList: true, subtree: true });
