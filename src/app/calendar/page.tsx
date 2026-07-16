@@ -572,9 +572,21 @@ function PerfHud() {
             st && st.startTime >= lastDown - 50
               ? ` · st ${Math.round(st.duration)}ms@${st.startTime < run.startTime ? "dwell" : "click"}`
               : "";
+          // fx sub-spans (only present on climb moves): w=wake+rail,
+          // s=freeze+band flush, f=flyer collect+build
+          const wake = lastMark("zoom-fx-wake");
+          const stg = lastMark("zoom-fx-stage");
+          const band = lastMark("zoom-fx-band");
+          const pair = lastMark("zoom-fx-pair");
+          const sub =
+            wake && stg && band && pair &&
+            wake.startTime >= fx0.startTime &&
+            pair.startTime <= fx1.startTime
+              ? `[w${r(fx0.startTime, wake.startTime)}·s${r(wake.startTime, stg.startTime)}·f${r(band.startTime, pair.startTime)}]`
+              : "";
           spans =
             ` · dwn→run ${r(lastDown, run.startTime)} · cm ${r(run.startTime, fx0.startTime)}` +
-            ` · fx ${r(fx0.startTime, fx1.startTime)} · pt ${r(fx1.startTime, m.startTime)}${stLine}`;
+            ` · fx ${r(fx0.startTime, fx1.startTime)}${sub} · pt ${r(fx1.startTime, m.startTime)}${stLine}`;
         }
         tapLine = ` · tap→move ${Math.round(m.startTime - lastDown)}ms${spans}`;
       }
@@ -1150,8 +1162,13 @@ function Calendar() {
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
-    // (inline style beats [data-dive-freeze]) — cleared a frame after finish
+    // (inline style beats the frozen cells' static) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
+    // the band's other margin cells, frozen to normal flow (inline
+    // position:static) so the page scales as one rigid block — inline on the
+    // ~15 band cells instead of the old [data-dive-freeze] CSS rule, whose
+    // attribute toggle invalidated selector-matching across the whole book
+    const frozen: HTMLElement[] = [];
     const willChanged: HTMLElement[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
@@ -1217,10 +1234,11 @@ function Calendar() {
       // single frame scrolls within the still-rendered band.)
       for (const el of Object.values(layers))
         if (el) el.style.pointerEvents = "";
-      // drop the dive freeze with the landing paint (it's imperative now, not a
-      // prop riding the setZoom(null) commit) — the straddler's inline sticky
-      // (repinned) is still up, so the restick stays a no-op until the deferred
-      // handover below
+      // drop the dive freeze with the landing paint — the band cells' inline
+      // static comes off here (the same moment the old CSS rule used to
+      // lift); the straddler's inline sticky (repinned) is still up, so the
+      // restick stays a no-op until the deferred handover below
+      for (const el of frozen) el.style.position = "";
       scheduleLayerRef.current
         ?.querySelector("[data-book-scroller]")
         ?.removeAttribute("data-dive-freeze");
@@ -1305,15 +1323,17 @@ function Calendar() {
       // re-rendered the whole feed at both ends of every move.
       performance.mark("zoom-fx-wake"); // wake + rail hold done
       if (freezeEnabled) {
+        // A probe latch only — no CSS is keyed on it anymore (the old
+        // [data-dive-freeze] rule's attribute toggle invalidated
+        // selector-matching across the whole book; see globals.css)
         scheduleLayerRef.current
           ?.querySelector("[data-book-scroller]")
           ?.setAttribute("data-dive-freeze", "");
-        // Repin the straddler NOW, before markOnStage's flush, so the ONE
-        // flush covers it (see the dayPair block for why the straddling
-        // section's margin date keeps inline sticky through the freeze).
-        // Written after the flush, this invalidated the scroller again and
-        // the flight's first rect read re-laid it out (~150ms of the setup
-        // at 6x). stickyDeltaFor is pure cached-geometry math — no reads.
+        // Freeze the BAND's margin dates to normal flow INLINE (O(band), the
+        // only dates that are rendered), and repin the straddler sticky —
+        // both NOW, before markOnStage's flush, so the ONE flush covers
+        // them and the flight measures the frozen truth. stickyDeltaFor is
+        // pure cached-geometry math — no reads.
         if (
           (zoom.from === "month" && zoom.to === "schedule") ||
           (zoom.from === "schedule" && zoom.to === "month")
@@ -1322,12 +1342,15 @@ function Calendar() {
             "[data-day][data-warm]",
           ) ?? []) {
             const day = sec.dataset.day;
-            if (!day || !(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0))
-              continue;
+            if (!day) continue;
             const cell = sec.querySelector<HTMLElement>(".book-margin-date");
-            if (cell) {
+            if (!cell) continue;
+            if (scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0) {
               cell.style.position = "sticky";
               repinned.push(cell);
+            } else {
+              cell.style.position = "static";
+              frozen.push(cell);
             }
           }
         }
@@ -3069,7 +3092,15 @@ function Calendar() {
           data-layer="year"
           className={cn(
             "absolute inset-0",
-            !showYearLayer && "invisible",
+            // content-visibility (not just visibility): a hidden-but-mounted
+            // year glance still paid STYLE RECALC on every pass — and each
+            // move triggers 5-17 passes (Performance.getMetrics: style
+            // dominates the move's cost). cv:hidden skips the subtree's
+            // style/layout entirely; the reveal happens at the move's commit
+            // (post-touch — never under a finger, see the pre-raster dead
+            // end). Year is never staged into mid-move, so nothing needs its
+            // geometry while hidden.
+            !showYearLayer && "invisible [content-visibility:hidden]",
             !showYearLayer && "pointer-events-none",
           )}
         >
@@ -3134,7 +3165,11 @@ function Calendar() {
             // origin, and the stage clips at its bottom edge — the bottom
             // breathing room mirrors what pt-2 already gives the top
             "absolute inset-0 px-2 pb-1.5 pt-2 [touch-action:pan-y]",
-            !showEntryLayer && "invisible",
+            // cv:hidden like the year layer — EntryView even mounts (warm>=2)
+            // inside the skipped subtree, so its build costs no layout at all;
+            // the entry morph reads its rects post-commit, when the layer is
+            // revealed.
+            !showEntryLayer && "invisible [content-visibility:hidden]",
             !showEntryLayer && "pointer-events-none",
           )}
         >

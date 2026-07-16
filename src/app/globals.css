@@ -501,13 +501,18 @@ textarea:focus-visible,
   box-shadow: var(--float-shadow);
 }
 
-/* during a "dive" camera move the book scroller is flagged so its sticky margin
-   dates fall back to normal flow — the whole page then scales as one rigid
-   block (dates locked to their cards) instead of the dates pinning to the top
-   while the cards slide under them. Unlayered so it beats Tailwind's `sticky`. */
-[data-dive-freeze] .book-margin-date {
-  position: static;
-}
+/* During a "dive" camera move the book's sticky margin dates fall back to
+   normal flow — the whole page then scales as one rigid block (dates locked
+   to their cards) instead of the dates pinning to the top while the cards
+   slide under them. This USED to be a rule here keyed on a scroller
+   attribute ([data-dive-freeze] .book-margin-date { position: static }),
+   but toggling that attribute invalidated selector-matching across every
+   section of the book — an O(book) style recalc on the move's setup frame
+   (~460ms of the setup at 6x throttle). Only the rendered band's dates are
+   visible during a move, so the zoom effect now writes position:static
+   INLINE on just those cells (O(band)) and restores them at finish; the
+   [data-dive-freeze] attribute still appears on the scroller as a latch for
+   probes, with no CSS keyed on it. */
 
 /* ══ THE FLAT-BOOK LAW — read before adding ANY paint to a book card ══════
    WHY THE BOOK CRASHES (the general rule, not one instance): the schedule
