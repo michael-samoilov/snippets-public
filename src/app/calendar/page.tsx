@@ -14,6 +14,7 @@ import {
   useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -477,14 +478,14 @@ interface ProbeStore {
 }
 
 interface ScheduleFeedHandle {
-  goTo: (day: string, smooth?: boolean) => void;
+  goTo: (day: string, smooth?: boolean, narrow?: boolean) => void;
   // The book rests windowed: only the [data-warm] band renders; everything else
   // is content-visibility:hidden (see globals.css). markOnStage warms the
   // (destination) band synchronously + flushes it, and latches climbingRef so
   // the observer/measure stand down for the move — O(band), nothing off-band to
   // touch, and with zero cv:auto elements a transformed ancestor re-evaluates
   // nothing. clearOnStage drops the latch and re-primes the observer.
-  markOnStage: () => void;
+  markOnStage: (narrow?: boolean) => void;
   clearOnStage: () => void;
   // how far a day's margin date sits BELOW its section top at rest — nonzero
   // only for the section straddling the scroll top, whose date pins to the
@@ -1024,7 +1025,18 @@ function Calendar() {
     stagedRunRef.current = () => {
       stagedRunRef.current = null;
       performance.mark("stage:1");
-      scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
+      // flushSync: goTo's probe move rides useSyncExternalStore + setState,
+      // and from a rAF those updates are SCHEDULED, not committed — they were
+      // batching into the CLICK's React flush, so the click frame paid the
+      // composer's mount + its section's layout (~350ms at 1200 entries on
+      // WebKitGTK, the dive's `s` block). Committed here instead, the whole
+      // probe lands under the finger.
+      flushSync(() => {
+        // narrow: the staged 0.35-viewport band IS the dive's climb band —
+        // no widen before liftoff (see markOnStage) — so the reveal's style
+        // pass covers a third of the content
+        scheduleFeedRef.current?.goTo(key, false, true);
+      });
       // FLUSH the staged layout NOW, under the finger. Blink flushes layout
       // inside scrollTo so this was implicit there — WebKit does NOT: the
       // band's fresh layout stayed dirty through the dwell and the CLICK
@@ -1356,6 +1368,14 @@ function Calendar() {
           (zoom.from === "month" && zoom.to === "schedule") ||
           (zoom.from === "schedule" && zoom.to === "month")
         ) {
+          // READS first, then writes — stickyDeltaFor reads scrollTop, and
+          // calling it after the previous iteration's position write forced
+          // ONE FULL BOOK LAYOUT PER SECTION on WebKit (~45ms × 7 warm
+          // sections = the dive's whole `s` block; the rise's `s` scaled
+          // with its warm count for the same reason). Phased, the loop costs
+          // at most one flush.
+          performance.mark("fz:a");
+          const freezeCells: { cell: HTMLElement; straddler: boolean }[] = [];
           for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
             "[data-day][data-warm]",
           ) ?? []) {
@@ -1363,17 +1383,22 @@ function Calendar() {
             if (!day) continue;
             const cell = sec.querySelector<HTMLElement>(".book-margin-date");
             if (!cell) continue;
-            if (scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0) {
-              cell.style.position = "sticky";
-              repinned.push(cell);
-            } else {
-              cell.style.position = "static";
-              frozen.push(cell);
-            }
+            freezeCells.push({
+              cell,
+              straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
+            });
           }
+          performance.mark("fz:b");
+          for (const { cell, straddler } of freezeCells) {
+            cell.style.position = straddler ? "sticky" : "static";
+            (straddler ? repinned : frozen).push(cell);
+          }
+          performance.mark("fz:c");
+          performance.measure("fz:reads", "fz:a", "fz:b");
+          performance.measure("fz:writes", "fz:b", "fz:c");
         }
       }
-      scheduleFeedRef.current?.markOnStage();
+      scheduleFeedRef.current?.markOnStage(zoom.to === "schedule");
       performance.mark("zoom-fx-stage"); // freeze + band warm/flush done
       // Descent: pick() set scrollTop against the book's --cis placeholders,
       // which are stale whenever the webfonts swapped after the book measured.
@@ -1707,13 +1732,15 @@ function Calendar() {
     // changes (a big, text-heavy grid/book repainting every frame) — the reason
     // the altitude camera felt choppy while the entry morph, whose card IS
     // promoted (below), stays buttery. will-change:transform rasters each layer
-    // once and lets the GPU composite the scale. finish() clears it (willChanged).
-    outgoing.style.willChange = "transform";
-    incoming.style.willChange = "transform";
-    willChanged.push(outgoing, incoming);
-
-    // hold the arriving layer dark until the animation's first tick owns it
-    incoming.style.opacity = "0";
+    // NO will-change and NO inline opacity hold on the layers here — both
+    // were ~300ms EACH on WebKitGTK (~100ms device): writing either on a
+    // layer containing the book rebuilds its compositing/stacking state over
+    // the whole ~50k-node subtree, and the setup's next geometry read paid
+    // the flush (fzReads/ivT, harness session 2026-07-16). Neither is needed
+    // under the compositor driver: a WAAPI transform animation promotes its
+    // layer itself, and the paused fill-forwards crossfade holds the arriving
+    // layer at opacity 0 from creation until play — their (one-time) apply
+    // cost lands in the browser's frame after setup, off every read path.
 
     // diving: the departing view blows up past its slot; pulling back: it
     // shrinks toward it — and the arriving view does the inverse.
@@ -1748,21 +1775,6 @@ function Calendar() {
           { transform: `scale(${inTo})` },
         ]),
       ]);
-    moves.push(
-      // the crossfade rides the SAME paused-create/rebase driver as the
-      // camera: as a wall-clock Motion tween it fast-forwarded through the
-      // device's expensive first frame — the schedule was simply GONE by the
-      // second frame of a rise instead of fading (device recording,
-      // 2026-07-16)
-      compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
-        duration: 180,
-        easing: "ease-out",
-      }),
-      compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
-        duration: 160,
-        easing: "ease-out",
-      }),
-    );
 
     // shared-element flight: a date standing in both altitudes travels
     // from its grid cell to its ledger slot (and back) instead of
@@ -1861,11 +1873,18 @@ function Calendar() {
         // DIVE (month→schedule): the month side names the candidates; the book
         // side is then queried for only those days.
         if (descentCache) {
+          // ONE traversal of the month layer, then map lookups — a
+          // querySelector per cached day (~30) re-ran WebKit's selector
+          // engine over the month subtree each time: 312-359ms of the dive's
+          // flight span on WebKitGTK for what one pass does in ~5ms.
           fromEls = new Map();
+          const monthFly = new Map<string, HTMLElement>();
+          for (const el of outgoing.querySelectorAll<HTMLElement>(
+            "[data-flydate]",
+          ))
+            monthFly.set(el.dataset.flydate!, el);
           for (const day of descentCache.cells.keys()) {
-            const el = outgoing.querySelector<HTMLElement>(
-              `[data-flydate="${CSS.escape(day)}"]`,
-            );
+            const el = monthFly.get(day);
             if (el) fromEls.set(day, el);
           }
           fromRectFor = (day, el) => descentCache.cells.get(day) ?? textRect(el);
@@ -1875,6 +1894,7 @@ function Calendar() {
         }
         toEls = collectDays(incoming, fromEls.keys());
       }
+
       // READ PHASE — measure every pair before a single style write. Each
       // hide/append below invalidates layout, so interleaving measurement with
       // the writes forced a fresh relayout per flyer (profiled at ~250ms of
@@ -2025,8 +2045,23 @@ function Calendar() {
       }
     }
 
-    // start the camera scale NOW — after every flight rect has been read
-    // (see startCameraScale): its synchronous start frame may scale the layers.
+    // start the camera scale AND the crossfades NOW — after every flight
+    // rect has been read (see startCameraScale). The crossfades used to be
+    // created BEFORE the flight: even paused, a fill-forwards opacity
+    // animation on the book layer invalidates its style, and the flight's
+    // first rect read then paid an O(book) recalc (~300ms of the dive's
+    // flight span on WebKitGTK). Same law as the camera: create animations
+    // only after all measurement.
+    moves.push(
+      compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
+        duration: 180,
+        easing: "ease-out",
+      }),
+      compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
+        duration: 160,
+        easing: "ease-out",
+      }),
+    );
     moves.push(startCameraScale());
     performance.mark("zoom-fx1"); // setup JS done — what follows is the
     // browser's first styled/painted frame (style+layout+paint+raster commit)
@@ -3817,7 +3852,7 @@ function ScheduleFeedBase({
     };
     warmSetRef.current = next;
   }, []);
-  const markOnStage = useCallback(() => {
+  const markOnStage = useCallback((narrow = false) => {
     const el = scrollerRef.current;
     if (!el) return;
     climbingRef.current = true; // measureRows + the observer stand down
@@ -3829,7 +3864,12 @@ function ScheduleFeedBase({
     // transforms the layer. O(band); the old design's O(book) auto→hidden recalc
     // (the front-loaded setup/teardown stall) is gone by construction.
     performance.mark("mos:0");
-    warmBand();
+    // narrow (a dive): keep the staged 0.35-viewport band — the camera only
+    // ever shows the clipped viewport, and every extra warm section is more
+    // freshly-styled content whose inherited visibility flips at the reveal
+    // (the dive's fzReads flush, ~240ms at 1.5 viewports on WebKitGTK).
+    // clearOnStage's observer re-prime widens the band right after landing.
+    warmBand(undefined, narrow ? 0.35 : 1.5);
     performance.mark("mos:warm");
     void el.offsetHeight; // sync layout flush: render the warm band now
     performance.mark("mos:flush");
@@ -3838,6 +3878,31 @@ function ScheduleFeedBase({
   }, [warmBand]);
   const clearOnStage = useCallback(() => {
     climbingRef.current = false;
+    // Restore the FULL resting band now — a dive climbed on the narrow
+    // staged band (see markOnStage), and this deferred-teardown frame is
+    // where the O(band) work belongs, off the move and off the settle paint.
+    // ANCHORED: the sections widening in above the landing render at their
+    // real heights, and any difference from their placeholders would shift
+    // the just-landed page down (measure-dive-exactness caught +55-75px).
+    // Add the growth above the anchor back to scrollTop in the same frame —
+    // invisible — unless the reader has already grabbed the scroll (never
+    // write scrollTop under a live gesture).
+    const el = scrollerRef.current;
+    let anchor: HTMLElement | null = null;
+    if (el) {
+      const st = el.scrollTop;
+      for (const g of rowGeomRef.current)
+        if (g.bottom > st) {
+          anchor = rowRefs.current.get(g.day) ?? null;
+          break;
+        }
+    }
+    const before = anchor ? anchor.offsetTop : 0;
+    warmBand();
+    if (el && anchor && !tookOverRef.current) {
+      const d = anchor.offsetTop - before;
+      if (d) el.scrollTop += d;
+    }
     // the landing band must STAY warm — the reader is looking at it. But the
     // observer missed every crossing during the climb (its callback stands down
     // mid-move, and misses are never re-delivered: IO only reports CHANGES) — so
@@ -3848,7 +3913,7 @@ function ScheduleFeedBase({
       io.disconnect();
       for (const row of rowRefs.current.values()) io.observe(row);
     }
-  }, []);
+  }, [warmBand]);
   // See ScheduleFeedHandle: how far below its section top a day's margin date
   // RESTS. Sticky top-0 pins the cell at max(section top, min(scroll top,
   // section bottom - cell height)); nonzero only for the section straddling the
@@ -4074,7 +4139,7 @@ function ScheduleFeedBase({
     !windowRows ||
     windowRows[windowRows.length - 1]?.day === rows[rows.length - 1]?.day;
 
-  const scrollToRow = useCallback((day: string, smooth = false) => {
+  const scrollToRow = useCallback((day: string, smooth = false, narrow = false) => {
     const el = scrollerRef.current;
     const row = rowRefs.current.get(day);
     if (!el) return false;
@@ -4281,15 +4346,16 @@ function ScheduleFeedBase({
     // itself (markOnStage), so the full band always stands by liftoff.
     warmBand(row.offsetTop, 0.35);
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
-    requestAnimationFrame(() => {
-      if (climbingRef.current) return;
-      warmBand();
-      // flush the widened band's layout HERE (still in the tap's dwell) —
-      // WebKit never flushes on its own, so without this read the CLICK
-      // frame paid the whole band render (~370ms at 1200 entries on
-      // WebKitGTK; Blink flushed it incidentally and hid the difference)
-      void el.offsetHeight;
-    });
+    if (!narrow)
+      requestAnimationFrame(() => {
+        if (climbingRef.current) return;
+        warmBand();
+        // flush the widened band's layout HERE (still in the tap's dwell) —
+        // WebKit never flushes on its own, so without this read the CLICK
+        // frame paid the whole band render (~370ms at 1200 entries on
+        // WebKitGTK; Blink flushed it incidentally and hid the difference)
+        void el.offsetHeight;
+      });
     if (!smooth) {
       // a dive lands here against a layout that's still settling — the opened
       // day's composer (probe) mounts a render later, and late rows/data shift the
@@ -4366,7 +4432,7 @@ function ScheduleFeedBase({
   }, [scrollerRef, todayKey, rowRefs, spyRef, progTargetRef, progTimerRef]);
 
   const goTo = useCallback(
-    (day: string, smooth = false) => {
+    (day: string, smooth = false, narrow = false) => {
       probeStore.set(day); // O(2 rows): just the composer moving day
       // conjure/retire the empty-day row — bails (no commit) when the value is
       // unchanged, i.e. on every dive between days that hold entries
@@ -4375,7 +4441,7 @@ function ScheduleFeedBase({
       // the probe (and any row churn) has committed. A smooth scroll (pressing
       // "today") must NOT be yanked instant by that settle — and today is
       // always in the rows, so it needs no settle pass.
-      scrollToRow(day, smooth);
+      scrollToRow(day, smooth, narrow);
       pendingRef.current = smooth ? null : day;
     },
     [scrollToRow, probeStore, dayGroups],
