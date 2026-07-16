@@ -47,6 +47,7 @@ function MonthFeedBase({
   counts,
   selected,
   onPick,
+  onPickHint,
   onVisible,
 }: {
   handleRef: React.MutableRefObject<MonthFeedHandle | null>;
@@ -60,6 +61,9 @@ function MonthFeedBase({
   counts: Map<string, number> | undefined;
   selected: string;
   onPick: (key: string) => void;
+  /** fired on pointerdown of a day cell — the tap's ~100ms dwell is free time
+      to stage the dive's destination (scroll + warm the book) before onPick */
+  onPickHint?: (key: string) => void;
   onVisible: (m: Date) => void;
   /** fully hidden (not this altitude, not in a zoom) — memo skips
       re-renders while frozen, so a book scroll never re-renders the
@@ -379,6 +383,7 @@ function MonthFeedBase({
                   isSameMonth(dateFromDayKey(selected), m) ? selected : ""
                 }
                 onPick={onPick}
+                onPickHint={onPickHint}
               />
             </div>
           ))}
@@ -410,6 +415,7 @@ const MonthBlock = memo(function MonthBlock({
   counts,
   selected,
   onPick,
+  onPickHint,
 }: {
   month: Date;
   cell: number;
@@ -419,6 +425,7 @@ const MonthBlock = memo(function MonthBlock({
   /** the selected day when it lives in this month, else "" */
   selected: string;
   onPick: (key: string) => void;
+  onPickHint?: (key: string) => void;
 }) {
   const weekStart = useSettings().weekStart;
   const days = eachDayOfInterval({ start: month, end: endOfMonth(month) });
@@ -465,6 +472,7 @@ const MonthBlock = memo(function MonthBlock({
               type="button"
               disabled={isFuture}
               onClick={() => onPick(key)}
+              onPointerDown={isFuture ? undefined : () => onPickHint?.(key)}
               whileTap={isFuture ? undefined : "pressed"}
               aria-label={`${format(date, "MMMM d")}${count ? `, ${count} kept` : ""}`}
               aria-pressed={key === selected}

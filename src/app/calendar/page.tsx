@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -463,6 +464,18 @@ type View = "year" | "month" | "schedule" | "entry";
 /** altitude order: a zoom to a deeper view dives in, shallower pulls back */
 const DEPTH: Record<View, number> = { year: 0, month: 1, schedule: 2, entry: 3 };
 
+// The opened page (`probe`) as an EXTERNAL STORE instead of feed state: a dive
+// used to commit a probe state change whose rows/body memos re-ran the whole
+// book map — 721 element creations + a full bail-walk, an O(book) reconcile on
+// the dive's critical path even though only ~2 rows changed. Each BookRow now
+// subscribes (useSyncExternalStore) to "am I the probed day?"; a probe change
+// re-renders exactly the row gaining the composer and the row losing it.
+interface ProbeStore {
+  subscribe: (fn: () => void) => () => void;
+  get: () => string | null;
+  set: (day: string | null) => void;
+}
+
 interface ScheduleFeedHandle {
   goTo: (day: string, smooth?: boolean) => void;
   // The book rests windowed: only the [data-warm] band renders; everything else
@@ -659,6 +672,12 @@ function Calendar() {
     anchor: string;
     cells: Map<string, DOMRect>;
   } | null>(null);
+  // a dive's selection update, held until finish() so its MonthFeed re-render
+  // never lands mid-flight (see pick)
+  const pendingSelectRef = useRef<string | null>(null);
+  // the day whose destination stageDescent() has already prepared (pointerdown
+  // hint) — pick() then skips the duplicate work; cleared when consumed
+  const stagedDescentRef = useRef<string | null>(null);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   // Each feed's interactivity gate as a REF, not a prop: `view/zoom` flip at the
   // start AND end of every altitude move, and as props they re-rendered all
@@ -784,42 +803,54 @@ function Calendar() {
     setView(to);
   }, []);
 
+  /** Stage a dive's DESTINATION: capture the flight's takeoff rects on the
+      clean month layout (the month grid is static through the dive, so these
+      boxes are the truth the whole move — and reading them post-commit forced
+      an O(month) reflow), and open + scroll + warm the book page behind the
+      still-invisible schedule layer. Idempotent per day. Called from the day
+      cell's POINTERDOWN (a tap dwells ~100ms between pointerdown and click —
+      free time in which the browser lays out the destination band while the
+      finger is still down) and again from pick() as the fallback for
+      keyboard/programmatic picks, where it runs on the tap frame as before. */
+  const stageDescent = useCallback((key: string) => {
+    if (stagedDescentRef.current === key) return;
+    if (zooming.current) return; // never restage under a live move
+    stagedDescentRef.current = key;
+    const stageEl = stageRef.current;
+    const monthEl = monthLayerRef.current;
+    if (stageEl && monthEl) {
+      const sr = stageEl.getBoundingClientRect();
+      const cells = new Map<string, DOMRect>();
+      for (const el of monthEl.querySelectorAll<HTMLElement>("[data-flydate]")) {
+        const r = textRectOf(el);
+        const y = r.top - sr.top;
+        if (y > -r.height && y < sr.height) cells.set(el.dataset.flydate!, r);
+      }
+      descentGeom.current = { anchor: key, cells };
+    } else {
+      descentGeom.current = null;
+    }
+    scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
+  }, []);
+
   /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
     (key: string) => {
       liveDayRef.current = key;
       navigator.vibrate?.(6);
-      // Capture the flight's takeoff rects NOW, on the clean month layout —
-      // before goTo/runZoom commit and dirty it. The month grid is static
-      // through the dive, so these boxes are the truth the whole move; reading
-      // them here (a handful of cheap reads against up-to-date layout) spares
-      // the zoom effect an O(month) reflow (a single post-commit
-      // getBoundingClientRect on the month re-flushes its whole layout).
-      const stageEl = stageRef.current;
-      const monthEl = monthLayerRef.current;
-      if (stageEl && monthEl) {
-        const sr = stageEl.getBoundingClientRect();
-        const cells = new Map<string, DOMRect>();
-        for (const el of monthEl.querySelectorAll<HTMLElement>("[data-flydate]")) {
-          const r = textRectOf(el);
-          const y = r.top - sr.top;
-          if (y > -r.height && y < sr.height) cells.set(el.dataset.flydate!, r);
-        }
-        descentGeom.current = { anchor: key, cells };
-      } else {
-        descentGeom.current = null;
-      }
+      stageDescent(key); // no-op when the pointerdown hint already staged it
+      stagedDescentRef.current = null; // consumed — the next tap restages
       if (urlTimer.current) clearTimeout(urlTimer.current);
       pushUrl(`${pathname}?d=${key}`);
-      scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
       runZoom("month", "schedule", key);
-      // `selected` only drives the outgoing month grid's highlight and a
-      // windowRows recompute — neither is needed for the dive's first frame.
-      // Defer it past the camera launch. (Proven safe: the blank-card bug that
-      // once appeared alongside this was the stale-placeholder bug, not this.)
-      requestAnimationFrame(() => setSelected(key));
+      // `selected` only drives the outgoing month grid's highlight — invisible
+      // until the reader returns to the month. It used to commit one rAF after
+      // the tap, i.e. MID-FLIGHT: a MonthFeed re-render landing on the clamped
+      // rAF driver's clock read as a hop in the move. It now lands at finish()
+      // (with the teardown commit), where the month layer is hidden anyway.
+      pendingSelectRef.current = key;
     },
-    [pathname, runZoom],
+    [pathname, runZoom, stageDescent],
   );
 
   /** the reader's place in the book drives selection, title, and URL.
@@ -856,6 +887,13 @@ function Calendar() {
     const incoming = layers[zoom.to];
     if (!stage || !outgoing || !incoming) {
       setZoom(null);
+      // the dive's held selection lands with this same teardown commit — the
+      // month layer is hidden after a dive, so its re-render is off-screen and
+      // off the move (it used to hop the camera one rAF after the tap)
+      if (pendingSelectRef.current !== null) {
+        setSelected(pendingSelectRef.current);
+        pendingSelectRef.current = null;
+      }
       zooming.current = false;
       return;
     }
@@ -969,6 +1007,13 @@ function Calendar() {
         ?.querySelector("[data-book-scroller]")
         ?.removeAttribute("data-dive-freeze");
       setZoom(null);
+      // the dive's held selection lands with this same teardown commit — the
+      // month layer is hidden after a dive, so its re-render is off-screen and
+      // off the move (it used to hop the camera one rAF after the tap)
+      if (pendingSelectRef.current !== null) {
+        setSelected(pendingSelectRef.current);
+        pendingSelectRef.current = null;
+      }
       zooming.current = false;
       // Everything heavy — dropping the band's content-visibility (flips ~720
       // sections cv:hidden→auto, a big style invalidation) AND handing the
@@ -2751,6 +2796,7 @@ function Calendar() {
             <MonthFeed
               handleRef={monthFeedRef}
               activeRef={monthActiveRef}
+              onPickHint={stageDescent}
               frozen={!showMonthLayer}
               today={today}
               span={monthSpan}
@@ -2979,7 +3025,8 @@ const BookRow = memo(function BookRow({
   snippets,
   newMonth,
   isToday,
-  showComposer,
+  isYesterday,
+  probeStore,
   last,
   windowTail,
   hideToday,
@@ -2995,7 +3042,8 @@ const BookRow = memo(function BookRow({
   snippets: Snippet[];
   newMonth: boolean;
   isToday: boolean;
-  showComposer: boolean;
+  isYesterday: boolean;
+  probeStore: ProbeStore;
   last: boolean;
   windowTail: boolean;
   hideToday: boolean;
@@ -3007,6 +3055,15 @@ const BookRow = memo(function BookRow({
   scrollToNewEntry: (id: string) => void;
   rowRef: (day: string) => (el: HTMLElement | null) => void;
 }) {
+  // subscribed, not a prop: only the two rows whose answer changes re-render
+  // on a probe change — the map and every other row stay untouched
+  const probed = useSyncExternalStore(
+    probeStore.subscribe,
+    () => probeStore.get() === day,
+    () => false,
+  );
+  const showComposer =
+    isToday || probed || (isYesterday && snippets.length === 0);
   const d = dateFromDayKey(day);
   const pageRow = (
     <section
@@ -3168,7 +3225,27 @@ function ScheduleFeedBase({
   }, [todayKey]);
   /** the day the book was opened to — keeps its composer row mounted
       and never moves with the reader's scroll */
-  const [probe, setProbe] = useState<string | null>(selected);
+  // the probed day rides the external store (see ProbeStore); the ROW SET only
+  // depends on it when the probed day holds no entries (an empty day needs a
+  // row conjured for its composer) — extraDay carries exactly that case, so a
+  // dive into a normal day commits NO row-set change at all
+  const [probeStore] = useState<ProbeStore>(() => {
+    const listeners = new Set<() => void>();
+    let val: string | null = selected;
+    return {
+      subscribe(fn: () => void) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      get: () => val,
+      set(day: string | null) {
+        if (val === day) return;
+        val = day;
+        for (const fn of [...listeners]) fn();
+      },
+    };
+  });
+  const [extraDay, setExtraDay] = useState<string | null>(selected);
   // First paint renders only a screenful of days; the rest of the history
   // mounts a frame later, off the critical path — so opening the book costs a
   // constant ~screenful no matter how many years it holds. Opening at the foot
@@ -3538,15 +3615,16 @@ function ScheduleFeedBase({
   const rows = useMemo(() => {
     if (!dayGroups) return null;
     const days = new Set(dayGroups.days);
-    // the one page the reader explicitly opened joins the ledger (so an empty
-    // day still has a row to land on + offer its composer). This is the ONLY
-    // probe-driven change; the snippet arrays come from the stable map above.
-    if (probe) days.add(probe);
+    // the one page the reader explicitly opened joins the ledger ONLY when it
+    // holds no entries (an empty day needs a row conjured for its composer —
+    // extraDay). A probed day that already has entries changes nothing here,
+    // so the common dive re-runs none of this.
+    if (extraDay) days.add(extraDay);
     return [...days].sort().map((day) => ({
       day,
       snippets: dayGroups.map.get(day) ?? EMPTY_SNIPPETS,
     }));
-  }, [dayGroups, probe, EMPTY_SNIPPETS]);
+  }, [dayGroups, extraDay, EMPTY_SNIPPETS]);
 
   // the rows actually rendered on first paint: FIRST_PAINT_DAYS around the
   // landing day (the tail when landing on today, a centered slice for a
@@ -3846,7 +3924,10 @@ function ScheduleFeedBase({
 
   const goTo = useCallback(
     (day: string, smooth = false) => {
-      setProbe(day);
+      probeStore.set(day); // O(2 rows): just the composer moving day
+      // conjure/retire the empty-day row — bails (no commit) when the value is
+      // unchanged, i.e. on every dive between days that hold entries
+      setExtraDay(dayGroups && !dayGroups.days.has(day) ? day : null);
       // land now so the camera zooms onto the right page, then settle once
       // the probe (and any row churn) has committed. A smooth scroll (pressing
       // "today") must NOT be yanked instant by that settle — and today is
@@ -3854,7 +3935,7 @@ function ScheduleFeedBase({
       scrollToRow(day, smooth);
       pendingRef.current = smooth ? null : day;
     },
-    [scrollToRow],
+    [scrollToRow, probeStore, dayGroups],
   );
   useLayoutEffect(() => {
     handleRef.current = {
@@ -4177,12 +4258,6 @@ function ScheduleFeedBase({
         const newMonth =
           i === 0 || windowRows[i - 1].day.slice(0, 7) !== row.day.slice(0, 7);
         const isToday = row.day === todayKey;
-        // today always invites; yesterday invites while it's still empty;
-        // and the page you opened keeps its composer
-        const showComposer =
-          isToday ||
-          row.day === probe ||
-          (row.day === yesterdayKey && row.snippets.length === 0);
         const last = i === windowRows.length - 1;
         // in zone mode today's own section stays invisible until it holds an
         // entry — its date lives in the zone, and the kept card wipes into this
@@ -4196,7 +4271,8 @@ function ScheduleFeedBase({
             snippets={row.snippets}
             newMonth={newMonth}
             isToday={isToday}
-            showComposer={showComposer}
+            isYesterday={row.day === yesterdayKey}
+            probeStore={probeStore}
             last={last}
             windowTail={windowTail}
             hideToday={hideToday}
@@ -4216,7 +4292,7 @@ function ScheduleFeedBase({
     // rebuilt the ENTIRE flat book's card tree on each dive: an O(book)
     // reconcile + reflow that was the bulk of the tap→dive input lag (~0.5s on a
     // 1000-entry book, scaling linearly). The card DOM depends only on content.
-    [windowRows, windowTail, probe, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, rowRef],
+    [windowRows, windowTail, probeStore, todayKey, yesterdayKey, onOpen, today, todayJustKept, bookEmpty, scrollToNewEntry, rowRef],
   );
 
   return (
