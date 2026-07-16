@@ -1181,6 +1181,9 @@ function Calendar() {
     // ~15 band cells instead of the old [data-dive-freeze] CSS rule, whose
     // attribute toggle invalidated selector-matching across the whole book
     const frozen: HTMLElement[] = [];
+    // every paused compositor animation of this move (camera, flyers) —
+    // played together on the play tick, cancelled together in finish()
+    const camAnims: Animation[] = [];
     const willChanged: HTMLElement[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
@@ -1212,6 +1215,10 @@ function Calendar() {
         el.style.transform = "";
         el.style.opacity = "";
       }
+      // drop the compositor animations' fill:forwards holds in the same
+      // style update as the resets above — underlying styles take over with
+      // no frame where the end pose lingers or the start pose flashes
+      for (const a of camAnims) a.cancel();
       if (entryCard) {
         entryCard.style.transform = "";
         entryCard.style.opacity = "";
@@ -1393,6 +1400,34 @@ function Calendar() {
       ? entryDiveCache.stage
       : stage.getBoundingClientRect();
     const moves: Promise<unknown>[] = [];
+
+    // COMPOSITOR driver — WAAPI round 4. Rounds 1-3 (see driveEase's header)
+    // lost on device because 400-600ms of setup sat between animation creation
+    // and first paint: a wall-clock animation either started mid-flight or
+    // started dirty. That setup is now ~65ms on device (dwell staging + the
+    // WebKit-harness rounds), so the trade flips — a main-thread rAF driver
+    // inherits every main-thread hiccup MID-move (the chop that survived every
+    // setup fix), while a compositor animation plays through them, exactly
+    // like the entry morph the moves are measured against. Created PAUSED
+    // (round 2's fix — the wall clock must not run before the play tick);
+    // the play tick below starts everything on the same frame; fill:forwards
+    // holds the end pose until finish() resets styles and cancels.
+    // measure-first-motion gates the historical failure modes (skipped-in
+    // start, mid-move lurch) on every run. (camAnims is declared with the
+    // teardown lists above — finish() can run before this line via the
+    // reduced-motion path.)
+    const compositorMove = (el: HTMLElement, keyframes: Keyframe[]) => {
+      const a = el.animate(keyframes, {
+        duration: 440, // driveEase's fixed duration
+        easing: "cubic-bezier(0.33, 1, 0.68, 1)", // easeOutCubic — the morph's curve
+        fill: "forwards",
+      });
+      a.pause();
+      camAnims.push(a);
+      // finished rejects on cancel — Promise.all(moves).then(finish, finish)
+      // treats both as completion
+      return a.finished;
+    };
 
     const textRect = textRectOf;
     const ensureFlyerBox = () => {
@@ -1699,13 +1734,16 @@ function Calendar() {
     // the arriving layer before the flight reads textRect(toEl) would measure
     // the date at its shrunk-in position and fly the number to the wrong spot.
     const startCameraScale = () =>
-      // the per-frame-CLAMPED rAF ease — a stall can only lengthen the glide,
-      // never skip it (see driveEase's header for why every compositor/WAAPI
-      // variant lost on device)
-      driveEase((t) => {
-        outgoing.style.transform = `scale(${outFrom + (outTo - outFrom) * t})`;
-        incoming.style.transform = `scale(${inFrom + (inTo - inFrom) * t})`;
-      });
+      Promise.all([
+        compositorMove(outgoing, [
+          { transform: `scale(${outFrom})` },
+          { transform: `scale(${outTo})` },
+        ]),
+        compositorMove(incoming, [
+          { transform: `scale(${inFrom})` },
+          { transform: `scale(${inTo})` },
+        ]),
+      ]);
     moves.push(
       // opacity keeps its own short crossfade — a fade fast-forwarding through
       // a stall is invisible (unlike a scale jump), so a plain tween is fine.
@@ -1891,27 +1929,32 @@ function Calendar() {
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
-        // clamped-dt ease (driveEase) — NOT motion's wall-clock
-        // `animate(0, 1, { spring })`, which fast-forwarded on the descent's
-        // setup stall and planted the number at its destination (bug: dates
-        // teleport instead of fly). The clamp guarantees every frame is read.
+        // Compositor flight (same paused-create driver as the camera): the
+        // point travels, the glyphs scale between the two type sizes, and the
+        // crossfade is centred on the flight's midpoint (offsets on the EASED
+        // progress, same as the old driver's t) — so the swap is never seen
+        // sitting at the origin or the destination.
+        const sFrom = fromFont.size / baseSize;
+        const sTo = toFont.size / baseSize;
+        const gtf = (s: number) => `translate(-50%,-50%) scale(${s})`;
         moves.push(
-          driveEase((t) => {
-            point.style.transform = `translate(${ax + (bx - ax) * t}px,${
-              ay + (by - ay) * t
-            }px)`;
-            const sc = (fromFont.size + (toFont.size - fromFont.size) * t) / baseSize;
-            const tf = `translate(-50%,-50%) scale(${sc})`;
-            gFrom.style.transform = tf;
-            gTo.style.transform = tf;
-            // crossover centred on t=0.5 — the flight's midpoint, so
-            // the swap is never seen sitting at the origin or the
-            // destination (no blur: the flight is too quick to read one)
-            const k = Math.min(1, Math.max(0, (t - 0.4) / 0.2));
-            gFrom.style.opacity = `${1 - k}`;
-            gTo.style.opacity = `${k}`;
-          }),
+          compositorMove(point, [
+            { transform: `translate(${ax}px,${ay}px)` },
+            { transform: `translate(${bx}px,${by}px)` },
+          ]),
         );
+        compositorMove(gFrom, [
+          { transform: gtf(sFrom), opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.4 },
+          { opacity: 0, offset: 0.6 },
+          { transform: gtf(sTo), opacity: 0, offset: 1 },
+        ]);
+        compositorMove(gTo, [
+          { transform: gtf(sFrom), opacity: 0, offset: 0 },
+          { opacity: 0, offset: 0.4 },
+          { opacity: 1, offset: 0.6 },
+          { transform: gtf(sTo), opacity: 1, offset: 1 },
+        ]);
       }
     }
 
@@ -1982,6 +2025,10 @@ function Calendar() {
     // so the fold never relayouts the layers at all. Until then it rides
     // the move, where the camera's motion masks it.)
     requestAnimationFrame(() => {
+      // one shared play tick: every paused compositor animation starts on
+      // this same frame — the setup/commit frame has painted, so the wall
+      // clock starts with the first visible frame, not before it
+      for (const a of camAnims) a.play();
       releaseRail();
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
