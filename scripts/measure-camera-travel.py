@@ -19,12 +19,13 @@ start scale to 1 — rather than snapping across in one frame.
 Runs on the dev seeder (?seed=1200); never touches real data.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 MIN_MIDFLIGHT = 3
 LO, HI = 0.10, 0.90
 

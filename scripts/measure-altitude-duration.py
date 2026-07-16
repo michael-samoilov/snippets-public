@@ -29,12 +29,13 @@ Exit 0 when the climb settles within budget AND never stalls a frame; non-zero
 if either regresses.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200  # deep enough that an O(book) render on the climb frame is obvious
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400  # deep enough that an O(book) render on the climb frame is obvious
 BUDGET_MS = 1000  # a healthy climb is ~600ms; the settle regression was ~2160ms
 # max rAF gap in the first frames after the click. A healthy climb's first frame
 # is the composite of the on-screen band (scaled) plus the month layer's reveal —

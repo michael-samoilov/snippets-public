@@ -20,11 +20,12 @@ script just reports the number.
       --server "node_modules/.bin/next start" --port 3000 \
       -- python3 scripts/measure-stall-immunity.py
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 # 360ms after motion begins, the eased 440ms move should be ≥90% travelled; a
 # main-thread camera frozen 220ms mid-flight (plus the clamp's one-frame
 # forgiveness) reaches only ~60%

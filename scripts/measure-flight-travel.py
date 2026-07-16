@@ -24,12 +24,13 @@ distance — rather than covering the whole distance in one jump.
 FAILS on the teleport regression (a flyer with < MIN_MIDFLIGHT in-flight frames).
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 MIN_MIDFLIGHT = 3  # frames a real flight spends strictly between source and dest
 LO, HI = 0.10, 0.90  # "mid-flight" = this fraction of the source→dest distance
 
@@ -44,10 +45,10 @@ TRACK = r"""(clickSel) => new Promise(res => {
     n++;
     const flys = document.querySelectorAll('[data-fly]');
     for (const p of flys) {
-      // COMPUTED transform, not inline: the flight rides a compositor (WAAPI)
-      // animation now, whose effect never touches el.style — inline holds the
-      // start pose for the whole move (reading it here reported "teleported"
-      // for a flyer that was visibly flying). matrix(a,b,c,d,tx,ty) → tx,ty.
+      // COMPUTED transform, not inline: correct for any driver (the rAF loop
+      // writes inline, a compositor animation never would — during the WAAPI
+      // experiments reading inline reported "teleported" for a flyer that was
+      // visibly flying). matrix(a,b,c,d,tx,ty) → tx,ty.
       const m = (getComputedStyle(p).transform || '').match(/matrix\(([^)]+)\)/);
       if (!m) continue;
       const parts = m[1].split(',').map(parseFloat);

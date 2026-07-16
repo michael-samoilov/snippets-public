@@ -32,12 +32,13 @@ itself becomes the stall it is hunting.
 Exit 0 when every assertion passes.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 TOL = 3  # px a flyer may miss its true slot by
 JITTER = 2  # px a settled date may move frame-to-frame after the finish
 

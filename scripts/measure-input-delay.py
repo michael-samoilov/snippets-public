@@ -23,12 +23,13 @@ Budget: NEAR descent (and ascent) ≤ NEAR_BUDGET; FAR is reported (it carries t
 irreducible destination-render cost) and held under FAR_BUDGET.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 NEAR_BUDGET = 150  # ms — the target for the common dive + the ascent
 FAR_BUDGET = 260   # ms — a far dive also pays the destination band's first render
 

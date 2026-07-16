@@ -23,12 +23,13 @@ its final height by more than TOL during the morph (the full-length flash).
 FAILS on the cold-open overshoot (open #1 peak ≫ settle; open #2 clean).
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 TOL = 24  # px the in-flight card may exceed its settled height by (sub-card slack)
 
 # Tap a SHORT visible entry (few lines) and trace [data-entry-card] height each

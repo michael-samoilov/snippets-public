@@ -848,6 +848,12 @@ function Calendar() {
   /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
     (key: string) => {
+      // a tap during a live move must do NOTHING — runZoom would bail on its
+      // latch anyway, but by then goTo had already scrolled the book and moved
+      // the probe: a half-applied tap (found at seed 2400, where a throttled
+      // move outlives a fast second tap; the dive then never happened but the
+      // book had jumped)
+      if (zooming.current) return;
       liveDayRef.current = key;
       navigator.vibrate?.(6);
       stageDescent(key); // no-op when the pointerdown hint already staged it
@@ -1721,6 +1727,8 @@ function Calendar() {
   }, [runZoom]);
 
   const openYear = () => {
+    if (zooming.current) return; // no half-applied taps (see pick): pushUrl
+    // without the climb left the URL claiming a view the app never entered
     const y = visibleMonth.getFullYear();
     pushUrl(`${pathname}?y=${y}`);
     climbToYear(y);

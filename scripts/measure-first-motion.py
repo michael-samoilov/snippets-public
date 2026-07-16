@@ -28,11 +28,14 @@ signal: the settle-wait build shows the flyer for ~20 frames vs ~7 before.)
       --server "node_modules/.bin/next start" --port 3000 \
       -- python3 scripts/measure-first-motion.py
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+# override with SNIPPETS_SEED=2400 etc — smoothness must hold at 2x the owner's
+# book, so CI habitually runs this at more than one size
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))
 START_TOL = 0.12   # first moving frame within 12% of the journey's start
 LURCH_GRACE = 1.5  # frames of progress a jump may exceed its wall-time by
 
@@ -126,20 +129,34 @@ def main() -> int:
         ctx = b.new_context(viewport={"width": 393, "height": 852}, device_scale_factor=2)
         pg = ctx.new_page()
         pg.goto(f"{BASE}?seed={SEED}", wait_until="load"); pg.wait_for_timeout(4500)
-        pg.goto(BASE, wait_until="load"); pg.wait_for_timeout(5000)
+        pg.goto(BASE, wait_until="load")
+        # wait for the app's own READY signal, not a fixed sleep: the full book
+        # has mounted + measured once [data-lazy] lands on the scroller (a big
+        # seed at a throttled CPU blows well past any fixed guess — the earlier
+        # fixed 5s read as a fake first-motion failure at seed 2400)
+        pg.wait_for_selector("[data-book-scroller][data-lazy]", timeout=60000)
         pg.wait_for_selector("[data-cal-title]", timeout=8000)
+        pg.wait_for_timeout(1200)  # let the post-mount settle (pins, heals) drain
         cdp = ctx.new_cdp_session(pg)
         cdp.send("Emulation.setCPUThrottlingRate", {"rate": 6})
         pg.wait_for_timeout(400)
 
-        # DIVE (month → schedule): incoming = schedule layer
+        # DIVE (month → schedule): incoming = schedule layer. The month-open
+        # click starts a move that a throttled big book stretches well past a
+        # fixed beat — wait for its climb latch to clear like every other leg
         pg.evaluate("() => document.querySelector('[data-cal-title]').click()")
-        pg.wait_for_timeout(1500)
+        pg.wait_for_selector("[data-book-scroller]:not([data-climbing])", state="attached", timeout=30000)
+        pg.wait_for_timeout(900)
         day = pg.evaluate(VIS)
         out = pg.evaluate(RUN, [f'[data-layer="month"] button[data-day-key="{day}"]', '[data-layer="schedule"]'])
         if "error" in out: errors.append(f"dive: {out['error']}")
         else: analyse("dive", out["trace"], errors)
-        pg.wait_for_timeout(1500)
+        # wait for the DIVE to actually finish, not a fixed beat: under throttle
+        # the clamped driver stretches (it never skips), and a rise clicked while
+        # zooming bounces off the latch — the harness then watched the dive's
+        # tail and read it as a rise that "skipped in" (seed-2400 false alarm)
+        pg.wait_for_selector("[data-book-scroller]:not([data-climbing])", state="attached", timeout=30000)
+        pg.wait_for_timeout(800)
 
         # RISE (schedule → month): incoming = month layer
         out = pg.evaluate(RUN, ['[data-cal-title]', '[data-layer="month"]'])

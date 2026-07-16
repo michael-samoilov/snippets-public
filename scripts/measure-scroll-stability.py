@@ -25,12 +25,13 @@ when the placeholder swings used to strike.
 Exit 0 when the scroll is stable.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 OPPOSITE_TOL = 4  # px of against-gesture movement that counts as a rubberband
 DRIFT_TOL = 12  # px the book's total height may drift over the whole run
 

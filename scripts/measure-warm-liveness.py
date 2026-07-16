@@ -17,11 +17,12 @@ settle → assert (a) day sections around the viewport are warm+rendered, and
       --server "node_modules/.bin/next start" --port 3000 \
       -- python3 scripts/measure-warm-liveness.py
 """
+import os
 import sys
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 
 
 def main() -> int:

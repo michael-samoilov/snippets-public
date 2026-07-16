@@ -27,12 +27,13 @@ Probe hygiene: only own-box reads (offsetTop/scrollTop) — never reaches into a
 content-visibility-skipped section.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 TOL = 2  # px the tapped row's top may miss the viewport top by, at any sample
 
 # make the metrics stale exactly as a late font swap does: every rendered card

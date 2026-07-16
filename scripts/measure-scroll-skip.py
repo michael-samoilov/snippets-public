@@ -30,12 +30,13 @@ above it.
 FAILS on the stale-placeholder skip; passes once placeholders track the swap.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 # a single frame's on-screen lurch (beyond the scroll itself) that reads as a
 # skip. Real momentum frames move smoothly; a section healing above the viewport
 # shoves content by a card's worth (tens of px) in one frame.

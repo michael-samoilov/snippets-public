@@ -22,12 +22,13 @@ frame must stay under MID_TOL. It prints the entry morph as the live reference.
 Runs on the dev seeder (?seed=1200); never touches real data.
 """
 
+import os
 import sys
 
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
-SEED = 1200
+SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 MID_TOL = 50  # ms — mid-flight frame budget (entry morph's own mid-frames ≈ 33)
 # a descent into a never-rendered region paints one frame of fresh content mid-
 # flight (~67ms) — that's the page appearing, not animation chop. Allow a SINGLE
