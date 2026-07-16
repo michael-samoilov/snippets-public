@@ -1152,6 +1152,18 @@ function Calendar() {
     const shield = document.createElement("div");
     shield.style.cssText = "position:absolute;inset:0;z-index:60;";
     stage.appendChild(shield);
+    // LATE-JOIN DIVES: the incoming BOOK layer stays inline-hidden through
+    // setup and the move's first frames — its reveal/promotion/raster is the
+    // device's ~270ms pt block, and paid up front it held the whole move's
+    // start hostage (tap->move went UP when the setup got cheaper, because
+    // the same work just moved into the frame the play tick waits for).
+    // Hidden (visibility: measured ~free, unlike opacity), the outgoing
+    // layer and the flyers start moving on a CHEAP first frame, and
+    // joinIncoming reveals + plays the book ~2 frames later: its raster
+    // happens behind visible motion, and its own 160ms opacity ramp makes
+    // the late entrance read as choreography, not a glitch.
+    const lateJoin = zoom.to === "schedule";
+    if (lateJoin) incoming.style.visibility = "hidden";
 
     // HOLD the weekday rail at its current fold through setup: the commit just
     // flipped `view`, and without the hold the rail's 260ms fold/unfold starts
@@ -1196,6 +1208,10 @@ function Calendar() {
     // every paused compositor animation of this move (camera, flyers) —
     // played together on the play tick, cancelled together in finish()
     const camAnims: Animation[] = [];
+    // the LATE-JOIN channel (dives): the incoming book layer's animations
+    // start ~2 frames after the rest, once its reveal/raster has happened
+    // BEHIND already-visible motion (see joinIncoming below)
+    const lateAnims: Animation[] = [];
     const willChanged: HTMLElement[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
@@ -1215,6 +1231,9 @@ function Calendar() {
 
     const finish = () => {
       releaseRail(); // safety — normally released when the move began
+      // the LANDED layer must never stay inline-hidden — a move canceled
+      // before joinIncoming ran would otherwise land on an invisible book
+      incoming.style.visibility = "";
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
@@ -1231,6 +1250,7 @@ function Calendar() {
       // style update as the resets above — underlying styles take over with
       // no frame where the end pose lingers or the start pose flashes
       for (const a of camAnims) a.cancel();
+      for (const a of lateAnims) a.cancel();
       if (entryCard) {
         entryCard.style.transform = "";
         entryCard.style.opacity = "";
@@ -1444,7 +1464,7 @@ function Calendar() {
     const compositorMove = (
       el: HTMLElement,
       keyframes: Keyframe[],
-      opts?: { duration?: number; easing?: string },
+      opts?: { duration?: number; easing?: string; late?: boolean },
     ) => {
       const a = el.animate(keyframes, {
         duration: opts?.duration ?? 440, // driveEase's fixed duration
@@ -1452,7 +1472,7 @@ function Calendar() {
         fill: "forwards",
       });
       a.pause();
-      camAnims.push(a);
+      (opts?.late ? lateAnims : camAnims).push(a);
       // finished rejects on cancel — Promise.all(moves).then(finish, finish)
       // treats both as completion
       return a.finished;
@@ -1770,10 +1790,14 @@ function Calendar() {
           { transform: `scale(${outFrom})` },
           { transform: `scale(${outTo})` },
         ]),
-        compositorMove(incoming, [
-          { transform: `scale(${inFrom})` },
-          { transform: `scale(${inTo})` },
-        ]),
+        compositorMove(
+          incoming,
+          [
+            { transform: `scale(${inFrom})` },
+            { transform: `scale(${inTo})` },
+          ],
+          { late: lateJoin },
+        ),
       ]);
 
     // shared-element flight: a date standing in both altitudes travels
@@ -2060,6 +2084,7 @@ function Calendar() {
       compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
         duration: 160,
         easing: "ease-out",
+        late: lateJoin,
       }),
     );
     moves.push(startCameraScale());
@@ -2091,6 +2116,16 @@ function Calendar() {
     // half-played moves ("replaying midway"). Any start correction must
     // happen BEFORE play(), never after.
     let played = false;
+    let joined = false;
+    const joinIncoming = () => {
+      if (joined) return;
+      joined = true;
+      // a canceled move's finish() has already run and canceled these —
+      // never restart them (zooming drops at finish)
+      if (!zooming.current) return;
+      incoming.style.visibility = "";
+      for (const a of lateAnims) a.play();
+    };
     const playAll = () => {
       if (played) return;
       played = true;
@@ -2099,6 +2134,14 @@ function Calendar() {
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
+      if (lateAnims.length) {
+        // the book joins two frames into the move — after its reveal frame
+        // has had a whole vsync of visible motion to hide behind
+        requestAnimationFrame(() => requestAnimationFrame(joinIncoming));
+        setTimeout(joinIncoming, 250); // backstop: the book must always join
+      } else {
+        joinIncoming();
+      }
     };
     requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
