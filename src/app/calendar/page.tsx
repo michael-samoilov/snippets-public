@@ -1974,14 +1974,15 @@ function Calendar() {
     moves.push(startCameraScale());
     performance.mark("zoom-fx1"); // setup JS done — what follows is the
     // browser's first styled/painted frame (style+layout+paint+raster commit)
-    // The rail STAYS HELD through the whole move now — finish() releases it,
-    // so the 260ms fold plays after landing. Folding WITH the camera animated
-    // grid-template-rows — a LAYOUT property — over the stage: every frame of
-    // the fold re-laid both full layers, and the WebKit frame trace showed
-    // exactly that as the rise's mid-move chop (160-230ms engine frames
-    // through the move's first half, zero JS). A post-landing fold costs one
-    // layout per frame too, but over a settled, unanimated stage.
+    // the weekday rail's fold joins driveEase's first moving frame. (A
+    // fold-after-landing was tried — 2026-07-16 device verdict: "very janky",
+    // the settled page visibly reflows. The fold's real cost is that it
+    // animates grid-template-rows, a LAYOUT property, over the stage — the
+    // durable fix is a rail that overlays the stage instead of sizing it,
+    // so the fold never relayouts the layers at all. Until then it rides
+    // the move, where the camera's motion masks it.)
     requestAnimationFrame(() => {
+      releaseRail();
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
