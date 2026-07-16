@@ -504,6 +504,62 @@ interface ScheduleFeedHandle {
   relandOnRow: (day: string) => void;
 }
 
+// Dev-only frame HUD (?perf=1): live worst-frame-gap + jank count so an
+// on-device report can carry NUMBERS instead of feel — the remaining dive/rise
+// costs are device-only (raster, re-raster-under-scale) and invisible headless.
+// Deliberately bare: a measuring tool, not UI.
+function PerfHud() {
+  const [on] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("perf"),
+  );
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    let raf = 0;
+    let last = performance.now();
+    let lastDraw = 0;
+    const gaps: { t: number; g: number }[] = [];
+    const loop = (now: number) => {
+      gaps.push({ t: now, g: now - last });
+      last = now;
+      while (gaps.length && gaps[0].t < now - 2000) gaps.shift();
+      if (now - lastDraw > 250 && boxRef.current) {
+        lastDraw = now;
+        let worst = 0;
+        let jank = 0;
+        for (const x of gaps) {
+          if (x.g > worst) worst = x.g;
+          if (x.g > 33) jank++;
+        }
+        boxRef.current.textContent = `worst ${Math.round(worst)}ms · >33ms ×${jank} (2s)`;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [on]);
+  if (!on) return null;
+  return (
+    <div
+      ref={boxRef}
+      style={{
+        position: "fixed",
+        top: 4,
+        left: 8,
+        zIndex: 9999,
+        font: "11px ui-monospace, monospace",
+        color: "#fff",
+        background: "rgba(0,0,0,.55)",
+        padding: "2px 6px",
+        borderRadius: 4,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 /**
  * The calendar is a camera over time. Month view and year view are two
  * altitudes of the same world: switching views zooms the whole field
@@ -824,6 +880,27 @@ function Calendar() {
       free time in which the browser lays out the destination band while the
       finger is still down) and again from pick() as the fallback for
       keyboard/programmatic picks, where it runs on the tap frame as before. */
+  // PRE-RASTER a hidden layer during the tap's dwell: the layers rest
+  // visibility:hidden, which skips painting entirely — so the incoming layer's
+  // first raster used to happen ON the move's first frames (device-only cost;
+  // headless never shows it). Inline visible+opacity:0 lets the compositor
+  // paint it under the finger; the zoom effect's start clears the inline
+  // visibility and owns opacity from there. A timeout restores rest state if
+  // the tap aborts.
+  const preRasterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const preRaster = useCallback((layer: HTMLDivElement | null) => {
+    if (!layer) return;
+    layer.style.visibility = "visible";
+    layer.style.opacity = "0";
+    if (preRasterTimerRef.current) clearTimeout(preRasterTimerRef.current);
+    preRasterTimerRef.current = setTimeout(() => {
+      if (!zooming.current) {
+        layer.style.visibility = "";
+        layer.style.opacity = "";
+      }
+    }, 2500);
+  }, []);
+
   const stageDescent = useCallback((key: string) => {
     if (stagedDescentRef.current === key) return;
     if (zooming.current) return; // never restage under a live move
@@ -843,7 +920,8 @@ function Calendar() {
       descentGeom.current = null;
     }
     scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
-  }, []);
+    preRaster(scheduleLayerRef.current); // textures ready before the move
+  }, [preRaster]);
 
   /** tapping a day dives the camera into it: the book opens there */
   const pick = useCallback(
@@ -2484,6 +2562,7 @@ function Calendar() {
     // beat after it first appeared. The swap is a seamless continuation instead:
     // the settled skeleton becomes the settled page with no second fade.
     <div className="flex h-full min-h-0 flex-col">
+      <PerfHud />
       {/* the current altitude, spoken to assistive tech after every zoom/jump.
           An h1 (not a p): the visible title is a click-to-climb BUTTON, not a
           heading, so without this the whole app had no h1 at all — nothing
@@ -2532,7 +2611,12 @@ function Calendar() {
             // the rise's stage-on-dwell hint (see riseStaged): the month feed
             // re-renders + lays out while the finger is still down
             onPointerDown={
-              view === "schedule" ? () => setRiseStaged(true) : undefined
+              view === "schedule"
+                ? () => {
+                    setRiseStaged(true); // unfreeze + mount the month feed
+                    preRaster(monthLayerRef.current); // textures under the finger
+                  }
+                : undefined
             }
             aria-label={
               view === "month"
