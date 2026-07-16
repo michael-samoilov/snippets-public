@@ -522,7 +522,13 @@ function PerfHud() {
     let lastDraw = 0;
     let touching = false; // no DOM writes while a finger is down — iOS watches
     // for content changing under a touch, and a poisoned tap loses its click
-    const down = () => (touching = true);
+    let lastDown = 0;
+    let seenMotion = 0;
+    let tapLine = "";
+    const down = () => {
+      touching = true;
+      lastDown = performance.now();
+    };
     const up = () => (touching = false);
     window.addEventListener("pointerdown", down, true);
     window.addEventListener("pointerup", up, true);
@@ -532,6 +538,14 @@ function PerfHud() {
       gaps.push({ t: now, g: now - last });
       last = now;
       while (gaps.length && gaps[0].t < now - 2000) gaps.shift();
+      // the zoom effect marks its first painting frame; paired with the last
+      // pointerdown that's the full input delay the finger felt
+      const marks = performance.getEntriesByName("zoom-motion");
+      const m = marks[marks.length - 1];
+      if (m && m.startTime > seenMotion && lastDown) {
+        seenMotion = m.startTime;
+        tapLine = ` · tap→move ${Math.round(m.startTime - lastDown)}ms`;
+      }
       if (!touching && now - lastDraw > 250 && boxRef.current) {
         lastDraw = now;
         let worst = 0;
@@ -540,7 +554,7 @@ function PerfHud() {
           if (x.g > worst) worst = x.g;
           if (x.g > 33) jank++;
         }
-        boxRef.current.textContent = `worst ${Math.round(worst)}ms · >33ms ×${jank} (2s)`;
+        boxRef.current.textContent = `worst ${Math.round(worst)}ms · >33ms ×${jank} (2s)${tapLine}`;
       }
       raf = requestAnimationFrame(loop);
     };
@@ -753,6 +767,19 @@ function Calendar() {
   // the day whose destination stageDescent() has already prepared (pointerdown
   // hint) — pick() then skips the duplicate work; cleared when consumed
   const stagedDescentRef = useRef<string | null>(null);
+  // staging's deferred half (goTo), scheduled one frame off the input event —
+  // flushStagedDescent() runs it synchronously if the click gets there first
+  const stagedRunRef = useRef<(() => void) | null>(null);
+  const stagedRafRef = useRef(0);
+  // ?flat=1 device A/B (see the camera-scale block): captured ONCE at first
+  // render — the deep-link effect rewrites the URL right after boot, so
+  // reading location.search at zoom time always missed the flag.
+  // Session-scoped like ?perf; reload without the flag to turn it off.
+  const [flatCamera] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("flat"),
+  );
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   // Each feed's interactivity gate as a REF, not a prop: `view/zoom` flip at the
   // start AND end of every altitude move, and as props they re-rendered all
@@ -909,6 +936,7 @@ function Calendar() {
     if (stagedDescentRef.current === key) return;
     if (zooming.current) return; // never restage under a live move
     stagedDescentRef.current = key;
+    performance.mark("stage:0");
     const stageEl = stageRef.current;
     const monthEl = monthLayerRef.current;
     if (stageEl && monthEl) {
@@ -923,7 +951,35 @@ function Calendar() {
     } else {
       descentGeom.current = null;
     }
-    scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
+    performance.mark("stage:rects");
+    performance.measure("stage:rects", "stage:0", "stage:rects");
+    // The heavy half — opening the page behind the zoom (goTo: probe commit +
+    // landing scroll + band flush) — runs ONE FRAME LATER, off the input
+    // event. The probe rides useSyncExternalStore, whose updates commit
+    // SYNCHRONOUSLY (React's tearing guard), so goTo inside the pointerdown
+    // handler blocked that frame ~140ms at 6x throttle — the device's 204ms
+    // tap stall (HUD round 2026-07-16); band width barely mattered (the cost
+    // is the probe/composer commit + flush, not the band's layout). A frame
+    // later is still early in the tap's ~100ms dwell, and pick() flushes
+    // pending staging synchronously, so the move NEVER runs unstaged.
+    stagedRunRef.current = () => {
+      stagedRunRef.current = null;
+      performance.mark("stage:1");
+      scheduleFeedRef.current?.goTo(key); // open the page behind the zoom
+      performance.mark("stage:goTo");
+      performance.measure("stage:goTo", "stage:1", "stage:goTo");
+    };
+    cancelAnimationFrame(stagedRafRef.current);
+    stagedRafRef.current = requestAnimationFrame(() => stagedRunRef.current?.());
+  }, []);
+
+  /** run a still-pending staged goTo NOW — pick() calls this before the zoom
+      so the landing is always in place when the effect measures, even if the
+      click somehow outruns the staging rAF */
+  const flushStagedDescent = useCallback(() => {
+    if (!stagedRunRef.current) return;
+    cancelAnimationFrame(stagedRafRef.current);
+    stagedRunRef.current();
   }, []);
 
   /** tapping a day dives the camera into it: the book opens there */
@@ -938,6 +994,7 @@ function Calendar() {
       liveDayRef.current = key;
       navigator.vibrate?.(6);
       stageDescent(key); // no-op when the pointerdown hint already staged it
+      flushStagedDescent(); // the landing must be real before the zoom measures
       stagedDescentRef.current = null; // consumed — the next tap restages
       if (urlTimer.current) clearTimeout(urlTimer.current);
       pushUrl(`${pathname}?d=${key}`);
@@ -949,7 +1006,7 @@ function Calendar() {
       // (with the teardown commit), where the month layer is hidden anyway.
       pendingSelectRef.current = key;
     },
-    [pathname, runZoom, stageDescent],
+    [pathname, runZoom, stageDescent, flushStagedDescent],
   );
 
   /** the reader's place in the book drives selection, title, and URL.
@@ -1503,9 +1560,21 @@ function Calendar() {
 
     // diving: the departing view blows up past its slot; pulling back: it
     // shrinks toward it — and the arriving view does the inverse.
+    // ?flat=1 (device A/B, 2026-07-16): no camera scale — crossfade + flyers
+    // only. The remaining dive/rise stalls are device-only raster-class costs,
+    // and the prime suspect is (re)rastering the full-screen layers UNDER A
+    // CHANGING SCALE — the rise's incoming month starts ENLARGED (its most
+    // expensive possible raster), the dive's incoming schedule starts small
+    // and grows, matching the observed asymmetry (dive smooth once moving,
+    // rise starved throughout). If flat kills the rise chop on device, that
+    // theory is confirmed and snapshot-based animation (View Transitions) is
+    // the structural fix; if the chop persists, the cost is elsewhere.
+    // (entry moves never reach this camera path — the morph, the A/B's
+    // reference, stays untouched by construction)
+    const flat = flatCamera;
     const outFrom = 1;
-    const outTo = deeper ? factor : 1 / factor;
-    const inFrom = deeper ? 1 / factor : factor;
+    const outTo = flat ? 1 : deeper ? factor : 1 / factor;
+    const inFrom = flat ? 1 : deeper ? 1 / factor : factor;
     const inTo = 1;
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
     // measured its rects — its start pose applies synchronously, and scaling
@@ -1784,10 +1853,15 @@ function Calendar() {
     // (see startCameraScale): its synchronous start frame may scale the layers.
     moves.push(startCameraScale());
     // the weekday rail's fold joins driveEase's first moving frame
-    requestAnimationFrame(releaseRail);
+    requestAnimationFrame(() => {
+      releaseRail();
+      // first frame that paints motion — PerfHud pairs it with the last
+      // pointerdown to show tap→motion on device (input-delay attribution)
+      performance.mark("zoom-motion");
+    });
     void Promise.all(moves).then(finish, finish);
-    // freezeEnabled is set once at mount, never changes in-session
-  }, [zoom, reduceMotion, freezeEnabled]);
+    // freezeEnabled/flatCamera are set once at mount, never change in-session
+  }, [zoom, reduceMotion, freezeEnabled, flatCamera]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
@@ -3481,11 +3555,11 @@ function ScheduleFeedBase({
   // against it, so marks never leak or fight.
   const warmSetRef = useRef<Set<HTMLElement>>(new Set());
   const warmObsRef = useRef<IntersectionObserver | null>(null);
-  const warmBand = useCallback((at?: number) => {
+  const warmBand = useCallback((at?: number, viewports = 1.5) => {
     const el = scrollerRef.current;
     if (!el) return;
     const top = at ?? el.scrollTop;
-    const band = el.clientHeight * 1.5;
+    const band = el.clientHeight * viewports;
     const lo = top - band;
     const hi = top + el.clientHeight + band;
     const next = new Set<HTMLElement>();
@@ -3950,11 +4024,21 @@ function ScheduleFeedBase({
     } else {
       progTargetRef.current = null;
     }
-    // destination band first (synchronous, from cached geometry): the section
+    // Destination band first (synchronous, from cached geometry): the section
     // being jumped to is hidden at rest — without this, a deep link / search
-    // jump / dive's goTo lands on bare paper until the observer's async catch-up
-    warmBand(row.offsetTop);
+    // jump / dive's goTo lands on bare paper until the observer's async catch-up.
+    // NARROW first, widen a frame later: the full ±1.5-viewport band's fresh
+    // layout is the bulk of the dive's pointerdown staging stall (143ms of the
+    // 189ms handler at 6x throttle ≈ the 204ms device stall, HUD round
+    // 2026-07-16) — the landing viewport alone is ~3x cheaper and is all the
+    // move can show. The rAF below completes the band off the input event,
+    // still inside the tap's dwell; a climb that starts first widens it
+    // itself (markOnStage), so the full band always stands by liftoff.
+    warmBand(row.offsetTop, 0.35);
     el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
+    requestAnimationFrame(() => {
+      if (!climbingRef.current) warmBand();
+    });
     if (!smooth) {
       // a dive lands here against a layout that's still settling — the opened
       // day's composer (probe) mounts a render later, and late rows/data shift the
