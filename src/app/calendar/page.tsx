@@ -2112,7 +2112,13 @@ function Calendar() {
       // moderate opacity — a materialization, not a flash — while the month
       // above it is still fading down. The fades deliberately overlap.
       compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
-        duration: 300,
+        // dives retire the calendar FASTER than the generic 300ms crossfade:
+        // owner note 2026-07-17, "the calendar should fully fade out a bit
+        // sooner" — 200ms commits the scene to the book earlier while still
+        // overlapping the book's late join (~2 frames in). The book's own
+        // 300ms materialization is untouched.
+        duration:
+          zoom.from === "month" && zoom.to === "schedule" ? 200 : 300,
         easing: "linear",
       }),
     );
@@ -3349,13 +3355,16 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, openYear)}
           onPointerCancel={() => (swipe.current = null)}
-          // (Dead end, device-measured 2026-07-17: resting
-          // will-change:transform promotion on both moving layers left the
-          // HUD's pt block unmoved — dive 139→140, rise 89→106. The move's
-          // first frame is NOT paying for compositor-layer creation/raster;
-          // don't re-add promotion chasing pt.)
+          // will-change: resting promotion, SECOND test. The first A/B
+          // (2026-07-17, pt 139→140) was CONFOUNDED: pt was then dominated
+          // by the book-fade create's ~140ms style recalc, which promotion
+          // cannot touch — a ~30-40ms promotion saving was invisible under
+          // it. With that recalc moved to the join frame (pt now 67, e≈9),
+          // the remaining pt is paint/commit — exactly what pre-promoted
+          // layers should shrink. If the device line shows pt unmoved AGAIN,
+          // remove this for good.
           className={cn(
-            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y]",
+            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y] [will-change:transform]",
             !showMonthLayer && "invisible",
           )}
         >
@@ -3443,8 +3452,9 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, closeSchedule)}
           onPointerCancel={() => (swipe.current = null)}
+          // will-change: resting promotion, second test — see the month layer
           className={cn(
-            "absolute inset-0 px-2 [touch-action:pan-y]",
+            "absolute inset-0 px-2 [touch-action:pan-y] [will-change:transform]",
             !showScheduleLayer && "invisible",
           )}
         >
