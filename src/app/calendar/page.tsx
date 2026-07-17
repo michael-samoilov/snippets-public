@@ -486,7 +486,7 @@ interface ScheduleFeedHandle {
   // touch, and with zero cv:auto elements a transformed ancestor re-evaluates
   // nothing. clearOnStage drops the latch and re-primes the observer.
   markOnStage: (narrow?: boolean) => void;
-  clearOnStage: () => void;
+  clearOnStage: (anchorDay?: string) => void;
   // how far a day's margin date sits BELOW its section top at rest — nonzero
   // only for the section straddling the scroll top, whose date pins to the
   // viewport (sticky). The month⇄schedule zooms measure flyer rects under
@@ -815,6 +815,7 @@ function Calendar() {
   // staging's deferred half (goTo), scheduled one frame off the input event —
   // flushStagedDescent() runs it synchronously if the click gets there first
   const stagedRunRef = useRef<(() => void) | null>(null);
+  const stagedFlushRef = useRef<(() => void) | null>(null);
   const stagedRafRef = useRef(0);
   // ?flat=1 device A/B (see the camera-scale block): captured ONCE at first
   // render — the deep-link effect rewrites the URL right after boot, so
@@ -1025,32 +1026,34 @@ function Calendar() {
     // is the probe/composer commit + flush, not the band's layout). A frame
     // later is still early in the tap's ~100ms dwell, and pick() flushes
     // pending staging synchronously, so the move NEVER runs unstaged.
+    // TWO dwell chunks, one frame each: the probe COMMIT (flushSync — from a
+    // rAF, uSES/setState updates otherwise batch into the CLICK's React
+    // flush, ~350ms on WebKitGTK) and then the band's LAYOUT flush (explicit
+    // — WebKit never flushes on its own; Blink did it inside scrollTo, which
+    // hid the difference). Split because as ONE block it ran ~130ms on
+    // device, and a quick finger lift queued the click dispatch behind it
+    // (the dwn->run spill): between two smaller frames the click can slot
+    // in, and pick() flushes whichever chunk hasn't run yet.
     stagedRunRef.current = () => {
       stagedRunRef.current = null;
       performance.mark("stage:1");
-      // flushSync: goTo's probe move rides useSyncExternalStore + setState,
-      // and from a rAF those updates are SCHEDULED, not committed — they were
-      // batching into the CLICK's React flush, so the click frame paid the
-      // composer's mount + its section's layout (~350ms at 1200 entries on
-      // WebKitGTK, the dive's `s` block). Committed here instead, the whole
-      // probe lands under the finger.
       flushSync(() => {
         // narrow: the staged 0.35-viewport band IS the dive's climb band —
         // no widen before liftoff (see markOnStage) — so the reveal's style
         // pass covers a third of the content
         scheduleFeedRef.current?.goTo(key, false, true);
       });
-      // FLUSH the staged layout NOW, under the finger. Blink flushes layout
-      // inside scrollTo so this was implicit there — WebKit does NOT: the
-      // band's fresh layout stayed dirty through the dwell and the CLICK
-      // frame paid it (the dive's whole point of staging, silently defeated
-      // on the only engine that matters). One forced read makes it
-      // engine-agnostic; the click then finds the destination laid out.
-      void scheduleLayerRef.current?.querySelector<HTMLElement>(
-        "[data-book-scroller]",
-      )?.offsetHeight;
       performance.mark("stage:goTo");
       performance.measure("stage:goTo", "stage:1", "stage:goTo");
+      stagedFlushRef.current = () => {
+        stagedFlushRef.current = null;
+        void scheduleLayerRef.current?.querySelector<HTMLElement>(
+          "[data-book-scroller]",
+        )?.offsetHeight;
+      };
+      stagedRafRef.current = requestAnimationFrame(
+        () => stagedFlushRef.current?.(),
+      );
     };
     cancelAnimationFrame(stagedRafRef.current);
     stagedRafRef.current = requestAnimationFrame(() => stagedRunRef.current?.());
@@ -1060,9 +1063,10 @@ function Calendar() {
       so the landing is always in place when the effect measures, even if the
       click somehow outruns the staging rAF */
   const flushStagedDescent = useCallback(() => {
-    if (!stagedRunRef.current) return;
     cancelAnimationFrame(stagedRafRef.current);
-    stagedRunRef.current();
+    stagedRunRef.current?.(); // commit chunk (schedules the flush chunk)...
+    cancelAnimationFrame(stagedRafRef.current);
+    stagedFlushRef.current?.(); // ...which runs NOW if still pending
   }, []);
 
   /** tapping a day dives the camera into it: the book opens there */
@@ -1341,7 +1345,7 @@ function Calendar() {
             scheduleLayerRef.current
               ?.querySelector("[data-book-scroller]")
               ?.removeAttribute("data-climbing");
-            scheduleFeedRef.current?.clearOnStage();
+            scheduleFeedRef.current?.clearOnStage(zoom.anchor);
           }
           for (const el of reals) el.style.visibility = "";
           // data-dive-freeze is gone (finish removed it), so dropping the inline
@@ -2169,7 +2173,14 @@ function Calendar() {
         joinIncoming();
       }
     };
-    requestAnimationFrame(() => requestAnimationFrame(playAll));
+    // Dives play on the FIRST rAF: the expensive frame the double-rAF
+    // dodged was the incoming layer's reveal paint, and dives defer that to
+    // joinIncoming now — their setup frame is cheap, and the extra vsync was
+    // pure input delay (pt ~150ms on device). Other moves keep the second
+    // rAF: their incoming layer reveals at commit, so frame one still
+    // carries its paint.
+    if (lateJoin) requestAnimationFrame(playAll);
+    else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled/flatCamera are set once at mount, never change in-session
@@ -3945,7 +3956,7 @@ function ScheduleFeedBase({
     performance.measure("mos:warm", "mos:0", "mos:warm");
     performance.measure("mos:flush", "mos:warm", "mos:flush");
   }, [warmBand]);
-  const clearOnStage = useCallback(() => {
+  const clearOnStage = useCallback((anchorDay?: string) => {
     climbingRef.current = false;
     // Restore the FULL resting band ONE FRAME after the reveal swap — a dive
     // climbed on the narrow staged band (see markOnStage). Widening in the
@@ -3962,14 +3973,26 @@ function ScheduleFeedBase({
     requestAnimationFrame(() => {
       if (climbingRef.current) return; // a new climb started — it owns the band
       const el = scrollerRef.current;
-      let anchor: HTMLElement | null = null;
-      if (el) {
+      // Anchor on the LANDED day itself when the climb names it — pinning
+      // the exact row the reader is looking at is deterministic, where every
+      // nearest-row heuristic raced the teardown's own commits (flaky
+      // +39-55px at finish in measure-dive-exactness). Fall back to the
+      // nearest live warm section (rowGeomRef is PRE-dive stale here —
+      // measureRows stands down through climbs).
+      let anchor: HTMLElement | null =
+        (anchorDay && rowRefs.current.get(anchorDay)) || null;
+      if (el && !anchor) {
         const st = el.scrollTop;
-        for (const g of rowGeomRef.current)
-          if (g.bottom > st) {
-            anchor = rowRefs.current.get(g.day) ?? null;
-            break;
+        let best = Infinity;
+        for (const sec of el.querySelectorAll<HTMLElement>(
+          "[data-day][data-warm]",
+        )) {
+          const d = Math.abs(sec.offsetTop - st);
+          if (d < best) {
+            best = d;
+            anchor = sec;
           }
+        }
       }
       const before = anchor ? anchor.offsetTop : 0;
       warmBand();
@@ -3977,17 +4000,21 @@ function ScheduleFeedBase({
         const d = anchor.offsetTop - before;
         if (d) el.scrollTop += d;
       }
+      // Re-prime the observer ONLY NOW, after the anchored widen: it missed
+      // every crossing during the climb (its callback stands down mid-move,
+      // and misses are never re-delivered — IO only reports CHANGES), but
+      // re-primed BEFORE the widen its async batch warmed the band's fresh
+      // sections UNANCHORED — the +39-55px landing shift at finish that no
+      // anchor heuristic could beat, because it happened in the observer's
+      // task, not ours. After the widen the band already covers everything
+      // the observer would mark (±1.5 vs its ±1.2 viewports), so its batch
+      // reconciles to a no-op.
+      const io = warmObsRef.current;
+      if (io) {
+        io.disconnect();
+        for (const row of rowRefs.current.values()) io.observe(row);
+      }
     });
-    // the landing band must STAY warm — the reader is looking at it. But the
-    // observer missed every crossing during the climb (its callback stands down
-    // mid-move, and misses are never re-delivered: IO only reports CHANGES) — so
-    // re-prime it: after disconnect+observe it reports current intersection for
-    // every row in one async batch, reconciling any mark the climb left stale.
-    const io = warmObsRef.current;
-    if (io) {
-      io.disconnect();
-      for (const row of rowRefs.current.values()) io.observe(row);
-    }
   }, [warmBand]);
   // See ScheduleFeedHandle: how far below its section top a day's margin date
   // RESTS. Sticky top-0 pins the cell at max(section top, min(scroll top,
