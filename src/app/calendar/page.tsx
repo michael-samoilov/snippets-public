@@ -664,19 +664,20 @@ function PerfHud() {
 // bottom, clear of the HUD. A measuring tool, not UI.
 // Diagnostic A/B for the dive's first-frame (pt) cost — device HUD only (it is
 // a WebKit compositing cost neither Chromium nor the Xvfb harness can price).
-// Flyers were RULED OUT (pt held ~108 with no-fly/1-fly). Next suspect: the
-// dive zooms IN, scaling the VISIBLE calendar layer UP, and WebKit re-rasters a
-// layer at higher resolution on an upscale — while the rise zooms OUT (scale
-// down = free) and its growing layer is hidden that frame.
-//   flat-out — the outgoing calendar does NOT scale (fade only). If pt drops,
-//              the upscale re-raster IS the cost.
-//   wc-out   — the outgoing calendar gets will-change:transform so the
-//              compositor scales its existing texture instead of re-rastering
-//              (the candidate FIX; blur on the fading-away layer is acceptable).
+// RULED OUT on device: the flying numbers (no-fly/1-fly held ~90) and the
+// outgoing calendar's upscale raster (flat-out/wc-out held ~90). That leaves
+// the INCOMING book layer: creating its camera-scale animation at setup
+// promotes it and makes WebKit raster its freshly-rendered destination page
+// into a texture, even though it is visibility:hidden — the rise's incoming is
+// the tiny month, so it is cheap.
+//   no-inc   — the incoming book does NOT get a camera scale (fades in at full
+//              size). If pt drops toward ~14, the incoming layer IS the cost.
+//   late-inc — the incoming book's camera scale is created at the JOIN frame
+//              (behind motion), not at setup. The candidate FIX.
 const OPEN_VARIANTS: { id: string | null; label: string }[] = [
   { id: null, label: "base" },
-  { id: "flatout", label: "flat-out" },
-  { id: "wcout", label: "wc-out" },
+  { id: "noinc", label: "no-inc" },
+  { id: "latinc", label: "late-inc" },
 ];
 function DiveOpenToggle({
   value,
@@ -2066,29 +2067,24 @@ function Calendar() {
     // measured its rects — its start pose applies synchronously, and scaling
     // the arriving layer before the flight reads textRect(toEl) would measure
     // the date at its shrunk-in position and fly the number to the wrong spot.
-    // pt A/B (dive only): flat-out freezes the outgoing calendar's scale (fade
-    // only) to test whether scaling it UP is the first-frame cost; wc-out
-    // promotes it so the compositor scales its texture instead of re-rastering.
-    const diveOut =
+    // pt A/B (dive only): defer or drop the INCOMING book's camera scale.
+    const diveInc =
       zoom.from === "month" && zoom.to === "schedule" ? openStyleRef.current : null;
-    if (diveOut === "wcout") {
-      outgoing.style.willChange = "transform, opacity";
-      willChanged.push(outgoing);
-    }
+    const skipIncCamAtSetup = diveInc === "noinc" || diveInc === "latinc";
     const startCameraScale = () =>
       Promise.all([
         compositorMove(outgoing, [
-          {
-            transform: `translateY(${railDelta}px) scale(${outFrom})`,
-          },
-          {
-            transform: `translateY(0px) scale(${diveOut === "flatout" ? outFrom : outTo})`,
-          },
+          { transform: `translateY(${railDelta}px) scale(${outFrom})` },
+          { transform: `translateY(0px) scale(${outTo})` },
         ]),
-        compositorMove(incoming, [
-          { transform: `scale(${inFrom})` },
-          { transform: `scale(${inTo})` },
-        ]),
+        ...(skipIncCamAtSetup
+          ? []
+          : [
+              compositorMove(incoming, [
+                { transform: `scale(${inFrom})` },
+                { transform: `scale(${inTo})` },
+              ]),
+            ]),
       ]);
 
     // shared-element flight: a date standing in both altitudes travels
@@ -2550,6 +2546,22 @@ function Calendar() {
         const clock = camAnims[0]?.currentTime;
         if (typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
+      }
+      // late-inc A/B: the incoming book's camera scale, deferred from setup to
+      // HERE (clock-synced, behind motion) so its promotion/raster never lands
+      // on the input frame. Same protocol as the fade above.
+      if (diveInc === "latinc") {
+        const inCam = incoming.animate(
+          [{ transform: `scale(${inFrom})` }, { transform: `scale(${inTo})` }],
+          {
+            duration: 440,
+            easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+            fill: "forwards",
+          },
+        );
+        const clock = camAnims[0]?.currentTime;
+        if (typeof clock === "number") inCam.currentTime = clock;
+        camAnims.push(inCam);
       }
       // REVEAL only — every animation (both scales, both fades) is already
       // playing on the shared camera clock. The book's raster happens here,
