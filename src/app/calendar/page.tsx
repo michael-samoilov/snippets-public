@@ -604,9 +604,21 @@ function PerfHud() {
             lastUp >= lastDown && lastUp <= run.startTime
               ? ` · dwn→up ${r(lastDown, lastUp)} · up→run ${r(lastUp, run.startTime)}`
               : ` · dwn→run ${r(lastDown, run.startTime)}`;
+          // rf a/b: a = the setup frame's engine production (fx1→raf1 — with
+          // `e` small this is pure paint/commit), b = the first motion
+          // frame's production (motion→raf2). The two engine halves of the
+          // input delay no harness can see.
+          const raf1 = lastMark("zoom-raf1");
+          const raf2 = lastMark("zoom-raf2");
+          const rfLine =
+            raf1 && raf2 &&
+            raf1.startTime >= fx1.startTime &&
+            raf2.startTime >= m.startTime
+              ? ` · rf ${r(fx1.startTime, raf1.startTime)}/${r(m.startTime, raf2.startTime)}`
+              : "";
           spans =
             `${contact} · cm ${r(run.startTime, fx0.startTime)}` +
-            ` · fx ${r(fx0.startTime, fx1.startTime)}${sub} · pt ${r(fx1.startTime, m.startTime)}${stLine}`;
+            ` · fx ${r(fx0.startTime, fx1.startTime)}${sub} · pt ${r(fx1.startTime, m.startTime)}${rfLine}${stLine}`;
         }
         tapLine = ` · tap→move ${Math.round(m.startTime - lastDown)}ms${spans}`;
       }
@@ -2003,10 +2015,13 @@ function Calendar() {
         const gTo = flyGlyph(num, toFont, color);
         gFrom.style.fontSize = `${baseSize}px`;
         gTo.style.fontSize = `${baseSize}px`;
-        gFrom.style.willChange = "transform, opacity";
-        gTo.style.willChange = "transform, opacity";
+        // NO will-change on flyers: their WAAPI animations promote them at
+        // PLAY, and a compositor animation's clock starts when its first
+        // frame commits — nothing is eaten. will-change instead forced all
+        // ~3 layers × pairs to allocate + raster inside the SETUP frame,
+        // i.e. inside pt, ahead of the play tick (device 2026-07-17: dive
+        // pt ~152 with layout measured clean — paint-bound).
         gTo.style.opacity = "0";
-        point.style.willChange = "transform";
         point.append(gFrom, gTo);
         box!.appendChild(point);
         fromEl.style.visibility = "hidden";
@@ -2076,8 +2091,7 @@ function Calendar() {
         const baseSize = Math.max(fromFont.size, toFont.size);
         const glyph = flyGlyph(fromEl.textContent ?? "", fromFont, readColor(fromEl));
         glyph.style.fontSize = `${baseSize}px`;
-        glyph.style.willChange = "transform";
-        point.style.willChange = "transform";
+        // no will-change — see the date flyers: promotion happens at play
         point.appendChild(glyph);
         box.appendChild(point);
         fromEl.style.visibility = "hidden";
@@ -2155,6 +2169,12 @@ function Calendar() {
     performance.measure("fx:endflush", "fx:ef0");
     performance.mark("zoom-fx1"); // setup JS done — what follows is the
     // browser's first styled/painted frame (style+layout+paint+raster commit)
+    // rf instrument: raf1 fires when the SETUP frame has been produced
+    // (fx1→raf1 = its real engine cost — with e≈10 proving layout clean,
+    // this is paint/commit); raf2 (in playAll) prices the first MOTION
+    // frame the same way. Together they split pt into its engine halves
+    // on device, where no harness can see frames.
+    requestAnimationFrame(() => performance.mark("zoom-raf1"));
     // the weekday rail's fold joins driveEase's first moving frame. (A
     // fold-after-landing was tried — 2026-07-16 device verdict: "very janky",
     // the settled page visibly reflows. The fold's real cost is that it
@@ -2216,6 +2236,9 @@ function Calendar() {
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
+      // rf instrument's second half: prices the first MOTION frame (flyer
+      // layerization + anim commit land here now that will-change is gone)
+      requestAnimationFrame(() => performance.mark("zoom-raf2"));
       if (lateJoin) {
         // the book reveals ON THE NEXT FRAME — motion is already on screen
         // from this one, and one vsync is all the head start the outgoing
@@ -3357,12 +3380,13 @@ function Calendar() {
           onPointerCancel={() => (swipe.current = null)}
           // (DEAD END, twice device-measured — do not re-add resting
           // will-change promotion on the layers. A/B 1, 2026-07-17: pt
-          // 139→140, neutral, but confounded by the fade-create recalc that
-          // then dominated pt. A/B 2, same day, confounder removed: dive pt
-          // 67→151 — promotion actively REGRESSED the dive's first frame
-          // ~84ms on device, while headless WebKit saw only its benefits
-          // (fade-create 46→3ms). iOS pays more to keep these layers
-          // composited at rest than their at-play promotion ever cost.)
+          // 139→140. A/B 2, same day: dive pt 151 with promotion, 152
+          // without — NULL both times; promotion buys nothing on device.
+          // The corrected ledger: the dive-pt jump 98→151 first blamed on
+          // promotion arrived with the RISE-LATE-JOIN build between the two
+          // recordings and persisted after promotion's removal — the
+          // post-rise state, not promotion, carries that cost; see the rf
+          // instrument in PerfHud.)
           className={cn(
             "absolute inset-0 flex flex-col px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
