@@ -578,16 +578,24 @@ function PerfHud() {
               ? ` · st ${Math.round(st.duration)}ms@${st.startTime < run.startTime ? "dwell" : "click"}`
               : "";
           // fx sub-spans (only present on climb moves): w=wake+rail,
-          // s=freeze+band flush, f=flyer collect+build
+          // s=freeze+band flush, f=flyer collect+build, e=the forced
+          // end-of-setup style+layout flush (pt's measurable half — what
+          // remains in pt after `e` is paint/raster/commit + vsync)
           const wake = lastMark("zoom-fx-wake");
           const stg = lastMark("zoom-fx-stage");
           const band = lastMark("zoom-fx-band");
           const pair = lastMark("zoom-fx-pair");
+          const efs = performance.getEntriesByName("fx:endflush", "measure");
+          const ef = efs[efs.length - 1];
+          const efPart =
+            ef && ef.startTime >= fx0.startTime
+              ? `·e${Math.round(ef.duration)}`
+              : "";
           const sub =
             wake && stg && band && pair &&
             wake.startTime >= fx0.startTime &&
             pair.startTime <= fx1.startTime
-              ? `[w${r(fx0.startTime, wake.startTime)}·s${r(wake.startTime, stg.startTime)}·f${r(band.startTime, pair.startTime)}]`
+              ? `[w${r(fx0.startTime, wake.startTime)}·s${r(wake.startTime, stg.startTime)}·f${r(band.startTime, pair.startTime)}${efPart}]`
               : "";
           // split finger-contact time (dwn→up, human) from dispatch delay
           // (up→run, the browser's lift→click→handler latency — the part a
@@ -1139,6 +1147,21 @@ function Calendar() {
     }
 
     performance.mark("zoom-fx0"); // commit done, setup begins (PerfHud spans)
+    // ?diag=1 — per-block forced flushes so the harness can attribute the
+    // end-of-setup flush (fx:endflush) to the block that dirtied it. NEVER on
+    // by default: extra sync flushes change the batching the normal path
+    // relies on (one flush at the end).
+    // window flag, not just the URL: pick() rewrites the search to ?d=<day>
+    // before this effect runs, so a URL-only check misses every dive
+    const diag =
+      window.location.search.includes("diag") ||
+      (window as unknown as { __diag?: boolean }).__diag === true;
+    const dgFlush = (n: string) => {
+      if (!diag) return;
+      performance.mark(`dg:${n}0`);
+      void stage.offsetHeight;
+      performance.measure(`dg:${n}`, `dg:${n}0`);
+    };
     // Wake the layers — the previous finish left the departed one
     // inline-hidden. NEVER write pointer-events on a layer here (inline OR
     // class): it's an INHERITED property, and WebKit propagates the change
@@ -1360,6 +1383,7 @@ function Calendar() {
       // finish() removes it. As a prop this rode the zoom commit and
       // re-rendered the whole feed at both ends of every move.
       performance.mark("zoom-fx-wake"); // wake + rail hold done
+      dgFlush("wake");
       if (freezeEnabled) {
         // A probe latch only — no CSS is keyed on it anymore (the old
         // [data-dive-freeze] rule's attribute toggle invalidated
@@ -1419,6 +1443,7 @@ function Calendar() {
         scheduleFeedRef.current?.relandOnRow(zoom.anchor);
     }
     performance.mark("zoom-fx-band"); // climb-band warm/flush + re-land done
+    dgFlush("band");
 
     // on an entry dive (open OR close), use the boxes measured on clean layout
     // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
@@ -2007,6 +2032,7 @@ function Calendar() {
     }
 
     performance.mark("zoom-fx-pair"); // date-flight collect + build done
+    dgFlush("pair");
     // the month's abbreviation morphs between its year-view mini label
     // and its hand-over label over the first of the month — one small
     // caps tag flying and resizing across the camera move
@@ -2079,12 +2105,38 @@ function Calendar() {
         duration: 300,
         easing: "linear",
       }),
-      compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
-        duration: 300,
-        easing: "linear",
-      }),
     );
+    dgFlush("crossA");
+    // The INCOMING fade: on a late-join dive it is NOT created here. Creating
+    // an opacity animation on the hidden book at setup was the device's
+    // entire pt block (~140ms; 520-570ms on the WebKit harness, landing
+    // reliably at the flush after this exact create — dg:cross bisection
+    // 2026-07-17; the promotion and rail-snap theories both failed device
+    // A/Bs first). joinIncoming creates it instead: one frame AFTER motion
+    // started, clock-synced, while the book is still hidden — the same
+    // O(book) recalc then lands behind compositor-driven motion instead of
+    // ahead of the play tick. Non-late-join moves (rises, month⇄year) keep
+    // the setup-time create: their incoming layer is small/visible and the
+    // create measured cheap (≤7ms harness).
+    if (!lateJoin)
+      moves.push(
+        compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
+          duration: 300,
+          easing: "linear",
+        }),
+      );
+    dgFlush("cross");
     moves.push(startCameraScale());
+    // Force the setup's style recalc + layout NOW, behind a measure — this
+    // splits the device HUD's opaque pt block into a measurable layout part
+    // (`e` in the fx sub-spans; also readable on the WebKit harness) and an
+    // unmeasurable paint/commit remainder. The work is the same either way:
+    // the browser's rendering step was about to do exactly this flush; only
+    // the attribution moves. (Promotion was the wrong guess for pt — see the
+    // dead end on the month layer — so pt needed real bisection.)
+    performance.mark("fx:ef0");
+    void stage.offsetHeight;
+    performance.measure("fx:endflush", "fx:ef0");
     performance.mark("zoom-fx1"); // setup JS done — what follows is the
     // browser's first styled/painted frame (style+layout+paint+raster commit)
     // the weekday rail's fold joins driveEase's first moving frame. (A
@@ -2118,6 +2170,23 @@ function Calendar() {
       if (joined) return;
       joined = true;
       if (!zooming.current) return; // a canceled move's finish already ran
+      // Late-join dives create the book's fade-in HERE, not at setup (see
+      // the crossfade block): the create's O(book) style recalc rides this
+      // frame, behind motion already on screen. The clock is synced from a
+      // playing camera animation BEFORE this one ever plays — the post-play
+      // rebase dead end applies to animations that have already painted,
+      // and this one starts life at the shared clock's current position, so
+      // the reveal lands at exactly the mid-ramp opacity a setup-created
+      // fade would have shown.
+      if (lateJoin) {
+        const fade = incoming.animate(
+          [{ opacity: 0 }, { opacity: 1 }],
+          { duration: 300, easing: "linear", fill: "forwards" },
+        );
+        const clock = camAnims[0]?.currentTime;
+        if (typeof clock === "number") fade.currentTime = clock;
+        camAnims.push(fade); // finish() cancels it with the rest
+      }
       // REVEAL only — every animation (both scales, both fades) is already
       // playing on the shared camera clock. The book's raster happens here,
       // behind motion that is already on screen, and its first paint lands
@@ -3269,14 +3338,13 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, openYear)}
           onPointerCancel={() => (swipe.current = null)}
-          // will-change: RESTING promotion. The camera animates this layer on
-          // every month⇄elsewhere move; without it the compositor layer is
-          // built + rastered inside the move's first frame (the device HUD's
-          // `pt` block — writing will-change AT move time measured ~300ms on
-          // WebKit, so the promotion must already exist when the tap lands).
-          // One viewport-sized layer, O(1) — not a FLAT-BOOK-LAW concern.
+          // (Dead end, device-measured 2026-07-17: resting
+          // will-change:transform promotion on both moving layers left the
+          // HUD's pt block unmoved — dive 139→140, rise 89→106. The move's
+          // first frame is NOT paying for compositor-layer creation/raster;
+          // don't re-add promotion chasing pt.)
           className={cn(
-            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y] [will-change:transform]",
+            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
           )}
         >
@@ -3364,9 +3432,8 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, closeSchedule)}
           onPointerCancel={() => (swipe.current = null)}
-          // will-change: resting promotion, same rationale as the month layer
           className={cn(
-            "absolute inset-0 px-2 [touch-action:pan-y] [will-change:transform]",
+            "absolute inset-0 px-2 [touch-action:pan-y]",
             !showScheduleLayer && "invisible",
           )}
         >
