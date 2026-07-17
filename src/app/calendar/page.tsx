@@ -524,13 +524,17 @@ function PerfHud() {
     let touching = false; // no DOM writes while a finger is down — iOS watches
     // for content changing under a touch, and a poisoned tap loses its click
     let lastDown = 0;
+    let lastUp = 0;
     let seenMotion = 0;
     let tapLine = "";
     const down = () => {
       touching = true;
       lastDown = performance.now();
     };
-    const up = () => (touching = false);
+    const up = () => {
+      touching = false;
+      lastUp = performance.now();
+    };
     window.addEventListener("pointerdown", down, true);
     window.addEventListener("pointerup", up, true);
     window.addEventListener("pointercancel", up, true);
@@ -585,8 +589,15 @@ function PerfHud() {
             pair.startTime <= fx1.startTime
               ? `[w${r(fx0.startTime, wake.startTime)}·s${r(wake.startTime, stg.startTime)}·f${r(band.startTime, pair.startTime)}]`
               : "";
+          // split finger-contact time (dwn→up, human) from dispatch delay
+          // (up→run, the browser's lift→click→handler latency — the part a
+          // pointerup-fired zoom could reclaim)
+          const contact =
+            lastUp >= lastDown && lastUp <= run.startTime
+              ? ` · dwn→up ${r(lastDown, lastUp)} · up→run ${r(lastUp, run.startTime)}`
+              : ` · dwn→run ${r(lastDown, run.startTime)}`;
           spans =
-            ` · dwn→run ${r(lastDown, run.startTime)} · cm ${r(run.startTime, fx0.startTime)}` +
+            `${contact} · cm ${r(run.startTime, fx0.startTime)}` +
             ` · fx ${r(fx0.startTime, fx1.startTime)}${sub} · pt ${r(fx1.startTime, m.startTime)}${stLine}`;
         }
         tapLine = ` · tap→move ${Math.round(m.startTime - lastDown)}ms${spans}`;
@@ -775,6 +786,8 @@ function Calendar() {
     (view === "schedule" && selected === dayKey());
 
   const stageRef = useRef<HTMLDivElement>(null);
+  // the title's lift-fire bookkeeping (see the title button's onPointerUp)
+  const titleTapRef = useRef({ x: 0, y: 0, id: -1, firedAt: 0 });
   const monthLayerRef = useRef<HTMLDivElement>(null);
   const yearLayerRef = useRef<HTMLDivElement>(null);
   const scheduleLayerRef = useRef<HTMLDivElement>(null);
@@ -2956,29 +2969,53 @@ function Calendar() {
           <button
             type="button"
             data-cal-title
-            onClick={
-              view === "month"
+            // The climb fires at POINTERUP (see the day cells in MonthFeed for
+            // the full rationale — iOS delivers the synthesized click 80–300ms
+            // after the lift). Here the dedupe window is LOAD-BEARING, not
+            // belt-and-braces: closeSchedule/closeEntry are history.back(),
+            // which the zooming latch does NOT guard — a trailing click
+            // slipping through would pop TWO altitudes.
+            onClick={() => {
+              if (performance.now() - titleTapRef.current.firedAt < 700) return;
+              (view === "month"
                 ? openYear
                 : view === "schedule"
                   ? closeSchedule
-                  : closeEntry
-            }
+                  : closeEntry)();
+            }}
             // the rise's stage-on-dwell hint (see riseStaged): the month feed
             // re-renders + lays out while the finger is still down — into a
             // layer that STAYS hidden (revealing it here killed the tap; see
             // the pre-raster dead end above stageDescent). The rAF flush makes
             // the layout actually HAPPEN in the dwell on WebKit, which never
             // flushes it on its own (reads only — nothing is revealed).
-            onPointerDown={
-              view === "schedule"
-                ? () => {
-                    setRiseStaged(true);
-                    requestAnimationFrame(() => {
-                      void monthLayerRef.current?.offsetHeight;
-                    });
-                  }
-                : undefined
-            }
+            onPointerDown={(e) => {
+              titleTapRef.current.x = e.clientX;
+              titleTapRef.current.y = e.clientY;
+              titleTapRef.current.id = e.pointerId;
+              if (view === "schedule") {
+                setRiseStaged(true);
+                requestAnimationFrame(() => {
+                  void monthLayerRef.current?.offsetHeight;
+                });
+              }
+            }}
+            onPointerUp={(e) => {
+              const t = titleTapRef.current;
+              if (
+                t.id !== e.pointerId ||
+                !e.isPrimary ||
+                e.button > 0 ||
+                Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12
+              )
+                return;
+              t.firedAt = performance.now();
+              (view === "month"
+                ? openYear
+                : view === "schedule"
+                  ? closeSchedule
+                  : closeEntry)();
+            }}
             aria-label={
               view === "month"
                 ? copy.calendar.backToGlance(visibleMonth.getFullYear())
@@ -3232,8 +3269,14 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, openYear)}
           onPointerCancel={() => (swipe.current = null)}
+          // will-change: RESTING promotion. The camera animates this layer on
+          // every month⇄elsewhere move; without it the compositor layer is
+          // built + rastered inside the move's first frame (the device HUD's
+          // `pt` block — writing will-change AT move time measured ~300ms on
+          // WebKit, so the promotion must already exist when the tap lands).
+          // One viewport-sized layer, O(1) — not a FLAT-BOOK-LAW concern.
           className={cn(
-            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y]",
+            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y] [will-change:transform]",
             !showMonthLayer && "invisible",
           )}
         >
@@ -3321,8 +3364,9 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, closeSchedule)}
           onPointerCancel={() => (swipe.current = null)}
+          // will-change: resting promotion, same rationale as the month layer
           className={cn(
-            "absolute inset-0 px-2 [touch-action:pan-y]",
+            "absolute inset-0 px-2 [touch-action:pan-y] [will-change:transform]",
             !showScheduleLayer && "invisible",
           )}
         >

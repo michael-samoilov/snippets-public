@@ -448,6 +448,15 @@ const MonthBlock = memo(function MonthBlock({
   const leadingBlanks = leadOffset(month, weekStart);
   const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
   const isCurrent = isSameMonth(month, today);
+  // The dive's input is decided at POINTERUP, not at the synthesized click
+  // that iOS delivers 80–300ms later (tap-slop arbitration, double-tap
+  // heuristics). A clean lift — primary pointer, same cell it went down on,
+  // finger stayed put — fires the pick immediately; the trailing click is
+  // recognized as the same tap (fired-within window) and dropped. Keyboard
+  // and AT activation arrive as bare clicks with no preceding lift, so they
+  // still run. A pan never gets here: touch-action pan-y hands the gesture
+  // to the scroller and the pointer ends in pointercancel, not pointerup.
+  const tapRef = useRef({ key: "", x: 0, y: 0, id: -1, firedAt: 0 });
 
   return (
     <div>
@@ -487,8 +496,38 @@ const MonthBlock = memo(function MonthBlock({
               key={key}
               type="button"
               disabled={isFuture}
-              onClick={() => onPick(key)}
-              onPointerDown={isFuture ? undefined : () => onPickHint?.(key)}
+              onClick={() => {
+                if (performance.now() - tapRef.current.firedAt < 700) return;
+                onPick(key);
+              }}
+              onPointerDown={
+                isFuture
+                  ? undefined
+                  : (e) => {
+                      tapRef.current.key = key;
+                      tapRef.current.x = e.clientX;
+                      tapRef.current.y = e.clientY;
+                      tapRef.current.id = e.pointerId;
+                      onPickHint?.(key);
+                    }
+              }
+              onPointerUp={
+                isFuture
+                  ? undefined
+                  : (e) => {
+                      const t = tapRef.current;
+                      if (
+                        t.key !== key ||
+                        t.id !== e.pointerId ||
+                        !e.isPrimary ||
+                        e.button > 0 ||
+                        Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12
+                      )
+                        return;
+                      t.firedAt = performance.now();
+                      onPick(key);
+                    }
+              }
               whileTap={isFuture ? undefined : "pressed"}
               aria-label={`${format(date, "MMMM d")}${count ? `, ${count} kept` : ""}`}
               aria-pressed={key === selected}
