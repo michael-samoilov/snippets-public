@@ -840,6 +840,9 @@ function Calendar() {
   const weekdayRailRef = useRef<HTMLDivElement | null>(null);
   // the rail's pre-commit fold, read cheaply in runZoom for the effect's hold
   const railHoldRef = useRef<string | null>(null);
+  // the rail's full (unfolded) height — cached whenever it's seen open, so a
+  // move INTO the month view knows the snap target without a mid-setup read
+  const railFullHRef = useRef(0);
   useLayoutEffect(() => {
     monthActiveRef.current = view === "month" && !zoom;
     yearActiveRef.current = view === "year" && !zoom;
@@ -1171,23 +1174,34 @@ function Calendar() {
       zoom.to === "schedule" && zoom.from !== "entry";
     if (lateJoin) incoming.style.visibility = "hidden";
 
-    // HOLD the weekday rail at its current fold through setup: the commit just
-    // flipped `view`, and without the hold the rail's 260ms fold/unfold starts
-    // at the commit PAINT — one to several frames before the animations play —
-    // so the reader saw the S-M-T-W-T-F-S bar change as the only moving thing.
-    // releaseRail() (the play tick / first motion frame) lets the class value
-    // take over, so the fold travels WITH the camera. Freezing it also keeps
-    // the stage's height stable while the flight measures its rects.
-    // The fold VALUE was read in runZoom, pre-commit, where the tree was still
-    // clean — reading computed style here forced a ~200ms full recalc at 6x.
+    // SNAP the weekday rail's space in this setup frame — never animate it.
+    // The 260ms grid-template-rows fold was the last LAYOUT animation on a
+    // move: it resized the stage every frame (the outgoing view visibly
+    // jumped as the SMTWTFS header collapsed — device recording 2026-07-17)
+    // and its per-frame relayout starved the move's opening frames. The
+    // space now changes ONCE, pre-paint, and the visual 28px hop is
+    // cancelled by folding railDelta into the OUTGOING layer's compositor
+    // keyframes (translateY(d) -> 0): frame 0 is pixel-identical to the
+    // pre-snap world, and the offset eases out inside the camera's glide.
+    // railHoldRef was read pre-commit in runZoom (clean tree, ~free); the
+    // rail's full height is cached whenever it's seen unfolded.
     const rail = weekdayRailRef.current;
-    if (rail && railHoldRef.current !== null)
-      rail.style.gridTemplateRows = railHoldRef.current;
-    let railReleased = false;
+    const heldRailH = parseFloat(railHoldRef.current ?? "") || 0;
+    if (heldRailH > 0) railFullHRef.current = heldRailH;
+    const targetRailH = zoom.to === "month" ? railFullHRef.current : 0;
+    // + when the rail is folding AWAY (stage top moves up), − when unfolding
+    const railDelta =
+      zoom.from === "entry" || zoom.to === "entry"
+        ? 0
+        : heldRailH - targetRailH;
+    if (rail && railDelta !== 0) {
+      rail.style.transition = "none"; // snap: the class's target applies now
+      rail.style.gridTemplateRows = "";
+    }
     const releaseRail = () => {
-      if (railReleased) return;
-      railReleased = true;
-      if (rail) rail.style.gridTemplateRows = "";
+      // restore the transition once the move is over (values are final by
+      // then, so nothing animates on restore)
+      if (rail) rail.style.transition = "";
     };
 
     // Belt-and-braces: sweep any orphaned flyer glyph from a prior move before
@@ -1793,8 +1807,8 @@ function Calendar() {
     const startCameraScale = () =>
       Promise.all([
         compositorMove(outgoing, [
-          { transform: `scale(${outFrom})` },
-          { transform: `scale(${outTo})` },
+          { transform: `translateY(${railDelta}px) scale(${outFrom})` },
+          { transform: `translateY(0px) scale(${outTo})` },
         ]),
         compositorMove(
           incoming,
@@ -1893,6 +1907,12 @@ function Calendar() {
       let fromEls: Map<string, HTMLElement>;
       let toEls: Map<string, HTMLElement>;
       let fromRectFor: (day: string, el: HTMLElement) => DOMRect;
+      // Live from-rects are measured POST-snap, but at frame 0 the outgoing
+      // layer wears translateY(railDelta) — its visual positions are the
+      // PRE-snap ones. Launch the flyers from the visual truth. (The dive's
+      // descentGeom cache was captured pre-snap at pointerdown: already
+      // visual, no adjustment.)
+      let fromVisualDy = railDelta;
       if (zoom.from === "schedule") {
         // RISE: only the day the reader stood on travels — the other visible
         // dates belong to the page being closed. Both sides are just the anchor.
@@ -1903,6 +1923,7 @@ function Calendar() {
         // DIVE (month→schedule): the month side names the candidates; the book
         // side is then queried for only those days.
         if (descentCache) {
+          fromVisualDy = 0; // pre-snap capture is already the visual truth
           // ONE traversal of the month layer, then map lookups — a
           // querySelector per cached day (~30) re-ran WebKit's selector
           // engine over the month subtree each time: 312-359ms of the dive's
@@ -1956,7 +1977,7 @@ function Calendar() {
       const box = pairs.length ? ensureFlyerBox() : null;
       for (const { day, fromEl, toEl, a, b, fromFont, toFont } of pairs) {
         const ax = a.left + a.width / 2 - stageRect.left;
-        const ay = a.top + a.height / 2 - stageRect.top;
+        const ay = a.top + a.height / 2 - stageRect.top + fromVisualDy;
         const bx = b.left + b.width / 2 - stageRect.left;
         const by = b.top + b.height / 2 - stageRect.top;
         const num = String(Number(day.slice(8)));
@@ -2039,7 +2060,7 @@ function Calendar() {
         const a = textRect(fromEl);
         const b = textRect(toEl);
         const ax = a.left + a.width / 2 - stageRect.left;
-        const ay = a.top + a.height / 2 - stageRect.top;
+        const ay = a.top + a.height / 2 - stageRect.top + railDelta;
         const bx = b.left + b.width / 2 - stageRect.left;
         const by = b.top + b.height / 2 - stageRect.top;
         const fromFont = readFont(fromEl);
