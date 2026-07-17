@@ -662,11 +662,18 @@ function PerfHud() {
 // Floating debug chip (?perf=1 or ?open=…): flip the dive-opening variant
 // live, no reload, so the candidates can be compared back to back. Sits at the
 // bottom, clear of the HUD. A measuring tool, not UI.
+// Diagnostic A/B for the calendar→schedule dive's first-frame (pt) cost. The
+// device HUD shows the dive's pt is 65-159ms while every other transition's is
+// ~14ms, and it is a WebKit-only compositing cost neither Chromium nor the Xvfb
+// harness can see — so the device is the only instrument. These isolate the
+// prime suspect: the ~30 flying date-number layers the dive composites on that
+// frame (the rise composites 1). If pt drops toward ~14 with no-fly, the flyer
+// layers ARE the cost. one-fly (anchor only, exactly like the rise) is the
+// tie-breaker.
 const OPEN_VARIANTS: { id: string | null; label: string }[] = [
   { id: null, label: "base" },
-  { id: "lead", label: "lead" },
-  { id: "punch", label: "punch" },
-  { id: "book", label: "book" },
+  { id: "nofly", label: "no-fly" },
+  { id: "onefly", label: "1-fly" },
 ];
 function DiveOpenToggle({
   value,
@@ -2190,6 +2197,18 @@ function Calendar() {
         } else {
           fromEls = collectAll(outgoing);
           fromRectFor = (_day, el) => textRect(el);
+        }
+        // ?open A/B (dive only) — isolate the flyer layers as the pt cost:
+        // nofly = no date numbers fly at all; onefly = only the tapped day
+        // flies (exactly one layer, like the rise). The device HUD's pt then
+        // says whether the ~30 flyer layers are what makes the dive's first
+        // frame expensive.
+        if (openStyleRef.current === "nofly") fromEls = new Map();
+        else if (openStyleRef.current === "onefly") {
+          const only = new Map<string, HTMLElement>();
+          const a = fromEls.get(zoom.anchor);
+          if (a) only.set(zoom.anchor, a);
+          fromEls = only;
         }
         toEls = collectDays(incoming, fromEls.keys());
       }
