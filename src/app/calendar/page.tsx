@@ -659,6 +659,70 @@ function PerfHud() {
   );
 }
 
+// Floating debug chip (?perf=1 or ?open=…): flip the dive-opening variant
+// live, no reload, so the candidates can be compared back to back. Sits at the
+// bottom, clear of the HUD. A measuring tool, not UI.
+const OPEN_VARIANTS: { id: string | null; label: string }[] = [
+  { id: null, label: "base" },
+  { id: "lead", label: "lead" },
+  { id: "punch", label: "punch" },
+  { id: "book", label: "book" },
+];
+function DiveOpenToggle({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const [on] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      (new URLSearchParams(window.location.search).has("perf") ||
+        new URLSearchParams(window.location.search).has("open")),
+  );
+  if (!on) return null;
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 9999,
+        display: "flex",
+        gap: 4,
+        padding: 3,
+        borderRadius: 8,
+        background: "rgba(0,0,0,.62)",
+        font: "12px ui-monospace, monospace",
+      }}
+    >
+      {OPEN_VARIANTS.map((v) => {
+        const active = value === v.id;
+        return (
+          <button
+            key={v.label}
+            type="button"
+            onClick={() => onChange(v.id)}
+            style={{
+              appearance: "none",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 11px",
+              color: active ? "#111" : "#fff",
+              background: active ? "#fff" : "rgba(255,255,255,.12)",
+              fontWeight: active ? 700 : 400,
+            }}
+          >
+            {v.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * The calendar is a camera over time. Month view and year view are two
  * altitudes of the same world: switching views zooms the whole field
@@ -894,11 +958,22 @@ function Calendar() {
   //           "it responded", the way the rise's book-scale reads)
   //   book  — the destination page materializes from frame one instead of ~2
   //           frames late, so it contributes pixels immediately
-  const [openStyle] = useState<string | null>(() =>
+  // switchable at runtime by the floating debug chip (DiveOpenToggle) so the
+  // variants can be compared without reloading; seeded from ?open= for deep
+  // links. The chip drives STATE (its active highlight) and a REF (what the
+  // zoom effect reads) together — via the ref, not the effect deps, so a flip
+  // never re-runs setup on an in-flight move (the chip sits above the shield);
+  // the NEXT dive picks up the new value.
+  const [openStyle, setOpenStyleState] = useState<string | null>(() =>
     typeof window === "undefined"
       ? null
       : new URLSearchParams(window.location.search).get("open"),
   );
+  const openStyleRef = useRef(openStyle);
+  const setOpenStyle = useCallback((v: string | null) => {
+    openStyleRef.current = v;
+    setOpenStyleState(v);
+  }, []);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   // Each feed's interactivity gate as a REF, not a prop: `view/zoom` flip at the
   // start AND end of every altitude move, and as props they re-rendered all
@@ -2209,7 +2284,8 @@ function Calendar() {
         // toward its page immediately — motion exactly where the eye rests,
         // before the calendar's own zoom has moved much. Only the anchor;
         // every other day keeps the shared eased glide.
-        const leadThis = openStyle === "lead" && day === zoom.anchor;
+        const leadThis =
+          openStyleRef.current === "lead" && day === zoom.anchor;
         moves.push(
           compositorMove(
             point,
@@ -2336,7 +2412,7 @@ function Calendar() {
             // sharply in the first frames, a screen-wide "it responded" that
             // the pixel-weak zoom-in otherwise lacks. Only the down-ramp
             // segment; the plateau is untouched. Dive only.
-            ...(openStyle === "punch" &&
+            ...(openStyleRef.current === "punch" &&
             zoom.from === "month" &&
             zoom.to === "schedule"
               ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
@@ -2516,7 +2592,9 @@ function Calendar() {
       // touch of delay before that frame paints) — exactly the trade the A/B
       // is measuring.
       const joinNow =
-        openStyle === "book" && zoom.from === "month" && zoom.to === "schedule";
+        openStyleRef.current === "book" &&
+        zoom.from === "month" &&
+        zoom.to === "schedule";
       if (lateJoin && !joinNow) {
         // the book reveals ON THE NEXT FRAME — motion is already on screen
         // from this one, and one vsync is all the head start the outgoing
@@ -2538,8 +2616,9 @@ function Calendar() {
     else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
     void Promise.all(moves).then(finish, finish);
-    // freezeEnabled/flatCamera/openStyle are set once at mount, never change
-  }, [zoom, reduceMotion, freezeEnabled, flatCamera, openStyle]);
+    // freezeEnabled/flatCamera set once at mount; openStyle read via ref so a
+    // live chip flip never re-runs setup on an in-flight move
+  }, [zoom, reduceMotion, freezeEnabled, flatCamera]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
@@ -3318,6 +3397,7 @@ function Calendar() {
     // the settled skeleton becomes the settled page with no second fade.
     <div className="flex h-full min-h-0 flex-col">
       <PerfHud />
+      <DiveOpenToggle value={openStyle} onChange={setOpenStyle} />
       {/* the current altitude, spoken to assistive tech after every zoom/jump.
           An h1 (not a p): the visible title is a click-to-climb BUTTON, not a
           heading, so without this the whole app had no h1 at all — nothing
