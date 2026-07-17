@@ -503,15 +503,6 @@ interface ScheduleFeedHandle {
   // the landing can't drift as the climb ends. Pre-paint, O(band). Call right
   // after markOnStage, before the flight measures anything.
   relandOnRow: (day: string) => void;
-  // The warm band's margin-date cells, paired with their day and whether that
-  // day straddles the scroll top (sticky). Read from the feed's warmSetRef
-  // ledger — O(band). The zoom effect USED to find these by scanning the whole
-  // schedule DOM (querySelectorAll("[data-day][data-warm] ...")), which is
-  // O(BOOK): WebKit walks every content-visibility:hidden section's subtree for
-  // a querySelectorAll, so the freeze read grew with the reader's total entry
-  // count (measured on WebKitGTK: 313ms at 1200 entries → 1194ms at 5000 — the
-  // dive's dominant input-lag term, and it scales with book size).
-  warmMarginCells: () => { day: string; cell: HTMLElement; straddler: boolean }[];
 }
 
 // Dev-only frame HUD (?perf=1): live worst-frame-gap + jank count so an
@@ -1432,27 +1423,7 @@ function Calendar() {
     const lateJoin =
       (zoom.to === "schedule" && zoom.from !== "entry") ||
       (zoom.to === "month" && zoom.from === "schedule");
-    // Hide the incoming layer with OPACITY, not visibility. visibility is an
-    // INHERITED property, so writing it on a layer that contains the book made
-    // WebKit re-resolve visibility for every content-visibility:hidden section
-    // in the book — O(BOOK), and the dive's dominant input-lag term: measured
-    // on WebKitGTK, this one write was 313ms at 1200 entries and 984ms at 5000,
-    // scaling with the reader's whole history. (The rise never felt it because
-    // ITS incoming layer is the small month, not the book — that is the entire
-    // rise-vs-dive asymmetry.) opacity is not inherited: the layer hides in
-    // O(1) with no subtree propagation. Same reason pointer-events is banned on
-    // this layer (see the wake comment).
-    // NO inherited/compositing write hides the incoming layer any more. Every
-    // one tried — visibility (inherited), opacity (stacking rebuild),
-    // content-visibility (deferred, then re-paid by the freeze's geometry
-    // reads) — was O(BOOK) on WebKit: WebKit propagates it through all of the
-    // book's content-visibility:hidden sections, so on a years-deep book the
-    // single hide write grew to ~1s at 5000 entries and WAS the dive's input
-    // lag (measured on WebKitGTK). The book is instead hidden by its own PAUSED
-    // opacity fade (created just below, opacity 0 at t=0) — a compositor
-    // animation, O(1) to arm, no subtree write. dgFlush confirms this point is
-    // now clean.
-    dgFlush("lateHide");
+    if (lateJoin) incoming.style.visibility = "hidden";
 
     // the weekday rail lives inside the month layer now — view flips never
     // resize the stage, so there is nothing to hold, snap, or compensate
@@ -1513,9 +1484,6 @@ function Calendar() {
     }[] = [];
     let lateGlyphTimer = 0;
     const willChanged: HTMLElement[] = [];
-    // the layer temporarily raised above the book for a month⇄schedule move's
-    // month-only crossfade; finish() restores its resting z-index
-    let zStacked: HTMLElement | null = null;
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
     // same paint that clears the card in finish()
@@ -1533,9 +1501,9 @@ function Calendar() {
     );
 
     const finish = () => {
-      // the incoming layer's opacity is owned by its fade animation; cancelling
-      // camAnims (below) drops the fill:forwards hold and the underlying
-      // opacity (1) takes over. Nothing to un-hide here any more.
+      // the LANDED layer must never stay inline-hidden — a move canceled
+      // before joinIncoming ran would otherwise land on an invisible book
+      incoming.style.visibility = "";
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
@@ -1548,7 +1516,6 @@ function Calendar() {
         el.style.transform = "";
         el.style.opacity = "";
       }
-      if (zStacked) zStacked.style.zIndex = ""; // restore the resting layer order
       // drop the compositor animations' fill:forwards holds in the same
       // style update as the resets above — underlying styles take over with
       // no frame where the end pose lingers or the start pose flashes
@@ -1692,17 +1659,26 @@ function Calendar() {
           (zoom.from === "month" && zoom.to === "schedule") ||
           (zoom.from === "schedule" && zoom.to === "month")
         ) {
-          // READS first, then writes. The warm margin cells come from the
-          // feed's warmSetRef ledger (warmMarginCells) — O(band). This USED to
-          // scan scheduleLayer.querySelectorAll("[data-day][data-warm]"), which
-          // is O(BOOK) on WebKit (it walks every content-visibility:hidden
-          // section's subtree): the freeze read grew with the reader's TOTAL
-          // entry count — 313ms at 1200 entries, 1194ms at 5000 on WebKitGTK,
-          // the dive's dominant input-lag term and the one that scaled with
-          // book size. stickyDeltaFor stays cached math (no per-section flush).
+          // READS first, then writes — stickyDeltaFor reads scrollTop, and
+          // calling it after the previous iteration's position write forced
+          // ONE FULL BOOK LAYOUT PER SECTION on WebKit (~45ms × 7 warm
+          // sections = the dive's whole `s` block; the rise's `s` scaled
+          // with its warm count for the same reason). Phased, the loop costs
+          // at most one flush.
           performance.mark("fz:a");
-          const freezeCells =
-            scheduleFeedRef.current?.warmMarginCells() ?? [];
+          const freezeCells: { cell: HTMLElement; straddler: boolean }[] = [];
+          for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
+            "[data-day][data-warm]",
+          ) ?? []) {
+            const day = sec.dataset.day;
+            if (!day) continue;
+            const cell = sec.querySelector<HTMLElement>(".book-margin-date");
+            if (!cell) continue;
+            freezeCells.push({
+              cell,
+              straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
+            });
+          }
           performance.mark("fz:b");
           for (const { cell, straddler } of freezeCells) {
             cell.style.position = straddler ? "sticky" : "static";
@@ -2406,61 +2382,67 @@ function Calendar() {
     // first rect read then paid an O(book) recalc (~300ms of the dive's
     // flight span on WebKitGTK). Same law as the camera: create animations
     // only after all measurement.
-    // THE CROSSFADE — but only ever on the MONTH layer's opacity, never the
-    // book's. Animating the book layer's opacity (or visibility, or
-    // content-visibility) is O(BOOK) on WebKit: it propagates through every one
-    // of the book's content-visibility:hidden sections, so on a years-deep book
-    // it grew to ~1.5s at 5000 entries and WAS the dive's input lag (measured
-    // on WebKitGTK, bisected write-by-write). The book only ever gets a camera
-    // TRANSFORM (compositor-only, O(1)); the small month layer's opacity does
-    // the whole crossfade, sitting ABOVE the book so its fade reveals (dive) or
-    // covers (rise) the opaque book beneath. z-order restored in finish().
-    const monthSchedule =
-      (zoom.from === "month" && zoom.to === "schedule") ||
-      (zoom.from === "schedule" && zoom.to === "month");
-    if (monthSchedule) {
-      const dive = zoom.to === "schedule";
-      const monthEl = dive ? outgoing : incoming; // the small layer
-      monthEl.style.zIndex = "1"; // above the opaque book for the move
-      zStacked = monthEl;
-      // dive: month fades OUT in 200ms (owner: "fully fade out a bit sooner").
-      // rise: month fades IN in 300ms. Plateau to 440 so no animation ends
-      // mid-move (an early end re-commits the set and replays the tail — device
-      // film 2026-07-17). ?open=punch front-loads the dive's fade-out.
-      const punch =
-        dive && openStyleRef.current === "punch"
-          ? "cubic-bezier(0.16, 1, 0.3, 1)"
-          : undefined;
+    moves.push(
+      // ONE synchronized crossfade: both fades share the camera's clock and
+      // start with it, so the two layers read as a single motion (played
+      // sequentially they read as the page "zooming out twice" — device,
+      // 2026-07-17). On a late-reveal dive the book's raster hides its first
+      // ~150ms; a LINEAR 300ms ramp means it surfaces mid-crossfade at
+      // moderate opacity — a materialization, not a flash — while the month
+      // above it is still fading down. The fades deliberately overlap.
+      // PLATEAU fades: every fade runs the camera's full 440ms, reaching its
+      // end value early (the same visible ramp) and holding flat to 440. An
+      // animation that ENDS mid-move makes iOS re-commit the layer's whole
+      // animation set, and with the main-thread clock a frame or two behind
+      // the compositor that re-commit visibly snapped the scale BACK and
+      // replayed the end (device recording 2026-07-17, measured on film: a
+      // 4px reversal at the 300ms mark, then a 3-frame replay). With every
+      // animation ending together at 440, the only commit is finish()'s.
+      //
+      // Ramp lengths: dives retire the calendar in 200ms (owner note
+      // 2026-07-17, "fully fade out a bit sooner"); everything else 300ms.
+      compositorMove(
+        outgoing,
+        [
+          {
+            opacity: 1,
+            offset: 0,
+            // ?open=punch: the calendar dims FAST at the very start — an
+            // expo-out on the fade drops the whole outgoing layer's opacity
+            // sharply in the first frames, a screen-wide "it responded" that
+            // the pixel-weak zoom-in otherwise lacks. Only the down-ramp
+            // segment; the plateau is untouched. Dive only.
+            ...(openStyleRef.current === "punch" &&
+            zoom.from === "month" &&
+            zoom.to === "schedule"
+              ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+              : {}),
+          },
+          {
+            opacity: 0,
+            offset:
+              (zoom.from === "month" && zoom.to === "schedule" ? 200 : 300) /
+              440,
+          },
+          { opacity: 0, offset: 1 },
+        ],
+        { easing: "linear" },
+      ),
+    );
+    dgFlush("crossA");
+    // The INCOMING fade: on a late-join dive it is NOT created here. Creating
+    // an opacity animation on the hidden book at setup was the device's
+    // entire pt block (~140ms; 520-570ms on the WebKit harness, landing
+    // reliably at the flush after this exact create — dg:cross bisection
+    // 2026-07-17; the promotion and rail-snap theories both failed device
+    // A/Bs first). joinIncoming creates it instead: one frame AFTER motion
+    // started, clock-synced, while the book is still hidden — the same
+    // O(book) recalc then lands behind compositor-driven motion instead of
+    // ahead of the play tick. Non-late-join moves (rises, month⇄year) keep
+    // the setup-time create: their incoming layer is small/visible and the
+    // create measured cheap (≤7ms harness).
+    if (!lateJoin)
       moves.push(
-        compositorMove(
-          monthEl,
-          dive
-            ? [
-                { opacity: 1, offset: 0, ...(punch ? { easing: punch } : {}) },
-                { opacity: 0, offset: 200 / 440 },
-                { opacity: 0, offset: 1 },
-              ]
-            : [
-                { opacity: 0, offset: 0 },
-                { opacity: 1, offset: 300 / 440 },
-                { opacity: 1, offset: 1 },
-              ],
-          { easing: "linear" },
-        ),
-      );
-    } else {
-      // year⇄month (and any non-book crossfade): both layers are small, so the
-      // classic overlapping opacity crossfade is fine and cheap.
-      moves.push(
-        compositorMove(
-          outgoing,
-          [
-            { opacity: 1, offset: 0 },
-            { opacity: 0, offset: 300 / 440 },
-            { opacity: 0, offset: 1 },
-          ],
-          { easing: "linear" },
-        ),
         compositorMove(
           incoming,
           [
@@ -2471,7 +2453,6 @@ function Calendar() {
           { easing: "linear" },
         ),
       );
-    }
     dgFlush("cross");
     moves.push(startCameraScale());
     // Force the setup's style recalc + layout NOW, behind a measure — this
@@ -2518,6 +2499,41 @@ function Calendar() {
     // half-played moves ("replaying midway"). Any start correction must
     // happen BEFORE play(), never after.
     let played = false;
+    let joined = false;
+    const joinIncoming = () => {
+      if (joined) return;
+      joined = true;
+      if (!zooming.current) return; // a canceled move's finish already ran
+      // Late-join dives create the book's fade-in HERE, not at setup (see
+      // the crossfade block): the create's O(book) style recalc rides this
+      // frame, behind motion already on screen. The clock is synced from a
+      // playing camera animation BEFORE this one ever plays — the post-play
+      // rebase dead end applies to animations that have already painted,
+      // and this one starts life at the shared clock's current position, so
+      // the reveal lands at exactly the mid-ramp opacity a setup-created
+      // fade would have shown.
+      if (lateJoin) {
+        // plateau to 440 like every other fade — an end mid-move re-commits
+        // the layer's animations and replays the scale's tail (see the
+        // crossfade block)
+        const fade = incoming.animate(
+          [
+            { opacity: 0, offset: 0 },
+            { opacity: 1, offset: 300 / 440 },
+            { opacity: 1, offset: 1 },
+          ],
+          { duration: 440, easing: "linear", fill: "forwards" },
+        );
+        const clock = camAnims[0]?.currentTime;
+        if (typeof clock === "number") fade.currentTime = clock;
+        camAnims.push(fade); // finish() cancels it with the rest
+      }
+      // REVEAL only — every animation (both scales, both fades) is already
+      // playing on the shared camera clock. The book's raster happens here,
+      // behind motion that is already on screen, and its first paint lands
+      // at exactly the mid-curve pose the single camera implies.
+      incoming.style.visibility = "";
+    };
     const playAll = () => {
       if (played) return;
       played = true;
@@ -2569,13 +2585,33 @@ function Calendar() {
             camAnims.push(a); // finish() cancels it with the rest
           }
         }, 80);
+      // ?open=book (dive only): join the destination page THIS frame, not the
+      // next — its fade-in then contributes screen-filling pixels from the
+      // first motion frame, the biggest lever against the pixel-weak opening.
+      // Cost: the book's raster moves into the first motion frame (may add a
+      // touch of delay before that frame paints) — exactly the trade the A/B
+      // is measuring.
+      const joinNow =
+        openStyleRef.current === "book" &&
+        zoom.from === "month" &&
+        zoom.to === "schedule";
+      if (lateJoin && !joinNow) {
+        // the book reveals ON THE NEXT FRAME — motion is already on screen
+        // from this one, and one vsync is all the head start the outgoing
+        // needs (two frames read as "the page is late" on device)
+        requestAnimationFrame(joinIncoming);
+        setTimeout(joinIncoming, 250); // backstop: the book must always join
+      } else {
+        joinIncoming();
+      }
     };
-    // The incoming book/month is no longer revealed by a separate join step —
-    // its own paused opacity fade (created at setup) plays with the camera and
-    // ramps it in a beat after motion. Late-join moves (month⇄schedule, both
-    // directions) still play on the FIRST rAF: their setup frame is cheap and
-    // the extra vsync a double-rAF adds was pure input delay (pt ~150ms on
-    // device). Other moves keep the second rAF.
+    // Late-join moves (month⇄schedule, both directions) play on the FIRST
+    // rAF: the expensive frame the double-rAF dodged was the incoming
+    // layer's reveal paint, and late joins defer that to joinIncoming —
+    // their setup frame is cheap, and the extra vsync was pure input delay
+    // (pt ~150ms on device). Other moves keep the second rAF: their
+    // incoming layer reveals at commit, so frame one still carries its
+    // paint.
     if (lateJoin) requestAnimationFrame(playAll);
     else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
@@ -4483,22 +4519,6 @@ function ScheduleFeedBase({
     const stuck = Math.min(Math.max(g.top, el.scrollTop), g.bottom - g.headH);
     return Math.max(0, stuck - g.top);
   }, []);
-  // See ScheduleFeedHandle.warmMarginCells. Enumerate ONLY the warm rows from
-  // warmSetRef (the maintained band ledger) — never a whole-book DOM scan. Each
-  // warm section is a tiny rendered subtree, so its per-section querySelector
-  // for the margin date is O(1); the whole thing is O(band). stickyDeltaFor is
-  // cached-geometry math (no layout read).
-  const warmMarginCells = useCallback(() => {
-    const out: { day: string; cell: HTMLElement; straddler: boolean }[] = [];
-    for (const sec of warmSetRef.current) {
-      const day = sec.dataset.day;
-      if (!day) continue;
-      const cell = sec.querySelector<HTMLElement>(".book-margin-date");
-      if (!cell) continue;
-      out.push({ day, cell, straddler: !!stickyDeltaFor(day) });
-    }
-    return out;
-  }, [stickyDeltaFor]);
   // See ScheduleFeedHandle.relandOnRow. markOnStage has just rendered the band
   // at REAL heights; the tapped row's offsetTop is now truth, but scrollTop was
   // set (in scrollToRow) against stale placeholders above it — so re-scroll onto
@@ -5009,12 +5029,11 @@ function ScheduleFeedBase({
       clearOnStage,
       stickyDeltaFor,
       relandOnRow,
-      warmMarginCells,
     };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow, warmMarginCells]);
+  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow]);
 
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
