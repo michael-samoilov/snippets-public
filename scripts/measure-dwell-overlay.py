@@ -36,7 +36,13 @@ with sync_playwright() as p:
         .filter(x => x.r.top > st.top + 80 && x.r.bottom < st.bottom - 80 && x.r.height > 0);
       const pick = cs[Math.floor(cs.length / 2)];
       const r = pick.b.getBoundingClientRect();
-      pick.b.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true,pointerId:9,pointerType:'touch',isPrimary:true,clientX:r.left+r.width/2,clientY:r.top+r.height/2}));
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      pick.b.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true,pointerId:9,pointerType:'touch',isPrimary:true,clientX:cx,clientY:cy}));
+      // a >SLOP drift STANDS THE DWELL-FIRE DOWN (no dive) while leaving the
+      // prebuilt overlay in place — the prebuild aborts only on
+      // pointercancel/scroll, not on a drift — so the overlay can be
+      // inspected statically without the early-fire zooming mid-probe
+      pick.b.dispatchEvent(new PointerEvent('pointermove', {bubbles:true,pointerId:9,pointerType:'touch',isPrimary:true,clientX:cx+16,clientY:cy}));
       setTimeout(() => res({
         stagedPoints: document.querySelectorAll('[data-fly-staged]').length,
         cell: { l: r.left, t: r.top, r: r.right, b: r.bottom },
