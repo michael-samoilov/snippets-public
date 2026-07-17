@@ -525,7 +525,6 @@ function PerfHud() {
     // for content changing under a touch, and a poisoned tap loses its click
     let lastDown = 0;
     let lastUp = 0;
-    let seenMotion = 0;
     let tapLine = "";
     const down = () => {
       touching = true;
@@ -556,8 +555,11 @@ function PerfHud() {
         return e[e.length - 1];
       };
       const m = lastMark("zoom-motion");
-      if (m && m.startTime > seenMotion && lastDown) {
-        seenMotion = m.startTime;
+      // recomputed EVERY tick (not latched on first sight): the rf marks
+      // land one and two frames AFTER zoom-motion, and a line built at first
+      // sight froze before they existed — rf never rendered (device
+      // 2026-07-17). Guards below pin every mark to the current tap.
+      if (m && lastDown && m.startTime > lastDown) {
         const run = lastMark("zoom-run");
         const fx0 = lastMark("zoom-fx0");
         const fx1 = lastMark("zoom-fx1");
@@ -1247,6 +1249,18 @@ function Calendar() {
     // every paused compositor animation of this move (camera, flyers) —
     // played together on the play tick, cancelled together in finish()
     const camAnims: Animation[] = [];
+    // arriving glyphs, built a few frames INTO the move (invisible until 40%
+    // of the flight — see the date-flight write phase)
+    const lateGlyphs: {
+      point: HTMLSpanElement;
+      num: string;
+      toFont: FlyFont;
+      color: string;
+      baseSize: number;
+      sFrom: number;
+      sTo: number;
+    }[] = [];
+    let lateGlyphTimer = 0;
     const willChanged: HTMLElement[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
@@ -1283,6 +1297,7 @@ function Calendar() {
       // drop the compositor animations' fill:forwards holds in the same
       // style update as the resets above — underlying styles take over with
       // no frame where the end pose lingers or the start pose flashes
+      clearTimeout(lateGlyphTimer); // a canceled move must not build glyphs
       for (const a of camAnims) a.cancel();
       if (entryCard) {
         entryCard.style.transform = "";
@@ -2012,17 +2027,16 @@ function Calendar() {
         // centred on the travelling point.
         const baseSize = Math.max(fromFont.size, toFont.size);
         const gFrom = flyGlyph(num, fromFont, color);
-        const gTo = flyGlyph(num, toFont, color);
         gFrom.style.fontSize = `${baseSize}px`;
-        gTo.style.fontSize = `${baseSize}px`;
-        // NO will-change on flyers: their WAAPI animations promote them at
-        // PLAY, and a compositor animation's clock starts when its first
-        // frame commits — nothing is eaten. will-change instead forced all
-        // ~3 layers × pairs to allocate + raster inside the SETUP frame,
-        // i.e. inside pt, ahead of the play tick (device 2026-07-17: dive
-        // pt ~152 with layout measured clean — paint-bound).
-        gTo.style.opacity = "0";
-        point.append(gFrom, gTo);
+        // will-change is BACK on the start-visible flyer parts (point +
+        // departing glyph): layerizing them at play instead was tried
+        // (device 2026-07-17) and ate the flight's start — WAAPI sets the
+        // clock at play() but the layers commit frames later and WebKit
+        // does NOT rebase, so the numbers materialized mid-path. Anything
+        // visible on frame one must be a layer BEFORE the play tick.
+        gFrom.style.willChange = "transform, opacity";
+        point.style.willChange = "transform";
+        point.append(gFrom);
         box!.appendChild(point);
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
@@ -2047,12 +2061,14 @@ function Calendar() {
           { opacity: 0, offset: 0.6 },
           { transform: gtf(sTo), opacity: 0, offset: 1 },
         ]);
-        compositorMove(gTo, [
-          { transform: gtf(sFrom), opacity: 0, offset: 0 },
-          { opacity: 0, offset: 0.4 },
-          { opacity: 1, offset: 0.6 },
-          { transform: gtf(sTo), opacity: 1, offset: 1 },
-        ]);
+        // The ARRIVING glyph late-joins: it is invisible until 40% of the
+        // flight (~175ms), so its creation, layerization, and raster can
+        // happen a few frames into the move — behind motion, with margin —
+        // instead of inside the setup frame. This halves the flyer raster
+        // the tap waits on (the other half must stay: see gFrom above).
+        // Its animation is currentTime-synced at creation, before it ever
+        // plays a visible frame — same protocol as the join-created fades.
+        lateGlyphs.push({ point, num, toFont, color, baseSize, sFrom, sTo });
       }
     }
 
@@ -2125,16 +2141,31 @@ function Calendar() {
       // ~150ms; a LINEAR 300ms ramp means it surfaces mid-crossfade at
       // moderate opacity — a materialization, not a flash — while the month
       // above it is still fading down. The fades deliberately overlap.
-      compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
-        // dives retire the calendar FASTER than the generic 300ms crossfade:
-        // owner note 2026-07-17, "the calendar should fully fade out a bit
-        // sooner" — 200ms commits the scene to the book earlier while still
-        // overlapping the book's late join (~2 frames in). The book's own
-        // 300ms materialization is untouched.
-        duration:
-          zoom.from === "month" && zoom.to === "schedule" ? 200 : 300,
-        easing: "linear",
-      }),
+      // PLATEAU fades: every fade runs the camera's full 440ms, reaching its
+      // end value early (the same visible ramp) and holding flat to 440. An
+      // animation that ENDS mid-move makes iOS re-commit the layer's whole
+      // animation set, and with the main-thread clock a frame or two behind
+      // the compositor that re-commit visibly snapped the scale BACK and
+      // replayed the end (device recording 2026-07-17, measured on film: a
+      // 4px reversal at the 300ms mark, then a 3-frame replay). With every
+      // animation ending together at 440, the only commit is finish()'s.
+      //
+      // Ramp lengths: dives retire the calendar in 200ms (owner note
+      // 2026-07-17, "fully fade out a bit sooner"); everything else 300ms.
+      compositorMove(
+        outgoing,
+        [
+          { opacity: 1, offset: 0 },
+          {
+            opacity: 0,
+            offset:
+              (zoom.from === "month" && zoom.to === "schedule" ? 200 : 300) /
+              440,
+          },
+          { opacity: 0, offset: 1 },
+        ],
+        { easing: "linear" },
+      ),
     );
     dgFlush("crossA");
     // The INCOMING fade: on a late-join dive it is NOT created here. Creating
@@ -2150,10 +2181,15 @@ function Calendar() {
     // create measured cheap (≤7ms harness).
     if (!lateJoin)
       moves.push(
-        compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
-          duration: 300,
-          easing: "linear",
-        }),
+        compositorMove(
+          incoming,
+          [
+            { opacity: 0, offset: 0 },
+            { opacity: 1, offset: 300 / 440 },
+            { opacity: 1, offset: 1 },
+          ],
+          { easing: "linear" },
+        ),
       );
     dgFlush("cross");
     moves.push(startCameraScale());
@@ -2215,9 +2251,16 @@ function Calendar() {
       // the reveal lands at exactly the mid-ramp opacity a setup-created
       // fade would have shown.
       if (lateJoin) {
+        // plateau to 440 like every other fade — an end mid-move re-commits
+        // the layer's animations and replays the scale's tail (see the
+        // crossfade block)
         const fade = incoming.animate(
-          [{ opacity: 0 }, { opacity: 1 }],
-          { duration: 300, easing: "linear", fill: "forwards" },
+          [
+            { opacity: 0, offset: 0 },
+            { opacity: 1, offset: 300 / 440 },
+            { opacity: 1, offset: 1 },
+          ],
+          { duration: 440, easing: "linear", fill: "forwards" },
         );
         const clock = camAnims[0]?.currentTime;
         if (typeof clock === "number") fade.currentTime = clock;
@@ -2236,9 +2279,41 @@ function Calendar() {
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
-      // rf instrument's second half: prices the first MOTION frame (flyer
-      // layerization + anim commit land here now that will-change is gone)
+      // rf instrument's second half: prices the first MOTION frame
       requestAnimationFrame(() => performance.mark("zoom-raf2"));
+      // build the arriving glyphs a few frames in — they stay invisible
+      // until 40% of the flight, so their layerization happens behind
+      // motion with margin to spare (see the date-flight write phase)
+      if (lateGlyphs.length)
+        lateGlyphTimer = window.setTimeout(() => {
+          if (!zooming.current) return; // a canceled move's finish ran
+          const clock = camAnims[0]?.currentTime;
+          for (const { point, num, toFont, color, baseSize, sFrom, sTo } of lateGlyphs) {
+            const gTo = flyGlyph(num, toFont, color);
+            gTo.style.fontSize = `${baseSize}px`;
+            gTo.style.opacity = "0";
+            gTo.style.willChange = "transform, opacity";
+            point.appendChild(gTo);
+            const gtf = (s: number) => `translate(-50%,-50%) scale(${s})`;
+            const a = gTo.animate(
+              [
+                { transform: gtf(sFrom), opacity: 0, offset: 0 },
+                { opacity: 0, offset: 0.4 },
+                { opacity: 1, offset: 0.6 },
+                { transform: gtf(sTo), opacity: 1, offset: 1 },
+              ],
+              {
+                duration: 440,
+                easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+                fill: "forwards",
+              },
+            );
+            // join the shared clock BEFORE this animation paints anything —
+            // by its 40% reveal the layer has long committed
+            if (typeof clock === "number") a.currentTime = clock;
+            camAnims.push(a); // finish() cancels it with the rest
+          }
+        }, 80);
       if (lateJoin) {
         // the book reveals ON THE NEXT FRAME — motion is already on screen
         // from this one, and one vsync is all the head start the outgoing
@@ -4104,10 +4179,16 @@ function ScheduleFeedBase({
           }
         }
       }
-      const before = anchor ? anchor.offsetTop : 0;
+      // FRACTIONAL anchor delta (gBCR, not offsetTop): offsetTop rounds to
+      // integers, and the rounding residue left the landed row ~1-2px off
+      // after the widen — seen on device as the flown dates nudging to the
+      // bottom-left a beat after they landed (2026-07-17). gBCR keeps the
+      // subpixel truth; scrollTop accepts fractional writes (iOS snaps to
+      // device pixels — 1/3px — instead of whole CSS pixels).
+      const before = anchor ? anchor.getBoundingClientRect().top : 0;
       warmBand();
       if (el && anchor && !tookOverRef.current) {
-        const d = anchor.offsetTop - before;
+        const d = anchor.getBoundingClientRect().top - before;
         if (d) el.scrollTop += d;
       }
       // Re-prime the observer ONLY NOW, after the anchored widen: it missed
