@@ -3355,16 +3355,16 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, openYear)}
           onPointerCancel={() => (swipe.current = null)}
-          // will-change: resting promotion, SECOND test. The first A/B
-          // (2026-07-17, pt 139→140) was CONFOUNDED: pt was then dominated
-          // by the book-fade create's ~140ms style recalc, which promotion
-          // cannot touch — a ~30-40ms promotion saving was invisible under
-          // it. With that recalc moved to the join frame (pt now 67, e≈9),
-          // the remaining pt is paint/commit — exactly what pre-promoted
-          // layers should shrink. If the device line shows pt unmoved AGAIN,
-          // remove this for good.
+          // (DEAD END, twice device-measured — do not re-add resting
+          // will-change promotion on the layers. A/B 1, 2026-07-17: pt
+          // 139→140, neutral, but confounded by the fade-create recalc that
+          // then dominated pt. A/B 2, same day, confounder removed: dive pt
+          // 67→151 — promotion actively REGRESSED the dive's first frame
+          // ~84ms on device, while headless WebKit saw only its benefits
+          // (fade-create 46→3ms). iOS pays more to keep these layers
+          // composited at rest than their at-play promotion ever cost.)
           className={cn(
-            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y] [will-change:transform]",
+            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
           )}
         >
@@ -3452,9 +3452,8 @@ function Calendar() {
           onPointerDown={(e) => armSwipe(e, true)}
           onPointerUp={(e) => settleSwipe(e, closeSchedule)}
           onPointerCancel={() => (swipe.current = null)}
-          // will-change: resting promotion, second test — see the month layer
           className={cn(
-            "absolute inset-0 px-2 [touch-action:pan-y] [will-change:transform]",
+            "absolute inset-0 px-2 [touch-action:pan-y]",
             !showScheduleLayer && "invisible",
           )}
         >
