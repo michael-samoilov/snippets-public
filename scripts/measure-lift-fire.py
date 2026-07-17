@@ -110,49 +110,36 @@ def main() -> int:
         else:
             sel = f'[data-layer="month"] button[data-day-key="{day}"]'
 
-            # 2. DAY DRIFTED (pointermove >SLOP, then a drifted lift): the
-            #    scroll intent stands the dwell down AND the lift is out of
-            #    slop — nothing fires
+            # 2. DAY DRIFTED (pointermove >slop, then a drifted lift): >12px
+            #    of wander is scroll intent, not a tap — nothing fires
             pg.evaluate(DISPATCH, {"sel": sel, "click": False, "driftY": 40})
             check("day drifted", "month", 0, settle=900)
 
-            # 3. DAY STATIONARY DWELL (held still, NO lift, NO click): the
-            #    dwell timer alone must run the dive — the felt-latency fix
-            pg.evaluate(DISPATCH, {"sel": sel, "noUp": True, "hold": 260})
-            check("day stationary dwell (no lift)", "schedule", 1)
-            # come back up for the next legs
-            pg.evaluate(DISPATCH, {"sel": "[data-cal-title]", "click": False})
-            check("  (return to month)", "month", 1)
+            # 3. DAY CLEAN LIFT (no click): the dive must run on the release
+            pg.evaluate(DISPATCH, {"sel": sel, "click": False})
+            check("day clean lift (no click)", "schedule", 1)
 
-            # 4. DAY FAST CLEAN LIFT (lift BEFORE the dwell timer): still fires
-            pg.evaluate(DISPATCH, {"sel": sel, "click": False, "hold": 60})
-            check("day fast lift (before dwell)", "schedule", 1)
-
-            # 5. TITLE FULL NATIVE SEQUENCE (down, up, trailing click):
+            # 4. TITLE FULL NATIVE SEQUENCE (down, up, trailing click):
             #    exactly one rise, ONE history pop — never two (the
             #    two-pop guard; a double back walks off the calendar)
             pg.evaluate(DISPATCH, {"sel": "[data-cal-title]", "click": True})
             check("title lift + trailing click", "month", 1, settle=2000)
 
-            # 6. DAY FULL NATIVE SEQUENCE (dwell fires, then the real lift +
-            #    trailing click both arrive): still EXACTLY one dive
-            pg.evaluate(DISPATCH, {"sel": sel, "click": True, "hold": 260})
-            check("day dwell + lift + click", "schedule", 1, settle=2000)
+            # 5. DAY FULL NATIVE SEQUENCE (lift + trailing click): one dive
+            pg.evaluate(DISPATCH, {"sel": sel, "click": True})
+            check("day lift + trailing click", "schedule", 1, settle=2000)
 
-            # 7. DAY SCROLL (pointermove drift then pointercancel): the browser
+            # 6. DAY SCROLL (pointermove drift then pointercancel): the browser
             #    took the gesture for a pan — nothing fires
             pg.evaluate(DISPATCH, {"sel": "[data-cal-title]", "click": False})
             check("  (return to month)", "month", 1)
             pg.evaluate(DISPATCH, {"sel": sel, "driftY": 40, "cancel": True})
             check("day scroll (move + cancel)", "month", 0, settle=900)
 
-            # 8. BARE CLICK (keyboard/AT): no pointer events at all. From
-            #    SCHEDULE (a bare click on a day cell has no preceding lift),
-            #    so first dwell-dive down, then the day's own onClick must
-            #    still be inert here — instead verify the title's bare click
-            #    rises schedule->month (the title path, unchanged by this round)
-            pg.evaluate(DISPATCH, {"sel": sel, "noUp": True, "hold": 260})
-            check("  (dwell-dive to schedule)", "schedule", 1)
+            # 7. BARE CLICK (keyboard/AT): no pointer events at all. From
+            #    schedule so the title rises schedule->month
+            pg.evaluate(DISPATCH, {"sel": sel, "click": False})
+            check("  (dive to schedule)", "schedule", 1)
             pg.evaluate("() => document.querySelector('[data-cal-title]').click()")
             check("title bare click (keyboard/AT)", "month", 1)
 

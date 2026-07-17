@@ -448,33 +448,23 @@ const MonthBlock = memo(function MonthBlock({
   const leadingBlanks = leadOffset(month, weekStart);
   const trailingBlanks = (7 - ((leadingBlanks + days.length) % 7)) % 7;
   const isCurrent = isSameMonth(month, today);
-  // The dive is decided at POINTERUP, not at the synthesized click iOS
-  // delivers 80–300ms after the lift (tap-slop arbitration, double-tap
-  // heuristics) — a clean lift (primary pointer, same cell, finger still)
-  // fires the pick; the trailing click is dropped by a fired-within window.
+  // The dive fires on RELEASE (pointerup), the same as the rise's title tap —
+  // a clean lift (primary pointer, same cell it went down on, finger stayed
+  // put) fires the pick immediately; the trailing synthesized click iOS
+  // delivers 80–300ms later is dropped by a fired-within window. Keyboard and
+  // AT activation arrive as a bare click with no preceding lift, so they still
+  // run. A pan never reaches pointerup: touch-action pan-y hands the gesture
+  // to the scroller and the pointer ends in pointercancel.
   //
-  // AND on a STATIONARY DWELL: measured on device (2026-07-17), a day-cell
-  // press lasts ~230-240ms before the lift — ~4x the title's ~60ms — and
-  // firing only on lift made the dive wait out that whole press (the felt
-  // "dive input delay" was mostly the reader's own finger, since nothing
-  // could move until they let go). A press held STILL for HOLD_MS is
-  // unambiguously a tap, not a scroll (a scroll moves within a frame or two
-  // and arrives as pointercancel or a >SLOP drift). So a still press fires
-  // the dive early, while the finger is still down — ~140ms sooner. Firing
-  // PROGRAMMATICALLY also sidesteps the tap-eater law entirely: we never
-  // needed the synthesized click, so nothing iOS suppresses can hurt us.
-  // Fast taps (lift before HOLD_MS) still fire on the lift; keyboard/AT
-  // fire on the bare click. The fired-within window dedups all paths.
-  const HOLD_MS = 95;
-  const SLOP = 10;
-  const tapRef = useRef({
-    key: "",
-    x: 0,
-    y: 0,
-    id: -1,
-    firedAt: 0,
-    timer: 0,
-  });
+  // (DEAD END — 2026-07-17, do not re-add: a "stationary dwell" early-fire
+  // that started the dive after a 95ms still hold, to save the reader's press
+  // time. On device it NEVER TRIGGERED — real-finger contact jitter drifts the
+  // pointer >10px within 95ms, cancelling the timer every time, so it always
+  // fell back to release anyway — AND the owner rejected the concept outright:
+  // the dive should begin on release, exactly like the rise. The felt dive lag
+  // is NOT the press duration; it is the dive's heavier first frame, chased
+  // via rf-a instead.)
+  const tapRef = useRef({ key: "", x: 0, y: 0, id: -1, firedAt: 0 });
 
   return (
     <div>
@@ -528,46 +518,19 @@ const MonthBlock = memo(function MonthBlock({
                       t.y = e.clientY;
                       t.id = e.pointerId;
                       onPickHint?.(key);
-                      // the stationary-dwell fire: a still press IS a tap
-                      clearTimeout(t.timer);
-                      t.timer = window.setTimeout(() => {
-                        if (performance.now() - t.firedAt < 700) return;
-                        t.firedAt = performance.now();
-                        onPick(key);
-                      }, HOLD_MS);
                     }
-              }
-              onPointerMove={
-                isFuture
-                  ? undefined
-                  : (e) => {
-                      // any real drift before the hold fires = scroll intent,
-                      // not a tap — stand the early fire down (a lift may
-                      // still fire it if the finger settles back inside slop)
-                      const t = tapRef.current;
-                      if (
-                        t.id === e.pointerId &&
-                        Math.hypot(e.clientX - t.x, e.clientY - t.y) > SLOP
-                      )
-                        clearTimeout(t.timer);
-                    }
-              }
-              onPointerCancel={
-                isFuture ? undefined : () => clearTimeout(tapRef.current.timer)
               }
               onPointerUp={
                 isFuture
                   ? undefined
                   : (e) => {
                       const t = tapRef.current;
-                      clearTimeout(t.timer);
                       if (
                         t.key !== key ||
                         t.id !== e.pointerId ||
                         !e.isPrimary ||
                         e.button > 0 ||
-                        Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12 ||
-                        performance.now() - t.firedAt < 700 // the dwell fired it
+                        Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12
                       )
                         return;
                       t.firedAt = performance.now();
