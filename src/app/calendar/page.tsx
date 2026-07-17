@@ -1193,8 +1193,18 @@ function Calendar() {
     // hidden book then stayed hidden through the whole close (device
     // recording 2026-07-17: every other card vanished until the morph
     // settled; scripts/measure-entry-close.py now gates this).
+    //
+    // RISES late-join too (the schedule->month leg, same mechanism
+    // mirrored): with the month revealed at setup, its reveal paint owned
+    // the rise's first frame — the double-rAF play existed to dodge exactly
+    // that frame, so the rise paid the paint AND a second vsync (device pt
+    // held at ~106 across three otherwise-different builds). Hidden through
+    // setup, the rise plays on the FIRST rAF like the dive, and the month's
+    // paint rides the join frame behind motion. Only from the schedule —
+    // year->month keeps its own choreography untouched.
     const lateJoin =
-      zoom.to === "schedule" && zoom.from !== "entry";
+      (zoom.to === "schedule" && zoom.from !== "entry") ||
+      (zoom.to === "month" && zoom.from === "schedule");
     if (lateJoin) incoming.style.visibility = "hidden";
 
     // the weekday rail lives inside the month layer now — view flips never
@@ -2210,12 +2220,13 @@ function Calendar() {
         joinIncoming();
       }
     };
-    // Dives play on the FIRST rAF: the expensive frame the double-rAF
-    // dodged was the incoming layer's reveal paint, and dives defer that to
-    // joinIncoming now — their setup frame is cheap, and the extra vsync was
-    // pure input delay (pt ~150ms on device). Other moves keep the second
-    // rAF: their incoming layer reveals at commit, so frame one still
-    // carries its paint.
+    // Late-join moves (month⇄schedule, both directions) play on the FIRST
+    // rAF: the expensive frame the double-rAF dodged was the incoming
+    // layer's reveal paint, and late joins defer that to joinIncoming —
+    // their setup frame is cheap, and the extra vsync was pure input delay
+    // (pt ~150ms on device). Other moves keep the second rAF: their
+    // incoming layer reveals at commit, so frame one still carries its
+    // paint.
     if (lateJoin) requestAnimationFrame(playAll);
     else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
