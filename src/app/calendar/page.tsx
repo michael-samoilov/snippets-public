@@ -847,6 +847,28 @@ function Calendar() {
   // the day whose destination stageDescent() has already prepared (pointerdown
   // hint) — pick() then skips the duplicate work; cleared when consumed
   const stagedDescentRef = useRef<string | null>(null);
+  // Flyer DOM prebuilt during the dive's finger-dwell (stageDescent chunk C).
+  // rf instrumentation (device 2026-07-17) split the dive's remaining input
+  // delay into two engine frames: 68ms producing the setup frame (the flyer
+  // point+glyph layers' allocation+raster under will-change) and 67ms
+  // producing the first motion frame (layer promotion at play). Both are
+  // pure paint — and the same taps carry ~150ms of measured idle dwell
+  // (dwn→up ~230, staging done by ~40). So the flyers are built HERE, under
+  // the finger: the box overlays the month grid pixel-exactly (same glyphs,
+  // same spots, same color — appending it changes nothing on screen), and
+  // iOS rasterizes the layers while the finger is still down. The zoom
+  // effect then ADOPTS these elements per day instead of creating them.
+  // disarm() = keep the box, drop the abort wiring (the move owns it now);
+  // abort() = remove everything (staging abandoned: restage, pointercancel,
+  // month scroll, a non-adopting zoom, or the 4s timeout).
+  const stagedFlyersRef = useRef<{
+    anchor: string;
+    box: HTMLDivElement;
+    points: Map<string, { point: HTMLSpanElement; gFrom: HTMLSpanElement }>;
+    disarm: () => void;
+    abort: () => void;
+  } | null>(null);
+  const stagedFlyRafRef = useRef(0);
   // staging's deferred half (goTo), scheduled one frame off the input event —
   // flushStagedDescent() runs it synchronously if the click gets there first
   const stagedRunRef = useRef<(() => void) | null>(null);
@@ -1069,9 +1091,97 @@ function Calendar() {
           "[data-book-scroller]",
         )?.offsetHeight;
       };
-      stagedRafRef.current = requestAnimationFrame(
-        () => stagedFlushRef.current?.(),
-      );
+      stagedRafRef.current = requestAnimationFrame(() => {
+        stagedFlushRef.current?.();
+        // CHUNK C — the flyer prebuild (see stagedFlyersRef). One frame
+        // after the band flush so the book side is fully laid out; still
+        // deep inside the dwell (chunks A+B are done by ~40ms of a ~230ms
+        // contact). Skipped entirely on a fast tap (flushStagedDescent
+        // never schedules it) — the effect then builds flyers inline as
+        // before.
+        stagedFlyRafRef.current = requestAnimationFrame(() => {
+          if (zooming.current || stagedDescentRef.current !== key) return;
+          stagedFlyersRef.current?.abort();
+          const st2 = stageRef.current;
+          const mo2 = monthLayerRef.current;
+          const geom = descentGeom.current;
+          if (!st2 || !mo2 || !geom || geom.anchor !== key) return;
+          const toEl = scheduleLayerRef.current?.querySelector<HTMLElement>(
+            "[data-day][data-warm] [data-flydate]",
+          );
+          if (!toEl) return;
+          // READS first: fonts + stage box (the margin dates share one
+          // voice — one representative toFont serves every pair)
+          const toFont = readFont(toEl);
+          const sr2 = st2.getBoundingClientRect();
+          const monthFly = new Map<string, HTMLElement>();
+          for (const el of mo2.querySelectorAll<HTMLElement>("[data-flydate]"))
+            monthFly.set(el.dataset.flydate!, el);
+          const fonts = new Map<string, FlyFont>();
+          for (const day of geom.cells.keys()) {
+            const el = monthFly.get(day);
+            if (el) fonts.set(day, readFont(el));
+          }
+          // WRITES: the warm-up overlay. opacity 0.003 — below 1/255, so
+          // nothing shows (probed: a truly visible copy diffs against the
+          // real grid's text rendering AND misses the pressed cell's
+          // whileTap scale), but unlike visibility:hidden the layer
+          // contents still PAINT, which is the whole point: iOS rasters
+          // every flyer layer during the dwell. The zoom effect reveals
+          // the box (opacity '') when it adopts.
+          const box = document.createElement("div");
+          box.style.cssText =
+            "position:absolute;inset:0;pointer-events:none;z-index:45;transform:translateZ(0);opacity:0.003;";
+          const points = new Map<
+            string,
+            { point: HTMLSpanElement; gFrom: HTMLSpanElement }
+          >();
+          for (const [day, a] of geom.cells) {
+            const fromFont = fonts.get(day);
+            if (!fromFont) continue;
+            const baseSize = Math.max(fromFont.size, toFont.size);
+            const ax = a.left + a.width / 2 - sr2.left;
+            const ay = a.top + a.height / 2 - sr2.top;
+            const num = String(Number(day.slice(8)));
+            const color = day === dayKey() ? "var(--wax)" : "var(--ink)";
+            const point = document.createElement("span");
+            point.dataset.flyStaged = day;
+            point.style.cssText = `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);will-change:transform;`;
+            const gFrom = flyGlyph(num, fromFont, color);
+            gFrom.style.fontSize = `${baseSize}px`;
+            gFrom.style.transform = `translate(-50%,-50%) scale(${fromFont.size / baseSize})`;
+            gFrom.style.willChange = "transform, opacity";
+            point.appendChild(gFrom);
+            box.appendChild(point);
+            points.set(day, { point, gFrom });
+          }
+          if (!points.size) return;
+          st2.appendChild(box);
+          // (Promoting the MONTH layer here too was probed and rejected:
+          // will-change on the layer re-snaps its already-painted content —
+          // the entry-count dots visibly shifted across the whole grid in
+          // the screenshot diff. The flyer box is additive-only; it cannot
+          // move existing pixels.)
+          void box.offsetHeight; // pay the raster NOW, in the dwell
+          const disarm = () => {
+            window.removeEventListener("pointercancel", abort, true);
+            mo2.removeEventListener("scroll", abort, true);
+            clearTimeout(tid);
+            if (stagedFlyersRef.current?.box === box)
+              stagedFlyersRef.current = null;
+          };
+          const abort = () => {
+            disarm();
+            box.remove();
+          };
+          // a pan (pointercancel) or any month scroll would slide the grid
+          // out from under the overlay — the ghosts must go instantly
+          window.addEventListener("pointercancel", abort, true);
+          mo2.addEventListener("scroll", abort, true);
+          const tid = setTimeout(abort, 4000);
+          stagedFlyersRef.current = { anchor: key, box, points, disarm, abort };
+        });
+      });
     };
     cancelAnimationFrame(stagedRafRef.current);
     stagedRafRef.current = requestAnimationFrame(() => stagedRunRef.current?.());
@@ -1085,6 +1195,9 @@ function Calendar() {
     stagedRunRef.current?.(); // commit chunk (schedules the flush chunk)...
     cancelAnimationFrame(stagedRafRef.current);
     stagedFlushRef.current?.(); // ...which runs NOW if still pending
+    // a not-yet-run flyer prebuild (chunk C) must not fire into the move —
+    // the effect builds inline when nothing was staged
+    cancelAnimationFrame(stagedFlyRafRef.current);
   }, []);
 
   /** tapping a day dives the camera into it: the book opens there */
@@ -1235,7 +1348,25 @@ function Calendar() {
       .querySelectorAll("[data-fly], [data-flymonth-fly]")
       .forEach((el) => el.remove());
 
-    let flyerBox: HTMLDivElement | null = null;
+    // adopt the dwell-prebuilt flyers when this move is the dive they were
+    // staged for; any other move sends them away before it starts (their
+    // [data-fly-staged] points are invisible overlay copies of the month
+    // grid — harmless, but a scaling month must not carry ghosts)
+    const stagedFly = stagedFlyersRef.current;
+    const adoptStaged = !!(
+      stagedFly &&
+      zoom.from === "month" &&
+      zoom.to === "schedule" &&
+      stagedFly.anchor === zoom.anchor &&
+      stagedFly.box.isConnected
+    );
+    if (stagedFly && !adoptStaged) stagedFly.abort();
+    else if (stagedFly) {
+      stagedFly.disarm();
+      stagedFly.box.style.opacity = ""; // reveal — the finger is up now
+    }
+
+    let flyerBox: HTMLDivElement | null = adoptStaged ? stagedFly!.box : null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
@@ -2014,10 +2145,13 @@ function Calendar() {
         // the crossfade all ride one spring value, so the type changes
         // exactly when the number reaches the middle of its flight,
         // not when it lands
-        const point = document.createElement("span");
-        point.dataset.fly = day;
-        point.style.cssText =
-          `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
+        const pre = adoptStaged ? stagedFly!.points.get(day) : undefined;
+        const point = pre?.point ?? document.createElement("span");
+        point.dataset.fly = day; // from here the orphan sweep owns it
+        delete point.dataset.flyStaged;
+        if (!pre)
+          point.style.cssText =
+            `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
         // TRANSFORM-ONLY flight: the glyphs render ONCE at the larger of the
         // two sizes and ride a `scale` (always ≤1, so downscaling — sharp, no
         // upscale blur) instead of re-setting fontSize each frame. fontSize is
@@ -2026,18 +2160,22 @@ function Calendar() {
         // glyph's centre (it wears translate(-50%,-50%)), so scaling holds it
         // centred on the travelling point.
         const baseSize = Math.max(fromFont.size, toFont.size);
-        const gFrom = flyGlyph(num, fromFont, color);
-        gFrom.style.fontSize = `${baseSize}px`;
-        // will-change is BACK on the start-visible flyer parts (point +
-        // departing glyph): layerizing them at play instead was tried
-        // (device 2026-07-17) and ate the flight's start — WAAPI sets the
-        // clock at play() but the layers commit frames later and WebKit
-        // does NOT rebase, so the numbers materialized mid-path. Anything
-        // visible on frame one must be a layer BEFORE the play tick.
-        gFrom.style.willChange = "transform, opacity";
-        point.style.willChange = "transform";
-        point.append(gFrom);
-        box!.appendChild(point);
+        const gFrom = pre?.gFrom ?? flyGlyph(num, fromFont, color);
+        if (!pre) {
+          gFrom.style.fontSize = `${baseSize}px`;
+          // will-change is REQUIRED on the start-visible flyer parts (point
+          // + departing glyph): layerizing them at play instead was tried
+          // (device 2026-07-17) and ate the flight's start — WAAPI sets the
+          // clock at play() but the layers commit frames later and WebKit
+          // does NOT rebase, so the numbers materialized mid-path. Anything
+          // visible on frame one must be a layer BEFORE the play tick —
+          // ideally the dwell-prebuilt one (see stagedFlyersRef), this
+          // inline build being the fast-tap fallback.
+          gFrom.style.willChange = "transform, opacity";
+          point.style.willChange = "transform";
+          point.append(gFrom);
+        }
+        if (!pre) box!.appendChild(point); // prebuilt points already live there
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
@@ -2070,6 +2208,12 @@ function Calendar() {
         // plays a visible frame — same protocol as the join-created fades.
         lateGlyphs.push({ point, num, toFont, color, baseSize, sFrom, sTo });
       }
+      // prebuilt points whose day found no book-side partner never became
+      // flyers — drop them before the move paints (they still wear the
+      // staged attribute; adopted ones traded it for data-fly above)
+      if (adoptStaged)
+        for (const { point } of stagedFly!.points.values())
+          if (point.dataset.flyStaged) point.remove();
     }
 
     performance.mark("zoom-fx-pair"); // date-flight collect + build done
@@ -2288,19 +2432,28 @@ function Calendar() {
         lateGlyphTimer = window.setTimeout(() => {
           if (!zooming.current) return; // a canceled move's finish ran
           const clock = camAnims[0]?.currentTime;
-          for (const { point, num, toFont, color, baseSize, sFrom, sTo } of lateGlyphs) {
+          for (const { point, num, toFont, color, sFrom, sTo } of lateGlyphs) {
+            // NATIVE size, scale ending at exactly 1: a glyph landing at
+            // `baseSize × scale(sTo)` rasters on its own layer with its own
+            // rounding, and on iOS that sat a px or two off the in-book
+            // text it swaps with (the "nudge to the bottom-left" — headless
+            // lands exact, so it is pure device rasterization). Rendered at
+            // toFont.size and arriving at scale(1), the landed flyer and
+            // the revealed cell are the same text rendered the same way.
+            // (On dives the book type is the larger, so the ride to 1 is
+            // still downscale-only — sharp.)
             const gTo = flyGlyph(num, toFont, color);
-            gTo.style.fontSize = `${baseSize}px`;
+            gTo.style.fontSize = `${toFont.size}px`;
             gTo.style.opacity = "0";
             gTo.style.willChange = "transform, opacity";
             point.appendChild(gTo);
             const gtf = (s: number) => `translate(-50%,-50%) scale(${s})`;
             const a = gTo.animate(
               [
-                { transform: gtf(sFrom), opacity: 0, offset: 0 },
+                { transform: gtf(sFrom / sTo), opacity: 0, offset: 0 },
                 { opacity: 0, offset: 0.4 },
                 { opacity: 1, offset: 0.6 },
-                { transform: gtf(sTo), opacity: 1, offset: 1 },
+                { transform: gtf(1), opacity: 1, offset: 1 },
               ],
               {
                 duration: 440,
