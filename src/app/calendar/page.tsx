@@ -2083,9 +2083,14 @@ function Calendar() {
     // flight span on WebKitGTK). Same law as the camera: create animations
     // only after all measurement.
     moves.push(
+      // the outgoing fade ALSO waits for the join on dives: fading the month
+      // away before the book's raster is ready showed bare stage paper for
+      // the raster's length (device symptom: "a while where the schedule
+      // view is just blank"). A crossfade AT the join can't gap.
       compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
         duration: 180,
         easing: "ease-out",
+        late: lateJoin,
       }),
       compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
         // a late-joining book gets a longer, gentler ramp — it reads as the
@@ -2131,8 +2136,17 @@ function Calendar() {
       // a canceled move's finish() has already run and canceled these —
       // never restart them (zooming drops at finish)
       if (!zooming.current) return;
+      // REVEAL first, PLAY one frame later: the reveal frame carries the
+      // book's raster, and a fade clock started on it fast-forwards through
+      // that work — the book then flashed in at near-full opacity instead
+      // of fading (device symptom 4). Paused fill-forwards keyframe-0 holds
+      // the layer at opacity 0 through the raster frame, so nothing shows
+      // until the fade truly plays, from true zero, on a cheap frame.
       incoming.style.visibility = "";
-      for (const a of lateAnims) a.play();
+      requestAnimationFrame(() => {
+        if (!zooming.current) return;
+        for (const a of lateAnims) a.play();
+      });
     };
     const playAll = () => {
       if (played) return;
@@ -3930,31 +3944,37 @@ function ScheduleFeedBase({
   }, [warmBand]);
   const clearOnStage = useCallback(() => {
     climbingRef.current = false;
-    // Restore the FULL resting band now — a dive climbed on the narrow
-    // staged band (see markOnStage), and this deferred-teardown frame is
-    // where the O(band) work belongs, off the move and off the settle paint.
+    // Restore the FULL resting band ONE FRAME after the reveal swap — a dive
+    // climbed on the narrow staged band (see markOnStage). Widening in the
+    // SAME frame as the flyer->real-date swap put the fresh sections' layout
+    // shifts into the exact paint the reader studies for landing truth
+    // (device: dates seeming to re-seat as the page appears); a frame later
+    // the eye has the settled page and the band grows invisibly.
     // ANCHORED: the sections widening in above the landing render at their
     // real heights, and any difference from their placeholders would shift
     // the just-landed page down (measure-dive-exactness caught +55-75px).
     // Add the growth above the anchor back to scrollTop in the same frame —
     // invisible — unless the reader has already grabbed the scroll (never
     // write scrollTop under a live gesture).
-    const el = scrollerRef.current;
-    let anchor: HTMLElement | null = null;
-    if (el) {
-      const st = el.scrollTop;
-      for (const g of rowGeomRef.current)
-        if (g.bottom > st) {
-          anchor = rowRefs.current.get(g.day) ?? null;
-          break;
-        }
-    }
-    const before = anchor ? anchor.offsetTop : 0;
-    warmBand();
-    if (el && anchor && !tookOverRef.current) {
-      const d = anchor.offsetTop - before;
-      if (d) el.scrollTop += d;
-    }
+    requestAnimationFrame(() => {
+      if (climbingRef.current) return; // a new climb started — it owns the band
+      const el = scrollerRef.current;
+      let anchor: HTMLElement | null = null;
+      if (el) {
+        const st = el.scrollTop;
+        for (const g of rowGeomRef.current)
+          if (g.bottom > st) {
+            anchor = rowRefs.current.get(g.day) ?? null;
+            break;
+          }
+      }
+      const before = anchor ? anchor.offsetTop : 0;
+      warmBand();
+      if (el && anchor && !tookOverRef.current) {
+        const d = anchor.offsetTop - before;
+        if (d) el.scrollTop += d;
+      }
+    });
     // the landing band must STAY warm — the reader is looking at it. But the
     // observer missed every crossing during the climb (its callback stands down
     // mid-move, and misses are never re-delivered: IO only reports CHANGES) — so
