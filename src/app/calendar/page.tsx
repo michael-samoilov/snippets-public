@@ -837,13 +837,8 @@ function Calendar() {
   const yearActiveRef = useRef(false);
   const schedActiveRef = useRef(false);
   // the weekday rail (S M T W T F S) — held frozen through a move's setup so
-  // its fold rides the move, not the commit paint (see the rail's JSX comment)
-  const weekdayRailRef = useRef<HTMLDivElement | null>(null);
-  // the rail's pre-commit fold, read cheaply in runZoom for the effect's hold
-  const railHoldRef = useRef<string | null>(null);
-  // the rail's full (unfolded) height — cached whenever it's seen open, so a
-  // move INTO the month view knows the snap target without a mid-setup read
-  const railFullHRef = useRef(0);
+
+
   useLayoutEffect(() => {
     monthActiveRef.current = view === "month" && !zoom;
     yearActiveRef.current = view === "year" && !zoom;
@@ -951,18 +946,6 @@ function Calendar() {
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
     if (zooming.current) return;
     performance.mark("zoom-run"); // click-task start — PerfHud span breakdown
-    // Read the weekday rail's CURRENT fold now, against the still-clean
-    // pre-commit tree, for the zoom effect's rail hold. The effect used to
-    // getComputedStyle here-after-commit, which forced a full style recalc of
-    // the just-invalidated app subtree — ~200-260ms of the setup at 6x
-    // throttle, the single biggest block of the move's input delay. Pre-commit
-    // the tree is clean and the read is ~free; the value is identical (a fold
-    // transition triggered by this commit hasn't started, so post-commit
-    // computed style still reports the pre-move fold).
-    const rail = weekdayRailRef.current;
-    railHoldRef.current = rail
-      ? getComputedStyle(rail).gridTemplateRows
-      : null;
     setWarm(3); // a camera move needs every layer mounted now
     zooming.current = true;
     setZoom({ from, to, anchor });
@@ -1178,35 +1161,9 @@ function Calendar() {
       zoom.to === "schedule" && zoom.from !== "entry";
     if (lateJoin) incoming.style.visibility = "hidden";
 
-    // SNAP the weekday rail's space in this setup frame — never animate it.
-    // The 260ms grid-template-rows fold was the last LAYOUT animation on a
-    // move: it resized the stage every frame (the outgoing view visibly
-    // jumped as the SMTWTFS header collapsed — device recording 2026-07-17)
-    // and its per-frame relayout starved the move's opening frames. The
-    // space now changes ONCE, pre-paint, and the visual 28px hop is
-    // cancelled by folding railDelta into the OUTGOING layer's compositor
-    // keyframes (translateY(d) -> 0): frame 0 is pixel-identical to the
-    // pre-snap world, and the offset eases out inside the camera's glide.
-    // railHoldRef was read pre-commit in runZoom (clean tree, ~free); the
-    // rail's full height is cached whenever it's seen unfolded.
-    const rail = weekdayRailRef.current;
-    const heldRailH = parseFloat(railHoldRef.current ?? "") || 0;
-    if (heldRailH > 0) railFullHRef.current = heldRailH;
-    const targetRailH = zoom.to === "month" ? railFullHRef.current : 0;
-    // + when the rail is folding AWAY (stage top moves up), − when unfolding
-    const railDelta =
-      zoom.from === "entry" || zoom.to === "entry"
-        ? 0
-        : heldRailH - targetRailH;
-    if (rail && railDelta !== 0) {
-      rail.style.transition = "none"; // snap: the class's target applies now
-      rail.style.gridTemplateRows = "";
-    }
-    const releaseRail = () => {
-      // restore the transition once the move is over (values are final by
-      // then, so nothing animates on restore)
-      if (rail) rail.style.transition = "";
-    };
+    // the weekday rail lives inside the month layer now — view flips never
+    // resize the stage, so there is nothing to hold, snap, or compensate
+    const railDelta = 0;
 
     // Belt-and-braces: sweep any orphaned flyer glyph from a prior move before
     // this one launches. The deferred finish cleanup removes each move's own
@@ -1250,7 +1207,6 @@ function Calendar() {
     );
 
     const finish = () => {
-      releaseRail(); // safety — normally released when the move began
       // the LANDED layer must never stay inline-hidden — a move canceled
       // before joinIncoming ran would otherwise land on an invisible book
       incoming.style.visibility = "";
@@ -2159,7 +2115,6 @@ function Calendar() {
       if (played) return;
       played = true;
       for (const a of camAnims) a.play();
-      releaseRail();
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
@@ -3237,36 +3192,10 @@ function Calendar() {
           hold it began folding at the COMMIT paint, a frame (or three, under
           device raster) before the animations played: the reader saw the
           weekday bar change as the ONLY thing moving. */}
-      <div
-        ref={weekdayRailRef}
-        className={cn(
-          "mt-5 grid border-b border-rule-faint transition-[grid-template-rows] duration-[var(--dur-slow)] ease-[var(--ease-out)]",
-          view === "month" && !searchActive
-            ? "grid-rows-[1fr]"
-            : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="overflow-hidden">
-          <div
-            role="row"
-            className={cn(
-              "grid grid-cols-7 transition-opacity duration-150",
-              view === "month" && !searchActive ? "opacity-100" : "opacity-0",
-            )}
-            aria-hidden={view !== "month" || searchActive}
-          >
-            {weekdays(weekStart).map((d, i) => (
-              <span
-                key={`${d}${i}`}
-                role="columnheader"
-                className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
-              >
-                {d}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* the header's bottom rule — constant across every view (it used to
+          be the weekday rail's border, and the rail's fold resized the stage;
+          the rail itself now lives inside the month layer) */}
+      <div className="mt-5 border-b border-rule-faint" />
 
       {/* the stage: one fixed frame for every altitude. It fills the
           column, and its terminating hairline sits the same distance
@@ -3304,10 +3233,35 @@ function Calendar() {
           onPointerUp={(e) => settleSwipe(e, openYear)}
           onPointerCancel={() => (swipe.current = null)}
           className={cn(
-            "absolute inset-0 px-2 [touch-action:pan-y]",
+            "absolute inset-0 flex flex-col px-2 [touch-action:pan-y]",
             !showMonthLayer && "invisible",
           )}
         >
+          {/* the weekday rail lives INSIDE the month layer: it is a
+              month-view artifact, and here it scales/fades away as part of
+              the calendar during a move. Its old life as a grid row ABOVE
+              the stage meant every month⇄elsewhere move resized the stage —
+              first as a 260ms layout ANIMATION (per-frame relayout of both
+              live layers: the mid-move jump), then as a setup-frame SNAP
+              (a stage-wide relayout+repaint that alone held the dive's play
+              tick ~140ms on device). Inside the layer, view flips never
+              touch the stage's geometry at all. */}
+          <div
+            role="row"
+            aria-hidden={view !== "month"}
+            className="grid shrink-0 grid-cols-7 pt-1.5"
+          >
+            {weekdays(weekStart).map((d, i) => (
+              <span
+                key={`${d}${i}`}
+                role="columnheader"
+                className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+          <div className="relative min-h-0 flex-1">
           {(view === "month" || warm >= 1 || riseStaged) && (
             <MonthFeed
               handleRef={monthFeedRef}
@@ -3322,6 +3276,7 @@ function Calendar() {
               onVisible={onMonthVisible}
             />
           )}
+          </div>
         </div>
         <div
           ref={yearLayerRef}
