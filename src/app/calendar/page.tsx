@@ -1228,10 +1228,6 @@ function Calendar() {
     // every paused compositor animation of this move (camera, flyers) —
     // played together on the play tick, cancelled together in finish()
     const camAnims: Animation[] = [];
-    // the LATE-JOIN channel (dives): the incoming book layer's animations
-    // start ~2 frames after the rest, once its reveal/raster has happened
-    // BEHIND already-visible motion (see joinIncoming below)
-    const lateAnims: Animation[] = [];
     const willChanged: HTMLElement[] = [];
     // the tile the CLOSING card lands on — hidden for the flight so only ONE card
     // is ever on stage (no retract toward a copy already seated), revealed in the
@@ -1270,7 +1266,6 @@ function Calendar() {
       // style update as the resets above — underlying styles take over with
       // no frame where the end pose lingers or the start pose flashes
       for (const a of camAnims) a.cancel();
-      for (const a of lateAnims) a.cancel();
       if (entryCard) {
         entryCard.style.transform = "";
         entryCard.style.opacity = "";
@@ -1484,7 +1479,7 @@ function Calendar() {
     const compositorMove = (
       el: HTMLElement,
       keyframes: Keyframe[],
-      opts?: { duration?: number; easing?: string; late?: boolean },
+      opts?: { duration?: number; easing?: string },
     ) => {
       const a = el.animate(keyframes, {
         duration: opts?.duration ?? 440, // driveEase's fixed duration
@@ -1492,7 +1487,7 @@ function Calendar() {
         fill: "forwards",
       });
       a.pause();
-      (opts?.late ? lateAnims : camAnims).push(a);
+      camAnims.push(a);
       // finished rejects on cancel — Promise.all(moves).then(finish, finish)
       // treats both as completion
       return a.finished;
@@ -1810,14 +1805,10 @@ function Calendar() {
           { transform: `translateY(${railDelta}px) scale(${outFrom})` },
           { transform: `translateY(0px) scale(${outTo})` },
         ]),
-        compositorMove(
-          incoming,
-          [
-            { transform: `scale(${inFrom})` },
-            { transform: `scale(${inTo})` },
-          ],
-          { late: lateJoin },
-        ),
+        compositorMove(incoming, [
+          { transform: `scale(${inFrom})` },
+          { transform: `scale(${inTo})` },
+        ]),
       ]);
 
     // shared-element flight: a date standing in both altitudes travels
@@ -2104,21 +2095,20 @@ function Calendar() {
     // flight span on WebKitGTK). Same law as the camera: create animations
     // only after all measurement.
     moves.push(
-      // the outgoing fade ALSO waits for the join on dives: fading the month
-      // away before the book's raster is ready showed bare stage paper for
-      // the raster's length (device symptom: "a while where the schedule
-      // view is just blank"). A crossfade AT the join can't gap.
+      // ONE synchronized crossfade: both fades share the camera's clock and
+      // start with it, so the two layers read as a single motion (played
+      // sequentially they read as the page "zooming out twice" — device,
+      // 2026-07-17). On a late-reveal dive the book's raster hides its first
+      // ~150ms; a LINEAR 300ms ramp means it surfaces mid-crossfade at
+      // moderate opacity — a materialization, not a flash — while the month
+      // above it is still fading down. The fades deliberately overlap.
       compositorMove(outgoing, [{ opacity: 1 }, { opacity: 0 }], {
-        duration: 180,
-        easing: "ease-out",
-        late: lateJoin,
+        duration: 300,
+        easing: "linear",
       }),
       compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
-        // a late-joining book gets a longer, gentler ramp — it reads as the
-        // page materializing under the flying dates, not popping in
-        duration: lateJoin ? 220 : 160,
-        easing: "ease-out",
-        late: lateJoin,
+        duration: 300,
+        easing: "linear",
       }),
     );
     moves.push(startCameraScale());
@@ -2154,20 +2144,12 @@ function Calendar() {
     const joinIncoming = () => {
       if (joined) return;
       joined = true;
-      // a canceled move's finish() has already run and canceled these —
-      // never restart them (zooming drops at finish)
-      if (!zooming.current) return;
-      // REVEAL first, PLAY one frame later: the reveal frame carries the
-      // book's raster, and a fade clock started on it fast-forwards through
-      // that work — the book then flashed in at near-full opacity instead
-      // of fading (device symptom 4). Paused fill-forwards keyframe-0 holds
-      // the layer at opacity 0 through the raster frame, so nothing shows
-      // until the fade truly plays, from true zero, on a cheap frame.
+      if (!zooming.current) return; // a canceled move's finish already ran
+      // REVEAL only — every animation (both scales, both fades) is already
+      // playing on the shared camera clock. The book's raster happens here,
+      // behind motion that is already on screen, and its first paint lands
+      // at exactly the mid-curve pose the single camera implies.
       incoming.style.visibility = "";
-      requestAnimationFrame(() => {
-        if (!zooming.current) return;
-        for (const a of lateAnims) a.play();
-      });
     };
     const playAll = () => {
       if (played) return;
@@ -2177,8 +2159,8 @@ function Calendar() {
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
-      if (lateAnims.length) {
-        // the book joins ON THE NEXT FRAME — motion is already on screen
+      if (lateJoin) {
+        // the book reveals ON THE NEXT FRAME — motion is already on screen
         // from this one, and one vsync is all the head start the outgoing
         // needs (two frames read as "the page is late" on device)
         requestAnimationFrame(joinIncoming);
