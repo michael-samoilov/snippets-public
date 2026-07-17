@@ -883,6 +883,22 @@ function Calendar() {
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).has("flat"),
   );
+  // Dive-opening A/B (device feel test, ?open=…). A zoom-IN is pixel-weak at
+  // the start — it magnifies about the tapped day, which is where the eye is
+  // and which therefore barely moves, while the destination book late-joins.
+  // Three candidates make the opening assertive; the reader records each and
+  // the winner stays. `null` (no flag) = the baseline.
+  //   lead  — the tapped day's number leaps toward its page on frame one,
+  //           giving motion exactly where the eye rests
+  //   punch — the whole calendar dims fast in the first frames (a screen-wide
+  //           "it responded", the way the rise's book-scale reads)
+  //   book  — the destination page materializes from frame one instead of ~2
+  //           frames late, so it contributes pixels immediately
+  const [openStyle] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("open"),
+  );
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   // Each feed's interactivity gate as a REF, not a prop: `view/zoom` flip at the
   // start AND end of every altitude move, and as props they re-rendered all
@@ -2187,11 +2203,24 @@ function Calendar() {
         const sFrom = fromFont.size / baseSize;
         const sTo = toFont.size / baseSize;
         const gtf = (s: number) => `translate(-50%,-50%) scale(${s})`;
+        // ?open=lead: the TAPPED day leaps on frame one. Its point rides a
+        // sharply front-loaded curve (covers most of its travel in the first
+        // ~120ms, then settles) so the number the reader is looking at bolts
+        // toward its page immediately — motion exactly where the eye rests,
+        // before the calendar's own zoom has moved much. Only the anchor;
+        // every other day keeps the shared eased glide.
+        const leadThis = openStyle === "lead" && day === zoom.anchor;
         moves.push(
-          compositorMove(point, [
-            { transform: `translate(${ax}px,${ay}px)` },
-            { transform: `translate(${bx}px,${by}px)` },
-          ]),
+          compositorMove(
+            point,
+            [
+              { transform: `translate(${ax}px,${ay}px)` },
+              { transform: `translate(${bx}px,${by}px)` },
+            ],
+            leadThis
+              ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" } // expo-out: bolts then settles
+              : undefined,
+          ),
         );
         compositorMove(gFrom, [
           { transform: gtf(sFrom), opacity: 1, offset: 0 },
@@ -2299,7 +2328,20 @@ function Calendar() {
       compositorMove(
         outgoing,
         [
-          { opacity: 1, offset: 0 },
+          {
+            opacity: 1,
+            offset: 0,
+            // ?open=punch: the calendar dims FAST at the very start — an
+            // expo-out on the fade drops the whole outgoing layer's opacity
+            // sharply in the first frames, a screen-wide "it responded" that
+            // the pixel-weak zoom-in otherwise lacks. Only the down-ramp
+            // segment; the plateau is untouched. Dive only.
+            ...(openStyle === "punch" &&
+            zoom.from === "month" &&
+            zoom.to === "schedule"
+              ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+              : {}),
+          },
           {
             opacity: 0,
             offset:
@@ -2467,7 +2509,15 @@ function Calendar() {
             camAnims.push(a); // finish() cancels it with the rest
           }
         }, 80);
-      if (lateJoin) {
+      // ?open=book (dive only): join the destination page THIS frame, not the
+      // next — its fade-in then contributes screen-filling pixels from the
+      // first motion frame, the biggest lever against the pixel-weak opening.
+      // Cost: the book's raster moves into the first motion frame (may add a
+      // touch of delay before that frame paints) — exactly the trade the A/B
+      // is measuring.
+      const joinNow =
+        openStyle === "book" && zoom.from === "month" && zoom.to === "schedule";
+      if (lateJoin && !joinNow) {
         // the book reveals ON THE NEXT FRAME — motion is already on screen
         // from this one, and one vsync is all the head start the outgoing
         // needs (two frames read as "the page is late" on device)
@@ -2488,8 +2538,8 @@ function Calendar() {
     else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
     void Promise.all(moves).then(finish, finish);
-    // freezeEnabled/flatCamera are set once at mount, never change in-session
-  }, [zoom, reduceMotion, freezeEnabled, flatCamera]);
+    // freezeEnabled/flatCamera/openStyle are set once at mount, never change
+  }, [zoom, reduceMotion, freezeEnabled, flatCamera, openStyle]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
