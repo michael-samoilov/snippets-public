@@ -49,12 +49,25 @@ WATCH_FLYERS = r"""() => {
   const seen = window.__flys;
   const scan = () => {
     for (const p of document.querySelectorAll('[data-fly]')) {
-      const m = (p.style.transform || '').match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+      // COMPUTED, not inline: the compositor (WAAPI) driver never writes
+      // inline transforms — reading style.transform reported every flyer
+      // parked at its creation pose (the same trap flight-travel fixed).
+      // matrix(a,b,c,d,tx,ty) -> tx,ty
+      const cm = (getComputedStyle(p).transform || '').match(/matrix\(([^)]+)\)/);
+      const m = cm ? [0, ...cm[1].split(',').slice(4).map(v => v.trim())] : null;
       if (!m) continue;
       const day = p.dataset.fly;
       const cur = { x: +m[1], y: +m[2] };
-      if (!seen[day]) seen[day] = { first: cur, last: cur };
-      else seen[day].last = cur;
+      if (!seen[day]) seen[day] = { first: cur, last: cur, far: 0 };
+      else {
+        // LANDING = the FARTHEST sample from the launch, not the final one:
+        // finish() cancels the fill-forwards animations, and for the frame
+        // between cancel and the flyer box's removal the computed transform
+        // REVERTS to the creation pose — a last-sample read said every flyer
+        // "landed" back at its origin (easeOut => farthest IS the landing).
+        const d = Math.hypot(cur.x - seen[day].first.x, cur.y - seen[day].first.y);
+        if (d >= seen[day].far) { seen[day].far = d; seen[day].last = cur; }
+      }
     }
     if (document.querySelector('[data-fly]') || !window.__flysDone)
       requestAnimationFrame(scan);

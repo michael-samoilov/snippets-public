@@ -1162,7 +1162,13 @@ function Calendar() {
     // joinIncoming reveals + plays the book ~2 frames later: its raster
     // happens behind visible motion, and its own 160ms opacity ramp makes
     // the late entrance read as choreography, not a glitch.
-    const lateJoin = zoom.to === "schedule";
+    // NEVER for entry moves: an entry->schedule close matches zoom.to but
+    // takes the morph branch below, which returns without playAll — the
+    // hidden book then stayed hidden through the whole close (device
+    // recording 2026-07-17: every other card vanished until the morph
+    // settled; scripts/measure-entry-close.py now gates this).
+    const lateJoin =
+      zoom.to === "schedule" && zoom.from !== "entry";
     if (lateJoin) incoming.style.visibility = "hidden";
 
     // HOLD the weekday rail at its current fold through setup: the commit just
@@ -2082,7 +2088,9 @@ function Calendar() {
         easing: "ease-out",
       }),
       compositorMove(incoming, [{ opacity: 0 }, { opacity: 1 }], {
-        duration: 160,
+        // a late-joining book gets a longer, gentler ramp — it reads as the
+        // page materializing under the flying dates, not popping in
+        duration: lateJoin ? 220 : 160,
         easing: "ease-out",
         late: lateJoin,
       }),
@@ -2135,9 +2143,10 @@ function Calendar() {
       // pointerdown to show tap→motion on device (input-delay attribution)
       performance.mark("zoom-motion");
       if (lateAnims.length) {
-        // the book joins two frames into the move — after its reveal frame
-        // has had a whole vsync of visible motion to hide behind
-        requestAnimationFrame(() => requestAnimationFrame(joinIncoming));
+        // the book joins ON THE NEXT FRAME — motion is already on screen
+        // from this one, and one vsync is all the head start the outgoing
+        // needs (two frames read as "the page is late" on device)
+        requestAnimationFrame(joinIncoming);
         setTimeout(joinIncoming, 250); // backstop: the book must always join
       } else {
         joinIncoming();
