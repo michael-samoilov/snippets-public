@@ -14,7 +14,6 @@ import {
   useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -1102,12 +1101,16 @@ function Calendar() {
     disarm: () => void;
     abort: () => void;
   } | null>(null);
-  const stagedFlyRafRef = useRef(0);
-  // staging's deferred half (goTo), scheduled one frame off the input event —
-  // flushStagedDescent() runs it synchronously if the click gets there first
-  const stagedRunRef = useRef<(() => void) | null>(null);
-  const stagedFlushRef = useRef<(() => void) | null>(null);
-  const stagedRafRef = useRef(0);
+  // (The dive's book landing — goTo: probe move + landing scroll (+ the band
+  // flush, now paid by the zoom effect's markOnStage) — no longer pre-runs
+  // during the finger dwell. It ran on a rAF from the day-cell POINTERDOWN, and
+  // a fast finger lift then queued pointerup behind that ~130ms flushSync on
+  // WebKit — the dive's ~200ms dwn→up spill (device 2026-07-18). pick() now
+  // does the cheap half (probe + narrow scroll) on POINTERUP instead, and the
+  // outgoing camera plays first so up→motion stays low (see earlyOut) — the
+  // pre-stage was pure input-latency cost with no remaining benefit.
+  // stageDescent now only caches the flight's takeoff rects (cheap), and the
+  // staged-flyer prebuild + its run/flush/raf refs are gone with it.)
   // ?flat=1 device A/B (see the camera-scale block): captured ONCE at first
   // render — the deep-link effect rewrites the URL right after boot, so
   // reading location.search at zoom time always missed the flag.
@@ -1270,15 +1273,17 @@ function Calendar() {
     setView(to);
   }, []);
 
-  /** Stage a dive's DESTINATION: capture the flight's takeoff rects on the
-      clean month layout (the month grid is static through the dive, so these
-      boxes are the truth the whole move — and reading them post-commit forced
-      an O(month) reflow), and open + scroll + warm the book page behind the
-      still-invisible schedule layer. Idempotent per day. Called from the day
-      cell's POINTERDOWN (a tap dwells ~100ms between pointerdown and click —
-      free time in which the browser lays out the destination band while the
-      finger is still down) and again from pick() as the fallback for
-      keyboard/programmatic picks, where it runs on the tap frame as before. */
+  /** Cache a dive's takeoff rects: measure the flight's month-cell flydate
+      boxes on the clean month layout (the month grid is static through the
+      dive, so these boxes are the truth the whole move — and reading them
+      post-commit forced an O(month) reflow) into descentGeom. That's ALL this
+      does now — cheap DOM reads, no React commit, no scroll. The book landing
+      (goTo) it used to pre-run during the finger dwell moved onto pick()'s
+      POINTERUP path instead (probe + narrow scroll only, band flush deferred to
+      the zoom effect behind the camera); pre-running it here only spilled onto a
+      fast finger's pointerup. Idempotent per day. Called from the day cell's
+      POINTERDOWN (free dwell time to read the rects) and again from pick() as
+      the fallback for keyboard/programmatic picks with no pointerdown hint. */
   // DEAD END — "pre-raster during the dwell" (tried twice, 2026-07-16; DO NOT
   // RE-ADD IN ANY TIMING). The idea: the layers rest visibility:hidden (skips
   // painting), so the incoming layer's first raster lands on the move's opening
@@ -1318,147 +1323,6 @@ function Calendar() {
     }
     performance.mark("stage:rects");
     performance.measure("stage:rects", "stage:0", "stage:rects");
-    // The heavy half — opening the page behind the zoom (goTo: probe commit +
-    // landing scroll + band flush) — runs ONE FRAME LATER, off the input
-    // event. The probe rides useSyncExternalStore, whose updates commit
-    // SYNCHRONOUSLY (React's tearing guard), so goTo inside the pointerdown
-    // handler blocked that frame ~140ms at 6x throttle — the device's 204ms
-    // tap stall (HUD round 2026-07-16); band width barely mattered (the cost
-    // is the probe/composer commit + flush, not the band's layout). A frame
-    // later is still early in the tap's ~100ms dwell, and pick() flushes
-    // pending staging synchronously, so the move NEVER runs unstaged.
-    // TWO dwell chunks, one frame each: the probe COMMIT (flushSync — from a
-    // rAF, uSES/setState updates otherwise batch into the CLICK's React
-    // flush, ~350ms on WebKitGTK) and then the band's LAYOUT flush (explicit
-    // — WebKit never flushes on its own; Blink did it inside scrollTo, which
-    // hid the difference). Split because as ONE block it ran ~130ms on
-    // device, and a quick finger lift queued the click dispatch behind it
-    // (the dwn->run spill): between two smaller frames the click can slot
-    // in, and pick() flushes whichever chunk hasn't run yet.
-    stagedRunRef.current = () => {
-      stagedRunRef.current = null;
-      performance.mark("stage:1");
-      flushSync(() => {
-        // narrow: the staged 0.35-viewport band IS the dive's climb band —
-        // no widen before liftoff (see markOnStage) — so the reveal's style
-        // pass covers a third of the content
-        scheduleFeedRef.current?.goTo(key, false, true);
-      });
-      performance.mark("stage:goTo");
-      performance.measure("stage:goTo", "stage:1", "stage:goTo");
-      stagedFlushRef.current = () => {
-        stagedFlushRef.current = null;
-        void scheduleLayerRef.current?.querySelector<HTMLElement>(
-          "[data-book-scroller]",
-        )?.offsetHeight;
-      };
-      stagedRafRef.current = requestAnimationFrame(() => {
-        stagedFlushRef.current?.();
-        // CHUNK C — the flyer prebuild (see stagedFlyersRef). One frame
-        // after the band flush so the book side is fully laid out; still
-        // deep inside the dwell (chunks A+B are done by ~40ms of a ~230ms
-        // contact). Skipped entirely on a fast tap (flushStagedDescent
-        // never schedules it) — the effect then builds flyers inline as
-        // before.
-        stagedFlyRafRef.current = requestAnimationFrame(() => {
-          if (zooming.current || stagedDescentRef.current !== key) return;
-          stagedFlyersRef.current?.abort();
-          const st2 = stageRef.current;
-          const mo2 = monthLayerRef.current;
-          const geom = descentGeom.current;
-          if (!st2 || !mo2 || !geom || geom.anchor !== key) return;
-          const toEl = scheduleLayerRef.current?.querySelector<HTMLElement>(
-            "[data-day][data-warm] [data-flydate]",
-          );
-          if (!toEl) return;
-          // READS first: fonts + stage box (the margin dates share one
-          // voice — one representative toFont serves every pair)
-          const toFont = readFont(toEl);
-          const sr2 = st2.getBoundingClientRect();
-          const monthFly = new Map<string, HTMLElement>();
-          for (const el of mo2.querySelectorAll<HTMLElement>("[data-flydate]"))
-            monthFly.set(el.dataset.flydate!, el);
-          const fonts = new Map<string, FlyFont>();
-          for (const day of geom.cells.keys()) {
-            const el = monthFly.get(day);
-            if (el) fonts.set(day, readFont(el));
-          }
-          // WRITES: the warm-up overlay. opacity 0.003 — below 1/255, so
-          // nothing shows (probed: a truly visible copy diffs against the
-          // real grid's text rendering AND misses the pressed cell's
-          // whileTap scale), but unlike visibility:hidden the layer
-          // contents still PAINT, which is the whole point: iOS rasters
-          // every flyer layer during the dwell. The zoom effect reveals
-          // the box (opacity '') when it adopts.
-          const box = document.createElement("div");
-          box.style.cssText =
-            "position:absolute;inset:0;pointer-events:none;z-index:45;transform:translateZ(0);opacity:0.003;";
-          const points = new Map<
-            string,
-            { point: HTMLSpanElement; gFrom: HTMLSpanElement }
-          >();
-          for (const [day, a] of geom.cells) {
-            const fromFont = fonts.get(day);
-            if (!fromFont) continue;
-            const baseSize = Math.max(fromFont.size, toFont.size);
-            const ax = a.left + a.width / 2 - sr2.left;
-            const ay = a.top + a.height / 2 - sr2.top;
-            const num = String(Number(day.slice(8)));
-            const color = day === dayKey() ? "var(--wax)" : "var(--ink)";
-            const point = document.createElement("span");
-            point.dataset.flyStaged = day;
-            point.style.cssText = `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);will-change:transform;`;
-            const gFrom = flyGlyph(num, fromFont, color);
-            gFrom.style.fontSize = `${baseSize}px`;
-            gFrom.style.transform = `translate(-50%,-50%) scale(${fromFont.size / baseSize})`;
-            gFrom.style.willChange = "transform, opacity";
-            point.appendChild(gFrom);
-            box.appendChild(point);
-            points.set(day, { point, gFrom });
-          }
-          if (!points.size) return;
-          st2.appendChild(box);
-          // (Promoting the MONTH layer here too was probed and rejected:
-          // will-change on the layer re-snaps its already-painted content —
-          // the entry-count dots visibly shifted across the whole grid in
-          // the screenshot diff. The flyer box is additive-only; it cannot
-          // move existing pixels.)
-          void box.offsetHeight; // pay the raster NOW, in the dwell
-          const disarm = () => {
-            window.removeEventListener("pointercancel", abort, true);
-            mo2.removeEventListener("scroll", abort, true);
-            clearTimeout(tid);
-            if (stagedFlyersRef.current?.box === box)
-              stagedFlyersRef.current = null;
-          };
-          const abort = () => {
-            disarm();
-            box.remove();
-          };
-          // a pan (pointercancel) or any month scroll would slide the grid
-          // out from under the overlay — the ghosts must go instantly
-          window.addEventListener("pointercancel", abort, true);
-          mo2.addEventListener("scroll", abort, true);
-          const tid = setTimeout(abort, 4000);
-          stagedFlyersRef.current = { anchor: key, box, points, disarm, abort };
-        });
-      });
-    };
-    cancelAnimationFrame(stagedRafRef.current);
-    stagedRafRef.current = requestAnimationFrame(() => stagedRunRef.current?.());
-  }, []);
-
-  /** run a still-pending staged goTo NOW — pick() calls this before the zoom
-      so the landing is always in place when the effect measures, even if the
-      click somehow outruns the staging rAF */
-  const flushStagedDescent = useCallback(() => {
-    cancelAnimationFrame(stagedRafRef.current);
-    stagedRunRef.current?.(); // commit chunk (schedules the flush chunk)...
-    cancelAnimationFrame(stagedRafRef.current);
-    stagedFlushRef.current?.(); // ...which runs NOW if still pending
-    // a not-yet-run flyer prebuild (chunk C) must not fire into the move —
-    // the effect builds inline when nothing was staged
-    cancelAnimationFrame(stagedFlyRafRef.current);
   }, []);
 
   /** tapping a day dives the camera into it: the book opens there */
@@ -1472,11 +1336,29 @@ function Calendar() {
       if (zooming.current) return;
       liveDayRef.current = key;
       navigator.vibrate?.(6);
-      stageDescent(key); // no-op when the pointerdown hint already staged it
-      flushStagedDescent(); // the landing must be real before the zoom measures
+      // Cache the flight's takeoff rects (a no-op when the pointerdown hint
+      // already did it). This is now the ONLY thing the day-cell POINTERDOWN
+      // pre-runs — the heavy staged goTo that used to run on a rAF during the
+      // dwell is gone, so a fast finger lift no longer queues pointerup behind
+      // it (the dive's ~200ms dwn→up spill). A tap with no pointerdown hint
+      // (keyboard/AT via onClick) still gets its descentGeom from this call.
+      stageDescent(key);
       stagedDescentRef.current = null; // consumed — the next tap restages
       if (urlTimer.current) clearTimeout(urlTimer.current);
       pushUrl(`${pathname}?d=${key}`);
+      // Land the book on POINTERUP (not on the press): move the probe/composer,
+      // conjure the empty-day row (extraDay), and scroll onto the tapped row.
+      // This is deliberately CHEAP — a probe change re-renders only the two rows
+      // whose composer toggles (useSyncExternalStore, see ProbeRow) and the
+      // NARROW scroll forces no band flush — so it neither spills onto dwn→up
+      // (pointerup has already dispatched by the time pick runs) nor inflates
+      // up→motion: the EXPENSIVE band warm/flush + the flight stay deferred
+      // behind the camera, in the zoom effect's markOnStage/relandOnRow. Doing
+      // it here rather than in that effect gives the freshly-mounted composer
+      // runZoom's OWN commit as a settling render before the flight measures the
+      // page — without it, days below the anchor measured a composer-less
+      // (short) page and their flyers landed ~46px high (measure-flight-fidelity).
+      scheduleFeedRef.current?.goTo(key, false, true);
       runZoom("month", "schedule", key);
       // `selected` only drives the outgoing month grid's highlight — invisible
       // until the reader returns to the month. It used to commit one rAF after
@@ -1485,7 +1367,7 @@ function Calendar() {
       // (with the teardown commit), where the month layer is hidden anyway.
       pendingSelectRef.current = key;
     },
-    [pathname, runZoom, stageDescent, flushStagedDescent],
+    [pathname, runZoom, stageDescent],
   );
 
   /** the reader's place in the book drives selection, title, and URL.
@@ -1824,11 +1706,18 @@ function Calendar() {
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
     // THE DIVE INPUT-LAG FIX (2026-07-18). The dive (month→schedule) is the one
     // path that plays its OUTGOING camera + crossfade and marks zoom-motion
-    // BEFORE the ~74ms of book work (freeze + markOnStage + reland) — moved below
-    // the camera params now — so iOS begins the zoom on the compositor thread
-    // while the main thread lays out the band. Everything else keeps the old
-    // ordering: the rise's outgoing IS the book, measured live in the flight, so
-    // it must stay at scale 1 until then; year⇄month has no book work at all.
+    // BEFORE the heavy book work (freeze + markOnStage + reland + flight) —
+    // moved below the camera params now — so iOS begins the zoom on the
+    // compositor thread while the main thread lays out the band. That deferral
+    // makes the pre-staged goTo redundant: pick() now does the CHEAP landing
+    // (probe move + narrow scroll, no band flush) synchronously on pointerup,
+    // and this branch's markOnStage pays the one expensive band flush behind the
+    // camera. The staged goTo used to pre-run the whole landing during the
+    // finger's dwell (day-cell pointerdown), which spilled onto a fast lift's
+    // pointerup (~200ms dwn→up on WebKit) for no remaining benefit. Everything
+    // else keeps the old ordering: the rise's outgoing IS the book, measured
+    // live in the flight, so it must stay at scale 1 until then; year⇄month has
+    // no book work at all.
     const earlyOut = zoom.from === "month" && zoom.to === "schedule";
 
     // on an entry dive (open OR close), use the boxes measured on clean layout
