@@ -723,22 +723,25 @@ function TapBeacon() {
           armed = false;
           const base = upT >= downT ? upT : downT; // release is the fair zero
           const total = Math.round(m.startTime - base);
-          const R = (a: number, b: number) => Math.round(b - a);
           const run = lastMark("zoom-run");
-          const fx0 = lastMark("zoom-fx0");
-          const fx1 = lastMark("zoom-fx1");
-          let parts = "";
-          if (
-            run && fx0 && fx1 &&
-            base <= run.startTime + 1 &&
-            run.startTime <= fx0.startTime &&
-            fx0.startTime <= fx1.startTime &&
-            fx1.startTime <= m.startTime
-          ) {
-            parts =
-              `up→run ${R(base, run.startTime)} · cm ${R(run.startTime, fx0.startTime)}` +
-              ` · fx ${R(fx0.startTime, fx1.startTime)} · pt ${R(fx1.startTime, m.startTime)}`;
-          }
+          // Pre-release split — robust to the dive's reordered marks (motion now
+          // precedes fx1, so the old fx1<=motion guard never held). This is the
+          // whole diagnosis for "tap->move high on the dive": dwn->up is
+          // finger-contact time (your press), up->run is the dispatch latency
+          // between the pointerup event and the handler running. If dwn->up is
+          // the bulk, tap->move is press duration, not lag; if up->run is, it's
+          // real dispatch delay we can attack.
+          const contact = upT >= downT ? Math.round(upT - downT) : null; // dwn->up
+          const dispatch =
+            run && upT && run.startTime >= upT
+              ? Math.round(run.startTime - upT)
+              : null; // up->run
+          const tapMove = Math.round(m.startTime - downT);
+          const parts =
+            `tap→move ${tapMove}` +
+            (contact != null ? ` · dwn→up ${contact}` : "") +
+            (dispatch != null ? ` · up→run ${dispatch}` : "") +
+            ` · up→motion ${total}`;
           const col = total < 100 ? "#39d98a" : total < 150 ? "#f0c419" : "#ff5a5a";
           const ring = ringRef.current;
           const txt = txtRef.current;
