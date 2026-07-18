@@ -1819,87 +1819,14 @@ function Calendar() {
     }
 
     const deeper = DEPTH[zoom.to] > DEPTH[zoom.from];
-
-    // Warm + flush the (destination) band BEFORE the first geometry read below
-    // (stageRect), so that flush renders only the band — never band-render then
-    // re-band (the old double flush). ONLY for real altitude CLIMBS — this
-    // condition must stay EXACTLY symmetric with finish()'s `climbed`, which is
-    // what calls clearOnStage: an entry open/close reaching markOnStage latches
-    // climbingRef with no finish-side release, and a stuck latch stands the warm
-    // observer down FOREVER — the reader then scrolls into permanently blank
-    // paper (device recording, 2026-07-15; entry moves never needed the band
-    // work anyway — pre-6ae01f7 this block sat below their early return).
-    if (
-      (zoom.from === "schedule" || zoom.to === "schedule") &&
-      zoom.from !== "entry" &&
-      zoom.to !== "entry"
-    ) {
-      // Un-stick the margin dates ONLY while the book is being scaled as a
-      // rigid block (this branch: month/year⇄schedule, never entry moves — an
-      // entry move just fades the book, and un-sticking there jumped the
-      // focused day's number to its section top for the whole card animation).
-      // Set imperatively (React doesn't manage this attribute) BEFORE the
-      // band flush below, so the flight measures under the frozen truth;
-      // finish() removes it. As a prop this rode the zoom commit and
-      // re-rendered the whole feed at both ends of every move.
-      performance.mark("zoom-fx-wake"); // wake + rail hold done
-      dgFlush("wake");
-      if (freezeEnabled) {
-        // A probe latch only — no CSS is keyed on it anymore (the old
-        // [data-dive-freeze] rule's attribute toggle invalidated
-        // selector-matching across the whole book; see globals.css)
-        scheduleLayerRef.current
-          ?.querySelector("[data-book-scroller]")
-          ?.setAttribute("data-dive-freeze", "");
-        // Freeze the BAND's margin dates to normal flow INLINE (O(band), the
-        // only dates that are rendered), and repin the straddler sticky —
-        // both NOW, before markOnStage's flush, so the ONE flush covers
-        // them and the flight measures the frozen truth. stickyDeltaFor is
-        // pure cached-geometry math — no reads.
-        if (
-          (zoom.from === "month" && zoom.to === "schedule") ||
-          (zoom.from === "schedule" && zoom.to === "month")
-        ) {
-          // READS first, then writes — stickyDeltaFor reads scrollTop, and
-          // calling it after the previous iteration's position write forced
-          // ONE FULL BOOK LAYOUT PER SECTION on WebKit (~45ms × 7 warm
-          // sections = the dive's whole `s` block; the rise's `s` scaled
-          // with its warm count for the same reason). Phased, the loop costs
-          // at most one flush.
-          performance.mark("fz:a");
-          // O(warm), from the feed's warmSetRef — NOT a querySelectorAll over the
-          // whole schedule layer (that book-wide scan was the dive's biggest
-          // setup cost: fz:reads ~32ms, near-constant with book size).
-          const freezeCells = (
-            scheduleFeedRef.current?.warmMarginCells() ?? []
-          ).map(({ cell, day }) => ({
-            cell,
-            straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
-          }));
-          performance.mark("fz:b");
-          for (const { cell, straddler } of freezeCells) {
-            cell.style.position = straddler ? "sticky" : "static";
-            (straddler ? repinned : frozen).push(cell);
-          }
-          performance.mark("fz:c");
-          performance.measure("fz:reads", "fz:a", "fz:b");
-          performance.measure("fz:writes", "fz:b", "fz:c");
-        }
-      }
-      scheduleFeedRef.current?.markOnStage(zoom.to === "schedule");
-      performance.mark("zoom-fx-stage"); // freeze + band warm/flush done
-      // Descent: pick() set scrollTop against the book's --cis placeholders,
-      // which are stale whenever the webfonts swapped after the book measured.
-      // markOnStage just rendered the band at real heights, so re-land on the
-      // tapped row's TRUE top now — before the flight measures or anything
-      // paints. The landing is then exact by construction, not a pin-timer
-      // correction the reader watches the dates skip through. (Ascent has no
-      // target row; a plain goTo keeps its own settle pins.)
-      if (zoom.to === "schedule")
-        scheduleFeedRef.current?.relandOnRow(zoom.anchor);
-    }
-    performance.mark("zoom-fx-band"); // climb-band warm/flush + re-land done
-    dgFlush("band");
+    // THE DIVE INPUT-LAG FIX (2026-07-18). The dive (month→schedule) is the one
+    // path that plays its OUTGOING camera + crossfade and marks zoom-motion
+    // BEFORE the ~74ms of book work (freeze + markOnStage + reland) — moved below
+    // the camera params now — so iOS begins the zoom on the compositor thread
+    // while the main thread lays out the band. Everything else keeps the old
+    // ordering: the rise's outgoing IS the book, measured live in the flight, so
+    // it must stay at scale 1 until then; year⇄month has no book work at all.
+    const earlyOut = zoom.from === "month" && zoom.to === "schedule";
 
     // on an entry dive (open OR close), use the boxes measured on clean layout
     // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
@@ -2256,7 +2183,14 @@ function Calendar() {
     // pt A/B (dive only): defer or drop the INCOMING book's camera scale.
     const diveInc =
       zoom.from === "month" && zoom.to === "schedule" ? openStyleRef.current : null;
-    const skipIncCamAtSetup = diveInc === "noinc" || diveInc === "latinc";
+    // Defer the incoming (book) camera to joinIncoming on EVERY late-join dive —
+    // not just the latinc A/B — so nothing scales the book before the flight has
+    // measured it (constraint 1) and its promotion/raster lands behind motion
+    // (see joinIncoming). noinc still drops it entirely.
+    const skipIncCamAtSetup =
+      diveInc === "noinc" ||
+      diveInc === "latinc" ||
+      (lateJoin && zoom.to === "schedule");
     const startCameraScale = () =>
       Promise.all([
         compositorMove(outgoing, [
@@ -2272,6 +2206,127 @@ function Calendar() {
               ]),
             ]),
       ]);
+
+    // EARLY OUTGOING MOTION (the dive only). Play the month's camera scale and
+    // its crossfade — both cheap, cached-geometry, month-only transforms/opacity
+    // that never walk the book — and stamp zoom-motion NOW, before the book work
+    // below. On iOS the compositor starts the zoom on its own thread while this
+    // thread spends ~74ms laying out the band. The incoming (book) camera + fade
+    // stay deferred to joinIncoming (skipIncCamAtSetup), and the flyers are
+    // compressed in playAll so they still LAND at 440 with this camera. Only the
+    // outgoing month moves here, so scaling it can't corrupt the flight's book
+    // measurement (constraint 1); its own flyer rects come from descentGeom.
+    if (earlyOut) {
+      moves.push(
+        compositorMove(outgoing, [
+          { transform: `translateY(${railDelta}px) scale(${outFrom})` },
+          { transform: `translateY(0px) scale(${outTo})` },
+        ]),
+        // the dive's outgoing crossfade, verbatim from its old (post-flight) home
+        // below — created here instead, and guarded out there for the dive
+        compositorMove(
+          outgoing,
+          [
+            {
+              opacity: 1,
+              offset: 0,
+              ...(openStyleRef.current === "punch"
+                ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+                : {}),
+            },
+            { opacity: 0, offset: 200 / 440 },
+            { opacity: 0, offset: 1 },
+          ],
+          { easing: "linear" },
+        ),
+      );
+      // camAnims holds exactly the two just created (nothing runs compositorMove
+      // before this on a dive) — play them together and mark the motion frame
+      for (const a of camAnims) a.play();
+      // first frame that paints motion — PerfHud pairs it with the last
+      // pointerdown to show tap→motion on device (input-delay attribution)
+      performance.mark("zoom-motion");
+    }
+
+    // Warm + flush the (destination) band. Runs AFTER the outgoing camera is
+    // already playing on a dive (see earlyOut above), so its ~74ms of layout is
+    // paid behind visible compositor motion. ONLY for real altitude CLIMBS — this
+    // condition must stay EXACTLY symmetric with finish()'s `climbed`, which is
+    // what calls clearOnStage: an entry open/close reaching markOnStage latches
+    // climbingRef with no finish-side release, and a stuck latch stands the warm
+    // observer down FOREVER — the reader then scrolls into permanently blank
+    // paper (device recording, 2026-07-15; entry moves never needed the band
+    // work anyway, and take the morph branch above before ever reaching here —
+    // which is why the entry exclusion is now by control flow, not a condition
+    // (TS narrows zoom to non-entry past that early return), yet the reachable
+    // set stays EXACTLY finish()'s `climbed`).
+    if (zoom.from === "schedule" || zoom.to === "schedule") {
+      // Un-stick the margin dates ONLY while the book is being scaled as a
+      // rigid block (this branch: month/year⇄schedule, never entry moves — an
+      // entry move just fades the book, and un-sticking there jumped the
+      // focused day's number to its section top for the whole card animation).
+      // Set imperatively (React doesn't manage this attribute) BEFORE the
+      // band flush below, so the flight measures under the frozen truth;
+      // finish() removes it. As a prop this rode the zoom commit and
+      // re-rendered the whole feed at both ends of every move.
+      performance.mark("zoom-fx-wake"); // wake + rail hold done
+      dgFlush("wake");
+      if (freezeEnabled) {
+        // A probe latch only — no CSS is keyed on it anymore (the old
+        // [data-dive-freeze] rule's attribute toggle invalidated
+        // selector-matching across the whole book; see globals.css)
+        scheduleLayerRef.current
+          ?.querySelector("[data-book-scroller]")
+          ?.setAttribute("data-dive-freeze", "");
+        // Freeze the BAND's margin dates to normal flow INLINE (O(band), the
+        // only dates that are rendered), and repin the straddler sticky —
+        // both NOW, before markOnStage's flush, so the ONE flush covers
+        // them and the flight measures the frozen truth. stickyDeltaFor is
+        // pure cached-geometry math — no reads.
+        if (
+          (zoom.from === "month" && zoom.to === "schedule") ||
+          (zoom.from === "schedule" && zoom.to === "month")
+        ) {
+          // READS first, then writes — stickyDeltaFor reads scrollTop, and
+          // calling it after the previous iteration's position write forced
+          // ONE FULL BOOK LAYOUT PER SECTION on WebKit (~45ms × 7 warm
+          // sections = the dive's whole `s` block; the rise's `s` scaled
+          // with its warm count for the same reason). Phased, the loop costs
+          // at most one flush.
+          performance.mark("fz:a");
+          // O(warm), from the feed's warmSetRef — NOT a querySelectorAll over the
+          // whole schedule layer (that book-wide scan was the dive's biggest
+          // setup cost: fz:reads ~32ms, near-constant with book size).
+          const freezeCells = (
+            scheduleFeedRef.current?.warmMarginCells() ?? []
+          ).map(({ cell, day }) => ({
+            cell,
+            straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
+          }));
+          performance.mark("fz:b");
+          for (const { cell, straddler } of freezeCells) {
+            cell.style.position = straddler ? "sticky" : "static";
+            (straddler ? repinned : frozen).push(cell);
+          }
+          performance.mark("fz:c");
+          performance.measure("fz:reads", "fz:a", "fz:b");
+          performance.measure("fz:writes", "fz:b", "fz:c");
+        }
+      }
+      scheduleFeedRef.current?.markOnStage(zoom.to === "schedule");
+      performance.mark("zoom-fx-stage"); // freeze + band warm/flush done
+      // Descent: pick() set scrollTop against the book's --cis placeholders,
+      // which are stale whenever the webfonts swapped after the book measured.
+      // markOnStage just rendered the band at real heights, so re-land on the
+      // tapped row's TRUE top now — before the flight measures or anything
+      // paints. The landing is then exact by construction, not a pin-timer
+      // correction the reader watches the dates skip through. (Ascent has no
+      // target row; a plain goTo keeps its own settle pins.)
+      if (zoom.to === "schedule")
+        scheduleFeedRef.current?.relandOnRow(zoom.anchor);
+    }
+    performance.mark("zoom-fx-band"); // climb-band warm/flush + re-land done
+    dgFlush("band");
 
     // shared-element flight: a date standing in both altitudes travels
     // from its grid cell to its ledger slot (and back) instead of
@@ -2587,7 +2642,10 @@ function Calendar() {
     // first rect read then paid an O(book) recalc (~300ms of the dive's
     // flight span on WebKitGTK). Same law as the camera: create animations
     // only after all measurement.
-    moves.push(
+    // The dive created AND PLAYED this outgoing crossfade in the early block
+    // above; only the non-dive paths (rise, month⇄year) create it here.
+    if (!earlyOut)
+      moves.push(
       // ONE synchronized crossfade: both fades share the camera's clock and
       // start with it, so the two layers read as a single motion (played
       // sequentially they read as the page "zooming out twice" — device,
@@ -2659,7 +2717,9 @@ function Calendar() {
         ),
       );
     dgFlush("cross");
-    moves.push(startCameraScale());
+    // the dive played its outgoing camera early and defers the incoming one to
+    // joinIncoming, so startCameraScale has nothing left to create for it
+    if (!earlyOut) moves.push(startCameraScale());
     // Force the setup's style recalc + layout NOW, behind a measure — this
     // splits the device HUD's opaque pt block into a measurable layout part
     // (`e` in the fx sub-spans; also readable on the WebKit harness) and an
@@ -2733,10 +2793,12 @@ function Calendar() {
         if (typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
       }
-      // late-inc A/B: the incoming book's camera scale, deferred from setup to
-      // HERE (clock-synced, behind motion) so its promotion/raster never lands
-      // on the input frame. Same protocol as the fade above.
-      if (diveInc === "latinc") {
+      // The incoming book's camera scale, deferred from setup to HERE
+      // (clock-synced, behind motion) so its promotion/raster never lands on the
+      // input frame. Created whenever it was skipped at setup — every late-join
+      // dive now (skipIncCamAtSetup), or the latinc A/B — but NOT the noinc A/B,
+      // which drops the incoming camera on purpose. Same protocol as the fade.
+      if (skipIncCamAtSetup && diveInc !== "noinc") {
         const inCam = incoming.animate(
           [{ transform: `scale(${inFrom})` }, { transform: `scale(${inTo})` }],
           {
@@ -2760,10 +2822,29 @@ function Calendar() {
     const playAll = () => {
       if (played) return;
       played = true;
-      for (const a of camAnims) a.play();
-      // first frame that paints motion — PerfHud pairs it with the last
-      // pointerdown to show tap→motion on device (input-delay attribution)
-      performance.mark("zoom-motion");
+      // On a dive the outgoing camera + crossfade are ALREADY running from the
+      // early block; play only the still-paused animations (the flyers) and
+      // COMPRESS them to the camera's remaining time, so they take off from their
+      // start rect NOW yet still LAND at 440 with the camera. Elsewhere nothing
+      // ran early: play the whole set together and stamp the motion mark here.
+      let motionDur = 440;
+      if (earlyOut) {
+        const elapsed = Number(camAnims[0]?.currentTime) || 0;
+        motionDur = Math.max(1, 440 - elapsed);
+        for (const a of camAnims)
+          if (a.playState === "paused") {
+            a.effect?.updateTiming({ duration: motionDur });
+            a.play();
+          }
+      } else {
+        for (const a of camAnims) a.play();
+        // first frame that paints motion — PerfHud pairs it with the last
+        // pointerdown to show tap→motion on device (input-delay attribution)
+        performance.mark("zoom-motion");
+      }
+      // the flyer timeline's origin — the arriving glyphs below ride it so their
+      // type-crossfade tracks the departing glyph's (compressed clock and all)
+      const flyerStart = performance.now();
       // rf instrument's second half: prices the first MOTION frame
       requestAnimationFrame(() => performance.mark("zoom-raf2"));
       // build the arriving glyphs a few frames in — they stay invisible
@@ -2772,7 +2853,12 @@ function Calendar() {
       if (lateGlyphs.length)
         lateGlyphTimer = window.setTimeout(() => {
           if (!zooming.current) return; // a canceled move's finish ran
-          const clock = camAnims[0]?.currentTime;
+          // ride the SAME (compressed on a dive) flyer clock as the departing
+          // glyph so the type-crossfade stays centred on the flight's midpoint;
+          // off a dive this equals camAnims[0].currentTime, exactly as before
+          const clock = earlyOut
+            ? performance.now() - flyerStart
+            : (camAnims[0]?.currentTime ?? null);
           for (const { point, num, toFont, color, sFrom, sTo } of lateGlyphs) {
             // NATIVE size, scale ending at exactly 1: a glyph landing at
             // `baseSize × scale(sTo)` rasters on its own layer with its own
@@ -2797,7 +2883,7 @@ function Calendar() {
                 { transform: gtf(1), opacity: 1, offset: 1 },
               ],
               {
-                duration: 440,
+                duration: motionDur,
                 easing: "cubic-bezier(0.33, 1, 0.68, 1)",
                 fill: "forwards",
               },
