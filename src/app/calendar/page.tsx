@@ -494,6 +494,14 @@ interface ScheduleFeedHandle {
   // this to fly from/to where the pinned date actually rests. Cached geometry
   // + one scroll read; no layout forced in skipped sections.
   stickyDeltaFor: (day: string) => number;
+  // The warm band's margin-date cells, walked from the feed's own warmSetRef
+  // (the ~7 rendered sections) — NOT a querySelectorAll over the schedule layer,
+  // which scans the whole book (hundreds of cv:hidden sections) to find those 7.
+  // That scan was the dive's single biggest setup cost (fz:reads ~32ms Chromium,
+  // ~constant with book size, far worse on WebKit's selector engine — the bulk
+  // of the release→motion lag). Each cell is queried inside its own small
+  // section, so this is O(warm), not O(book).
+  warmMarginCells: () => { cell: HTMLElement; day: string }[];
   // Re-land the scroll on a day's TRUE top. pick() set scrollTop against the
   // book's --cis placeholders, which go stale when the webfonts swap after the
   // book measured (every rendered card grows; skipped sections keep the short
@@ -656,6 +664,154 @@ function PerfHud() {
         pointerEvents: "none",
       }}
     />
+  );
+}
+
+// Tap beacon (?perf=1): a big, tap-anchored readout of the release→first-motion
+// delay — the thing the finger actually feels, spelled out where it happened so
+// it's legible on a phone screen recording (the top-left HUD line is too small
+// to read back). On every tap it records the down point + release time WITHOUT
+// touching the DOM (an iOS write under a live finger poisons the tap — see the
+// HUD's `touching` guard and the dead-first-tap regressions); then, once the
+// zoom marks its first MOTION frame (finger long gone), it latches and paints a
+// ring at the tap with the total ms and its decomposition:
+//   up→run  release → the click handler runs (dispatch latency)
+//   cm      the React commit
+//   fx      the zoom SETUP JS (band warm + layout flushes) — usually the bulk
+//   pt      the browser's first styled/painted frame (paint/raster/commit)
+// Color: green <100ms · amber <150 · red ≥150. Held ~2.6s, then fades. Which
+// span is largest is the whole diagnosis — on the dive it is `fx`, not `pt`.
+function TapBeacon() {
+  const [on] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("perf"),
+  );
+  const ringRef = useRef<HTMLDivElement | null>(null);
+  const txtRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!on) return;
+    let raf = 0;
+    let downT = 0;
+    let upT = 0;
+    let x = 0;
+    let y = 0;
+    let armed = false; // a tap is in flight, waiting for its motion frame
+    let shownAt = 0;
+    // record only — NO DOM writes while the finger is on the glass
+    const down = (e: PointerEvent) => {
+      downT = performance.now();
+      upT = 0;
+      x = e.clientX;
+      y = e.clientY;
+      armed = true;
+    };
+    const up = () => {
+      upT = performance.now();
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    const lastMark = (n: string) => {
+      const e = performance.getEntriesByName(n);
+      return e[e.length - 1];
+    };
+    const loop = (now: number) => {
+      if (armed) {
+        const m = lastMark("zoom-motion");
+        if (m && downT && m.startTime > downT) {
+          armed = false;
+          const base = upT >= downT ? upT : downT; // release is the fair zero
+          const total = Math.round(m.startTime - base);
+          const R = (a: number, b: number) => Math.round(b - a);
+          const run = lastMark("zoom-run");
+          const fx0 = lastMark("zoom-fx0");
+          const fx1 = lastMark("zoom-fx1");
+          let parts = "";
+          if (
+            run && fx0 && fx1 &&
+            base <= run.startTime + 1 &&
+            run.startTime <= fx0.startTime &&
+            fx0.startTime <= fx1.startTime &&
+            fx1.startTime <= m.startTime
+          ) {
+            parts =
+              `up→run ${R(base, run.startTime)} · cm ${R(run.startTime, fx0.startTime)}` +
+              ` · fx ${R(fx0.startTime, fx1.startTime)} · pt ${R(fx1.startTime, m.startTime)}`;
+          }
+          const col = total < 100 ? "#39d98a" : total < 150 ? "#f0c419" : "#ff5a5a";
+          const ring = ringRef.current;
+          const txt = txtRef.current;
+          if (ring && txt) {
+            ring.style.left = `${x}px`;
+            ring.style.top = `${y}px`;
+            ring.style.borderColor = col;
+            ring.style.opacity = "1";
+            const below = y < 160; // flip the label under vs above the ring near the top
+            txt.style.left = `${x}px`;
+            txt.style.top = `${below ? y + 40 : y - 78}px`;
+            txt.style.color = col;
+            txt.innerHTML =
+              `<b style="font-size:38px;line-height:1">${total}` +
+              `<span style="font-size:15px">ms</span></b>` +
+              `<div style="font-size:11px;color:#e8e8e8;margin-top:3px">${parts}</div>`;
+            txt.style.opacity = "1";
+          }
+          shownAt = now;
+        }
+      }
+      if (shownAt && now - shownAt > 2600) {
+        shownAt = 0;
+        if (ringRef.current) ringRef.current.style.opacity = "0";
+        if (txtRef.current) txtRef.current.style.opacity = "0";
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
+  }, [on]);
+  if (!on) return null;
+  return (
+    <>
+      <div
+        ref={ringRef}
+        style={{
+          position: "fixed",
+          width: 54,
+          height: 54,
+          marginLeft: -27,
+          marginTop: -27,
+          border: "3px solid #39d98a",
+          borderRadius: "50%",
+          zIndex: 10000,
+          pointerEvents: "none",
+          opacity: 0,
+          transition: "opacity .12s",
+          boxShadow: "0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.5)",
+        }}
+      />
+      <div
+        ref={txtRef}
+        style={{
+          position: "fixed",
+          transform: "translateX(-50%)",
+          textAlign: "center",
+          zIndex: 10000,
+          pointerEvents: "none",
+          opacity: 0,
+          transition: "opacity .12s",
+          font: "12px ui-monospace, monospace",
+          fontWeight: 700,
+          whiteSpace: "nowrap",
+          textShadow: "0 1px 4px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9)",
+        }}
+      />
+    </>
   );
 }
 
@@ -1401,7 +1557,41 @@ function Calendar() {
     // below instead — one empty div on top of everything, O(1) to add and
     // remove. Hidden layers need no pointer-events at all: visibility:hidden
     // already excludes them from hit-testing.
-    for (const el of Object.values(layers)) if (el) el.style.visibility = "";
+    // A late-join move (dive, or the schedule->month rise) keeps its INCOMING
+    // layer hidden until joinIncoming — so do NOT reveal it here. `visibility`
+    // is INHERITED, and WebKit walks the change through the layer's whole
+    // subtree INCLUDING content-visibility:hidden sections (the pointer-events
+    // trap above): revealing the book here and re-hiding it on the very next
+    // line paid that O(book) style walk TWICE for a book that stays hidden
+    // anyway — ~433ms EACH on WebKitGTK (dg:wake), the dive's single biggest
+    // setup cost. Left untouched it never walks. (finish() left it inline-hidden
+    // from the prior move, so the incoming re-hide below is a no-op in steady
+    // state; the reveal is what cost.)
+    const lateJoin =
+      (zoom.to === "schedule" && zoom.from !== "entry") ||
+      (zoom.to === "month" && zoom.from === "schedule");
+    // Reveal every layer EXCEPT the late-joined incoming (the book on a dive,
+    // the month on a schedule->month rise) — that one stays hidden until join,
+    // and revealing it here would be an O(book) style walk we immediately undo.
+    for (const el of Object.values(layers))
+      if (el && !(lateJoin && el === incoming)) el.style.visibility = "";
+    // THE DIVE-INPUT-LAG FIX. Hide the late-joined incoming book with clip-path,
+    // NOT visibility/content-visibility. Any inherited or containment property
+    // written on the book LAYER ROOT (visibility, opacity, content-visibility)
+    // makes WebKit walk the change through the whole book subtree INCLUDING the
+    // hundreds of content-visibility:hidden sections — a forced O(book) style
+    // recalc measured at ~288ms on WebKitGTK (~100ms on the phone). It is the
+    // ENTIRE release->first-motion delay: the first geometry read in setup
+    // (stickyDeltaFor's scrollTop) flushes it, so it showed up as `fz:reads`.
+    // clip-path is a compositor/paint property — not inherited, no subtree walk
+    // — so clipping the layer to nothing hides it in ~O(1): fz:reads 288 -> 46ms,
+    // release->motion 360 -> ~126ms on WebKitGTK. Cleared at joinIncoming/finish,
+    // exactly where the old visibility reveal was (same hide-through-setup,
+    // join-one-frame-in choreography; verified the clip engages only in the
+    // flight window then clears). Transforms were always safe here for the same
+    // reason (the camera scale never walked the book); this extends that to the
+    // hide. DO NOT revert to visibility/opacity/content-visibility on the root.
+    if (lateJoin) incoming.style.clipPath = "inset(100%)";
     // the shield: swallows every tap/scroll for the move's duration (the
     // flyer box sits at z-45; this must cover it and everything else)
     const shield = document.createElement("div");
@@ -1431,10 +1621,8 @@ function Calendar() {
     // setup, the rise plays on the FIRST rAF like the dive, and the month's
     // paint rides the join frame behind motion. Only from the schedule —
     // year->month keeps its own choreography untouched.
-    const lateJoin =
-      (zoom.to === "schedule" && zoom.from !== "entry") ||
-      (zoom.to === "month" && zoom.from === "schedule");
-    if (lateJoin) incoming.style.visibility = "hidden";
+    // (lateJoin computed above, before the reveal, so the incoming book is
+    // never revealed on a late-join move — see the O(book) visibility note.)
 
     // the weekday rail lives inside the month layer now — view flips never
     // resize the stage, so there is nothing to hold, snap, or compensate
@@ -1515,6 +1703,8 @@ function Calendar() {
       // the LANDED layer must never stay inline-hidden — a move canceled
       // before joinIncoming ran would otherwise land on an invisible book
       incoming.style.visibility = "";
+      incoming.style.clipPath = ""; // the late-join hide (see setup)
+      outgoing.style.clipPath = "";
       // keep the departed layer hidden across the gap between these
       // inline clears and the commit that restores its `invisible`
       // class — a paint in that gap flashed the old view at full scale
@@ -1677,19 +1867,15 @@ function Calendar() {
           // with its warm count for the same reason). Phased, the loop costs
           // at most one flush.
           performance.mark("fz:a");
-          const freezeCells: { cell: HTMLElement; straddler: boolean }[] = [];
-          for (const sec of scheduleLayerRef.current?.querySelectorAll<HTMLElement>(
-            "[data-day][data-warm]",
-          ) ?? []) {
-            const day = sec.dataset.day;
-            if (!day) continue;
-            const cell = sec.querySelector<HTMLElement>(".book-margin-date");
-            if (!cell) continue;
-            freezeCells.push({
-              cell,
-              straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
-            });
-          }
+          // O(warm), from the feed's warmSetRef — NOT a querySelectorAll over the
+          // whole schedule layer (that book-wide scan was the dive's biggest
+          // setup cost: fz:reads ~32ms, near-constant with book size).
+          const freezeCells = (
+            scheduleFeedRef.current?.warmMarginCells() ?? []
+          ).map(({ cell, day }) => ({
+            cell,
+            straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
+          }));
           performance.mark("fz:b");
           for (const { cell, straddler } of freezeCells) {
             cell.style.position = straddler ? "sticky" : "static";
@@ -2566,7 +2752,9 @@ function Calendar() {
       // REVEAL only — every animation (both scales, both fades) is already
       // playing on the shared camera clock. The book's raster happens here,
       // behind motion that is already on screen, and its first paint lands
-      // at exactly the mid-curve pose the single camera implies.
+      // at exactly the mid-curve pose the single camera implies. content-
+      // visibility (not visibility) — the hide at setup used it too, O(1).
+      incoming.style.clipPath = "";
       incoming.style.visibility = "";
     };
     const playAll = () => {
@@ -3432,6 +3620,7 @@ function Calendar() {
     // the settled skeleton becomes the settled page with no second fade.
     <div className="flex h-full min-h-0 flex-col">
       <PerfHud />
+      <TapBeacon />
       <DiveOpenToggle value={openStyle} onChange={setOpenStyle} />
       {/* the current altitude, spoken to assistive tech after every zoom/jump.
           An h1 (not a p): the visible title is a click-to-climb BUTTON, not a
@@ -4435,6 +4624,21 @@ function ScheduleFeedBase({
     };
     warmSetRef.current = next;
   }, []);
+  // O(warm) enumeration of the band's margin-date cells for the dive freeze —
+  // walk warmSetRef (the ~7 rendered rows), query .book-margin-date inside each
+  // small section. Replaces the freeze block's querySelectorAll over the whole
+  // schedule layer, which scanned every cv:hidden section in the book to find
+  // these same 7 (the dominant setup-JS cost; see the handle-interface note).
+  const warmMarginCells = useCallback(() => {
+    const out: { cell: HTMLElement; day: string }[] = [];
+    for (const row of warmSetRef.current) {
+      const day = row.dataset.day;
+      if (!day) continue;
+      const cell = row.querySelector<HTMLElement>(".book-margin-date");
+      if (cell) out.push({ cell, day });
+    }
+    return out;
+  }, []);
   const markOnStage = useCallback((narrow = false) => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -5064,11 +5268,12 @@ function ScheduleFeedBase({
       clearOnStage,
       stickyDeltaFor,
       relandOnRow,
+      warmMarginCells,
     };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow]);
+  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow, warmMarginCells]);
 
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
