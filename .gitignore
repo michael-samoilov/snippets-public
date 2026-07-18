@@ -43,3 +43,6 @@ next-env.d.ts
 # skeleton-alignment harness screenshots
 scripts/.skeleton-align/
 scripts/.header-align/
+
+# agent worktrees (transient, isolation: "worktree")
+.claude/worktrees/
