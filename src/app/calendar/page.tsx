@@ -2777,9 +2777,10 @@ function Calendar() {
       }
       // rf instrument's second half: prices the first MOTION frame
       requestAnimationFrame(() => performance.mark("zoom-raf2"));
-      // build the arriving glyphs a few frames in — they stay invisible
-      // until 40% of the flight, so their layerization happens behind
-      // motion with margin to spare (see the date-flight write phase)
+      // build the arriving glyphs a few frames in — their layerization then
+      // happens behind motion with margin to spare. On a dive they fade in as
+      // soon as they are built (path-ready); on a rise they crossfade with the
+      // still-departing glyph at the flight midpoint (see the write phase)
       if (lateGlyphs.length)
         lateGlyphTimer = window.setTimeout(() => {
           if (!zooming.current) return; // a canceled move's finish ran
@@ -2804,23 +2805,49 @@ function Calendar() {
             gTo.style.willChange = "transform, opacity";
             point.appendChild(gTo);
             const gtf = (s: number) => `translate(-50%,-50%) scale(${s})`;
-            const a = gTo.animate(
-              [
-                { transform: gtf(sFrom / sTo), opacity: 0, offset: 0 },
-                { opacity: 0, offset: 0.4 },
-                { opacity: 1, offset: 0.6 },
-                { transform: gtf(1), opacity: 1, offset: 1 },
-              ],
-              {
-                duration: motionDur,
-                easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+            if (earlyOut) {
+              // DIVE: the number's PATH is already computed (this glyph exists),
+              // so fade it in the instant it is built — not at a fixed 40%-of-
+              // timeline offset, which felt arbitrary and disconnected from when
+              // the path was actually ready. The scale still rides the shared
+              // camera clock so it lands at native size with its point; only the
+              // reveal is decoupled. (This glyph builds ~a frame after the
+              // calendar has faded out, so fading it in here never doubles the
+              // still-departing calendar number.)
+              const scaleA = gTo.animate(
+                [{ transform: gtf(sFrom / sTo) }, { transform: gtf(1) }],
+                {
+                  duration: motionDur,
+                  easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+                  fill: "forwards",
+                },
+              );
+              if (typeof clock === "number") scaleA.currentTime = clock;
+              const fadeA = gTo.animate([{ opacity: 0 }, { opacity: 1 }], {
+                duration: 150,
+                easing: "linear",
                 fill: "forwards",
-              },
-            );
-            // join the shared clock BEFORE this animation paints anything —
-            // by its 40% reveal the layer has long committed
-            if (typeof clock === "number") a.currentTime = clock;
-            camAnims.push(a); // finish() cancels it with the rest
+              });
+              camAnims.push(scaleA, fadeA);
+            } else {
+              // RISE: the departing glyph is still crossfading out, so the
+              // arriving one fades in centred on the flight midpoint (synced).
+              const a = gTo.animate(
+                [
+                  { transform: gtf(sFrom / sTo), opacity: 0, offset: 0 },
+                  { opacity: 0, offset: 0.4 },
+                  { opacity: 1, offset: 0.6 },
+                  { transform: gtf(1), opacity: 1, offset: 1 },
+                ],
+                {
+                  duration: motionDur,
+                  easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+                  fill: "forwards",
+                },
+              );
+              if (typeof clock === "number") a.currentTime = clock;
+              camAnims.push(a); // finish() cancels it with the rest
+            }
           }
         }, 80);
       // ?open=book (dive only): join the destination page THIS frame, not the
