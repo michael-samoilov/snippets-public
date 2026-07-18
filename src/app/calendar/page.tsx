@@ -2686,21 +2686,28 @@ function Calendar() {
         camAnims.push(fade); // finish() cancels it with the rest
       }
       // The incoming book's camera scale, deferred from setup to HERE
-      // (clock-synced, behind motion) so its promotion/raster never lands on the
-      // input frame. Created whenever it was skipped at setup — every late-join
-      // dive now (skipIncCamAtSetup), or the latinc A/B — but NOT the noinc A/B,
-      // which drops the incoming camera on purpose. Same protocol as the fade.
+      // (behind motion) so its promotion/raster never lands on the input frame.
+      // Created whenever it was skipped at setup — every late-join dive now
+      // (skipIncCamAtSetup), or the latinc A/B — but NOT the noinc A/B.
+      // FULL-RANGE, not clock-synced: the rise's incoming scale is created at
+      // setup and plays from 0, so the month does its WHOLE zoom-in; the dive's
+      // book joins ~one book-work later, and clock-syncing it (starting it
+      // part-way to match the camera pose) made it skip most of its zoom and
+      // just snap to size — the "dive plays too fast" the owner reported. Play
+      // it from scale(inFrom) over the REMAINING time (compressed to still land
+      // with the outgoing camera at 440), so the book does a full zoom journey
+      // like the rise's month, just a touch quicker. (The fade stays clock-
+      // synced above, exactly as the rise's fade is — only the scale skipped.)
       if (skipIncCamAtSetup && diveInc !== "noinc") {
+        const clock = Number(camAnims[0]?.currentTime) || 0;
         const inCam = incoming.animate(
           [{ transform: `scale(${inFrom})` }, { transform: `scale(${inTo})` }],
           {
-            duration: 440,
+            duration: Math.max(1, 440 - clock),
             easing: "cubic-bezier(0.33, 1, 0.68, 1)",
             fill: "forwards",
           },
         );
-        const clock = camAnims[0]?.currentTime;
-        if (typeof clock === "number") inCam.currentTime = clock;
         camAnims.push(inCam);
       }
       // REVEAL only — every animation (both scales, both fades) is already
