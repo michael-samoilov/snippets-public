@@ -33,6 +33,10 @@ import sys
 from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
+# DIVE_OPEN=bare validates the bare-land variant's landing precision (its band is
+# blanked to zero then re-warmed on landing — a harder re-anchor than base).
+_OPEN = os.environ.get("DIVE_OPEN", "")
+DIVE_URL = f"{BASE}?open={_OPEN}" if _OPEN else BASE
 SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))  # scale runs: SNIPPETS_SEED=2400
 TOL = 2  # px the tapped row's top may miss the viewport top by, at any sample
 
@@ -82,7 +86,7 @@ def main() -> int:
             pg = ctx.new_page()
             pg.goto(f"{BASE}?seed={SEED}", wait_until="load")
             pg.wait_for_timeout(4500)
-            pg.goto(BASE, wait_until="load")
+            pg.goto(DIVE_URL, wait_until="load")
             pg.wait_for_timeout(5000)
             pg.evaluate(STALE)  # fonts "swap" now — placeholders go stale
             pg.wait_for_timeout(400)

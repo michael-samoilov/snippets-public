@@ -32,6 +32,9 @@ CATS = ",".join(
 SEED = int(os.environ.get("SNIPPETS_SEED", "1500"))
 YEARS = int(os.environ.get("SNIPPETS_YEARS", "6"))
 TRIALS = int(os.environ.get("DIVE_RASTER_TRIALS", "4"))
+# OPEN=bare selects the bare-land dive variant (?open=bare) so a fix can be A/B'd
+# against base without touching the code. "" (default) = base.
+OPEN = os.environ.get("DIVE_OPEN", "")
 
 
 def rise(pg):
@@ -70,9 +73,10 @@ def main() -> int:
         ctx = b.new_context(viewport={"width": 393, "height": 852}, device_scale_factor=3)
         pg = ctx.new_page()
         cdp = ctx.new_cdp_session(pg)
+        openq = f"&open={OPEN}" if OPEN else ""
         pg.goto(f"http://localhost:3000/calendar?seed={SEED}&years={YEARS}&perf=1", wait_until="load")
         pg.wait_for_timeout(5000)
-        pg.goto("http://localhost:3000/calendar?perf=1", wait_until="load")
+        pg.goto(f"http://localhost:3000/calendar?perf=1{openq}", wait_until="load")
         pg.wait_for_timeout(5000)
         rise(pg)
         days = pg.evaluate(
@@ -91,7 +95,7 @@ def main() -> int:
             results[label] = med
             print(f"  {label:6} {d['k']} (dots={d['dots']}): raster {rs}  median={med}ms")
         b.close()
-    print(f"\n  DIVE DESTINATION RASTER — dense {results['dense']}ms / sparse {results['sparse']}ms")
+    print(f"\n  DIVE DESTINATION RASTER [{OPEN or 'base'}] — dense {results['dense']}ms / sparse {results['sparse']}ms")
     print("  (a fix must drop the dense number; this is the device-pt proxy)")
     return 0
 
