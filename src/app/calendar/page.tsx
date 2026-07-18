@@ -1544,10 +1544,6 @@ function Calendar() {
     let flyerBox: HTMLDivElement | null = adoptStaged ? stagedFly!.box : null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
-    // dive flyers held visibility:hidden through setup so their first paint is
-    // the play tick's camera-synced pose — never the origin pose parked behind
-    // the deferred book work (the "hang"). Revealed together in playAll.
-    const flyerReveal: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
     // (inline style beats the frozen cells' static) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
@@ -2407,9 +2403,19 @@ function Calendar() {
         // glyph's centre (it wears translate(-50%,-50%)), so scaling holds it
         // centred on the travelling point.
         const baseSize = Math.max(fromFont.size, toFont.size);
-        const gFrom = pre?.gFrom ?? flyGlyph(num, fromFont, color);
-        if (!pre) {
-          gFrom.style.fontSize = `${baseSize}px`;
+        // The DIVE never shows the departing (month-typeface) glyph. It would
+        // sit at the calendar cell while the deferred book work runs behind the
+        // camera — the "hang" — and even camera-synced it would flash the
+        // calendar number away from where the eye rests. Instead the number
+        // resolves ONLY in the book typeface (the arriving glyph, below), which
+        // fades in over the latter part of the path once the calendar has gone:
+        // nothing is ever drawn near the origin, so there is nothing to hang.
+        // The rise keeps its departing→arriving crossfade (it never defers).
+        const departing = earlyOut
+          ? null
+          : (pre?.gFrom ?? flyGlyph(num, fromFont, color));
+        if (!pre && departing) {
+          departing.style.fontSize = `${baseSize}px`;
           // will-change is REQUIRED on the start-visible flyer parts (point
           // + departing glyph): layerizing them at play instead was tried
           // (device 2026-07-17) and ate the flight's start — WAAPI sets the
@@ -2418,26 +2424,26 @@ function Calendar() {
           // visible on frame one must be a layer BEFORE the play tick —
           // ideally the dwell-prebuilt one (see stagedFlyersRef), this
           // inline build being the fast-tap fallback.
-          gFrom.style.willChange = "transform, opacity";
-          point.style.willChange = "transform";
-          point.append(gFrom);
+          departing.style.willChange = "transform, opacity";
+          point.append(departing);
         }
+        if (!pre) point.style.willChange = "transform";
+        // a dwell-prebuilt departing glyph exists even on a dive — keep it dark
+        // so only the arriving book-typeface glyph is ever seen
+        if (earlyOut && pre?.gFrom) pre.gFrom.style.opacity = "0";
         if (!pre) box!.appendChild(point); // prebuilt points already live there
-        if (earlyOut) {
-          // the dive defers the flight build behind the camera (playAll), so a
-          // visible point would sit at its origin pose while the camera scales
-          // the month away — the "hang". Hide it until playAll reveals it at the
-          // camera-synced pose, already on its path. opacity (not visibility): the
-          // point already carries will-change:transform, so opacity:0 keeps its
-          // compositor layer warm and committed — the reveal is then just a
-          // layer already on screen turning visible, never a fresh layerization
-          // landing mid-path (the will-change dead end noted above).
-          point.style.opacity = "0";
-          flyerReveal.push(point);
+        // The destination book number always hides until finish, so the arriving
+        // flyer is never doubled by the real cell underneath it. The SOURCE
+        // number hides only on a rise (whose departing glyph flies from it, so it
+        // must clear): on a dive no glyph leaves the source, so leaving it visible
+        // lets it fade + scale away WITH the zooming calendar — the departure
+        // reads as the page dissolving, not a number blinking off.
+        if (!earlyOut) {
+          fromEl.style.visibility = "hidden";
+          hiddenNumbers.push(fromEl);
         }
-        fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
-        hiddenNumbers.push(fromEl, toEl);
+        hiddenNumbers.push(toEl);
         // Compositor flight (same paused-create driver as the camera): the
         // point travels, the glyphs scale between the two type sizes, and the
         // crossfade is centred on the flight's midpoint (offsets on the EASED
@@ -2466,17 +2472,22 @@ function Calendar() {
               : undefined,
           ),
         );
-        compositorMove(gFrom, [
-          { transform: gtf(sFrom), opacity: 1, offset: 0 },
-          { opacity: 1, offset: 0.4 },
-          { opacity: 0, offset: 0.6 },
-          { transform: gtf(sTo), opacity: 0, offset: 1 },
-        ]);
+        // the departing→arriving crossfade — rise only (a dive shows no
+        // departing glyph, so there is nothing to fade out)
+        if (departing)
+          compositorMove(departing, [
+            { transform: gtf(sFrom), opacity: 1, offset: 0 },
+            { opacity: 1, offset: 0.4 },
+            { opacity: 0, offset: 0.6 },
+            { transform: gtf(sTo), opacity: 0, offset: 1 },
+          ]);
         // The ARRIVING glyph late-joins: it is invisible until 40% of the
         // flight (~175ms), so its creation, layerization, and raster can
         // happen a few frames into the move — behind motion, with margin —
         // instead of inside the setup frame. This halves the flyer raster
-        // the tap waits on (the other half must stay: see gFrom above).
+        // the tap waits on (on a rise the departing glyph carries frame one;
+        // on a dive nothing is shown until this glyph fades in, which IS the
+        // point — the number only appears once it is on its path).
         // Its animation is currentTime-synced at creation, before it ever
         // plays a visible frame — same protocol as the join-created fades.
         lateGlyphs.push({ point, num, toFont, color, baseSize, sFrom, sTo });
@@ -2738,28 +2749,26 @@ function Calendar() {
       if (played) return;
       played = true;
       // On a dive the outgoing camera + crossfade are ALREADY running from the
-      // early block; play only the still-paused animations (the flyers) and
-      // COMPRESS them to the camera's remaining time, so they take off from their
-      // start rect NOW yet still LAND at 440 with the camera. Elsewhere nothing
-      // ran early: play the whole set together and stamp the motion mark here.
+      // early block; play only the still-paused animations (the flyers) on the
+      // camera's clock. Elsewhere nothing ran early: play the whole set together
+      // and stamp the motion mark here.
       const motionDur = 440;
       if (earlyOut) {
         // The outgoing camera has been playing since the early block. Bring the
-        // still-paused flyers onto ITS clock (same 440 timeline) rather than
-        // compressing them into the time that's left. Compression put each flyer
-        // on a faster, separately-eased clock: it launched from its origin pose
-        // (where the month cell WAS) and darted to catch the camera — the
-        // "hang then disjoint rush". Synced, a flyer is placed at exactly the
-        // pose the camera's progress implies and rides the rest in lockstep with
-        // the month it lifted off, landing together at 440. The flyers were built
-        // visibility:hidden, so this is their first paint — never the origin pose.
+        // still-paused flyers onto ITS clock (currentTime = elapsed, same 440
+        // timeline) rather than compressing them into the time that's left.
+        // Compression put each flyer on a faster, separately-eased clock and it
+        // darted to catch the camera up. Synced, a flyer sits at exactly the pose
+        // the camera's progress implies and rides the rest in lockstep. And the
+        // dive draws no departing glyph, so the number stays invisible until its
+        // book-typeface glyph fades in over the latter path — it is only ever
+        // seen ON its way to the schedule, never parked at the calendar cell.
         const elapsed = Number(camAnims[0]?.currentTime) || 0;
         for (const a of camAnims)
           if (a.playState === "paused") {
             a.currentTime = elapsed;
             a.play();
           }
-        for (const el of flyerReveal) el.style.opacity = "";
       } else {
         for (const a of camAnims) a.play();
         // first frame that paints motion — PerfHud pairs it with the last

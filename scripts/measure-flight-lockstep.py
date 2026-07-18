@@ -1,35 +1,30 @@
 """
-Guard the calendar→schedule dive's flyers against the "hang then rush" — the
-device-visible artifact the fidelity harness can't see (it only checks the
-LANDING, not the path taken to get there).
+Guard the calendar→schedule dive's flyers against the "hang" — the number
+sitting at its calendar cell while the deferred book work runs behind the
+camera. The fidelity harness only checks the LANDING; this checks the PATH.
 
-The dive plays the month's camera FIRST and defers the flight build behind it
-(earlyOut). The flyers used to be COMPRESSED into the camera's remaining time:
-each one sat parked at its origin pose — where the month cell WAS — for the
-whole span the deferred book work took, while the camera scaled the month away,
-then darted to catch up. On screen: the number hangs in mid-air over the fading
-calendar, then jumps disjointly onto its path.
+The dive plays the month's camera first and defers the flight build behind it
+(earlyOut). To avoid any hang the dive now draws NO departing (month-typeface)
+glyph at all: the number stays invisible until its book-typeface glyph fades in
+over the LATTER part of the path, once the calendar has zoomed away. So nothing
+is ever drawn near the origin — there is nothing to hang.
 
-The fix syncs the flyers to the CAMERA's clock (same 440ms timeline) instead of
-compressing, and builds them opacity:0 so their first paint is already the
-camera-synced pose. So the invariant this asserts, sampling every frame of a far
-dive:
+The invariant this asserts, sampling every frame of a dive: whenever a flyer's
+glyph is visible (opacity > VIS), the point has already travelled past
+REVEAL_FRAC of its total path. In other words the number is only ever seen ON
+its way to the schedule, never parked at the calendar cell. It also confirms the
+number does appear (some glyph reaches full opacity); the fidelity harness owns
+the landing precision.
 
-  once a flyer is visible (opacity > 0.05), it is never FROZEN while the camera
-  is still moving. A run of consecutive visible frames where the flyer's
-  transform barely changes (|Δ| < FROZEN_PX) while the camera's scale is clearly
-  changing (|Δscale| > CAM_MOVE) is a hang — assert the longest such run is ≤
-  HANG_FRAMES (sampling jitter only, not a real dwell).
-
-FAILS on the compressed build: the flyer is visible and parked at origin for the
-several frames the deferred book work runs while the camera scales.
+FAILS on a build that shows the flyer near its origin (a departing glyph, or a
+camera-synced point revealed early in its travel).
 
     python3 .claude/skills/webapp-testing/scripts/with_server.py \
       --server "node_modules/.bin/next start" --port 3000 \
       -- python3 scripts/measure-flight-lockstep.py
 
-Probe hygiene: reads only computed transforms of the flyer points and the month
-layer — never reaches into a content-visibility-skipped section.
+Probe hygiene: reads only computed transforms/opacity of the flyer points and
+their glyph children — never reaches into a content-visibility-skipped section.
 """
 
 import os
@@ -39,33 +34,25 @@ from playwright.sync_api import sync_playwright
 
 BASE = "http://localhost:3000/calendar"
 SEED = int(os.environ.get("SNIPPETS_SEED", "1200"))
-FROZEN_PX = 0.75  # a visible flyer moving less than this frame-to-frame is "still"
-CAM_MOVE = 0.002  # month scale changing more than this frame-to-frame is "moving"
-HANG_FRAMES = 2  # longest tolerated still-flyer-while-camera-moves run (jitter)
+VIS = 0.05  # a glyph past this opacity counts as visible on screen
+REVEAL_FRAC = 0.4  # a visible glyph must be at least this far along its path
+SETTLE_SLACK = 6  # px near the origin that don't count (sub-pixel jitter)
 
-# Sample every rAF for ~550ms after a tap: each flyer point's translate + opacity
-# and the month layer's scale (matrix `a`). Returns the per-flyer frame series.
+# Sample every rAF for ~600ms after a tap: each flyer point's translate, and the
+# max opacity among its glyph children (what's actually on screen).
 WATCH = r"""() => new Promise(res => {
-  const mlayer = document.querySelector('[data-layer="month"]');
-  const camScale = () => {
-    const m = (getComputedStyle(mlayer).transform || '').match(/matrix\(([^)]+)\)/);
-    return m ? +m[1].split(',')[0] : 1;  // a = scaleX
-  };
-  const series = {};      // day -> [{x,y,op,cam}]
+  const series = {};      // day -> [{x,y,op}]
   const t0 = performance.now();
   const loop = () => {
-    const cam = camScale();
     for (const p of document.querySelectorAll('[data-fly]')) {
       const cm = (getComputedStyle(p).transform || '').match(/matrix\(([^)]+)\)/);
       if (!cm) continue;
       const parts = cm[1].split(',').map(v => +v.trim());
-      const day = p.dataset.fly;
-      (series[day] ||= []).push({
-        x: parts[4], y: parts[5],
-        op: +getComputedStyle(p).opacity, cam,
-      });
+      let op = 0;
+      for (const g of p.children) op = Math.max(op, +getComputedStyle(g).opacity);
+      (series[p.dataset.fly] ||= []).push({ x: parts[4], y: parts[5], op });
     }
-    if (performance.now() - t0 < 550) requestAnimationFrame(loop);
+    if (performance.now() - t0 < 600) requestAnimationFrame(loop);
     else res(series);
   };
   requestAnimationFrame(loop);
@@ -107,8 +94,6 @@ def main() -> int:
                   };
                   sc.scrollTop -= sc.clientHeight * n;
                   await sleep(700);
-                  // if the target landed on a gap, walk back down a viewport at a
-                  // time until enabled cells render in view (bounded)
                   for (let i = 0; i < 12 && visCount() < 3; i++) {
                     sc.scrollTop += sc.clientHeight * 0.75;
                     await sleep(350);
@@ -139,54 +124,41 @@ def main() -> int:
             if not series:
                 errors.append(f"dive[{tag}]: no flyers observed at all")
                 return
-            worst_run = 0
-            worst_day = None
+            worst_frac = None  # smallest path-fraction at which a glyph was visible
+            appeared = 0
             for day, frames in series.items():
-                vis = [f for f in frames if f["op"] > 0.05]
-                if len(vis) < 3:
-                    continue
-                # origin = first visible pose; travel = the whole path length. The
-                # HANG is the flyer parked NEAR its origin while the camera moves;
-                # the flyer legitimately parks at its DESTINATION (fill-forwards)
-                # while the camera's easeOut tail still creeps — exclude that by
-                # only counting frozen frames within the first 20% of the travel.
-                ox, oy = vis[0]["x"], vis[0]["y"]
+                ox, oy = frames[0]["x"], frames[0]["y"]
                 travel = max(
-                    ((f["x"] - ox) ** 2 + (f["y"] - oy) ** 2) ** 0.5 for f in vis
+                    ((f["x"] - ox) ** 2 + (f["y"] - oy) ** 2) ** 0.5 for f in frames
                 )
-                near_origin = travel * 0.2
-                run = 0
-                prev = None
-                for f in vis:
-                    if prev is not None:
-                        dmove = ((f["x"] - prev["x"]) ** 2 + (f["y"] - prev["y"]) ** 2) ** 0.5
-                        dcam = abs(f["cam"] - prev["cam"])
-                        from_origin = ((f["x"] - ox) ** 2 + (f["y"] - oy) ** 2) ** 0.5
-                        if dmove < FROZEN_PX and dcam > CAM_MOVE and from_origin < near_origin:
-                            run += 1
-                            if run > worst_run:
-                                worst_run, worst_day = run, day
-                        else:
-                            run = 0
-                    prev = f
-            n_vis = sum(
-                1 for frames in series.values() for f in frames if f["op"] > 0.05
-            )
-            mark = "ok" if worst_run <= HANG_FRAMES else "HANG"
+                if travel < 1:
+                    continue
+                if any(f["op"] > 0.5 for f in frames):
+                    appeared += 1
+                for f in frames:
+                    if f["op"] <= VIS:
+                        continue
+                    dist = ((f["x"] - ox) ** 2 + (f["y"] - oy) ** 2) ** 0.5
+                    frac = dist / travel
+                    if frac < REVEAL_FRAC and dist > SETTLE_SLACK:
+                        if worst_frac is None or frac < worst_frac:
+                            worst_frac = frac
+                        errors.append(
+                            f"dive[{tag}]: flyer {day} was visible (op {f['op']:.2f}) at only "
+                            f"{frac * 100:.0f}% of its path — shown near the calendar cell (the hang)"
+                        )
+                        break
+            shown = f"{appeared}/{len(series)} flyers appeared"
+            mark = "ok" if worst_frac is None else f"HANG @ {worst_frac * 100:.0f}%"
             print(
-                f"  dive[{tag}]: {len(series)} flyer(s), {n_vis} visible frames; "
-                f"longest frozen-while-camera-moves run = {worst_run} "
-                f"(≤ {HANG_FRAMES})  {mark}"
-                + (f"  [day {worst_day}]" if worst_day else "")
+                f"  dive[{tag}]: {shown}; earliest visible path-fraction "
+                f"≥ {REVEAL_FRAC * 100:.0f}%  {mark}"
             )
-            if worst_run > HANG_FRAMES:
-                errors.append(
-                    f"dive[{tag}]: a flyer stayed frozen for {worst_run} frames while the "
-                    f"camera scaled — the hang (day {worst_day})"
-                )
+            if appeared == 0:
+                errors.append(f"dive[{tag}]: no flyer ever became visible")
 
         dive("near", 0)
-        # back up to the book, then a far dive (the worst hang case)
+        # back up to the book, then a far dive (the heaviest deferred work)
         pg.evaluate("() => document.querySelector('[data-cal-title]').click()")
         pg.wait_for_timeout(1500)
         dive("far", 3)
@@ -194,9 +166,13 @@ def main() -> int:
         ctx.close()
         browser.close()
 
+    # de-dup the per-frame spam into one line per flyer
+    seen = set()
     for e in errors:
-        print("  ✗", e)
-    print("\n", "FLIGHTS RIDE THE CAMERA ✓" if not errors else "FLYERS HANG ✗")
+        if e not in seen:
+            print("  ✗", e)
+            seen.add(e)
+    print("\n", "FLYERS ONLY ON-PATH ✓" if not errors else "FLYERS HANG ✗")
     return 0 if not errors else 1
 
 
