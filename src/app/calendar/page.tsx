@@ -503,15 +503,6 @@ interface ScheduleFeedHandle {
   // the landing can't drift as the climb ends. Pre-paint, O(band). Call right
   // after markOnStage, before the flight measures anything.
   relandOnRow: (day: string) => void;
-  // bare-land A/B: strip data-warm off the whole staged band so the incoming
-  // book paints NOTHING during the dive (every section cv:hidden → its card
-  // text never rasters on WebKit's opening frame, the density-dependent pt).
-  // Called AFTER the flight has measured its flyer rects (needs the band
-  // rendered) and BEFORE the endflush; finish()'s clearOnStage re-warms one
-  // frame after landing, so the entries render as the page settles. Geometry
-  // is preserved (sections keep their --cis placeholder height), so the flyer
-  // still lands where the margin date will be. O(band).
-  blankOnStage: () => void;
 }
 
 // Dev-only frame HUD (?perf=1): live worst-frame-gap + jank count so an
@@ -683,20 +674,10 @@ function PerfHud() {
 //              size). If pt drops toward ~14, the incoming layer IS the cost.
 //   late-inc — the incoming book's camera scale is created at the JOIN frame
 //              (behind motion), not at setup. The candidate FIX.
-// All three held ~130-150 on device (2026-07-17): deferring WHEN the promoted
-// layer reveals never moves its eager raster off frame one. The density-INDEP
-// floor is ~90ms even landing on a 1-entry day, and the density-DEP part
-// (~+40 on a dense day) is the landing cards' text raster.
-//   bare     — the incoming book paints NOTHING for the flight (its whole warm
-//              band is stripped to cv:hidden after the flyer rects are read);
-//              entries render as the page settles (finish's clearOnStage). Kills
-//              the density-dependent text raster; if pt then sits at the ~90
-//              floor it is under 100. The tradeoff the owner is A/Bing: the
-//              destination is bare paper as you dive, words arrive on landing.
 const OPEN_VARIANTS: { id: string | null; label: string }[] = [
   { id: null, label: "base" },
+  { id: "noinc", label: "no-inc" },
   { id: "latinc", label: "late-inc" },
-  { id: "bare", label: "bare" },
 ];
 function DiveOpenToggle({
   value,
@@ -2493,12 +2474,6 @@ function Calendar() {
       );
     dgFlush("cross");
     moves.push(startCameraScale());
-    // bare-land (dive A/B): the flight has now read every flyer rect off the
-    // rendered band, so strip the band to cv:hidden — the incoming book paints
-    // bare paper for the whole flight and its landing cards never raster on the
-    // opening frame. finish()'s clearOnStage re-warms one frame after landing,
-    // so the entries render as the page settles. Folded into the endflush below.
-    if (diveInc === "bare") scheduleFeedRef.current?.blankOnStage();
     // Force the setup's style recalc + layout NOW, behind a measure — this
     // splits the device HUD's opaque pt block into a measurable layout part
     // (`e` in the fx sub-spans; also readable on the WebKit harness) and an
@@ -4484,14 +4459,6 @@ function ScheduleFeedBase({
     performance.measure("mos:warm", "mos:0", "mos:warm");
     performance.measure("mos:flush", "mos:warm", "mos:flush");
   }, [warmBand]);
-  // bare-land: drop the whole warm band (every staged section → cv:hidden), so
-  // the incoming book paints only bare paper for the flight. warmSetRef is
-  // emptied, so finish()'s clearOnStage→warmBand rebuilds the band from scratch
-  // (anchored on the landed day) and the entries render as the page settles.
-  const blankOnStage = useCallback(() => {
-    for (const row of warmSetRef.current) row.removeAttribute("data-warm");
-    warmSetRef.current = new Set();
-  }, []);
   const clearOnStage = useCallback((anchorDay?: string) => {
     climbingRef.current = false;
     // Restore the FULL resting band ONE FRAME after the reveal swap — a dive
@@ -5097,12 +5064,11 @@ function ScheduleFeedBase({
       clearOnStage,
       stickyDeltaFor,
       relandOnRow,
-      blankOnStage,
     };
     return () => {
       handleRef.current = null;
     };
-  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow, blankOnStage]);
+  }, [handleRef, goTo, markOnStage, clearOnStage, stickyDeltaFor, relandOnRow]);
 
   // position once the rows are real; afterwards, settle pendings
   useLayoutEffect(() => {
