@@ -1120,6 +1120,20 @@ function Calendar() {
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).has("flat"),
   );
+  // Dive entrance A/B (?dive2=1, device feel test). The default dive COMPRESSES
+  // the book's zoom into the camera's leftover time so it lands with the camera
+  // at 440 — but "leftover" varies with how far the jump is (near = cheap prep =
+  // full smooth entrance; far = costly prep = compressed, fast entrance): the
+  // owner's "sometimes fast" inconsistency. dive2 plays a CONSTANT full-length
+  // entrance (book + flyers run their whole 440ms from when they're ready,
+  // landing a touch after the outgoing camera). Speed is then identical every
+  // dive; on near dives the full entrance also overlaps the calendar's exit,
+  // reading as a crossfade. Reload without the flag to A/B.
+  const [diveV2] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("dive2"),
+  );
   // Dive-opening A/B (device feel test, ?open=…). A zoom-IN is pixel-weak at
   // the start — it magnifies about the tapped day, which is where the eye is
   // and which therefore barely moves, while the destination book late-joins.
@@ -2064,6 +2078,9 @@ function Calendar() {
     // (entry moves never reach this camera path — the morph, the A/B's
     // reference, stays untouched by construction)
     const flat = flatCamera;
+    // dive2 A/B: a constant full-length book + flyer entrance (no compression),
+    // only ever on the dive (the deferred move). See the diveV2 flag comment.
+    const v2 = diveV2 && zoom.from === "month" && zoom.to === "schedule";
     const outFrom = 1;
     const outTo = flat ? 1 : deeper ? factor : 1 / factor;
     const inFrom = flat ? 1 : deeper ? 1 / factor : factor;
@@ -2708,8 +2725,10 @@ function Calendar() {
           ],
           { duration: 440, easing: "linear", fill: "forwards" },
         );
+        // dive2 plays the fade from 0 over the full duration (constant
+        // entrance); the default clock-syncs it to land with the outgoing camera
         const clock = camAnims[0]?.currentTime;
-        if (typeof clock === "number") fade.currentTime = clock;
+        if (!v2 && typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
       }
       // The incoming book's camera scale, deferred from setup to HERE
@@ -2730,7 +2749,10 @@ function Calendar() {
         const inCam = incoming.animate(
           [{ transform: `scale(${inFrom})` }, { transform: `scale(${inTo})` }],
           {
-            duration: Math.max(1, 440 - clock),
+            // dive2: the WHOLE 440ms zoom, so the entrance is the same length
+            // every dive (it lands a touch after the camera). Default: compress
+            // into the camera's leftover time so it lands WITH the camera at 440.
+            duration: v2 ? 440 : Math.max(1, 440 - clock),
             easing: "cubic-bezier(0.33, 1, 0.68, 1)",
             fill: "forwards",
           },
@@ -2766,7 +2788,9 @@ function Calendar() {
         const elapsed = Number(camAnims[0]?.currentTime) || 0;
         for (const a of camAnims)
           if (a.playState === "paused") {
-            a.currentTime = elapsed;
+            // dive2 plays flyers from 0 (full-length, constant entrance); the
+            // default syncs them to the camera clock so they land with it at 440
+            if (!v2) a.currentTime = elapsed;
             a.play();
           }
       } else {
@@ -2822,7 +2846,8 @@ function Calendar() {
                   fill: "forwards",
                 },
               );
-              if (typeof clock === "number") scaleA.currentTime = clock;
+              // dive2 plays the scale from 0 too (constant entrance)
+              if (!v2 && typeof clock === "number") scaleA.currentTime = clock;
               const fadeA = gTo.animate([{ opacity: 0 }, { opacity: 1 }], {
                 duration: 150,
                 easing: "linear",
@@ -2883,7 +2908,7 @@ function Calendar() {
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled/flatCamera set once at mount; openStyle read via ref so a
     // live chip flip never re-runs setup on an in-flight move
-  }, [zoom, reduceMotion, freezeEnabled, flatCamera]);
+  }, [zoom, reduceMotion, freezeEnabled, flatCamera, diveV2]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
