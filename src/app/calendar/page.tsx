@@ -1544,6 +1544,10 @@ function Calendar() {
     let flyerBox: HTMLDivElement | null = adoptStaged ? stagedFly!.box : null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
+    // dive flyers held visibility:hidden through setup so their first paint is
+    // the play tick's camera-synced pose — never the origin pose parked behind
+    // the deferred book work (the "hang"). Revealed together in playAll.
+    const flyerReveal: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
     // (inline style beats the frozen cells' static) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
@@ -2419,6 +2423,18 @@ function Calendar() {
           point.append(gFrom);
         }
         if (!pre) box!.appendChild(point); // prebuilt points already live there
+        if (earlyOut) {
+          // the dive defers the flight build behind the camera (playAll), so a
+          // visible point would sit at its origin pose while the camera scales
+          // the month away — the "hang". Hide it until playAll reveals it at the
+          // camera-synced pose, already on its path. opacity (not visibility): the
+          // point already carries will-change:transform, so opacity:0 keeps its
+          // compositor layer warm and committed — the reveal is then just a
+          // layer already on screen turning visible, never a fresh layerization
+          // landing mid-path (the will-change dead end noted above).
+          point.style.opacity = "0";
+          flyerReveal.push(point);
+        }
         fromEl.style.visibility = "hidden";
         toEl.style.visibility = "hidden";
         hiddenNumbers.push(fromEl, toEl);
@@ -2726,24 +2742,30 @@ function Calendar() {
       // COMPRESS them to the camera's remaining time, so they take off from their
       // start rect NOW yet still LAND at 440 with the camera. Elsewhere nothing
       // ran early: play the whole set together and stamp the motion mark here.
-      let motionDur = 440;
+      const motionDur = 440;
       if (earlyOut) {
+        // The outgoing camera has been playing since the early block. Bring the
+        // still-paused flyers onto ITS clock (same 440 timeline) rather than
+        // compressing them into the time that's left. Compression put each flyer
+        // on a faster, separately-eased clock: it launched from its origin pose
+        // (where the month cell WAS) and darted to catch the camera — the
+        // "hang then disjoint rush". Synced, a flyer is placed at exactly the
+        // pose the camera's progress implies and rides the rest in lockstep with
+        // the month it lifted off, landing together at 440. The flyers were built
+        // visibility:hidden, so this is their first paint — never the origin pose.
         const elapsed = Number(camAnims[0]?.currentTime) || 0;
-        motionDur = Math.max(1, 440 - elapsed);
         for (const a of camAnims)
           if (a.playState === "paused") {
-            a.effect?.updateTiming({ duration: motionDur });
+            a.currentTime = elapsed;
             a.play();
           }
+        for (const el of flyerReveal) el.style.opacity = "";
       } else {
         for (const a of camAnims) a.play();
         // first frame that paints motion — PerfHud pairs it with the last
         // pointerdown to show tap→motion on device (input-delay attribution)
         performance.mark("zoom-motion");
       }
-      // the flyer timeline's origin — the arriving glyphs below ride it so their
-      // type-crossfade tracks the departing glyph's (compressed clock and all)
-      const flyerStart = performance.now();
       // rf instrument's second half: prices the first MOTION frame
       requestAnimationFrame(() => performance.mark("zoom-raf2"));
       // build the arriving glyphs a few frames in — they stay invisible
@@ -2752,12 +2774,11 @@ function Calendar() {
       if (lateGlyphs.length)
         lateGlyphTimer = window.setTimeout(() => {
           if (!zooming.current) return; // a canceled move's finish ran
-          // ride the SAME (compressed on a dive) flyer clock as the departing
-          // glyph so the type-crossfade stays centred on the flight's midpoint;
-          // off a dive this equals camAnims[0].currentTime, exactly as before
-          const clock = earlyOut
-            ? performance.now() - flyerStart
-            : (camAnims[0]?.currentTime ?? null);
+          // ride the SAME camera clock as the departing glyph so the type-
+          // crossfade stays centred on the flight's midpoint — on a dive the
+          // flyers are now camera-synced (not compressed), so this one shared
+          // clock is correct in every direction.
+          const clock = camAnims[0]?.currentTime ?? null;
           for (const { point, num, toFont, color, sFrom, sTo } of lateGlyphs) {
             // NATIVE size, scale ending at exactly 1: a glyph landing at
             // `baseSize × scale(sTo)` rasters on its own layer with its own
