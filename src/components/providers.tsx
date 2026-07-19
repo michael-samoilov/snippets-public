@@ -64,10 +64,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // days whose live draft should render birthless (a backfill morph). Tracked
   // alongside `drafts` and cleared in lockstep.
   const [morphDays, setMorphDays] = useState<Set<string>>(() => new Set());
+  // ids written at submit whose live row must stay invisible until the seal
+  // choreography's beat reveals it (see KeptDraftStore.heldIds)
+  const [heldIds, setHeldIds] = useState<Set<string>>(() => new Set());
   const draftStore = useMemo<KeptDraftStore>(
     () => ({
       drafts,
       morphDays,
+      heldIds,
+      hold: (id) =>
+        setHeldIds((h) => (h.has(id) ? h : new Set(h).add(id))),
+      release: (id) =>
+        setHeldIds((h) => {
+          if (!h.has(id)) return h;
+          const n = new Set(h);
+          n.delete(id);
+          return n;
+        }),
       set: (s, morph) => {
         setDrafts((d) => ({ ...d, [s.day]: s }));
         setMorphDays((m) => {
@@ -94,7 +107,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         });
       },
     }),
-    [drafts, morphDays],
+    [drafts, morphDays, heldIds],
   );
 
   return (

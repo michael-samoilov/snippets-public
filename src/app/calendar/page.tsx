@@ -5522,16 +5522,29 @@ const ScheduleCards = memo(function ScheduleCards({
   };
 
   // the optimistic just-kept card: render it in its final slot the instant the
-  // seal is pressed so the typed words never blink out waiting for the live
-  // query; when the real row lands (same id) it takes over seamlessly (same key
-  // → same element, no re-animation) and the draft is cleared.
+  // seal choreography's beat fires so the typed words never blink out waiting
+  // for the live query; when the real row lands (same id) it takes over
+  // seamlessly (same key → same element, no re-animation) and the draft is
+  // cleared. HELD ids stay invisible entirely: the keep now WRITES at submit
+  // (durability — see pendingWrite in the composers), so the live row can
+  // arrive mid-press; the hold keeps it off stage until the beat.
   const draftStore = useKeptDraft();
+  const held = draftStore?.heldIds;
+  const liveShown =
+    held && held.size ? snippets.filter((s) => !held.has(s.id)) : snippets;
   const draft = draftStore?.drafts[day];
-  const draftPending = draft != null && !snippets.some((s) => s.id === draft.id);
+  const draftPending =
+    draft != null && !liveShown.some((s) => s.id === draft.id);
   useEffect(() => {
-    if (draft && snippets.some((s) => s.id === draft.id)) draftStore?.clear(day);
-  }, [draft, snippets, day, draftStore]);
-  const items = draftPending ? [...snippets, draft] : snippets;
+    if (!draft || !snippets.some((s) => s.id === draft.id)) return;
+    // hand-off, two paints: first RELEASE the hold (the live row joins under
+    // the draft's key — the draft is what's on screen, so nothing moves), then
+    // on the next pass CLEAR the draft. Releasing and clearing together would
+    // skip the draft frame and replay the birth animation on the live row.
+    if (held?.has(draft.id)) draftStore?.release(draft.id);
+    else draftStore?.clear(day);
+  }, [draft, snippets, day, draftStore, held]);
+  const items = draftPending ? [...liveShown, draft] : liveShown;
   // FLIP is gated on THIS key, not on every render. A dive in/out re-renders the
   // whole book (the feed goes inactive) and scrolls it — but the order is
   // unchanged, so the key holds and Framer skips its layout pass entirely. That
@@ -5688,6 +5701,16 @@ function FlowBackfillCapture({
   // a long entry's glide-to-top (timer that starts it + the running scroll)
   const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollCancel = useRef<null | (() => void)>(null);
+  // The id whose live row is HELD off stage while the seal choreography plays.
+  // The keep WRITES AT SUBMIT (a keep must survive the reader leaving — even a
+  // tab close; a write deferred into an animation timer was silently lost when
+  // unmount cleared the timer, and a pagehide flush dies with the document
+  // before Dexie reaches IndexedDB). The hold keeps the early row invisible
+  // until the carding beat; unmount releases it so the row simply appears
+  // wherever the reader went. A failed write aborts the choreography's
+  // data-facing steps (abortedRef) and puts the words back.
+  const heldKeepRef = useRef<string | null>(null);
+  const keepAbortedRef = useRef(false);
   useEffect(
     () => () => {
       settleCancel.current?.();
@@ -5698,6 +5721,21 @@ function FlowBackfillCapture({
   );
   const seq = useKeepSequence(KEEP_BEATS, reduce);
   const draftStore = useKeptDraft();
+  // unmount mid-choreography: the write already landed at submit — just release
+  // the held row so it can render wherever the reader went (ref-read store: the
+  // store's identity changes per draft commit, but this effect must be
+  // unmount-only)
+  const draftStoreRef = useRef(draftStore);
+  useEffect(() => {
+    draftStoreRef.current = draftStore;
+  }, [draftStore]);
+  useEffect(
+    () => () => {
+      if (heldKeepRef.current)
+        draftStoreRef.current?.release(heldKeepRef.current);
+    },
+    [],
+  );
   // the thumb-down dip (the seal's `pressed` feedback before release)
   const [pressedDown, setPressedDown] = useState(false);
   const isToday = day === dayKey();
@@ -5719,34 +5757,49 @@ function FlowBackfillCapture({
     // the id is minted NOW (creation order), even for a backfill whose
     // capturedAt sits in the past — so the entry sorts to the foot of its day
     const id = ulid();
-    // FILE — deferred to the CARDING beat (after the seal has pressed) so the
-    // order is strict: press → the entry settles in, not the entry appearing
-    // before the press. The optimistic draft still lands the card in its final
-    // slot at once (no blink) — just timed to the press, not the tap.
+    // WRITE NOW, reveal at the beat. The write must survive the reader leaving
+    // mid-choreography (unmount, even tab close) — a write deferred into an
+    // animation timer was silently lost when unmount cleared the timer, and a
+    // pagehide flush dies with the document before Dexie reaches IndexedDB. The
+    // held id keeps the early-arriving live row OFF STAGE until the carding
+    // beat, so the strict visual order (press → the entry settles in) holds.
+    keepAbortedRef.current = false;
+    if (heldKeepRef.current) draftStore?.release(heldKeepRef.current);
+    heldKeepRef.current = id;
+    draftStore?.hold(id);
+    void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).catch(
+      (error: unknown) => {
+        // the keep did not take — stop the theatre's data-facing steps, unveil
+        // nothing, put the words back, say why. Never a silent loss.
+        keepAbortedRef.current = true;
+        if (heldKeepRef.current === id) heldKeepRef.current = null;
+        draftStore?.release(id);
+        draftStore?.clear(day);
+        setPressedDown(false);
+        setText(trimmed);
+        if (areaRef.current) {
+          areaRef.current.value = trimmed;
+          autosizeArea(areaRef.current);
+        }
+        toast(
+          error instanceof StorageWriteError && error.full
+            ? copy.data.storageFull
+            : copy.data.keepFailed,
+        );
+      },
+    );
     const file = () => {
+      if (keepAbortedRef.current) return; // the write failed — nothing to reveal
       // morph=true: this backfill composer's card takes its exact slot with no
       // birth wipe — the composer settles INTO the preview card seamlessly.
+      // ScheduleCards releases the held live row once it lands under this draft.
       draftStore?.set({
         id, text: trimmed, kind: null, tags: [],
         capturedAt, day, source: "typed", favorite: 0, updatedAt: capturedAt,
       }, true);
-      void addSnippet({ id, text: trimmed, source: "typed", capturedAt }).catch(
-        (error: unknown) => {
-          // the keep did not take — withdraw the optimistic card, put the words
-          // back, say why. Never a silent loss.
-          draftStore?.clear(day);
-          setText(trimmed);
-          if (areaRef.current) {
-            areaRef.current.value = trimmed;
-            autosizeArea(areaRef.current);
-          }
-          toast(
-            error instanceof StorageWriteError && error.full
-              ? copy.data.storageFull
-              : copy.data.keepFailed,
-          );
-        },
-      );
+      // heldKeepRef stays set until the next keep or unmount — releasing an
+      // already-released id is a no-op, and the hand-off effect owns the real
+      // release once the live row lands under this draft
     };
     navigator.vibrate?.(8);
     // reduced motion: file at once, no press theatre
@@ -5786,6 +5839,7 @@ function FlowBackfillCapture({
       // beat — after the seal animation — not before. So the card never blinks
       // out mid-press.
       seq.start(() => {
+        if (keepAbortedRef.current) return; // failed write: the words stay put
         file();
         setText("");
         if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
@@ -6242,7 +6296,27 @@ function TodayZoneFill({
   // the live seal-into-view settle watcher (feature: press only once the seal has
   // scrolled to rest); cancelled on unmount / any new submit
   const settleCancel = useRef<null | (() => void)>(null);
+  // The id whose live row is HELD off stage while the seal choreography plays.
+  // The keep WRITES AT SUBMIT (durability: a write deferred into the HOLD+EXIT
+  // timer was silently lost when clearTimers dropped it on unmount, and a
+  // pagehide flush dies with the document before Dexie reaches IndexedDB); the
+  // hold keeps the early row invisible until the filling beat. Unmount releases
+  // the hold; a failed write aborts the choreography (abortedRef).
+  const heldKeepRef = useRef<string | null>(null);
+  const keepAbortedRef = useRef(false);
   const draft = useKeptDraft();
+  // unmount mid-choreography: the write already landed at submit — release the
+  // held row so it renders wherever the reader went (ref-read: unmount-only)
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  useEffect(
+    () => () => {
+      if (heldKeepRef.current) draftRef.current?.release(heldKeepRef.current);
+    },
+    [],
+  );
   const router = useRouter();
   // The locked letter's inputs — it shows only on POSITIVE evidence of the
   // exact state it addresses, never on assumption: a live signed-in session
@@ -7019,24 +7093,40 @@ function TodayZoneFill({
     const t = text.trim();
     const capturedAt = Date.now();
     const id = ulid(); // creation-order id (today: same as capturedAt)
+    const source = voiceUsed.current ? "voice" : "typed";
+    // WRITE NOW, reveal at the beat (see heldKeepRef): the entry can no longer
+    // be lost to a cancelled animation timer, and the held id keeps the early
+    // live row off stage so the sweep still reveals it at the filling beat
+    keepAbortedRef.current = false;
+    if (heldKeepRef.current) draft?.release(heldKeepRef.current);
+    heldKeepRef.current = id;
+    draft?.hold(id);
+    void addSnippet({ id, text: t, source, capturedAt })
+      .catch((error: unknown) => {
+        // the keep did not take — stop the theatre, put the words back, say
+        // why. Never a silent loss.
+        keepAbortedRef.current = true;
+        draft?.release(id);
+        draft?.clear(day);
+        clearTimers();
+        settleCancel.current?.();
+        settleCancel.current = null;
+        setHoldDown(false);
+        setPhase("idle");
+        keeping.current = false;
+        setText(t);
+        toast(
+          error instanceof StorageWriteError && error.full
+            ? copy.data.storageFull
+            : copy.data.keepFailed,
+        );
+      });
     const file = () => {
-      const source = voiceUsed.current ? "voice" : "typed";
+      if (keepAbortedRef.current) return; // failed write: nothing to reveal
       draft?.set({
         id, text: t, kind: null, tags: [], capturedAt, day,
         source, favorite: 0, updatedAt: capturedAt,
       });
-      void addSnippet({ id, text: t, source, capturedAt })
-        .catch((error: unknown) => {
-          // the keep did not take — withdraw the optimistic card, put the
-          // words back, say why. Never a silent loss.
-          draft?.clear(day);
-          setText(t);
-          toast(
-            error instanceof StorageWriteError && error.full
-              ? copy.data.storageFull
-              : copy.data.keepFailed,
-          );
-        });
     };
     // freeze the words; hold the seal pressed-down through the lead; dismiss the
     // keyboard and bring the seal fully into view. The press then plays only once
