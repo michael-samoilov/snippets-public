@@ -63,6 +63,24 @@ class SnippetsDB extends Dexie {
 
 export const db = new SnippetsDB();
 
+/**
+ * DEV-SEED writes (lib/dev-seed's only door into the table). They live HERE so
+ * db.ts stays the single write choke point, and they carry the structural
+ * guard the seeder itself cannot enforce: a sync-adopted book is NEVER touched
+ * — a raw clear() on one would vanish rows without tombstones (see CLAUDE.md's
+ * erase-all rule). Seed rows arrive pre-shaped with _dirty: 0 (local-only,
+ * invisible to sync by construction).
+ */
+export async function devReplaceSeedRows(
+  rows: Snippet[],
+  clearFirst: boolean,
+): Promise<void> {
+  if (syncAdopted())
+    throw new Error("dev-seed refused: this book is sync-adopted");
+  if (clearFirst) await db.snippets.clear();
+  if (rows.length) await db.snippets.bulkPut(rows);
+}
+
 const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function notDeleted(s: Snippet): boolean {

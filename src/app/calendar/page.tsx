@@ -111,6 +111,26 @@ const YearFeed = dynamic(
     scales with the unlikelihood of needing to. */
 const ARCHIVE_YEAR = 1950;
 
+/** User-Timing instrumentation, live ONLY under ?perf (the HUD/beacon's flag).
+ * Ungated, every dive/rise/entry move appended marks+measures that nothing
+ * read and nothing cleared — an unbounded User Timing buffer growing across a
+ * long PWA session, on devices this app has already been jetsam-killed on. */
+const PERF_ON =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).has("perf");
+function pmark(name: string): void {
+  if (PERF_ON) performance.mark(name);
+}
+function pmeasure(name: string, start: string, end?: string): void {
+  // marks may be missing on the first move after load — never throw for a HUD
+  if (PERF_ON)
+    try {
+      performance.measure(name, start, end);
+    } catch {
+      /* a named mark wasn't recorded this round */
+    }
+}
+
 /** A typeface snapshot, for the date numbers that fly between altitudes. */
 interface FlyFont {
   family: string;
@@ -644,7 +664,14 @@ function PerfHud() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // the capture-phase pointer listeners must go too — a remount (dev
+      // StrictMode double-invoke) was accumulating live duplicates
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
   }, [on]);
   if (!on) return null;
   return (
@@ -912,19 +939,6 @@ function Calendar() {
   const counts = useDayCounts();
   const all = useAllSnippets();
   const reduceMotion = useReducedMotion();
-  // Device A/B toggle for the dive freeze (see data-dive-freeze in globals.css):
-  // `localStorage.setItem('nofreeze','1')` + reload runs the month⇄schedule
-  // moves with the margin dates genuinely sticky the whole way (no freeze, no
-  // sticky-delta compensation — measured rects are then already the truth).
-  // The freeze exists for a suspected iOS sticky-under-transform artifact that
-  // headless Chromium can't reproduce; whichever the owner's device pass picks,
-  // the loser gets deleted. Read once per mount (lazy state initializer — it
-  // deliberately never changes without a reload).
-  const [freezeEnabled] = useState(
-    () =>
-      typeof window === "undefined" ||
-      window.localStorage?.getItem("nofreeze") !== "1",
-  );
   // a deletion closes the entry by dissolving the card in place, not the
   // shared-element shrink back to its (vanishing) book slot — this flag marks
   // the next close as a deletion so it plays the dissolve.
@@ -1134,7 +1148,7 @@ function Calendar() {
 
   const runZoom = useCallback((from: View, to: View, anchor: string) => {
     if (zooming.current) return;
-    performance.mark("zoom-run"); // click-task start — PerfHud span breakdown
+    pmark("zoom-run"); // click-task start — PerfHud span breakdown
     setWarm(3); // a camera move needs every layer mounted now
     zooming.current = true;
     setZoom({ from, to, anchor });
@@ -1170,11 +1184,18 @@ function Calendar() {
   // move actually starting. If the first-raster cost must die someday, it needs
   // a mechanism that never reveals under a live touch (e.g. View Transitions
   // snapshots, or rastering at idle after landing on the month).
-  const stageDescent = useCallback((key: string) => {
-    if (stagedDescentRef.current === key) return;
+  // `force` (the pointerdown hint): a fresh finger-down always re-measures.
+  // The same-key guard exists only to dedup WITHIN one tap (pointerdown hint,
+  // then pick() on the release) — but a pan ends in pointercancel, never
+  // consuming the staged key, so the NEXT tap of the same day was serving
+  // rects captured at the pre-pan scroll position: every flyer launched offset
+  // by the pan delta. The cache carries no scroll stamp, so freshness is the
+  // caller's contract: pointerdown forces, pick() dedups.
+  const stageDescent = useCallback((key: string, force = false) => {
+    if (!force && stagedDescentRef.current === key) return;
     if (zooming.current) return; // never restage under a live move
     stagedDescentRef.current = key;
-    performance.mark("stage:0");
+    pmark("stage:0");
     const stageEl = stageRef.current;
     const monthEl = monthLayerRef.current;
     if (stageEl && monthEl) {
@@ -1189,11 +1210,17 @@ function Calendar() {
     } else {
       descentGeom.current = null;
     }
-    performance.mark("stage:rects");
-    performance.measure("stage:rects", "stage:0", "stage:rects");
+    pmark("stage:rects");
+    pmeasure("stage:rects", "stage:0", "stage:rects");
   }, []);
 
   /** tapping a day dives the camera into it: the book opens there */
+  // the day-cell pointerdown hint: always a FRESH measure (see stageDescent's
+  // force contract — a stale cache from a pan-abandoned tap must not survive)
+  const stageHint = useCallback(
+    (key: string) => stageDescent(key, true),
+    [stageDescent],
+  );
   const pick = useCallback(
     (key: string) => {
       // a tap during a live move must do NOTHING — runZoom would bail on its
@@ -1284,7 +1311,7 @@ function Calendar() {
       return;
     }
 
-    performance.mark("zoom-fx0"); // commit done, setup begins (PerfHud spans)
+    pmark("zoom-fx0"); // commit done, setup begins (PerfHud spans)
     // ?diag=1 — per-block forced flushes so the harness can attribute the
     // end-of-setup flush (fx:endflush) to the block that dirtied it. NEVER on
     // by default: extra sync flushes change the batching the normal path
@@ -1296,9 +1323,9 @@ function Calendar() {
       (window as unknown as { __diag?: boolean }).__diag === true;
     const dgFlush = (n: string) => {
       if (!diag) return;
-      performance.mark(`dg:${n}0`);
+      pmark(`dg:${n}0`);
       void stage.offsetHeight;
-      performance.measure(`dg:${n}`, `dg:${n}0`);
+      pmeasure(`dg:${n}`, `dg:${n}0`);
     };
     // Wake the layers — the previous finish left the departed one
     // inline-hidden. NEVER write pointer-events on a layer here (inline OR
@@ -1963,7 +1990,7 @@ function Calendar() {
       for (const a of camAnims) a.play();
       // first frame that paints motion — PerfHud pairs it with the last
       // pointerdown to show tap→motion on device (input-delay attribution)
-      performance.mark("zoom-motion");
+      pmark("zoom-motion");
     }
 
     // Warm + flush the (destination) band. Runs AFTER the outgoing camera is
@@ -1987,9 +2014,12 @@ function Calendar() {
       // band flush below, so the flight measures under the frozen truth;
       // finish() removes it. As a prop this rode the zoom commit and
       // re-rendered the whole feed at both ends of every move.
-      performance.mark("zoom-fx-wake"); // wake + rail hold done
+      pmark("zoom-fx-wake"); // wake + rail hold done
       dgFlush("wake");
-      if (freezeEnabled) {
+      {
+        // (The `nofreeze` localStorage A/B that used to gate this block is
+        // retired — the freeze shipped as the standing default through the
+        // whole animation campaign and its rects are what every harness pins.)
         // A probe latch only — no CSS is keyed on it anymore (the old
         // [data-dive-freeze] rule's attribute toggle invalidated
         // selector-matching across the whole book; see globals.css)
@@ -2011,7 +2041,7 @@ function Calendar() {
           // sections = the dive's whole `s` block; the rise's `s` scaled
           // with its warm count for the same reason). Phased, the loop costs
           // at most one flush.
-          performance.mark("fz:a");
+          pmark("fz:a");
           // O(warm), from the feed's warmSetRef — NOT a querySelectorAll over the
           // whole schedule layer (that book-wide scan was the dive's biggest
           // setup cost: fz:reads ~32ms, near-constant with book size).
@@ -2021,18 +2051,18 @@ function Calendar() {
             cell,
             straddler: !!(scheduleFeedRef.current?.stickyDeltaFor(day) ?? 0),
           }));
-          performance.mark("fz:b");
+          pmark("fz:b");
           for (const { cell, straddler } of freezeCells) {
             cell.style.position = straddler ? "sticky" : "static";
             (straddler ? repinned : frozen).push(cell);
           }
-          performance.mark("fz:c");
-          performance.measure("fz:reads", "fz:a", "fz:b");
-          performance.measure("fz:writes", "fz:b", "fz:c");
+          pmark("fz:c");
+          pmeasure("fz:reads", "fz:a", "fz:b");
+          pmeasure("fz:writes", "fz:b", "fz:c");
         }
       }
       scheduleFeedRef.current?.markOnStage(zoom.to === "schedule");
-      performance.mark("zoom-fx-stage"); // freeze + band warm/flush done
+      pmark("zoom-fx-stage"); // freeze + band warm/flush done
       // Descent: pick() set scrollTop against the book's --cis placeholders,
       // which are stale whenever the webfonts swapped after the book measured.
       // markOnStage just rendered the band at real heights, so re-land on the
@@ -2043,7 +2073,7 @@ function Calendar() {
       if (zoom.to === "schedule")
         scheduleFeedRef.current?.relandOnRow(zoom.anchor);
     }
-    performance.mark("zoom-fx-band"); // climb-band warm/flush + re-land done
+    pmark("zoom-fx-band"); // climb-band warm/flush + re-land done
     dgFlush("band");
 
     // shared-element flight: a date standing in both altitudes travels
@@ -2299,7 +2329,7 @@ function Calendar() {
       }
     }
 
-    performance.mark("zoom-fx-pair"); // date-flight collect + build done
+    pmark("zoom-fx-pair"); // date-flight collect + build done
     dgFlush("pair");
     // the month's abbreviation morphs between its year-view mini label
     // and its hand-over label over the first of the month — one small
@@ -2435,17 +2465,17 @@ function Calendar() {
     // the browser's rendering step was about to do exactly this flush; only
     // the attribution moves. (Promotion was the wrong guess for pt — see the
     // dead end on the month layer — so pt needed real bisection.)
-    performance.mark("fx:ef0");
+    pmark("fx:ef0");
     void stage.offsetHeight;
-    performance.measure("fx:endflush", "fx:ef0");
-    performance.mark("zoom-fx1"); // setup JS done — what follows is the
+    pmeasure("fx:endflush", "fx:ef0");
+    pmark("zoom-fx1"); // setup JS done — what follows is the
     // browser's first styled/painted frame (style+layout+paint+raster commit)
     // rf instrument: raf1 fires when the SETUP frame has been produced
     // (fx1→raf1 = its real engine cost — with e≈10 proving layout clean,
     // this is paint/commit); raf2 (in playAll) prices the first MOTION
     // frame the same way. Together they split pt into its engine halves
     // on device, where no harness can see frames.
-    requestAnimationFrame(() => performance.mark("zoom-raf1"));
+    requestAnimationFrame(() => pmark("zoom-raf1"));
     // the weekday rail's fold joins driveEase's first moving frame. (A
     // fold-after-landing was tried — 2026-07-16 device verdict: "very janky",
     // the settled page visibly reflows. The fold's real cost is that it
@@ -2560,10 +2590,10 @@ function Calendar() {
         for (const a of camAnims) a.play();
         // first frame that paints motion — PerfHud pairs it with the last
         // pointerdown to show tap→motion on device (input-delay attribution)
-        performance.mark("zoom-motion");
+        pmark("zoom-motion");
       }
       // rf instrument's second half: prices the first MOTION frame
-      requestAnimationFrame(() => performance.mark("zoom-raf2"));
+      requestAnimationFrame(() => pmark("zoom-raf2"));
       // build the arriving glyphs a few frames in — their layerization then
       // happens behind motion with margin to spare. On a dive they fade in as
       // soon as they are built (path-ready); on a rise they crossfade with the
@@ -2658,8 +2688,7 @@ function Calendar() {
     else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
     void Promise.all(moves).then(finish, finish);
-    // freezeEnabled set once at mount
-  }, [zoom, reduceMotion, freezeEnabled]);
+  }, [zoom, reduceMotion]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
@@ -3479,12 +3508,21 @@ function Calendar() {
             data-cal-title
             // The climb fires at POINTERUP (see the day cells in MonthFeed for
             // the full rationale — iOS delivers the synthesized click 80–300ms
-            // after the lift). Here the dedupe window is LOAD-BEARING, not
+            // after the lift). Here the dedupe is LOAD-BEARING, not
             // belt-and-braces: closeSchedule/closeEntry are history.back(),
             // which the zooming latch does NOT guard — a trailing click
-            // slipping through would pop TWO altitudes.
-            onClick={() => {
-              if (performance.now() - titleTapRef.current.firedAt < 700) return;
+            // slipping through would pop a second altitude. Pointer-driven
+            // clicks (detail > 0) are ALWAYS the pointerup's trailing twin —
+            // a pointer user is fully served by pointerup — so they only pass
+            // after a long quiet spell (a synthesized click stall-delayed past
+            // a short window was overshooting an altitude); keyboard/AT clicks
+            // (detail 0, no preceding lift) always pass.
+            onClick={(e) => {
+              if (
+                e.detail > 0 &&
+                performance.now() - titleTapRef.current.firedAt < 2500
+              )
+                return;
               (view === "month"
                 ? openYear
                 : view === "schedule"
@@ -3508,6 +3546,13 @@ function Calendar() {
                 });
               }
             }}
+            // a cancelled/rejected press must unwind the stage hint — without
+            // this a pan starting on the title left riseStaged latched, keeping
+            // the hidden month feed unfrozen (re-rendering on every book
+            // update) until the next completed zoom
+            onPointerCancel={() => {
+              if (riseStaged) setRiseStaged(false);
+            }}
             onPointerUp={(e) => {
               const t = titleTapRef.current;
               if (
@@ -3515,8 +3560,14 @@ function Calendar() {
                 !e.isPrimary ||
                 e.button > 0 ||
                 Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12
-              )
+              ) {
+                // rejected: arm the swallow-window so the trailing synthesized
+                // click can't run the climb the rejection refused, and stand
+                // the stage hint down
+                t.firedAt = performance.now();
+                if (riseStaged) setRiseStaged(false);
                 return;
+              }
               t.firedAt = performance.now();
               (view === "month"
                 ? openYear
@@ -3820,7 +3871,7 @@ function Calendar() {
             <MonthFeed
               handleRef={monthFeedRef}
               activeRef={monthActiveRef}
-              onPickHint={stageDescent}
+              onPickHint={stageHint}
               frozen={!showMonthLayer && !riseStaged}
               today={today}
               span={monthSpan}
@@ -4467,18 +4518,18 @@ function ScheduleFeedBase({
     // scrolled there — and force its render in THIS pass, before Motion
     // transforms the layer. O(band); the old design's O(book) auto→hidden recalc
     // (the front-loaded setup/teardown stall) is gone by construction.
-    performance.mark("mos:0");
+    pmark("mos:0");
     // narrow (a dive): keep the staged 0.35-viewport band — the camera only
     // ever shows the clipped viewport, and every extra warm section is more
     // freshly-styled content whose inherited visibility flips at the reveal
     // (the dive's fzReads flush, ~240ms at 1.5 viewports on WebKitGTK).
     // clearOnStage's observer re-prime widens the band right after landing.
     warmBand(undefined, narrow ? 0.35 : 1.5);
-    performance.mark("mos:warm");
+    pmark("mos:warm");
     void el.offsetHeight; // sync layout flush: render the warm band now
-    performance.mark("mos:flush");
-    performance.measure("mos:warm", "mos:0", "mos:warm");
-    performance.measure("mos:flush", "mos:warm", "mos:flush");
+    pmark("mos:flush");
+    pmeasure("mos:warm", "mos:0", "mos:warm");
+    pmeasure("mos:flush", "mos:warm", "mos:flush");
   }, [warmBand]);
   const clearOnStage = useCallback((anchorDay?: string) => {
     climbingRef.current = false;

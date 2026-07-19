@@ -464,7 +464,14 @@ const MonthBlock = memo(function MonthBlock({
   // the dive should begin on release, exactly like the rise. The felt dive lag
   // is NOT the press duration; it is the dive's heavier first frame, chased
   // via rf-a instead.)
-  const tapRef = useRef({ key: "", x: 0, y: 0, id: -1, firedAt: 0 });
+  // firedKey rides with firedAt so the click dedup is PER DAY, not per month:
+  // a time-only window swallowed a keyboard/AT activation of a DIFFERENT day
+  // within 700ms of a touch tap. rejectedAt covers the other hole: a press the
+  // pointerup REFUSES (drifted >12px) still synthesizes a click (always on
+  // mouse; on touch when the drift wasn't taken as a scroll), and with firedAt
+  // never set that ghost click dove into the day the rejection refused — so a
+  // rejection now arms the same swallow-window as a fire.
+  const tapRef = useRef({ key: "", x: 0, y: 0, id: -1, firedAt: 0, firedKey: "" });
 
   return (
     <div>
@@ -504,8 +511,17 @@ const MonthBlock = memo(function MonthBlock({
               key={key}
               type="button"
               disabled={isFuture}
-              onClick={() => {
-                if (performance.now() - tapRef.current.firedAt < 700) return;
+              onClick={(e) => {
+                const t = tapRef.current;
+                // keyboard/AT activation (Enter/Space → click with detail 0)
+                // always passes; a pointer-driven click is swallowed when a
+                // pointerup on THIS day recently fired or rejected the gesture
+                if (
+                  e.detail > 0 &&
+                  t.firedKey === key &&
+                  performance.now() - t.firedAt < 700
+                )
+                  return;
                 onPick(key);
               }}
               onPointerDown={
@@ -531,9 +547,16 @@ const MonthBlock = memo(function MonthBlock({
                         !e.isPrimary ||
                         e.button > 0 ||
                         Math.hypot(e.clientX - t.x, e.clientY - t.y) > 12
-                      )
+                      ) {
+                        // a REJECTED gesture must also swallow its trailing
+                        // synthesized click — else the drag the rejection
+                        // refused dives anyway (see tapRef)
+                        t.firedAt = performance.now();
+                        t.firedKey = key;
                         return;
+                      }
                       t.firedAt = performance.now();
+                      t.firedKey = key;
                       onPick(key);
                     }
               }

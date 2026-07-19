@@ -49,7 +49,7 @@ def main():
     req("POST", p + "/window/rect", {"width": 393, "height": 852})
     def js(script, args=None):
         return req("POST", p + "/execute/sync", {"script": script, "args": args or []})
-    req("POST", p + "/url", {"url": f"http://127.0.0.1:3000/calendar?seed={seed}"})
+    req("POST", p + "/url", {"url": f"http://127.0.0.1:3000/calendar?seed={seed}&perf=1"})
     want = int(int(seed) * 0.55)  # sections ~ 0.6/entry at these densities
     for i in range(20):
         time.sleep(2)
@@ -57,7 +57,7 @@ def main():
         if n and int(n) > want: break
     print("seeded:", n, "sections after", (i+1)*2, "s")
     time.sleep(10)  # let the IDB writes land before navigating away
-    req("POST", p + "/url", {"url": "http://127.0.0.1:3000/calendar"})
+    req("POST", p + "/url", {"url": "http://127.0.0.1:3000/calendar?perf=1"})
     for i in range(20):
         time.sleep(2)
         n = js("return document.querySelectorAll('[data-day]').length")

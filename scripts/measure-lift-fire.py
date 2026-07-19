@@ -73,8 +73,8 @@ def main() -> int:
         ctx = browser.new_context(viewport={"width": 393, "height": 852},
                                   device_scale_factor=2)
         pg = ctx.new_page()
-        pg.goto(f"{BASE}?seed={SEED}", wait_until="load"); pg.wait_for_timeout(4500)
-        pg.goto(BASE, wait_until="load"); pg.wait_for_timeout(5000)
+        pg.goto(f"{BASE}?seed={SEED}&perf=1", wait_until="load"); pg.wait_for_timeout(4500)
+        pg.goto(f"{BASE}?perf=1", wait_until="load"); pg.wait_for_timeout(5000)
 
         runs = pg.evaluate(COUNT_RUNS)
 

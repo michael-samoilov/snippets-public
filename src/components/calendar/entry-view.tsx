@@ -3,6 +3,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
+import { useScrollEdges } from "@/components/ui/scroll-terminus";
 import { PressGlow } from "@/components/capture/press-glow";
 import { useContainedField } from "@/hooks/use-contained-field";
 import { updateSnippet } from "@/lib/db";
@@ -91,6 +92,22 @@ function EntryBody({
   // the card never moves. This replaced the generic keyboard-room padding,
   // which reserved a whole keyboard of blank reach below the card.
   useContainedField(areaRef, editing);
+  // The foot fade is a CSS scroll-driven mask (scroll-fade below) — but
+  // `animation-timeline: scroll()` is missing on older Safari/Firefox, where
+  // the mask is simply absent AND the scrollbar is hidden: a long entry there
+  // gave no sign at all that more words lay below. On those browsers only,
+  // fall back to the old JS terminus (useScrollEdges + the fade/hairline
+  // overlay this card used before adopting the mask).
+  const cssScrollFade = useMemo(
+    () =>
+      typeof CSS !== "undefined" &&
+      CSS.supports("animation-timeline: scroll()"),
+    [],
+  );
+  // liveHeight: one entry's scrollHeight is a cheap read, and its words can
+  // re-wrap with no dep firing (a late font load) — same contract as before
+  // the mask adoption. Consulted only on the fallback path.
+  const edges = useScrollEdges(contentRef, [editing, draft, snippet.text], true);
   // a long entry that overflows the card reads at the schedule-preview size
   // (smaller) rather than full prose. We can't trust the live scroll edges
   // for this: as the card opens it FLIPs from a small tile up to the full
@@ -288,7 +305,8 @@ function EntryBody({
         // short entry that fits isn't scrollable → the timeline is inactive →
         // no fade. Held OFF while editing (below): the field autoscrolls to
         // the caret every keystroke, and a masked caret edge is worse than a
-        // hard one. Where it's unsupported the mask is simply absent.
+        // hard one. Where scroll-driven animation is unsupported the mask is
+        // absent — the JS terminus in the foot (below) stands in there.
         className={cn(
           "relative min-h-0 flex-initial overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]",
           !editing && "scroll-fade scroll-fade-8",
@@ -349,7 +367,22 @@ function EntryBody({
         className="relative shrink-0"
       >
         {/* the words dissolve at the foot via the scroller's own scroll-fade
-            mask (above) — no overlay or hairline here anymore. */}
+            mask (above). Where scroll-driven animation is unsupported, the
+            old JS terminus stands back in: a soft fade + hairline while more
+            words lie below (edges.bottom), hidden mid-edit like the mask. */}
+        {!cssScrollFade && (
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-full z-[6] h-8 transition-opacity duration-200",
+              edges.bottom && !editing ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <div className="absolute inset-x-0 top-0 bottom-[2px] bg-gradient-to-t from-paper to-transparent" />
+            <div className="absolute inset-x-0 bottom-[-4px] h-[6px] bg-paper" />
+            <div className="absolute inset-x-4 bottom-0 border-t border-rule-faint" />
+          </div>
+        )}
         <div
           // constant padding: the foot never changes the card's height
           // as the terminus comes and goes (it sets the gap from the

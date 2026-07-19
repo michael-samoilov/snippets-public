@@ -36,7 +36,7 @@
    every time. */
 
 import { ulid } from "ulidx";
-import { db } from "@/lib/db";
+import { db, devReplaceSeedRows } from "@/lib/db";
 import { dayKey } from "@/lib/dates";
 import type { Snippet } from "@/lib/types";
 
@@ -181,7 +181,7 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
   };
 
   if (seed === "clear") {
-    await db.snippets.clear();
+    await devReplaceSeedRows([], true);
     // keep the mark SET (to a sentinel) so the preview auto-seed won't refill a
     // book you cleared on purpose — e.g. to test empty states. `?seed=N` reseeds.
     try {
@@ -220,13 +220,10 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
   }
 
   // replace our OWN prior seed so a new count is exact — ?seed=800 after
-  // ?seed=500 yields 800, not 1300 (a real book with &force still adds on top)
-  if (isOurSeed) {
-    await db.snippets.clear();
-  }
-
-  const rows = buildSeedRows(count, years, 1);
-  await db.snippets.bulkPut(rows);
+  // ?seed=500 yields 800, not 1300 (a real book with &force still adds on top).
+  // All writes go through db.ts's devReplaceSeedRows (the choke point), which
+  // also refuses structurally on a sync-adopted book.
+  await devReplaceSeedRows(buildSeedRows(count, years, 1), isOurSeed);
   try {
     localStorage.setItem(SEED_MARK, signature);
   } catch {}
@@ -267,7 +264,7 @@ export async function maybeSeedDevBook(search?: string): Promise<void> {
     return;
   }
   if ((await db.snippets.count()) > 0) return; // a real book is present — leave it
-  await db.snippets.bulkPut(buildSeedRows(AUTO_SEED_COUNT, AUTO_SEED_YEARS, 1));
+  await devReplaceSeedRows(buildSeedRows(AUTO_SEED_COUNT, AUTO_SEED_YEARS, 1), false);
   try {
     localStorage.setItem(SEED_MARK, `auto:${AUTO_SEED_COUNT}@${AUTO_SEED_YEARS}`);
   } catch {}
