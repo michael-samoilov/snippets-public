@@ -1005,27 +1005,6 @@ function Calendar() {
   // the day whose destination stageDescent() has already prepared (pointerdown
   // hint) — pick() then skips the duplicate work; cleared when consumed
   const stagedDescentRef = useRef<string | null>(null);
-  // Flyer DOM prebuilt during the dive's finger-dwell (stageDescent chunk C).
-  // rf instrumentation (device 2026-07-17) split the dive's remaining input
-  // delay into two engine frames: 68ms producing the setup frame (the flyer
-  // point+glyph layers' allocation+raster under will-change) and 67ms
-  // producing the first motion frame (layer promotion at play). Both are
-  // pure paint — and the same taps carry ~150ms of measured idle dwell
-  // (dwn→up ~230, staging done by ~40). So the flyers are built HERE, under
-  // the finger: the box overlays the month grid pixel-exactly (same glyphs,
-  // same spots, same color — appending it changes nothing on screen), and
-  // iOS rasterizes the layers while the finger is still down. The zoom
-  // effect then ADOPTS these elements per day instead of creating them.
-  // disarm() = keep the box, drop the abort wiring (the move owns it now);
-  // abort() = remove everything (staging abandoned: restage, pointercancel,
-  // month scroll, a non-adopting zoom, or the 4s timeout).
-  const stagedFlyersRef = useRef<{
-    anchor: string;
-    box: HTMLDivElement;
-    points: Map<string, { point: HTMLSpanElement; gFrom: HTMLSpanElement }>;
-    disarm: () => void;
-    abort: () => void;
-  } | null>(null);
   // (The dive's book landing — goTo: probe move + landing scroll (+ the band
   // flush, now paid by the zoom effect's markOnStage) — no longer pre-runs
   // during the finger dwell. It ran on a rAF from the day-cell POINTERDOWN, and
@@ -1412,25 +1391,7 @@ function Calendar() {
       .querySelectorAll("[data-fly], [data-flymonth-fly]")
       .forEach((el) => el.remove());
 
-    // adopt the dwell-prebuilt flyers when this move is the dive they were
-    // staged for; any other move sends them away before it starts (their
-    // [data-fly-staged] points are invisible overlay copies of the month
-    // grid — harmless, but a scaling month must not carry ghosts)
-    const stagedFly = stagedFlyersRef.current;
-    const adoptStaged = !!(
-      stagedFly &&
-      zoom.from === "month" &&
-      zoom.to === "schedule" &&
-      stagedFly.anchor === zoom.anchor &&
-      stagedFly.box.isConnected
-    );
-    if (stagedFly && !adoptStaged) stagedFly.abort();
-    else if (stagedFly) {
-      stagedFly.disarm();
-      stagedFly.box.style.opacity = ""; // reveal — the finger is up now
-    }
-
-    let flyerBox: HTMLDivElement | null = adoptStaged ? stagedFly!.box : null;
+    let flyerBox: HTMLDivElement | null = null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
     // the straddling day's margin cell, held sticky through a frozen move
@@ -2253,13 +2214,10 @@ function Calendar() {
         // the crossfade all ride one spring value, so the type changes
         // exactly when the number reaches the middle of its flight,
         // not when it lands
-        const pre = adoptStaged ? stagedFly!.points.get(day) : undefined;
-        const point = pre?.point ?? document.createElement("span");
+        const point = document.createElement("span");
         point.dataset.fly = day; // from here the orphan sweep owns it
-        delete point.dataset.flyStaged;
-        if (!pre)
-          point.style.cssText =
-            `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
+        point.style.cssText =
+          `position:absolute;left:0;top:0;width:0;height:0;transform:translate(${ax}px,${ay}px);`;
         // TRANSFORM-ONLY flight: the glyphs render ONCE at the larger of the
         // two sizes and ride a `scale` (always ≤1, so downscaling — sharp, no
         // upscale blur) instead of re-setting fontSize each frame. fontSize is
@@ -2276,27 +2234,20 @@ function Calendar() {
         // fades in over the latter part of the path once the calendar has gone:
         // nothing is ever drawn near the origin, so there is nothing to hang.
         // The rise keeps its departing→arriving crossfade (it never defers).
-        const departing = earlyOut
-          ? null
-          : (pre?.gFrom ?? flyGlyph(num, fromFont, color));
-        if (!pre && departing) {
+        const departing = earlyOut ? null : flyGlyph(num, fromFont, color);
+        if (departing) {
           departing.style.fontSize = `${baseSize}px`;
           // will-change is REQUIRED on the start-visible flyer parts (point
           // + departing glyph): layerizing them at play instead was tried
           // (device 2026-07-17) and ate the flight's start — WAAPI sets the
           // clock at play() but the layers commit frames later and WebKit
           // does NOT rebase, so the numbers materialized mid-path. Anything
-          // visible on frame one must be a layer BEFORE the play tick —
-          // ideally the dwell-prebuilt one (see stagedFlyersRef), this
-          // inline build being the fast-tap fallback.
+          // visible on frame one must be a layer BEFORE the play tick.
           departing.style.willChange = "transform, opacity";
           point.append(departing);
         }
-        if (!pre) point.style.willChange = "transform";
-        // a dwell-prebuilt departing glyph exists even on a dive — keep it dark
-        // so only the arriving book-typeface glyph is ever seen
-        if (earlyOut && pre?.gFrom) pre.gFrom.style.opacity = "0";
-        if (!pre) box!.appendChild(point); // prebuilt points already live there
+        point.style.willChange = "transform";
+        box!.appendChild(point);
         // The destination book number always hides until finish, so the arriving
         // flyer is never doubled by the real cell underneath it. The SOURCE
         // number hides only on a rise (whose departing glyph flies from it, so it
@@ -2346,12 +2297,6 @@ function Calendar() {
         // plays a visible frame — same protocol as the join-created fades.
         lateGlyphs.push({ point, num, toFont, color, baseSize, sFrom, sTo });
       }
-      // prebuilt points whose day found no book-side partner never became
-      // flyers — drop them before the move paints (they still wear the
-      // staged attribute; adopted ones traded it for data-fly above)
-      if (adoptStaged)
-        for (const { point } of stagedFly!.points.values())
-          if (point.dataset.flyStaged) point.remove();
     }
 
     performance.mark("zoom-fx-pair"); // date-flight collect + build done
