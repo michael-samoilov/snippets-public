@@ -817,81 +817,6 @@ function TapBeacon() {
   );
 }
 
-// Floating debug chip (?perf=1 or ?open=…): flip the dive-opening variant
-// live, no reload, so the candidates can be compared back to back. Sits at the
-// bottom, clear of the HUD. A measuring tool, not UI.
-// Diagnostic A/B for the dive's first-frame (pt) cost — device HUD only (it is
-// a WebKit compositing cost neither Chromium nor the Xvfb harness can price).
-// RULED OUT on device: the flying numbers (no-fly/1-fly held ~90) and the
-// outgoing calendar's upscale raster (flat-out/wc-out held ~90). That leaves
-// the INCOMING book layer: creating its camera-scale animation at setup
-// promotes it and makes WebKit raster its freshly-rendered destination page
-// into a texture, even though it is visibility:hidden — the rise's incoming is
-// the tiny month, so it is cheap.
-//   no-inc   — the incoming book does NOT get a camera scale (fades in at full
-//              size). If pt drops toward ~14, the incoming layer IS the cost.
-//   late-inc — the incoming book's camera scale is created at the JOIN frame
-//              (behind motion), not at setup. The candidate FIX.
-const OPEN_VARIANTS: { id: string | null; label: string }[] = [
-  { id: null, label: "base" },
-  { id: "noinc", label: "no-inc" },
-  { id: "latinc", label: "late-inc" },
-];
-function DiveOpenToggle({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (v: string | null) => void;
-}) {
-  const [on] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      (new URLSearchParams(window.location.search).has("perf") ||
-        new URLSearchParams(window.location.search).has("open")),
-  );
-  if (!on) return null;
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 9999,
-        display: "flex",
-        gap: 4,
-        padding: 3,
-        borderRadius: 8,
-        background: "rgba(0,0,0,.62)",
-        font: "12px ui-monospace, monospace",
-      }}
-    >
-      {OPEN_VARIANTS.map((v) => {
-        const active = value === v.id;
-        return (
-          <button
-            key={v.label}
-            type="button"
-            onClick={() => onChange(v.id)}
-            style={{
-              appearance: "none",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 11px",
-              color: active ? "#111" : "#fff",
-              background: active ? "#fff" : "rgba(255,255,255,.12)",
-              fontWeight: active ? 700 : 400,
-            }}
-          >
-            {v.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * The calendar is a camera over time. Month view and year view are two
  * altitudes of the same world: switching views zooms the whole field
@@ -1111,42 +1036,6 @@ function Calendar() {
   // pre-stage was pure input-latency cost with no remaining benefit.
   // stageDescent now only caches the flight's takeoff rects (cheap), and the
   // staged-flyer prebuild + its run/flush/raf refs are gone with it.)
-  // ?flat=1 device A/B (see the camera-scale block): captured ONCE at first
-  // render — the deep-link effect rewrites the URL right after boot, so
-  // reading location.search at zoom time always missed the flag.
-  // Session-scoped like ?perf; reload without the flag to turn it off.
-  const [flatCamera] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).has("flat"),
-  );
-  // Dive-opening A/B (device feel test, ?open=…). A zoom-IN is pixel-weak at
-  // the start — it magnifies about the tapped day, which is where the eye is
-  // and which therefore barely moves, while the destination book late-joins.
-  // Three candidates make the opening assertive; the reader records each and
-  // the winner stays. `null` (no flag) = the baseline.
-  //   lead  — the tapped day's number leaps toward its page on frame one,
-  //           giving motion exactly where the eye rests
-  //   punch — the whole calendar dims fast in the first frames (a screen-wide
-  //           "it responded", the way the rise's book-scale reads)
-  //   book  — the destination page materializes from frame one instead of ~2
-  //           frames late, so it contributes pixels immediately
-  // switchable at runtime by the floating debug chip (DiveOpenToggle) so the
-  // variants can be compared without reloading; seeded from ?open= for deep
-  // links. The chip drives STATE (its active highlight) and a REF (what the
-  // zoom effect reads) together — via the ref, not the effect deps, so a flip
-  // never re-runs setup on an in-flight move (the chip sits above the shield);
-  // the NEXT dive picks up the new value.
-  const [openStyle, setOpenStyleState] = useState<string | null>(() =>
-    typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("open"),
-  );
-  const openStyleRef = useRef(openStyle);
-  const setOpenStyle = useCallback((v: string | null) => {
-    openStyleRef.current = v;
-    setOpenStyleState(v);
-  }, []);
   const monthFeedRef = useRef<MonthFeedHandle | null>(null);
   // Each feed's interactivity gate as a REF, not a prop: `view/zoom` flip at the
   // start AND end of every altitude move, and as props they re-rendered all
@@ -2052,37 +1941,19 @@ function Calendar() {
 
     // diving: the departing view blows up past its slot; pulling back: it
     // shrinks toward it — and the arriving view does the inverse.
-    // ?flat=1 (device A/B, 2026-07-16): no camera scale — crossfade + flyers
-    // only. The remaining dive/rise stalls are device-only raster-class costs,
-    // and the prime suspect is (re)rastering the full-screen layers UNDER A
-    // CHANGING SCALE — the rise's incoming month starts ENLARGED (its most
-    // expensive possible raster), the dive's incoming schedule starts small
-    // and grows, matching the observed asymmetry (dive smooth once moving,
-    // rise starved throughout). If flat kills the rise chop on device, that
-    // theory is confirmed and snapshot-based animation (View Transitions) is
-    // the structural fix; if the chop persists, the cost is elsewhere.
-    // (entry moves never reach this camera path — the morph, the A/B's
-    // reference, stays untouched by construction)
-    const flat = flatCamera;
     const outFrom = 1;
-    const outTo = flat ? 1 : deeper ? factor : 1 / factor;
-    const inFrom = flat ? 1 : deeper ? 1 / factor : factor;
+    const outTo = deeper ? factor : 1 / factor;
+    const inFrom = deeper ? 1 / factor : factor;
     const inTo = 1;
     // The SCALE driver is started BELOW, AFTER the shared-element flight has
     // measured its rects — its start pose applies synchronously, and scaling
     // the arriving layer before the flight reads textRect(toEl) would measure
     // the date at its shrunk-in position and fly the number to the wrong spot.
-    // pt A/B (dive only): defer or drop the INCOMING book's camera scale.
-    const diveInc =
-      zoom.from === "month" && zoom.to === "schedule" ? openStyleRef.current : null;
-    // Defer the incoming (book) camera to joinIncoming on EVERY late-join dive —
-    // not just the latinc A/B — so nothing scales the book before the flight has
-    // measured it (constraint 1) and its promotion/raster lands behind motion
-    // (see joinIncoming). noinc still drops it entirely.
-    const skipIncCamAtSetup =
-      diveInc === "noinc" ||
-      diveInc === "latinc" ||
-      (lateJoin && zoom.to === "schedule");
+    // Defer the incoming (book) camera to joinIncoming on EVERY late-join dive,
+    // so nothing scales the book before the flight has measured it
+    // (constraint 1) and its promotion/raster lands behind motion
+    // (see joinIncoming).
+    const skipIncCamAtSetup = lateJoin && zoom.to === "schedule";
     const startCameraScale = () =>
       Promise.all([
         compositorMove(outgoing, [
@@ -2119,13 +1990,7 @@ function Calendar() {
         compositorMove(
           outgoing,
           [
-            {
-              opacity: 1,
-              offset: 0,
-              ...(openStyleRef.current === "punch"
-                ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
-                : {}),
-            },
+            { opacity: 1, offset: 0 },
             { opacity: 0, offset: 200 / 440 },
             { opacity: 0, offset: 1 },
           ],
@@ -2452,14 +2317,6 @@ function Calendar() {
         const sFrom = fromFont.size / baseSize;
         const sTo = toFont.size / baseSize;
         const gtf = (s: number) => `translate(-50%,-50%) scale(${s})`;
-        // ?open=lead: the TAPPED day leaps on frame one. Its point rides a
-        // sharply front-loaded curve (covers most of its travel in the first
-        // ~120ms, then settles) so the number the reader is looking at bolts
-        // toward its page immediately — motion exactly where the eye rests,
-        // before the calendar's own zoom has moved much. Only the anchor;
-        // every other day keeps the shared eased glide.
-        const leadThis =
-          openStyleRef.current === "lead" && day === zoom.anchor;
         moves.push(
           compositorMove(
             point,
@@ -2467,9 +2324,6 @@ function Calendar() {
               { transform: `translate(${ax}px,${ay}px)` },
               { transform: `translate(${bx}px,${by}px)` },
             ],
-            leadThis
-              ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" } // expo-out: bolts then settles
-              : undefined,
           ),
         );
         // the departing→arriving crossfade — rise only (a dive shows no
@@ -2589,16 +2443,6 @@ function Calendar() {
           {
             opacity: 1,
             offset: 0,
-            // ?open=punch: the calendar dims FAST at the very start — an
-            // expo-out on the fade drops the whole outgoing layer's opacity
-            // sharply in the first frames, a screen-wide "it responded" that
-            // the pixel-weak zoom-in otherwise lacks. Only the down-ramp
-            // segment; the plateau is untouched. Dive only.
-            ...(openStyleRef.current === "punch" &&
-            zoom.from === "month" &&
-            zoom.to === "schedule"
-              ? { easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
-              : {}),
           },
           {
             opacity: 0,
@@ -2714,8 +2558,6 @@ function Calendar() {
       }
       // The incoming book's camera scale, deferred from setup to HERE
       // (behind motion) so its promotion/raster never lands on the input frame.
-      // Created whenever it was skipped at setup — every late-join dive now
-      // (skipIncCamAtSetup), or the latinc A/B — but NOT the noinc A/B.
       // FULL-RANGE, not clock-synced: the rise's incoming scale is created at
       // setup and plays from 0, so the month does its WHOLE zoom-in; the dive's
       // book joins ~one book-work later, and clock-syncing it (starting it
@@ -2725,7 +2567,7 @@ function Calendar() {
       // with the outgoing camera at 440), so the book does a full zoom journey
       // like the rise's month, just a touch quicker. (The fade stays clock-
       // synced above, exactly as the rise's fade is — only the scale skipped.)
-      if (skipIncCamAtSetup && diveInc !== "noinc") {
+      if (skipIncCamAtSetup) {
         const clock = Number(camAnims[0]?.currentTime) || 0;
         const inCam = incoming.animate(
           [{ transform: `scale(${inFrom})` }, { transform: `scale(${inTo})` }],
@@ -2850,17 +2692,7 @@ function Calendar() {
             }
           }
         }, 80);
-      // ?open=book (dive only): join the destination page THIS frame, not the
-      // next — its fade-in then contributes screen-filling pixels from the
-      // first motion frame, the biggest lever against the pixel-weak opening.
-      // Cost: the book's raster moves into the first motion frame (may add a
-      // touch of delay before that frame paints) — exactly the trade the A/B
-      // is measuring.
-      const joinNow =
-        openStyleRef.current === "book" &&
-        zoom.from === "month" &&
-        zoom.to === "schedule";
-      if (lateJoin && !joinNow) {
+      if (lateJoin) {
         // the book reveals ON THE NEXT FRAME — motion is already on screen
         // from this one, and one vsync is all the head start the outgoing
         // needs (two frames read as "the page is late" on device)
@@ -2881,9 +2713,8 @@ function Calendar() {
     else requestAnimationFrame(() => requestAnimationFrame(playAll));
     setTimeout(playAll, 150);
     void Promise.all(moves).then(finish, finish);
-    // freezeEnabled/flatCamera set once at mount; openStyle read via ref so a
-    // live chip flip never re-runs setup on an in-flight move
-  }, [zoom, reduceMotion, freezeEnabled, flatCamera]);
+    // freezeEnabled set once at mount
+  }, [zoom, reduceMotion, freezeEnabled]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
@@ -3663,7 +3494,6 @@ function Calendar() {
     <div className="flex h-full min-h-0 flex-col">
       <PerfHud />
       <TapBeacon />
-      <DiveOpenToggle value={openStyle} onChange={setOpenStyle} />
       {/* the current altitude, spoken to assistive tech after every zoom/jump.
           An h1 (not a p): the visible title is a click-to-climb BUTTON, not a
           heading, so without this the whole app had no h1 at all — nothing
