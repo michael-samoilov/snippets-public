@@ -134,6 +134,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let stillDeath = 0;
     let dwell = 0;
     let litAt = 0;
+    let scaleHold = 0;
+    let levelHold = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
     // the recipe in force for the current press (re-read per press: theme
@@ -142,16 +144,29 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let reduce = false;
 
     let shedWC = 0;
-    // a standing selection in a text field of this surface owns its taps:
-    // iOS shows the Cut/Copy/Paste callout for them, and it dismisses on any
-    // nearby relayering — the glow's blend/will-change/transform writes are
-    // exactly that. While one stands, the light neither arrives nor sheds.
-    const fieldSelectionStands = () => {
+    // a standing selection in this surface owns its taps: iOS shows the
+    // Cut/Copy/Paste callout for them, and it dismisses on any nearby
+    // relayering — the glow's blend/will-change/transform writes are exactly
+    // that. Both kinds count: a field's own selection (invisible to
+    // getSelection) AND a DOM selection on static words (a long-press on the
+    // card view's prose). While one stands, the light neither arrives nor
+    // sheds nor retracts its bloom.
+    const selectionStands = () => {
       const a = document.activeElement;
-      return (
+      if (
         (a instanceof HTMLTextAreaElement || a instanceof HTMLInputElement) &&
         host.contains(a) &&
         a.selectionStart !== a.selectionEnd
+      )
+        return true;
+      const sel = document.getSelection();
+      return (
+        !!sel &&
+        !sel.isCollapsed &&
+        !!sel.anchorNode &&
+        host.contains(
+          sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement,
+        )
       );
     };
     const arm = () => {
@@ -195,6 +210,14 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     };
     const level = () => {
       const lit = (down || riding) && !quenched;
+      // fading out is a paint change beside a possibly-open callout — while
+      // a selection stands on this surface, the light simply stays (the
+      // hand's work is ongoing) and fades once the selection collapses
+      if (!lit && glow.style.opacity !== "0" && selectionStands()) {
+        clearTimeout(levelHold);
+        levelHold = window.setTimeout(level, 350);
+        return;
+      }
       // per-direction envelopes, measured from iOS's Liquid Glass bar
       // (30fps frame analysis): the light swells in over ~200ms and leaves
       // on a long, near-linear ~380ms tail. One shared snappy ease-out
@@ -212,7 +235,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         // the selection collapses.
         clearTimeout(shedWC);
         const shed = () => {
-          if (fieldSelectionStands()) {
+          if (selectionStands()) {
             shedWC = window.setTimeout(shed, 350);
             return;
           }
@@ -252,8 +275,16 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
           bloomEl.style.transformOrigin =
             `${r.left + r.width / 2 - b.left}px ${r.top + r.height / 2 - b.top}px`;
         }
-        bloomEl.style.transform = `scale(${eff})`;
-      } else {
+        const next = `scale(${eff})`;
+        if (bloomEl.style.transform !== next) bloomEl.style.transform = next;
+      } else if (bloomEl.style.transform !== "") {
+        if (selectionStands()) {
+          // a callout may be showing over this surface — retracting the
+          // bloom would relayer it away; retry once the selection collapses
+          clearTimeout(scaleHold);
+          scaleHold = window.setTimeout(scale, 350);
+          return;
+        }
         bloomEl.style.transform = "";
       }
     };
@@ -271,7 +302,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       else exit();
     };
     const onDown = (e: PointerEvent) => {
-      if (fieldSelectionStands()) return; // the callout's tap — stay dark
+      if (selectionStands()) return; // the callout's tap — stay dark
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
       clearTimeout(dwell);
@@ -424,6 +455,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       clearTimeout(scaleClear);
       clearTimeout(stillDeath);
       clearTimeout(dwell);
+      clearTimeout(scaleHold);
+      clearTimeout(levelHold);
       window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
