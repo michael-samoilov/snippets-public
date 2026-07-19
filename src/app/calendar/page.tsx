@@ -4220,11 +4220,7 @@ const BookRow = memo(function BookRow({
       <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
         <ScheduleCards snippets={snippets} day={day} onOpen={onOpen} />
         {showComposer && (
-          <BackfillCapture
-            key={day}
-            day={day}
-            follows={snippets.length > 0}
-          />
+          <BackfillCapture key={day} day={day} snippets={snippets} />
         )}
       </div>
     </section>
@@ -5726,7 +5722,7 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 // seal. Today's capture lives in the big fill zone, so today's inline composer
 // steps aside — but other days keep theirs (yesterday's "add something from
 // yesterday" invite, or any page you opened to backfill).
-function BackfillCapture(props: { day: string; follows?: boolean }) {
+function BackfillCapture(props: { day: string; snippets: Snippet[] }) {
   if (props.day === dayKey()) return null;
   return <FlowBackfillCapture {...props} />;
 }
@@ -5738,10 +5734,10 @@ function BackfillCapture(props: { day: string; follows?: boolean }) {
    line (slow). */
 function FlowBackfillCapture({
   day,
-  follows = false,
+  snippets,
 }: {
   day: string;
-  follows?: boolean;
+  snippets: Snippet[];
 }) {
   const reduce = useReducedMotion() ?? false;
   const [text, setText] = useState("");
@@ -5772,6 +5768,20 @@ function FlowBackfillCapture({
   );
   const seq = useKeepSequence(KEEP_BEATS, reduce);
   const draftStore = useKeptDraft();
+  // Does a VISIBLE entry sit above this composer? (Governs the mt-1 gap that
+  // separates the composer from the cards above it.) Count only shown rows:
+  // the keep WRITES at submit, so this composer's just-written row is already
+  // in `snippets` but HELD off stage until the carding beat. Counting it would
+  // flip `follows` true mid-press — the composer gains mt-1 and drops 4px while
+  // its card is still held, so when the settled card lands (where the composer
+  // sat BEFORE the drop) it reads as a 4px jump up as the seal exits. Excluding
+  // held ids keeps the composer put; the gap returns with the empty composer at
+  // the composing beat, once the card is really on stage.
+  const heldNow = draftStore?.heldIds;
+  const follows =
+    heldNow && heldNow.size
+      ? snippets.some((s) => !heldNow.has(s.id))
+      : snippets.length > 0;
   // unmount mid-choreography: the write already landed at submit — just release
   // the held row so it can render wherever the reader went (ref-read store: the
   // store's identity changes per draft commit, but this effect must be
