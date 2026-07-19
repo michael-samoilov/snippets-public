@@ -76,8 +76,9 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   O(1)-in-book-size paint (flat fill, hairline, non-blurred top highlight).
   Do NOT add per-card blend/isolation/blurred-shadow, and do NOT "restore"
   the seat-shadow lift — it was tried and crashes. The full "FLAT-BOOK LAW"
-  lives on `.book-card` in `globals.css`; the permanent fix that buys the
-  rich look back is windowing the render (BACKLOG.md #12).
+  lives on `.book-card` in `globals.css`. (A render window — cv:hidden at
+  rest + a warm band — already limits how much of the book LAYS OUT; the
+  law is about per-card PAINT cost and stands regardless.)
 - **Shaders:** `src/vendor/paper-shaders/` is the vendored PaperTexture
   chain from paper-design/shaders (Apache-2.0, LICENSE alongside) — no
   npm dependency, same rule as the shadcn sources. Used only by the

@@ -232,7 +232,7 @@ export async function runDevSeedFromUrl(search?: string): Promise<boolean> {
 }
 
 // The default book a fresh preview seeds itself with. 1000 over 5 years is a
-// genuine longtime-user book — the corpus the WINDOWING work (BACKLOG #12) has
+// genuine longtime-user book — the corpus the render-window work has
 // to stay smooth and crash-free on, so the preview opens straight onto the case
 // that matters. Before windowing this crashed and 400 was used to keep the
 // preview usable; windowing renders only the on-screen sections, so 1000 is now

@@ -594,8 +594,8 @@ textarea:focus-visible,
   mix-blend-mode: normal;
 }
 
-/* Lazy-render the flat book (the honest fix for the dive/rise input lag — a CSS
-   route to BACKLOG #12's windowing that keeps the DOM whole). The book is NOT
+/* Lazy-render the flat book (the honest fix for the dive/rise input lag — a
+   CSS windowing that keeps the DOM whole). The book is NOT
    virtualized, so diving into an entry made the browser lay out + composite ALL
    the day sections on the transition frame — an O(book) stall (~45ms at 100
    entries, ~190ms at 1000+) felt as the dive "waiting" before it moves.
@@ -610,7 +610,7 @@ textarea:focus-visible,
    only set once the full book has mounted and measured (so the measurements are
    real, not estimates).
 
-   THE RENDER WINDOW (BACKLOG #12's windowing, done in CSS state — the DOM stays
+   THE RENDER WINDOW (windowing done in CSS state — the DOM stays
    whole so scroll physics/momentum are untouched). At rest every section is
    `content-visibility: hidden`; only the sections carrying [data-warm] — a
    ±1.2-viewport band — are rendered. The band is maintained two ways:
