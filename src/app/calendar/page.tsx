@@ -1134,6 +1134,18 @@ function Calendar() {
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).has("dive2"),
   );
+  // Dive entrance A/B #2 (?dive3=1). The default plays the outgoing camera FIRST
+  // (tap-instant) and joins the book late — so the book reveals "behind" the
+  // camera and rushes to catch it (the owner's "skips forward" seam). dive3
+  // disables that early-out: the camera, book, and flyers all start TOGETHER
+  // once the book is prepared, for a single synchronized zoom + crossfade with
+  // no seam — at the cost of input delay (tap→motion grows to the prep time).
+  // A feel test for whether the clean motion is worth the delay. Reload to A/B.
+  const [diveV3] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("dive3"),
+  );
   // Dive-opening A/B (device feel test, ?open=…). A zoom-IN is pixel-weak at
   // the start — it magnifies about the tapped day, which is where the eye is
   // and which therefore barely moves, while the destination book late-joins.
@@ -1732,7 +1744,10 @@ function Calendar() {
     // else keeps the old ordering: the rise's outgoing IS the book, measured
     // live in the flight, so it must stay at scale 1 until then; year⇄month has
     // no book work at all.
-    const earlyOut = zoom.from === "month" && zoom.to === "schedule";
+    // ?dive3 turns the early-out off so the whole dive plays synchronized (the
+    // camera waits for the book, then everything starts together — see diveV3).
+    const earlyOut =
+      zoom.from === "month" && zoom.to === "schedule" && !diveV3;
 
     // on an entry dive (open OR close), use the boxes measured on clean layout
     // (tap handler / descendFromEntry) so NOTHING in this effect reads the DOM
@@ -2908,7 +2923,7 @@ function Calendar() {
     void Promise.all(moves).then(finish, finish);
     // freezeEnabled/flatCamera set once at mount; openStyle read via ref so a
     // live chip flip never re-runs setup on an in-flight move
-  }, [zoom, reduceMotion, freezeEnabled, flatCamera, diveV2]);
+  }, [zoom, reduceMotion, freezeEnabled, flatCamera, diveV2, diveV3]);
 
   // month ⇄ year camera moves (history-free). `openYear` adds the pushState and
   // the popstate handler replays these on a browser back/forward — bringing the
