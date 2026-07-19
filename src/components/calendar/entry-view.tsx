@@ -10,7 +10,6 @@ import { copy } from "@/lib/copy";
 import type { Snippet } from "@/lib/types";
 import { allOccurrences, queryTerms } from "@/lib/search";
 import { cn, enterFiles } from "@/lib/utils";
-import { useScrollEdges } from "@/components/ui/scroll-terminus";
 import { autosizeArea } from "./shared";
 
 /* ── the focused entry: one card, the whole stage ────────────────── */
@@ -161,19 +160,6 @@ function EntryBody({
   useLayoutEffect(() => {
     if (!editing && areaRef.current) areaRef.current.style.height = "";
   }, [editing]);
-  // the foot terminus shows while more words lie below, and clears at the last
-  // line (or if they all fit). compact is a dep because shrinking the font
-  // changes the scroll height WITHOUT resizing the scroller, which the
-  // ResizeObserver alone misses — leaving the terminus lit at the very bottom;
-  // snippet.text is one because a save flips `editing` back BEFORE the live
-  // query delivers the new words, whose re-render changes the scroll height
-  // with no other dep moving. liveHeight, because this scroller holds a single
-  // entry (the read is cheap) and its content can re-wrap without any dep
-  // firing at all (a late font load) — stale height left the foot lit at the
-  // very bottom. All refreshes run in the hook's layout effect: settled
-  // before the frame paints, never as a visible correction after it.
-  const edges = useScrollEdges(contentRef, [editing, draft, compact, snippet.text], true);
-
   const save = async () => {
     const trimmed = draft.trim();
     if (trimmed && trimmed !== snippet.text) {
@@ -293,10 +279,23 @@ function EntryBody({
         // flex-initial (basis auto), NOT flex-1 (basis 0): the card is
         // max-h, so a short entry must size to its words and show them
         // all; only a long one shrinks to fill the stage and scrolls.
-        // No bottom padding, so the terminus hairline rides the true
-        // bottom edge and the words clip cleanly beneath it.
-        className="relative min-h-0 flex-initial overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]"
-        style={{ scrollbarWidth: "none" }}
+        //
+        // The head and foot dissolve via shadcn's scroll-fade mask (a
+        // scroll-driven mask on this very scroller — no JS): scroll-fade-8
+        // makes each fade 2rem, and --scroll-fade-reveal ties the fade's
+        // recede to that same 2rem, so the foot stays covered until the last
+        // line is fully in view (a longer reveal leaves it hard-clipped). A
+        // short entry that fits isn't scrollable → the timeline is inactive →
+        // no fade. Held OFF while editing (below): the field autoscrolls to
+        // the caret every keystroke, and a masked caret edge is worse than a
+        // hard one. Where it's unsupported the mask is simply absent.
+        className={cn(
+          "relative min-h-0 flex-initial overflow-y-auto overflow-x-hidden overscroll-contain px-4 pt-3 [overflow-anchor:none] [overflow-wrap:anywhere]",
+          !editing && "scroll-fade scroll-fade-8",
+        )}
+        style={
+          { scrollbarWidth: "none", "--scroll-fade-reveal": "2rem" } as React.CSSProperties
+        }
       >
         {!editing && <SnippetEntry snippet={snippet} dense compact={compact} />}
         {/* the field is always mounted (a hidden one can't take the
@@ -349,36 +348,8 @@ function EntryBody({
         onClick={editing ? undefined : (e) => wasTap(e) && startEdit()}
         className="relative shrink-0"
       >
-        {/* the scroll terminus — a soft fade + hairline marking that the words
-            run on below. It sits just ABOVE the foot (OUTSIDE the scroller), so
-            the scroller's sub-pixel clip can't leak a sliver of the next line
-            beneath the rule; it clears once the last line is in view. Paper on
-            paper, so an overscroll never flashes it. */}
-        <div
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute inset-x-0 bottom-full z-[6] h-8 transition-opacity duration-200",
-            // hidden while rewriting: as the field autosizes and the keyboard
-            // room scrolls to follow the caret, the foot crosses the bottom
-            // threshold every keystroke — which would flicker the hairline. The
-            // caret is kept in view by useKeyboardRoom, so the marker isn't
-            // needed mid-edit anyway.
-            edges.bottom && !editing ? "opacity-100" : "opacity-0",
-          )}
-        >
-          {/* the soft fade, dissolving to solid paper just above the rule */}
-          <div className="absolute inset-x-0 top-0 bottom-[2px] bg-gradient-to-t from-paper to-transparent" />
-          {/* an opaque paper band straddling the scroller's bottom edge — a
-              couple px above the rule, down a few px into the foot — so no
-              sliver of the next line can leak under the rule (WebKit clips a
-              hair low). It's outside the scroller, so it adds no scroll
-              overflow; and it shows only WITH the fade, so the last line is
-              never covered once it's fully in view. */}
-          <div className="absolute inset-x-0 bottom-[-4px] h-[6px] bg-paper" />
-          {/* the rule itself is inset to the words' own margins (the scroller's
-              px-4), not spanning the whole card */}
-          <div className="absolute inset-x-4 bottom-0 border-t border-rule-faint" />
-        </div>
+        {/* the words dissolve at the foot via the scroller's own scroll-fade
+            mask (above) — no overlay or hairline here anymore. */}
         <div
           // constant padding: the foot never changes the card's height
           // as the terminus comes and goes (it sets the gap from the
