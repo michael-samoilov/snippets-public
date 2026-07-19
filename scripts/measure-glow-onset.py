@@ -28,20 +28,27 @@ with sync_playwright() as p:
     page.goto("http://localhost:3000/calendar", wait_until="networkidle")
     page.wait_for_timeout(1800)
 
-    # the intro letter suppresses the zone's glow on an empty book — seed
-    ta = page.locator("textarea[data-room-center]").first
-    ta.click()
-    ta.type("glow envelope measurement", delay=2)
-    page.keyboard.press("Meta+Enter")
-    page.wait_for_timeout(4600)
+    # the measured surface is the ENTRY CARD (the today zone deliberately
+    # carries no glow — "the paper just takes the pen"). The dev seed fills
+    # the book; open the most recent entry. Fallback: seed one by hand.
+    if page.locator(".book-card").count() == 0:
+        ta = page.locator("textarea[data-room-center]").first
+        ta.click()
+        ta.type("glow envelope measurement", delay=2)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(4600)
+    tile = page.locator(".book-card").last
+    tile.scroll_into_view_if_needed()
+    tile.click()
+    page.wait_for_timeout(1600)
 
     # scenario 2 first (fresh surface): a QUICK TAP (~60ms) must still play
     # the light's full arc — swell to peak, then the long tail — like a
     # Liquid Glass tap (measured: ~330ms of light for any tap length)
     tap = page.evaluate(
         """() => new Promise((resolve) => {
-      const zone = document.querySelector('[data-today-zone-box]');
-      const glow = zone.querySelector(':scope > [aria-hidden]').firstElementChild;
+      const zone = document.querySelector('[data-entry-card]');
+      const glow = zone.querySelector('[data-press-glow]').firstElementChild;
       const r = zone.getBoundingClientRect();
       const opts = {bubbles: true, clientX: r.left + r.width/2, clientY: r.top + r.height/2, pointerId: 8};
       const out = [];
@@ -62,8 +69,8 @@ with sync_playwright() as p:
     # opacity every rAF for 450ms, release, sample 650ms more
     result = page.evaluate(
         """() => new Promise((resolve) => {
-      const zone = document.querySelector('[data-today-zone-box]');
-      const glow = zone.querySelector(':scope > [aria-hidden]').firstElementChild;
+      const zone = document.querySelector('[data-entry-card]');
+      const glow = zone.querySelector('[data-press-glow]').firstElementChild;
       const r = zone.getBoundingClientRect();
       const opts = {bubbles: true, clientX: r.left + r.width/2, clientY: r.top + r.height/2, pointerId: 7};
       const rise = [], tail = [];

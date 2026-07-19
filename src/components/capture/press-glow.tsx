@@ -142,6 +142,18 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let reduce = false;
 
     let shedWC = 0;
+    // a standing selection in a text field of this surface owns its taps:
+    // iOS shows the Cut/Copy/Paste callout for them, and it dismisses on any
+    // nearby relayering — the glow's blend/will-change/transform writes are
+    // exactly that. While one stands, the light neither arrives nor sheds.
+    const fieldSelectionStands = () => {
+      const a = document.activeElement;
+      return (
+        (a instanceof HTMLTextAreaElement || a instanceof HTMLInputElement) &&
+        host.contains(a) &&
+        a.selectionStart !== a.selectionEnd
+      );
+    };
     const arm = () => {
       reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       rec = document.documentElement.classList.contains("dark")
@@ -194,12 +206,20 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
           : "opacity 380ms cubic-bezier(0.3, 0, 0.6, 1)";
       glow.style.opacity = lit ? "1" : "0";
       if (!lit) {
-        // shed the compositor hint once the fade has finished
+        // shed the compositor hint once the fade has finished — but never
+        // while a selection stands (a long-press select ends with the
+        // callout open; the blend flip would knock it down). Re-check until
+        // the selection collapses.
         clearTimeout(shedWC);
-        shedWC = window.setTimeout(() => {
+        const shed = () => {
+          if (fieldSelectionStands()) {
+            shedWC = window.setTimeout(shed, 350);
+            return;
+          }
           glow.style.willChange = "";
           layer.style.mixBlendMode = "";
-        }, 400);
+        };
+        shedWC = window.setTimeout(shed, 400);
       }
     };
     // the bloom's target: the host, or — where the host's transform belongs
@@ -223,7 +243,11 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         const r = host.getBoundingClientRect();
         const diag = Math.max(120, Math.hypot(r.width, r.height));
         const eff = Math.min(1.06, 1 + (rec.grow - 1) * (525 / diag));
-        if (bloomEl !== host) {
+        // set the origin only on the FIRST application: re-measuring while
+        // the wrapper is already scaled reads transformed rects, drifting
+        // the origin a few px per call (and each write is a style mutation
+        // near a possible iOS callout, which dismisses on relayering)
+        if (bloomEl !== host && !bloomEl.style.transform) {
           const b = bloomEl.getBoundingClientRect();
           bloomEl.style.transformOrigin =
             `${r.left + r.width / 2 - b.left}px ${r.top + r.height / 2 - b.top}px`;
@@ -247,6 +271,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       else exit();
     };
     const onDown = (e: PointerEvent) => {
+      if (fieldSelectionStands()) return; // the callout's tap — stay dark
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
       clearTimeout(dwell);
@@ -267,6 +292,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       nudge();
     };
     const onUp = () => {
+      if (!down) return; // a swallowed press (standing selection) exits nothing
       down = false;
       afterDwell(() => {
         level();
@@ -433,6 +459,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     // per-card compositing tax perf-flat and zoom relief exist to shed.
     <div
       ref={layerRef}
+      data-press-glow
       aria-hidden
       className={`pointer-events-none absolute inset-0 z-[15] overflow-hidden rounded-[inherit] ${className ?? ""}`}
     >

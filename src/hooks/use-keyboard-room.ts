@@ -106,26 +106,28 @@ export function useKeyboardRoom(
     // (overflow hidden — the scrollbar is already hidden, so nothing shifts),
     // with the snap kept underneath as a fallback for engines that still
     // programmatically scroll a hidden-overflow box. The lock lifts when the
-    // selection collapses, the field blurs, or the drag goes quiet.
+    // selection collapses or the field blurs — and ONLY then. It used to
+    // also lift after 700ms of quiet, but each lift/relock flips the
+    // scroller's overflow, and iOS dismisses the Cut/Copy/Paste callout on
+    // any such layout change: tapping a standing selection re-locked (menu
+    // died as it opened), and the quiet-unlock killed it moments later.
+    // While the selection stands, the lock simply holds — every word the
+    // writer could want is inside the contained box, and any tap outside
+    // collapses the selection and frees the scroller.
     let selLocked = false;
-    let selLockTimer: ReturnType<typeof setTimeout> | undefined;
     let savedOverflowY = "";
     const unlockSelection = () => {
       if (!selLocked) return;
       selLocked = false;
-      clearTimeout(selLockTimer);
       el.style.overflowY = savedOverflowY;
       rearm();
     };
     const lockForSelection = () => {
-      if (!selLocked) {
-        selLocked = true;
-        savedOverflowY = el.style.overflowY;
-        el.style.overflowY = "hidden";
-        if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
-      }
-      clearTimeout(selLockTimer);
-      selLockTimer = setTimeout(unlockSelection, 700);
+      if (selLocked) return; // already held — no writes, the callout lives
+      selLocked = true;
+      savedOverflowY = el.style.overflowY;
+      el.style.overflowY = "hidden";
+      if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
     };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
@@ -289,7 +291,6 @@ export function useKeyboardRoom(
     }
     return () => {
       unlockSelection();
-      clearTimeout(selLockTimer);
       document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
