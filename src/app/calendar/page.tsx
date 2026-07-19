@@ -5892,8 +5892,15 @@ function FlowBackfillCapture({
       seq.start(() => {
         if (keepAbortedRef.current) return; // failed write: the words stay put
         file();
+        // Clear via state ONLY. The composer unmounts this same commit (carding
+        // → composerOpen goes false), so an imperative `value = ""` + autosize
+        // here just force-collapses the field to its one-line placeholder and
+        // forces a synchronous reflow BEFORE the unmount lands — which iOS can
+        // paint for a frame (the seam: the composer flashes back to "Add
+        // something…", the day below jumps up, then the card arrives). setText
+        // clears the state the composer's empty return needs at the composing
+        // beat; the unmounting field needs no imperative resize.
         setText("");
-        if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
       });
     };
     const btn = sealBtnRef.current;
