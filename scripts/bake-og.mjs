@@ -168,6 +168,77 @@ async function capturePlates(browser) {
 
     await ctx.close();
   }
+
+  // PORTRAIT BLEED SET (light only): each altitude captured at the target
+  // portrait aspect (2:3) so a full-bleed portrait variant shows the real app
+  // UI edge-to-edge with no cropping. Written to <view>-bleed.png.
+  const bctx = await browser.newContext({
+    viewport: { width: 420, height: 640 },
+    deviceScaleFactor: 2,
+  });
+  await bctx.addInitScript(() => {
+    try {
+      localStorage.setItem("theme", "light");
+      localStorage.removeItem("snip:loadmarks");
+    } catch {}
+  });
+  const bp = await bctx.newPage();
+
+  // today — the composer/doorway (date, write line, mic seal). Fresh load lands
+  // on today's schedule foot; scroll to the very bottom to frame the composer.
+  await bp.goto(`${BASE}/calendar?seed=600&years=3`, { waitUntil: "load", timeout: 60000 });
+  await bp.waitForSelector(".book-card", { state: "attached", timeout: 45000 });
+  await bp.waitForTimeout(2500);
+  await bp.mouse.move(210, 420);
+  await bp.mouse.wheel(0, 4000);
+  await bp.waitForTimeout(1500);
+  await bp.screenshot({ path: "public/og-plates/today-bleed.png" });
+  console.log("plate today-bleed");
+
+  // schedule — scroll up into the kept days
+  await bp.mouse.wheel(0, -2600);
+  await bp.waitForTimeout(1500);
+  await bp.screenshot({ path: "public/og-plates/schedule-bleed.png" });
+  console.log("plate schedule-bleed");
+
+  // month canvas
+  await bp.goBack();
+  await bp.waitForTimeout(1800);
+  await bp.screenshot({ path: "public/og-plates/calendar-bleed.png" });
+  console.log("plate calendar-bleed");
+
+  // year glance
+  await bp.goto(`${BASE}/calendar?y=${year}`, { waitUntil: "load", timeout: 60000 });
+  await bp.waitForTimeout(2200);
+  await bp.screenshot({ path: "public/og-plates/year-bleed.png" });
+  console.log("plate year-bleed");
+
+  // entry
+  const btarget = await bp.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const req = indexedDB.open("snippets");
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const all = req.result.transaction("snippets").objectStore("snippets").getAll();
+          all.onsuccess = () => {
+            const rows = all.result
+              .filter((r) => !r.deletedAt && r.text.length > 80 && r.text.length < 240)
+              .sort((a, b) => b.capturedAt - a.capturedAt);
+            resolve(rows[0] ? { id: rows[0].id, day: rows[0].day } : null);
+          };
+          all.onerror = () => reject(all.error);
+        };
+      }),
+  );
+  if (btarget) {
+    await bp.goto(`${BASE}/calendar?d=${btarget.day}&e=${btarget.id}`, { waitUntil: "load", timeout: 60000 });
+    await bp.waitForTimeout(2500);
+    await bp.screenshot({ path: "public/og-plates/entry-bleed.png" });
+    console.log("plate entry-bleed");
+  }
+
+  await bctx.close();
 }
 
 async function main() {
@@ -180,20 +251,21 @@ async function main() {
     await browser.close();
     return;
   }
-  const page = await browser.newPage({
-    viewport: { width: W + 80, height: H + 80 },
-    deviceScaleFactor: SCALE,
-  });
+  // one page, resized per variant (portrait variants set their own size)
+  const page = await browser.newPage({ deviceScaleFactor: SCALE });
 
   await mkdir("og-review", { recursive: true });
   const manifest = [];
 
   for (const v of targets) {
+    const vw = v.size?.w ?? W;
+    const vh = v.size?.h ?? H;
+    await page.setViewportSize({ width: vw + 80, height: vh + 80 });
     const url = `${BASE}/lab/og?variant=${encodeURIComponent(v.key)}`;
     await page.goto(url, { waitUntil: "load", timeout: 60000 });
     await page.waitForSelector('#og-stage-wrap[data-ready="1"]', { timeout: 45000 });
-    const shot = await page.locator("#og-stage").screenshot(); // W×H at 2×
-    const full = await sharp(shot).resize(W, H).png().toBuffer();
+    const shot = await page.locator("#og-stage").screenshot();
+    const full = await sharp(shot).resize(vw, vh).png().toBuffer();
 
     if (pick) {
       const { buf, ext } = await encodeFinal(full);
@@ -214,22 +286,25 @@ async function main() {
     }
 
     await writeFile(`og-review/${v.key}.png`, full);
+    // the ~1.91:1 "feed crop" — what Facebook/X/LinkedIn center-crop TO. For a
+    // landscape variant it's nearly the whole image; for a portrait one it's
+    // the thin middle band those platforms would show (the honest caveat).
+    const fbW = vw;
+    const fbH = Math.min(vh, Math.round(vw / 1.91));
     await sharp(full)
-      .extract({ left: (W - H) / 2, top: 0, width: H, height: H })
-      .toFile(`og-review/${v.key}.imsg.png`);
-    const xw = Math.round((H * 16) / 9);
-    await sharp(full)
-      .extract({ left: Math.round((W - xw) / 2), top: 0, width: xw, height: H })
-      .toFile(`og-review/${v.key}.x.png`);
+      .extract({ left: 0, top: Math.round((vh - fbH) / 2), width: fbW, height: fbH })
+      .toFile(`og-review/${v.key}.fbx.png`);
     manifest.push({
       key: v.key,
       theme: v.theme,
       lens: v.lens,
       concept: v.concept,
       needs: v.needs ?? [],
+      size: { w: vw, h: vh },
+      portrait: vh > vw,
       bytes: full.length,
     });
-    console.log(`baked ${v.key} (${(full.length / 1024).toFixed(0)} KB)`);
+    console.log(`baked ${v.key} ${vw}×${vh} (${(full.length / 1024).toFixed(0)} KB)`);
   }
 
   await browser.close();
@@ -250,10 +325,12 @@ async function main() {
 
   await writeFile("og-review/manifest.json", JSON.stringify(manifest, null, 2) + "\n");
 
-  // contact sheet: labelled grid, 4 across
+  // contact sheet: labelled grid, 4 across. Each cell is a fixed landscape box;
+  // portrait variants are letterboxed inside it (contain) so mixed aspects sit
+  // in one grid.
   const COLS = 4;
   const TW = 400;
-  const TH = 210;
+  const TH = 230;
   const LABEL = 34;
   const PAD = 12;
   const rows = Math.ceil(manifest.length / COLS);
@@ -264,10 +341,13 @@ async function main() {
     const m = manifest[i];
     const x = PAD + (i % COLS) * (TW + PAD);
     const y = PAD + Math.floor(i / COLS) * (TH + LABEL + PAD);
-    const thumb = await sharp(`og-review/${m.key}.png`).resize(TW, TH).toBuffer();
+    const thumb = await sharp(`og-review/${m.key}.png`)
+      .resize(TW, TH, { fit: "contain", background: "#d9cdb2" })
+      .toBuffer();
     comps.push({ input: thumb, left: x, top: y });
+    const tag = `${m.theme} · ${m.lens}${m.portrait ? " · PORTRAIT" : ""}${m.needs?.length ? " · needs " + m.needs.join("+") : ""}`;
     const label = Buffer.from(
-      `<svg width="${TW}" height="${LABEL}"><text x="4" y="14" font-family="monospace" font-size="12" font-weight="bold" fill="#241e15">${esc(m.key)}</text><text x="4" y="28" font-family="monospace" font-size="10" fill="#6f6553">${esc(`${m.theme} · ${m.lens}${m.needs.length ? " · needs " + m.needs.join("+") : ""}`)}</text></svg>`,
+      `<svg width="${TW}" height="${LABEL}"><text x="4" y="14" font-family="monospace" font-size="12" font-weight="bold" fill="#241e15">${esc(m.key)}</text><text x="4" y="28" font-family="monospace" font-size="10" fill="#6f6553">${esc(tag)}</text></svg>`,
     );
     comps.push({ input: label, left: x, top: y + TH });
   }
@@ -275,7 +355,7 @@ async function main() {
     create: { width: sheetW, height: sheetH, channels: 3, background: "#e8dcc2" },
   })
     .composite(comps)
-    .jpeg({ quality: 88 })
+    .jpeg({ quality: 86 })
     .toFile("og-review/contact-sheet.jpg");
   console.log(`wrote og-review/contact-sheet.jpg (${manifest.length} variants)`);
 }

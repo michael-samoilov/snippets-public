@@ -120,7 +120,12 @@ function Seal({ b, dark }: { b: OgSealBlock; dark: boolean }) {
  *  be judged. Sheet-like paint: paper ground, hairline, sheet shadow. */
 function Plate({ b, dark }: { b: Extract<OgBlock, { kind: "plate" }>; dark: boolean }) {
   const [missing, setMissing] = useState(false);
-  const src = `/og-plates/${b.view}-${dark ? "dark" : "light"}.png`;
+  // portrait bleed captures live at <view>-bleed.png (light only for now);
+  // the framed/stack plates use the tall <view>-<theme>.png phone captures.
+  const src = b.portrait
+    ? `/og-plates/${b.view}-bleed.png`
+    : `/og-plates/${b.view}-${dark ? "dark" : "light"}.png`;
+  const bleed = b.bleed;
   return (
     <div
       style={{
@@ -130,10 +135,14 @@ function Plate({ b, dark }: { b: Extract<OgBlock, { kind: "plate" }>; dark: bool
         width: b.w,
         height: b.h,
         transform: b.rotateDeg ? `rotate(${b.rotateDeg}deg)` : undefined,
-        border: missing ? "1px dashed var(--ink-faint)" : "1px solid var(--ink-faint)",
-        borderRadius: 6,
+        border: bleed
+          ? "none"
+          : missing
+            ? "1px dashed var(--ink-faint)"
+            : "1px solid var(--ink-faint)",
+        borderRadius: bleed ? 0 : 6,
         background: "var(--paper)",
-        boxShadow: "var(--sheet-shadow)",
+        boxShadow: bleed ? "none" : "var(--sheet-shadow)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -154,7 +163,7 @@ function Plate({ b, dark }: { b: Extract<OgBlock, { kind: "plate" }>; dark: bool
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            objectPosition: "top center",
+            objectPosition: b.focus ?? "top center",
           }}
         />
       )}
@@ -303,8 +312,8 @@ function Stage({ v, id }: { v: OgVariant; id?: string }) {
       className={dark ? "dark" : undefined}
       style={{
         position: "relative",
-        width: W,
-        height: H,
+        width: v.size?.w ?? W,
+        height: v.size?.h ?? H,
         overflow: "hidden",
         background: "var(--desk)",
         colorScheme: dark ? "dark" : "light",
@@ -396,22 +405,28 @@ function Index() {
       <p style={{ color: "#6f6553", fontSize: 13, marginBottom: 20 }}>
         {OG_VARIANTS.length} candidates from src/lib/og-variants.json. Click one
         for the bake view (?variant=key). Baked by scripts/bake-og.mjs (pnpm
-        og). Center 630×630 is the iMessage-safe zone.
+        og). iMessage shows the whole image at its aspect ratio; Facebook/X
+        center-crop to ~1.91:1, so keep essentials in the vertical middle band.
       </p>
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
           gap: 20,
+          alignItems: "start",
         }}
       >
-        {OG_VARIANTS.map((v) => (
+        {OG_VARIANTS.map((v) => {
+          const vw = v.size?.w ?? W;
+          const vh = v.size?.h ?? H;
+          const scale = 300 / vw;
+          return (
           <div key={v.key}>
             <Link href={`/lab/og?variant=${encodeURIComponent(v.key)}`}>
               <div
                 style={{
-                  width: 360,
-                  height: 189,
+                  width: 300,
+                  height: vh * scale,
                   overflow: "hidden",
                   borderRadius: 4,
                   boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
@@ -419,10 +434,10 @@ function Index() {
               >
                 <div
                   style={{
-                    transform: "scale(0.3)",
+                    transform: `scale(${scale})`,
                     transformOrigin: "top left",
-                    width: W,
-                    height: H,
+                    width: vw,
+                    height: vh,
                     pointerEvents: "none",
                   }}
                 >
@@ -437,11 +452,12 @@ function Index() {
                 {v.needs?.length ? ` · needs ${v.needs.join("+")}` : ""}
               </span>
             </div>
-            <div style={{ fontSize: 12, color: "#6f6553", maxWidth: 360 }}>
+            <div style={{ fontSize: 12, color: "#6f6553", maxWidth: 300 }}>
               {v.concept}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -79,16 +79,25 @@ export interface OgWordmarkBlock {
   fontPx: number;
 }
 
-/** A captured app view ("altitude") — gray-box placeholder until the
- *  view-plate module is built, then a real screenshot. */
+/** A captured app view ("altitude"). Frameless by default it renders with a
+ *  sheet-like frame (border + shadow) as if a screenshot laid on the desk; set
+ *  `bleed` to drop the frame and show the raw app UI (fill the box, no border/
+ *  shadow) — the "just app UI, not a photo of a phone" look. */
 export interface OgPlateBlock {
   kind: "plate";
-  view: "year" | "calendar" | "schedule" | "entry";
+  view: "today" | "year" | "calendar" | "schedule" | "entry";
   x: number;
   y: number;
   w: number;
   h: number;
   rotateDeg?: number;
+  /** frameless full-bleed app UI (no border/shadow/radius) */
+  bleed?: boolean;
+  /** use the portrait bleed capture (<view>-bleed.png) instead of the tall
+   *  phone plate — matches a portrait canvas without cropping */
+  portrait?: boolean;
+  /** object-position for the cover crop (default "top center") */
+  focus?: string;
 }
 
 /** Lamplight — a warm radial light overlay; the app's depth cue. */
@@ -130,6 +139,10 @@ export interface OgVariant {
   lens: string;
   /** modules this direction needs at full fidelity (absent = pure lab CSS) */
   needs?: ("tilt" | "plate")[];
+  /** canvas size in px (default 1200×630 landscape). Portrait variants set a
+   *  taller box — iMessage/Slack render it tall; note FB/X center-crop to
+   *  ~1.91:1, so keep the essential content within the vertical middle band. */
+  size?: { w: number; h: number };
   blocks: OgBlock[];
 }
 

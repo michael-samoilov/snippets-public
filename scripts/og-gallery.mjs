@@ -19,12 +19,22 @@ const esc = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const imgs = {};
+const fbx = {};
 for (const m of manifest) {
+  // full image, kept at native aspect (portrait stays portrait)
+  const w = 640;
+  const h = Math.round(w * ((m.size?.h ?? 630) / (m.size?.w ?? 1200)));
   const buf = await sharp(`og-review/${m.key}.png`)
-    .resize(720, 378)
+    .resize(w, h)
     .jpeg({ quality: 78, mozjpeg: true })
     .toBuffer();
   imgs[m.key] = `data:image/jpeg;base64,${buf.toString("base64")}`;
+  // the ~1.91:1 feed crop (what Facebook/X show)
+  const fb = await sharp(`og-review/${m.key}.fbx.png`)
+    .resize(560)
+    .jpeg({ quality: 76, mozjpeg: true })
+    .toBuffer();
+  fbx[m.key] = `data:image/jpeg;base64,${fb.toString("base64")}`;
 }
 
 const LENS_ORDER = [
@@ -61,20 +71,24 @@ const card = (m) => `
   <header class="v-head">
     <span class="v-key">${esc(m.key)}</span>
     <span class="chip">${m.theme}</span>
-    ${m.needs.length ? `<span class="chip chip-needs">needs ${esc(m.needs.join(" + "))}</span>` : ""}
+    ${m.portrait ? `<span class="chip chip-portrait">portrait ${m.size.w}×${m.size.h}</span>` : ""}
+    ${m.needs?.length ? `<span class="chip chip-needs">needs ${esc(m.needs.join(" + "))}</span>` : ""}
   </header>
   <p class="v-concept">${esc(m.concept)}</p>
   <div class="mocks">
     <figure class="mock">
-      <div class="imsg"><img src="${imgs[m.key]}" alt="${esc(m.key)} — iMessage square crop"></div>
-      <figcaption>iMessage · square crop</figcaption>
+      <div class="imsg ${m.portrait ? "imsg-tall" : ""}">
+        <img src="${imgs[m.key]}" alt="${esc(m.key)} — iMessage">
+        <div class="imsg-cap"><div class="imsg-title">Snippets</div><div class="imsg-url">snippets.ink</div></div>
+      </div>
+      <figcaption>iMessage · full bubble</figcaption>
     </figure>
     <figure class="mock">
       <div class="xcard">
-        <img src="${imgs[m.key]}" alt="${esc(m.key)} — X 16:9 crop">
+        <img src="${fbx[m.key]}" alt="${esc(m.key)} — Facebook / X feed crop">
         <div class="x-meta">snippets.ink</div>
       </div>
-      <figcaption>X · 16:9 crop</figcaption>
+      <figcaption>Facebook / X · 1.91:1 crop</figcaption>
     </figure>
     <figure class="mock">
       <div class="slack">
@@ -88,8 +102,8 @@ const card = (m) => `
       <figcaption>Slack · unfurl</figcaption>
     </figure>
     <figure class="mock mock-full">
-      <img class="full" src="${imgs[m.key]}" alt="${esc(m.key)} — full 1200×630">
-      <figcaption>full 1200×630</figcaption>
+      <img class="full ${m.portrait ? "full-tall" : ""}" src="${imgs[m.key]}" alt="${esc(m.key)} — full ${m.size?.w ?? 1200}×${m.size?.h ?? 630}">
+      <figcaption>full ${m.size?.w ?? 1200}×${m.size?.h ?? 630}</figcaption>
     </figure>
   </div>
 </article>`;
@@ -134,15 +148,20 @@ const html = `<title>Snippets — link-preview candidates</title>
   .v-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95rem; font-weight: 700; }
   .chip { font-family: ui-monospace, monospace; font-size: 0.68rem; letter-spacing: 0.05em; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 999px; padding: 0.1rem 0.55rem; }
   .chip-needs { color: var(--wax); border-color: var(--wax); }
+  .chip-portrait { color: #a8641e; border-color: #a8641e; }
   .v-concept { color: var(--ink-soft); font-size: 0.95rem; line-height: 1.5; margin: 0.35rem 0 1rem; max-width: 70ch; }
   .mocks { display: flex; gap: 1.4rem; align-items: flex-start; flex-wrap: wrap; }
   .mock { margin: 0; }
   .mock figcaption { font-family: ui-monospace, monospace; font-size: 0.68rem; color: var(--ink-soft); margin-top: 0.4rem; letter-spacing: 0.04em; }
   .mock img { display: block; max-width: 100%; }
-  .imsg { width: 200px; border-radius: 14px; overflow: hidden; background: var(--chat); }
-  .imsg img { width: 200px; height: 200px; object-fit: cover; }
+  /* iMessage renders the whole image at its aspect ratio, title bar below */
+  .imsg { width: 240px; border-radius: 16px; overflow: hidden; background: var(--chat); }
+  .imsg > img { width: 240px; display: block; }
+  .imsg-cap { padding: 0.4rem 0.7rem 0.5rem; }
+  .imsg-title { font-weight: 700; font-size: 0.85rem; }
+  .imsg-url { font-size: 0.74rem; color: var(--ink-soft); }
   .xcard { width: 300px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--chat); }
-  .xcard img { width: 300px; aspect-ratio: 16 / 9; object-fit: cover; }
+  .xcard img { width: 300px; aspect-ratio: 1.91 / 1; object-fit: cover; }
   .x-meta { font-family: ui-monospace, monospace; font-size: 0.7rem; color: var(--ink-soft); padding: 0.35rem 0.6rem; }
   .slack { width: 300px; display: flex; gap: 0.55rem; }
   .slack-bar { width: 4px; border-radius: 4px; background: var(--line); flex-shrink: 0; }
@@ -151,12 +170,13 @@ const html = `<title>Snippets — link-preview candidates</title>
   .slack img { width: 280px; border-radius: 6px; }
   .mock-full { flex-basis: 100%; }
   .mock-full .full { width: min(560px, 100%); border: 1px solid var(--line); border-radius: 4px; }
+  .mock-full .full-tall { width: min(320px, 100%); }
   @media (max-width: 760px) { .mocks { gap: 1rem; } }
 </style>
 <div class="wrap">
   <h1>Link-preview candidates — ${manifest.length} directions</h1>
-  <p class="sub">Every composition baked from the real app materials at 1200×630, shown here the way recipients meet it: an iMessage square crop, an X 16:9 crop, a Slack unfurl. Judge at these sizes — the full frame is reference, not the test.</p>
-  <p class="how">To cull: reply in the session with the keys to keep (aim for ~5). Dashed “needs” chips mean the variant is a blocking stand-in — a tilted seal is a CSS tilt until the relight module is built, and app views are gray boxes until real screenshots are captured. Judge the composition, not the placeholder.</p>
+  <p class="sub">Baked from the real app materials, shown the way recipients meet it. <strong>iMessage</strong> shows the whole image at its aspect ratio (landscape stays wide, portrait stands tall) with the title bar below — it does not square-crop. <strong>Facebook / X</strong> center-crop to ~1.91:1, so a portrait image loses its top and bottom there — that column shows exactly what survives. Judge at these small sizes; the full frame is reference.</p>
+  <p class="how">To cull: reply with the keys to keep. Orange “portrait” chips are taller-than-wide (great in iMessage/Slack, cropped on Facebook/X). “needs” chips mark blocking stand-ins — a tilted seal is a CSS tilt until the relight module lands. Judge the composition, not the placeholder.</p>
   ${sections}
 </div>
 `;

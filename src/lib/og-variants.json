@@ -1,8 +1,146 @@
 [
   {
+    "key": "ui-today",
+    "theme": "light",
+    "concept": "The today zone itself, full-bleed — date, the open line, the wax mic. The app's doorway, no frame.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "today", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 }
+    ]
+  },
+  {
+    "key": "ui-year",
+    "theme": "light",
+    "concept": "The full year, full-bleed — twelve months of kept days as the whole image.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "year", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 }
+    ]
+  },
+  {
+    "key": "ui-schedule",
+    "theme": "light",
+    "concept": "The book, full-bleed — the reading stream of kept days as the whole image.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "schedule", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 }
+    ]
+  },
+  {
+    "key": "ui-entry",
+    "theme": "light",
+    "concept": "A single kept entry, full-bleed — one day, one small true thing.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "entry", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 }
+    ]
+  },
+  {
+    "key": "ui-calendar",
+    "theme": "light",
+    "concept": "The month grid, full-bleed — the days of July with their kept marks.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "calendar", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 }
+    ]
+  },
+  {
+    "key": "ui-year-seal",
+    "theme": "light",
+    "concept": "The full year, full-bleed, a wax seal pressed into the quiet lower months.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "year", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 },
+      { "kind": "seal", "cx": 640, "cy": 1130, "sizePx": 230, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "ui-entry-seal",
+    "theme": "light",
+    "concept": "A single entry, full-bleed, the seal pressed into the page's lower whitespace.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 840, "h": 1280 },
+    "blocks": [
+      { "kind": "plate", "view": "entry", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 840, "h": 1280 },
+      { "kind": "seal", "cx": 440, "cy": 940, "sizePx": 260, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "ui-today-tall-crop",
+    "theme": "light",
+    "concept": "The today zone in a shorter portrait (4:5) — survives the Facebook/X crop better than a full phone.",
+    "lens": "portrait-ui",
+    "needs": ["plate"],
+    "size": { "w": 1080, "h": 1350 },
+    "blocks": [
+      { "kind": "plate", "view": "today", "portrait": true, "bleed": true, "x": 0, "y": 0, "w": 1080, "h": 1350, "focus": "center" }
+    ]
+  },
+  {
+    "key": "stack-four-spaced",
+    "theme": "light",
+    "concept": "All four altitudes fanned at a generous gap — year to entry — the seal pressed in the entry's lower whitespace.",
+    "lens": "stack",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "light", "cx": 700, "cy": 190, "radius": 900, "strength": 0.32 },
+      { "kind": "plate", "view": "year", "x": 300, "y": 72, "w": 330, "h": 500, "rotateDeg": -6 },
+      { "kind": "plate", "view": "calendar", "x": 420, "y": 64, "w": 330, "h": 500, "rotateDeg": -2 },
+      { "kind": "plate", "view": "schedule", "x": 540, "y": 60, "w": 330, "h": 500, "rotateDeg": 2 },
+      { "kind": "plate", "view": "entry", "x": 660, "y": 66, "w": 330, "h": 500, "rotateDeg": 5 },
+      { "kind": "seal", "cx": 835, "cy": 430, "sizePx": 210, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 74, "x": 70, "y": 245, "italic": true },
+      { "kind": "text", "text": "From a glance to a line.", "voice": "label", "sizePx": 23, "x": 74, "y": 350, "w": 250, "color": "ink-soft", "lineHeight": 1.5 }
+    ]
+  },
+  {
+    "key": "stack-four-wide",
+    "theme": "light",
+    "concept": "The four altitudes spread wider so each card reads clearly; seal on the entry's lower whitespace.",
+    "lens": "stack",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "light", "cx": 640, "cy": 190, "radius": 950, "strength": 0.32 },
+      { "kind": "plate", "view": "year", "x": 250, "y": 78, "w": 320, "h": 486, "rotateDeg": -8 },
+      { "kind": "plate", "view": "calendar", "x": 385, "y": 66, "w": 320, "h": 486, "rotateDeg": -3 },
+      { "kind": "plate", "view": "schedule", "x": 520, "y": 60, "w": 320, "h": 486, "rotateDeg": 2 },
+      { "kind": "plate", "view": "entry", "x": 655, "y": 66, "w": 320, "h": 486, "rotateDeg": 7 },
+      { "kind": "seal", "cx": 835, "cy": 425, "sizePx": 200, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 62, "x": 70, "y": 250, "italic": true }
+    ]
+  },
+  {
+    "key": "stack-four-centered",
+    "theme": "light",
+    "concept": "The four-card deck centered, seal in the entry's lower whitespace, name a caption below.",
+    "lens": "stack",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 180, "radius": 950, "strength": 0.32 },
+      { "kind": "plate", "view": "year", "x": 240, "y": 66, "w": 330, "h": 500, "rotateDeg": -6 },
+      { "kind": "plate", "view": "calendar", "x": 360, "y": 58, "w": 330, "h": 500, "rotateDeg": -2 },
+      { "kind": "plate", "view": "schedule", "x": 480, "y": 54, "w": 330, "h": 500, "rotateDeg": 2 },
+      { "kind": "plate", "view": "entry", "x": 600, "y": 60, "w": 330, "h": 500, "rotateDeg": 5 },
+      { "kind": "seal", "cx": 775, "cy": 430, "sizePx": 200, "tint": "wordmark" }
+    ]
+  },
+  {
     "key": "scene-letter-light",
     "theme": "light",
-    "concept": "PARENT — a letter on the desk, sheet slightly askew, sealed at its corner.",
+    "concept": "REF — a letter on the desk, sheet slightly askew, sealed at its corner.",
     "lens": "letter",
     "blocks": [
       { "kind": "light", "cx": 560, "cy": 160, "radius": 900, "strength": 0.4 },
@@ -13,22 +151,47 @@
     ]
   },
   {
-    "key": "letter-seal-hero",
+    "key": "letter-head-hero",
     "theme": "light",
-    "concept": "The letter, but the seal grown large at its foot — wax as the object, words as caption.",
+    "concept": "The seal crowns the letterhead, grown large; name and line tuck beneath it.",
     "lens": "letter",
     "blocks": [
-      { "kind": "light", "cx": 560, "cy": 160, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 250, "y": 60, "w": 700, "h": 515, "rotateDeg": 1.5 },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 60, "x": 320, "y": 128, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 324, "y": 214, "color": "ink-soft" },
-      { "kind": "seal", "cx": 800, "cy": 430, "sizePx": 280, "tint": "wordmark" }
+      { "kind": "light", "cx": 600, "cy": 150, "radius": 850, "strength": 0.4 },
+      { "kind": "sheet", "x": 270, "y": 60, "w": 660, "h": 510 },
+      { "kind": "seal", "cx": 600, "cy": 168, "sizePx": 280, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 56, "x": 300, "y": 350, "w": 600, "align": "center", "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 300, "y": 440, "w": 600, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "letter-diptych",
+    "theme": "light",
+    "concept": "Name and promise up top, a prominent seal signing the foot — a letter, read top to bottom.",
+    "lens": "letter",
+    "blocks": [
+      { "kind": "light", "cx": 560, "cy": 150, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 300, "y": 55, "w": 600, "h": 520, "rotateDeg": 1 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 70, "x": 300, "y": 120, "w": 600, "align": "center", "italic": true },
+      { "kind": "text", "text": "Catch the stray thoughts of your day.", "voice": "label", "sizePx": 22, "x": 350, "y": 220, "w": 500, "align": "center", "color": "ink-soft" },
+      { "kind": "seal", "cx": 600, "cy": 430, "sizePx": 210, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "letter-head-tagline",
+    "theme": "light",
+    "concept": "Seal at the head, a single centered line of promise below it — spare and quiet.",
+    "lens": "letter",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 200, "radius": 700, "strength": 0.55 },
+      { "kind": "sheet", "x": 290, "y": 70, "w": 620, "h": 490 },
+      { "kind": "seal", "cx": 600, "cy": 190, "sizePx": 230, "tint": "wordmark" },
+      { "kind": "text", "text": "Every day, one true moment.", "voice": "display", "sizePx": 46, "x": 320, "y": 360, "w": 560, "align": "center", "italic": true }
     ]
   },
   {
     "key": "letter-seal-head",
     "theme": "light",
-    "concept": "The seal crowns the letter's head; the name and line sit centered below it.",
+    "concept": "REF — the seal crowns the letter's head; the name and line sit centered below it.",
     "lens": "letter",
     "blocks": [
       { "kind": "light", "cx": 600, "cy": 150, "radius": 850, "strength": 0.4 },
@@ -39,71 +202,9 @@
     ]
   },
   {
-    "key": "letter-portrait",
-    "theme": "light",
-    "concept": "A tall portrait sheet, prominent seal centered, name floating above the page.",
-    "lens": "letter",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 120, "radius": 900, "strength": 0.35 },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 300, "y": 40, "w": 600, "align": "center", "italic": true },
-      { "kind": "sheet", "x": 360, "y": 120, "w": 480, "h": 500 },
-      { "kind": "seal", "cx": 600, "cy": 330, "sizePx": 240, "tint": "wordmark" }
-    ]
-  },
-  {
-    "key": "letter-lamp",
-    "theme": "light",
-    "concept": "A tight pool of lamplight finds the sheet and a prominent seal; the desk falls away.",
-    "lens": "letter",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 300, "radius": 430, "strength": 0.9 },
-      { "kind": "sheet", "x": 300, "y": 90, "w": 600, "h": 470 },
-      { "kind": "seal", "cx": 600, "cy": 300, "sizePx": 250, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 26, "x": 400, "y": 502, "w": 400, "align": "center", "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "letter-bare",
-    "theme": "light",
-    "concept": "Just the sheet and a big seal; the name a whisper of small caps beneath the page.",
-    "lens": "letter",
-    "blocks": [
-      { "kind": "light", "cx": 560, "cy": 180, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 290, "y": 50, "w": 620, "h": 465 },
-      { "kind": "seal", "cx": 600, "cy": 258, "sizePx": 260, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 30, "x": 400, "y": 556, "w": 400, "align": "center", "color": "ink-soft", "trackingEm": 0.18 }
-    ]
-  },
-  {
-    "key": "scene-corner-desk",
-    "theme": "light",
-    "concept": "PARENT — the sheet enters from the corner, sealed where it lands; the name owns the open desk.",
-    "lens": "corner",
-    "blocks": [
-      { "kind": "light", "cx": 400, "cy": 150, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 520, "y": 200, "w": 800, "h": 560, "rotateDeg": -3 },
-      { "kind": "seal", "cx": 590, "cy": 268, "sizePx": 150, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 84, "x": 110, "y": 130, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 114, "y": 248, "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "corner-seal-big",
-    "theme": "light",
-    "concept": "The corner composition with the seal grown prominent where the sheet arrives.",
-    "lens": "corner",
-    "blocks": [
-      { "kind": "light", "cx": 400, "cy": 150, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 520, "y": 200, "w": 800, "h": 560, "rotateDeg": -3 },
-      { "kind": "seal", "cx": 610, "cy": 258, "sizePx": 240, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 84, "x": 110, "y": 130, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 114, "y": 248, "color": "ink-soft" }
-    ]
-  },
-  {
     "key": "corner-flip",
     "theme": "light",
-    "concept": "The sheet drops in from the top-right instead; the name anchors the lower-left.",
+    "concept": "REF — the sheet drops in from the top-right; the name anchors the lower-left.",
     "lens": "corner",
     "blocks": [
       { "kind": "light", "cx": 450, "cy": 470, "radius": 900, "strength": 0.4 },
@@ -114,125 +215,46 @@
     ]
   },
   {
-    "key": "corner-bottom",
+    "key": "corner-flip-seal-big",
     "theme": "light",
-    "concept": "The sheet rises from the lower edge, sealed; the name spans the open top.",
+    "concept": "The top-right sheet with the seal grown large where it lands.",
     "lens": "corner",
     "blocks": [
-      { "kind": "light", "cx": 600, "cy": 160, "radius": 900, "strength": 0.4 },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 88, "x": 300, "y": 120, "w": 600, "align": "center", "italic": true },
-      { "kind": "sheet", "x": 300, "y": 360, "w": 600, "h": 360, "rotateDeg": 1 },
-      { "kind": "seal", "cx": 600, "cy": 430, "sizePx": 210, "tint": "wordmark" }
+      { "kind": "light", "cx": 450, "cy": 470, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 560, "y": -150, "w": 780, "h": 540, "rotateDeg": 4 },
+      { "kind": "seal", "cx": 690, "cy": 320, "sizePx": 300, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 80, "x": 100, "y": 430, "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 104, "y": 540, "color": "ink-soft" }
     ]
   },
   {
-    "key": "corner-name-large",
+    "key": "corner-flip-name-big",
     "theme": "light",
-    "concept": "The name enormous; a small sealed sheet tucks into the far corner as a footnote.",
+    "concept": "The top-right sheet, sealed, the name enormous across the lower-left.",
     "lens": "corner",
     "blocks": [
-      { "kind": "light", "cx": 400, "cy": 300, "radius": 950, "strength": 0.35 },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 130, "x": 80, "y": 205, "italic": true },
-      { "kind": "sheet", "x": 780, "y": 300, "w": 520, "h": 420, "rotateDeg": -4 },
-      { "kind": "seal", "cx": 845, "cy": 360, "sizePx": 180, "tint": "wordmark" }
+      { "kind": "light", "cx": 420, "cy": 450, "radius": 950, "strength": 0.4 },
+      { "kind": "sheet", "x": 590, "y": -170, "w": 760, "h": 520, "rotateDeg": 5 },
+      { "kind": "seal", "cx": 690, "cy": 290, "sizePx": 220, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 118, "x": 80, "y": 380, "italic": true }
     ]
   },
   {
-    "key": "corner-tagline",
+    "key": "corner-flip-tagline",
     "theme": "light",
-    "concept": "The promise set as a stacked phrase on the desk; corner sheet, prominent seal.",
+    "concept": "The top-right sheet, sealed, a stacked line of promise holding the lower-left.",
     "lens": "corner",
     "blocks": [
-      { "kind": "light", "cx": 400, "cy": 150, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 540, "y": 210, "w": 800, "h": 540, "rotateDeg": -3 },
-      { "kind": "seal", "cx": 635, "cy": 275, "sizePx": 220, "tint": "wordmark" },
-      { "kind": "text", "text": "Catch the stray thoughts of your day.", "voice": "display", "sizePx": 46, "x": 100, "y": 150, "w": 360, "italic": true, "lineHeight": 1.3 }
-    ]
-  },
-  {
-    "key": "scene-diary-today",
-    "theme": "light",
-    "concept": "PARENT — today's page: the sheet carries the date at its head and a fresh seal below.",
-    "lens": "diary",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 140, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 290, "y": 75, "w": 620, "h": 480 },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 24, "x": 300, "y": 150, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 68, "x": 300, "y": 186, "w": 600, "align": "center" },
-      { "kind": "seal", "cx": 600, "cy": 412, "sizePx": 160, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 24, "x": 400, "y": 584, "w": 400, "align": "center", "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "diary-seal-hero",
-    "theme": "light",
-    "concept": "Today's page with the seal grown prominent below the date.",
-    "lens": "diary",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 140, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 290, "y": 70, "w": 620, "h": 500 },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 24, "x": 300, "y": 145, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 68, "x": 300, "y": 182, "w": 600, "align": "center" },
-      { "kind": "seal", "cx": 600, "cy": 415, "sizePx": 230, "tint": "wordmark" }
-    ]
-  },
-  {
-    "key": "diary-date-large",
-    "theme": "light",
-    "concept": "The date itself is the hero, huge; a modest seal signs it below.",
-    "lens": "diary",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 160, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 260, "y": 60, "w": 680, "h": 520 },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 30, "x": 300, "y": 150, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 108, "x": 260, "y": 198, "w": 680, "align": "center" },
-      { "kind": "seal", "cx": 600, "cy": 448, "sizePx": 160, "tint": "wordmark" }
-    ]
-  },
-  {
-    "key": "diary-seal-crown",
-    "theme": "light",
-    "concept": "The seal crowns the page; the date sits beneath it like a dateline.",
-    "lens": "diary",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 130, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 300, "y": 60, "w": 600, "h": 510 },
-      { "kind": "seal", "cx": 600, "cy": 152, "sizePx": 190, "tint": "wordmark" },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 24, "x": 300, "y": 312, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 76, "x": 300, "y": 350, "w": 600, "align": "center" },
-      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 22, "x": 400, "y": 520, "w": 400, "align": "center", "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "diary-portrait",
-    "theme": "light",
-    "concept": "A narrow portrait diary page: date at the head, seal at the foot.",
-    "lens": "diary",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 120, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 380, "y": 50, "w": 440, "h": 540 },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 22, "x": 380, "y": 122, "w": 440, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 56, "x": 380, "y": 154, "w": 440, "align": "center" },
-      { "kind": "seal", "cx": 600, "cy": 400, "sizePx": 200, "tint": "wordmark" }
-    ]
-  },
-  {
-    "key": "diary-lamp",
-    "theme": "light",
-    "concept": "The dated page and its seal caught in a bright pool of lamplight.",
-    "lens": "diary",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 300, "radius": 450, "strength": 0.85 },
-      { "kind": "sheet", "x": 300, "y": 80, "w": 600, "h": 480 },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 24, "x": 300, "y": 150, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 64, "x": 300, "y": 186, "w": 600, "align": "center" },
-      { "kind": "seal", "cx": 600, "cy": 388, "sizePx": 210, "tint": "wordmark" }
+      { "kind": "light", "cx": 450, "cy": 470, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 560, "y": -150, "w": 780, "h": 540, "rotateDeg": 4 },
+      { "kind": "seal", "cx": 665, "cy": 300, "sizePx": 230, "tint": "wordmark" },
+      { "kind": "text", "text": "Catch your days before they evaporate.", "voice": "display", "sizePx": 52, "x": 90, "y": 360, "w": 380, "italic": true, "lineHeight": 1.25 }
     ]
   },
   {
     "key": "wild-envelope",
     "theme": "light",
-    "concept": "PARENT — a seal straddling the sheet's top edge, closing it like an envelope.",
+    "concept": "REF — a seal straddling the sheet's top edge, closing it like an envelope.",
     "lens": "envelope",
     "blocks": [
       { "kind": "light", "cx": 600, "cy": 150, "radius": 900, "strength": 0.4 },
@@ -243,195 +265,40 @@
     ]
   },
   {
-    "key": "envelope-seal-hero",
+    "key": "envelope-hero-big",
     "theme": "light",
-    "concept": "The envelope gesture with the seal grown large over the sheet's top edge.",
+    "concept": "The envelope gesture, the seal grown large over the sheet's top edge.",
+    "lens": "envelope",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 160, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 240, "y": 230, "w": 720, "h": 450 },
+      { "kind": "seal", "cx": 600, "cy": 230, "sizePx": 300, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 62, "x": 300, "y": 410, "w": 600, "align": "center", "italic": true }
+    ]
+  },
+  {
+    "key": "envelope-date-big",
+    "theme": "light",
+    "concept": "A sealed envelope carrying today's date, set large — the day, closed and kept.",
     "lens": "envelope",
     "blocks": [
       { "kind": "light", "cx": 600, "cy": 150, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 220, "y": 215, "w": 760, "h": 470 },
-      { "kind": "seal", "cx": 600, "cy": 215, "sizePx": 260, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 300, "y": 388, "w": 600, "align": "center", "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 400, "y": 484, "w": 400, "align": "center", "color": "ink-soft" }
+      { "kind": "sheet", "x": 250, "y": 200, "w": 700, "h": 470 },
+      { "kind": "seal", "cx": 600, "cy": 200, "sizePx": 210, "tint": "wordmark" },
+      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 24, "x": 300, "y": 330, "w": 600, "align": "center", "color": "ink-faint" },
+      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 92, "x": 250, "y": 366, "w": 700, "align": "center" }
     ]
   },
   {
-    "key": "envelope-name-inside",
+    "key": "envelope-narrow",
     "theme": "light",
-    "concept": "The name set large on the sealed sheet, seal closing the top.",
+    "concept": "A narrow portrait envelope, the seal riding its top edge, name within.",
     "lens": "envelope",
     "blocks": [
-      { "kind": "light", "cx": 600, "cy": 150, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 240, "y": 200, "w": 720, "h": 480 },
-      { "kind": "seal", "cx": 600, "cy": 200, "sizePx": 200, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 96, "x": 300, "y": 372, "w": 600, "align": "center", "italic": true }
-    ]
-  },
-  {
-    "key": "envelope-date",
-    "theme": "light",
-    "concept": "A sealed envelope carrying today's date — the day, closed and kept.",
-    "lens": "envelope",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 150, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 260, "y": 200, "w": 680, "h": 470 },
-      { "kind": "seal", "cx": 600, "cy": 200, "sizePx": 200, "tint": "wordmark" },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 22, "x": 300, "y": 336, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 72, "x": 300, "y": 372, "w": 600, "align": "center" }
-    ]
-  },
-  {
-    "key": "envelope-tall",
-    "theme": "light",
-    "concept": "A narrower sealed sheet set lower, the seal riding its top edge.",
-    "lens": "envelope",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 120, "radius": 900, "strength": 0.4 },
-      { "kind": "sheet", "x": 330, "y": 170, "w": 540, "h": 460 },
-      { "kind": "seal", "cx": 600, "cy": 170, "sizePx": 190, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 60, "x": 300, "y": 330, "w": 600, "align": "center", "italic": true }
-    ]
-  },
-  {
-    "key": "envelope-lower",
-    "theme": "light",
-    "concept": "The name above the desk; the seal presses a fold lower on the sheet.",
-    "lens": "envelope",
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 130, "radius": 900, "strength": 0.4 },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 76, "x": 300, "y": 70, "w": 600, "align": "center", "italic": true },
-      { "kind": "sheet", "x": 270, "y": 210, "w": 660, "h": 420 },
-      { "kind": "seal", "cx": 600, "cy": 420, "sizePx": 220, "tint": "wordmark" }
-    ]
-  },
-  {
-    "key": "stack-fan-entry",
-    "theme": "light",
-    "concept": "The four altitudes fanned like a deck — year to entry — seal pressed on the entry on top.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 720, "cy": 180, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "year", "x": 555, "y": 80, "w": 290, "h": 515, "rotateDeg": -9 },
-      { "kind": "plate", "view": "calendar", "x": 600, "y": 66, "w": 290, "h": 515, "rotateDeg": -4 },
-      { "kind": "plate", "view": "schedule", "x": 650, "y": 56, "w": 290, "h": 515, "rotateDeg": 1 },
-      { "kind": "plate", "view": "entry", "x": 695, "y": 50, "w": 290, "h": 515, "rotateDeg": 6 },
-      { "kind": "seal", "cx": 735, "cy": 120, "sizePx": 195, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 76, "x": 85, "y": 215, "italic": true },
-      { "kind": "text", "text": "Every day, from a glance to a line.", "voice": "label", "sizePx": 24, "x": 89, "y": 325, "w": 320, "color": "ink-soft", "lineHeight": 1.5 }
-    ]
-  },
-  {
-    "key": "stack-fan-tight",
-    "theme": "light",
-    "concept": "The same deck, fanned tighter and higher, name and line held at the left.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 700, "cy": 190, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "year", "x": 560, "y": 95, "w": 270, "h": 480, "rotateDeg": -7 },
-      { "kind": "plate", "view": "calendar", "x": 600, "y": 84, "w": 270, "h": 480, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 640, "y": 76, "w": 270, "h": 480, "rotateDeg": 1 },
-      { "kind": "plate", "view": "entry", "x": 680, "y": 70, "w": 270, "h": 480, "rotateDeg": 5 },
-      { "kind": "seal", "cx": 715, "cy": 135, "sizePx": 175, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 90, "y": 250, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 22, "x": 94, "y": 345, "w": 300, "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "stack-centered",
-    "theme": "light",
-    "concept": "The deck centered, seal crowning it, the name a quiet caption beneath.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 170, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "year", "x": 420, "y": 85, "w": 280, "h": 480, "rotateDeg": -6 },
-      { "kind": "plate", "view": "calendar", "x": 455, "y": 77, "w": 280, "h": 480, "rotateDeg": -2 },
-      { "kind": "plate", "view": "schedule", "x": 490, "y": 71, "w": 280, "h": 480, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 525, "y": 66, "w": 280, "h": 480, "rotateDeg": 6 },
-      { "kind": "seal", "cx": 565, "cy": 125, "sizePx": 185, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 28, "x": 300, "y": 585, "w": 600, "align": "center", "color": "ink-soft", "trackingEm": 0.14 }
-    ]
-  },
-  {
-    "key": "stack-deck",
-    "theme": "light",
-    "concept": "A tight physical stack of pages, barely offset, a prominent seal on the top page.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 640, "cy": 170, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "year", "x": 480, "y": 75, "w": 330, "h": 500, "rotateDeg": -2 },
-      { "kind": "plate", "view": "calendar", "x": 487, "y": 69, "w": 330, "h": 500, "rotateDeg": 0 },
-      { "kind": "plate", "view": "schedule", "x": 494, "y": 63, "w": 330, "h": 500, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 501, "y": 57, "w": 330, "h": 500, "rotateDeg": 4 },
-      { "kind": "seal", "cx": 560, "cy": 120, "sizePx": 210, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 70, "x": 90, "y": 240, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 22, "x": 94, "y": 340, "w": 300, "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "stack-two-composer",
-    "theme": "light",
-    "concept": "Two altitudes — the book and a single entry — seal pressed where you write.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 680, "cy": 180, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "schedule", "x": 440, "y": 58, "w": 340, "h": 510, "rotateDeg": -3 },
-      { "kind": "plate", "view": "entry", "x": 545, "y": 72, "w": 340, "h": 510, "rotateDeg": 4 },
-      { "kind": "seal", "cx": 800, "cy": 160, "sizePx": 220, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 78, "x": 85, "y": 250, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 89, "y": 360, "w": 300, "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "stack-three",
-    "theme": "light",
-    "concept": "Three altitudes — year, month, the book — seal on the composer up top.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 680, "cy": 180, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "year", "x": 520, "y": 85, "w": 290, "h": 500, "rotateDeg": -7 },
-      { "kind": "plate", "view": "calendar", "x": 570, "y": 74, "w": 290, "h": 500, "rotateDeg": -2 },
-      { "kind": "plate", "view": "schedule", "x": 620, "y": 66, "w": 290, "h": 500, "rotateDeg": 4 },
-      { "kind": "seal", "cx": 690, "cy": 140, "sizePx": 195, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 76, "x": 90, "y": 245, "italic": true },
-      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 94, "y": 350, "w": 300, "color": "ink-soft" }
-    ]
-  },
-  {
-    "key": "stack-hero-seal",
-    "theme": "light",
-    "concept": "The deck recedes behind one monumental seal — the mark dominant, the altitudes its backdrop.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 200, "radius": 900, "strength": 0.35 },
-      { "kind": "plate", "view": "year", "x": 420, "y": 95, "w": 270, "h": 470, "rotateDeg": -6 },
-      { "kind": "plate", "view": "calendar", "x": 460, "y": 86, "w": 270, "h": 470, "rotateDeg": -2 },
-      { "kind": "plate", "view": "schedule", "x": 500, "y": 80, "w": 270, "h": 470, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 540, "y": 74, "w": 270, "h": 470, "rotateDeg": 6 },
-      { "kind": "seal", "cx": 565, "cy": 330, "sizePx": 340, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 58, "x": 300, "y": 30, "w": 600, "align": "center", "italic": true }
-    ]
-  },
-  {
-    "key": "stack-name-crown",
-    "theme": "light",
-    "concept": "The name across the top, the altitude deck below it, seal on the top page.",
-    "lens": "stack",
-    "needs": ["plate"],
-    "blocks": [
-      { "kind": "light", "cx": 600, "cy": 300, "radius": 950, "strength": 0.35 },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 84, "x": 150, "y": 22, "w": 900, "align": "center", "italic": true },
-      { "kind": "plate", "view": "year", "x": 455, "y": 150, "w": 270, "h": 460, "rotateDeg": -5 },
-      { "kind": "plate", "view": "calendar", "x": 490, "y": 143, "w": 270, "h": 460, "rotateDeg": -2 },
-      { "kind": "plate", "view": "schedule", "x": 525, "y": 138, "w": 270, "h": 460, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 560, "y": 133, "w": 270, "h": 460, "rotateDeg": 5 },
-      { "kind": "seal", "cx": 600, "cy": 195, "sizePx": 180, "tint": "wordmark" }
+      { "kind": "light", "cx": 600, "cy": 130, "radius": 850, "strength": 0.42 },
+      { "kind": "sheet", "x": 390, "y": 165, "w": 420, "h": 460 },
+      { "kind": "seal", "cx": 600, "cy": 165, "sizePx": 190, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 52, "x": 390, "y": 320, "w": 420, "align": "center", "italic": true }
     ]
   }
 ]
