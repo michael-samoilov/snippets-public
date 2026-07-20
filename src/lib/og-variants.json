@@ -156,7 +156,7 @@
     "blocks": [
       {
         "kind": "light",
-        "cx": 820,
+        "cx": 880,
         "cy": 210,
         "radius": 1080,
         "strength": 0.3
@@ -164,47 +164,47 @@
       {
         "kind": "plate",
         "view": "year",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -12,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "calendar",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "schedule",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "entry",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 12,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "seal",
-        "cx": 975,
-        "cy": 536,
+        "cx": 1054,
+        "cy": 534,
         "sizePx": 185,
         "glyph": "e:quill",
         "tint": "app",
@@ -212,7 +212,7 @@
       },
       {
         "kind": "wordmark",
-        "cx": 215,
+        "cx": 205,
         "cy": 315,
         "fontPx": 60
       }
@@ -229,7 +229,7 @@
     "blocks": [
       {
         "kind": "light",
-        "cx": 820,
+        "cx": 880,
         "cy": 210,
         "radius": 1080,
         "strength": 0.3
@@ -237,47 +237,47 @@
       {
         "kind": "plate",
         "view": "year",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -12,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "calendar",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "schedule",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "entry",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 12,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "seal",
-        "cx": 975,
-        "cy": 536,
+        "cx": 1054,
+        "cy": 534,
         "sizePx": 155,
         "glyph": "e:quill",
         "tint": "app",
@@ -285,7 +285,7 @@
       },
       {
         "kind": "wordmark",
-        "cx": 215,
+        "cx": 205,
         "cy": 315,
         "fontPx": 60
       }
@@ -450,7 +450,7 @@
     "blocks": [
       {
         "kind": "light",
-        "cx": 820,
+        "cx": 880,
         "cy": 210,
         "radius": 1080,
         "strength": 0.3
@@ -458,48 +458,48 @@
       {
         "kind": "plate",
         "view": "year",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -12,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "calendar",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "schedule",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "today",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 12,
-        "originYpx": 1400,
+        "originYpx": 1300,
         "portrait": true
       },
       {
         "kind": "seal",
-        "cx": 975,
-        "cy": 536,
+        "cx": 1054,
+        "cy": 534,
         "sizePx": 185,
         "glyph": "e:quill",
         "tint": "app",
@@ -507,7 +507,7 @@
       },
       {
         "kind": "wordmark",
-        "cx": 215,
+        "cx": 205,
         "cy": 315,
         "fontPx": 60
       }
@@ -524,7 +524,7 @@
     "blocks": [
       {
         "kind": "light",
-        "cx": 820,
+        "cx": 880,
         "cy": 210,
         "radius": 1080,
         "strength": 0.3
@@ -532,48 +532,48 @@
       {
         "kind": "plate",
         "view": "year",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -12,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "calendar",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": -4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "schedule",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 4,
-        "originYpx": 1400
+        "originYpx": 1300
       },
       {
         "kind": "plate",
         "view": "today",
-        "x": 580,
+        "x": 680,
         "y": 55,
         "w": 400,
         "h": 640,
         "rotateDeg": 12,
-        "originYpx": 1400,
+        "originYpx": 1300,
         "portrait": true
       },
       {
         "kind": "seal",
-        "cx": 975,
-        "cy": 536,
+        "cx": 1054,
+        "cy": 534,
         "sizePx": 155,
         "glyph": "e:quill",
         "tint": "app",
@@ -581,7 +581,7 @@
       },
       {
         "kind": "wordmark",
-        "cx": 215,
+        "cx": 205,
         "cy": 315,
         "fontPx": 60
       }
