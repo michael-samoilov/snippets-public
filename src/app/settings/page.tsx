@@ -631,7 +631,7 @@ function SyncLines() {
         {copy.settings.sync.cadence}
       </p>
       {sync.skewed && (
-        <p className="voice-prose-sm text-ink-faint">
+        <p className="voice-prose-sm text-ink-soft">
           {copy.settings.sync.skewed}
         </p>
       )}
@@ -642,7 +642,7 @@ function SyncLines() {
           <p className="voice-prose-sm text-ember">
             {copy.settings.sync.outOfStep}
           </p>
-          <p className="voice-prose-sm mt-1 text-ink-faint">
+          <p className="voice-prose-sm mt-1 text-ink-soft">
             {copy.settings.sync.reconcileHint}
           </p>
           <div className="mt-3">
@@ -680,7 +680,7 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
           formatBytes(storage.quotaBytes),
         )}
       </p>
-      <p className="voice-prose-sm text-ink-faint">
+      <p className="voice-prose-sm text-ink-soft">
         {note}
       </p>
     </div>
@@ -1137,7 +1137,7 @@ function EncryptionSection({ email }: { email: string }) {
           <p className="voice-data select-all break-all text-center text-ui leading-relaxed">
             {recoveryCode}
           </p>
-          <p className="voice-prose-sm text-center text-ink-faint">
+          <p className="voice-prose-sm text-center text-ink-soft">
             {copy.settings.encryption.recoveryFileNote}
           </p>
           <DialogFooter className="gap-2">
@@ -1318,12 +1318,12 @@ function BackupSection() {
           }
           state="good"
         />
-        <p className="voice-prose-sm text-ink-faint">
+        <p className="voice-prose-sm text-ink-soft">
           {copy.settings.backup.mirrors}
         </p>
         {deviceHasToken === false && (
           <div className="space-y-3">
-            <p className="voice-prose-sm text-ink-faint">
+            <p className="voice-prose-sm text-ink-soft">
               {copy.settings.backup.deliversElsewhere}
             </p>
             {/* same consent, this device: Google mints it a grant of its own
@@ -1502,7 +1502,7 @@ function AccountSection() {
             <PaperButton onClick={() => void signOut()}>
               {copy.settings.account.signOut}
             </PaperButton>
-            <p className="voice-prose-sm text-ink-faint">
+            <p className="voice-prose-sm text-ink-soft">
               {copy.settings.account.signOutHint}
             </p>
           </div>

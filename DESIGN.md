@@ -102,8 +102,13 @@ screen-height); the fix was to decide each size once and let it ripple.
 
 Action titles ("Disconnect Google Drive") are `voice-display text-ui` —
 the display voice IS the heading voice; there is no fifth voice.
-Hierarchy on control pages comes from the ink ramp (`ink` → `ink-soft`
-→ `ink-faint`), not from more sizes. One tuned exception: the calendar
+Hierarchy on control pages comes from the ink ramp and position, not
+from more sizes — but the ramp separates *roles*, not paragraph from
+paragraph. **Full-sentence body prose is one shade (`ink-soft`)**; a
+second, fainter paragraph reads as noise, not hierarchy. `ink` is the
+display/action title; `ink-soft` is body prose; `ink-faint` is for mono
+data, inactive/secondary labels, placeholders, and icons — never a body
+paragraph; `ember` is errors. One tuned exception: the calendar
 composer's textarea keeps a literal 0.9rem + line-height pairing so its
 wrapping matches the book card preview character-for-character.
 
