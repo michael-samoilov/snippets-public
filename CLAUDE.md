@@ -135,7 +135,10 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   vanished-device case no report can reach. The daily cron
   (`CRON_SECRET`, vercel.json) is a watchdog only — stale ledger +
   moving book → one email per silence — plus the tombstone
-  scrubber. Google OAuth
+  scrubber, plus an ops storage watchdog (`pg_database_size` vs the
+  Neon free-tier 0.5 GB cap → emails `OPS_ALERT_EMAIL` past ~70%, so
+  the owner upgrades before writes are refused; capture stays
+  local-first regardless). Google OAuth
   app must be *published to Production* or refresh tokens die in
   7 days. Plaintext Drive files are the key-loss safety net; never
   encrypt them.
