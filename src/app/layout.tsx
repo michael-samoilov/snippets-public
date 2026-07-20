@@ -52,12 +52,30 @@ const startupImage = APPLE_LAUNCH.flatMap(({ w, h, r }) =>
 );
 
 export const metadata: Metadata = {
+  // Canonical origin for absolute URLs in metadata (og:image etc). The custom
+  // domain is the canonical one; NEXT_PUBLIC_SITE_URL overrides for previews.
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.snippets.ink",
+  ),
   title: {
     default: copy.app.name,
     template: copy.app.titleTemplate,
   },
   description: copy.app.description,
   applicationName: copy.app.name,
+  // og:image itself comes from the file convention (src/app/opengraph-image.png
+  // + opengraph-image.alt.txt, baked by `pnpm og` — scripts/bake-og.mjs) so the
+  // tags can't drift from the file.
+  openGraph: {
+    title: copy.app.name,
+    description: copy.app.description,
+    siteName: copy.app.name,
+    type: "website",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

@@ -9,6 +9,7 @@
     "lint": "eslint",
     "splash": "node scripts/generate-splash.mjs",
     "icons": "node scripts/bake-icons.mjs",
+    "og": "node scripts/bake-og.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run"

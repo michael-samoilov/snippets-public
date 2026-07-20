@@ -44,5 +44,8 @@ next-env.d.ts
 scripts/.skeleton-align/
 scripts/.header-align/
 
+# OG-image bake review output (pnpm og)
+/og-review/
+
 # agent worktrees (transient, isolation: "worktree")
 .claude/worktrees/

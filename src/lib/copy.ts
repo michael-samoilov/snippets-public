@@ -29,6 +29,8 @@ export const copy = {
     titleTemplate: "%s · Snippets",
     description:
       "A pocket notebook. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
+    /** alt text for the link-preview image (src/app/opengraph-image.alt.txt is generated from this — keep them matched) */
+    ogAlt: "A blue wax seal pressed with the letter S, on a sheet of paper under lamplight — Snippets, a pocket notebook.",
   },
 
   /** primary navigation — the desktop links and the mobile dock */

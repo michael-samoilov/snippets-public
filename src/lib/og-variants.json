@@ -1,0 +1,50 @@
+[
+  {
+    "key": "smoke-hero-light",
+    "theme": "light",
+    "concept": "Smoke test: monumental seal centered on the desk, wordmark beneath.",
+    "lens": "smoke",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 200, "radius": 900, "strength": 0.5 },
+      { "kind": "seal", "cx": 600, "cy": 270, "sizePx": 340, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 400, "y": 470, "w": 400, "align": "center", "italic": true },
+      { "kind": "text", "text": "$tagline", "voice": "label", "sizePx": 22, "x": 300, "y": 555, "w": 600, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "smoke-hero-dark",
+    "theme": "dark",
+    "concept": "Smoke test: the same hero on the lamplight desk.",
+    "lens": "smoke",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 200, "radius": 900, "strength": 0.6 },
+      { "kind": "seal", "cx": 600, "cy": 270, "sizePx": 340, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 400, "y": 470, "w": 400, "align": "center", "italic": true },
+      { "kind": "text", "text": "$tagline", "voice": "label", "sizePx": 22, "x": 300, "y": 555, "w": 600, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "smoke-sheet-date",
+    "theme": "light",
+    "concept": "Smoke test: paper sheet with the today-zone date block and a modest seal.",
+    "lens": "smoke",
+    "blocks": [
+      { "kind": "sheet", "x": 210, "y": 60, "w": 780, "h": 570 },
+      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 26, "x": 300, "y": 170, "w": 600, "align": "center", "color": "ink-faint" },
+      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 76, "x": 300, "y": 205, "w": 600, "align": "center" },
+      { "kind": "seal", "cx": 600, "cy": 430, "sizePx": 190, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "smoke-tilt-stand-in",
+    "theme": "light",
+    "concept": "Smoke test: CSS-tilt stand-in for the low-camera seal, macro crop.",
+    "lens": "smoke",
+    "needs": ["tilt"],
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 120, "radius": 900, "strength": 0.4 },
+      { "kind": "seal", "cx": 600, "cy": 360, "sizePx": 560, "cssTilt": 35, "tint": "icon" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 54, "x": 400, "y": 60, "w": 400, "align": "center", "italic": true }
+    ]
+  }
+]
