@@ -171,6 +171,105 @@ function Plate({ b, dark }: { b: Extract<OgBlock, { kind: "plate" }>; dark: bool
   );
 }
 
+/** Faithful reproduction of the app's today-zone composer (calendar/page.tsx
+ *  TodayZoneFill): the date, three ruled lines with the placeholder, and the
+ *  wax seal — seal glyph swappable. Reproduces the real markup so it reads as
+ *  the app. Everything scales off the app's 390px reference. */
+function TodayZone({
+  b,
+  dark,
+}: {
+  b: Extract<OgBlock, { kind: "todayzone" }>;
+  dark: boolean;
+}) {
+  const now = new Date();
+  // scale off the app's 390px sheet; default to filling the box width nicely
+  const s = b.scale ?? b.w / 300;
+  const rule = 20 * s; // the app's 20px ruled rhythm
+  const glyph = b.seal === "S" ? "S" : b.seal === "mic" ? "c:mic" : "e:quill";
+  const iconScale = b.seal === "quill" ? 0.36 : 0.46;
+  const useWordmarkTint = b.sealTint === "wordmark" || b.seal === "S";
+  const sealPx = Math.round(150 * s);
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: b.x,
+        top: b.y,
+        width: b.w,
+        height: b.h,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 16 * s,
+        textAlign: "center",
+      }}
+    >
+      {/* the date, in the today-zone voice (calendar/page.tsx:7373) */}
+      <div style={{ lineHeight: 1 }}>
+        <p
+          className="voice-label"
+          style={{ fontSize: `${0.72 * s}rem`, color: "var(--ink-faint)", margin: 0 }}
+        >
+          {format(now, "EEEE")}
+        </p>
+        <h2
+          className="voice-display"
+          style={{
+            fontSize: `${2 * s}rem`,
+            lineHeight: 1,
+            color: "var(--ink)",
+            margin: `${0.25 * s}rem 0 0`,
+            // pin opsz so the enlarged date keeps the app's sturdy 2rem cut
+            fontOpticalSizing: "none",
+            fontVariationSettings: '"SOFT" 0, "WONK" 0, "opsz" 30',
+          }}
+        >
+          {format(now, "MMMM d")}
+        </h2>
+      </div>
+      {/* three ruled lines + the resting placeholder (calendar/page.tsx:7506) */}
+      <div style={{ width: "82%", minWidth: 0 }}>
+        <div
+          className="voice-prose"
+          style={{
+            fontSize: `${0.9 * s}rem`,
+            lineHeight: `${rule}px`,
+            minHeight: `${rule * 3}px`,
+            textAlign: "left",
+            fontStyle: "italic",
+            color: "var(--ink-faint)",
+            backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${rule - 1}px, var(--rule-faint) ${rule - 1}px, var(--rule-faint) ${rule}px)`,
+            backgroundPositionY: `${-4 * s}px`,
+          }}
+        >
+          Add something else from today…
+        </div>
+      </div>
+      {/* the wax seal — the app's mic/quill at default tint, or the brand S */}
+      <div style={{ width: sealPx, height: sealPx, marginTop: 8 * s }}>
+        <WaxStamp
+          playKey={ICON_SEAL.seed}
+          size={sealPx}
+          glyph={glyph}
+          iconScale={iconScale}
+          mode="press"
+          still
+          restGlyph
+          variant="spring"
+          superSample={2}
+          cloud={0.5}
+          puck={1}
+          tint={useWordmarkTint ? (dark ? DEEP_BLUE : LIGHT_BLUE) : undefined}
+          glyphColor={b.seal === "S" ? (dark ? LIGHT_S_INK : DARK_S_INK) : undefined}
+          ignoreReducedMotion
+        />
+      </div>
+    </div>
+  );
+}
+
 function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
   switch (b.kind) {
     case "text": {
@@ -189,12 +288,21 @@ function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
             lineHeight: b.lineHeight ?? (b.voice === "prose" ? 1.5 : 1.1),
             letterSpacing:
               b.trackingEm !== undefined ? `${b.trackingEm}em` : undefined,
+            // pin the optical-size axis so a big date keeps the app's sturdy cut
+            ...(b.optical !== undefined
+              ? {
+                  fontOpticalSizing: "none",
+                  fontVariationSettings: `"SOFT" 0, "WONK" 0, "opsz" ${b.optical}`,
+                }
+              : {}),
           }}
         >
           {resolveText(b.text)}
         </div>
       );
     }
+    case "todayzone":
+      return <TodayZone b={b} dark={dark} />;
     case "seal":
       return <Seal b={b} dark={dark} />;
     case "sheet":

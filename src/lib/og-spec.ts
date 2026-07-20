@@ -36,6 +36,31 @@ export interface OgTextBlock {
   lineHeight?: number;
   /** letter-spacing in em, overriding the voice default */
   trackingEm?: number;
+  /** pin the Fraunces optical-size axis (opsz) instead of letting it track the
+   *  font size. The app renders the today-zone date at 2rem (opsz≈32); pinning
+   *  ~30 keeps a large date reading like the app's sturdy cut, not a thin
+   *  high-contrast display cut. */
+  optical?: number;
+}
+
+/** A faithful reproduction of the app's today-zone composer: the date
+ *  (weekday small-caps + Month Day), three ruled lines with the placeholder,
+ *  and the wax seal — with the seal's glyph swappable. Reproduces the real
+ *  markup (globals.css voices, the 20px ruled gradient, the WaxStamp) so it
+ *  reads as the app, not a mock. */
+export interface OgTodayZoneBlock {
+  kind: "todayzone";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** which face the seal wears: the brand "S", the app's mic, or the quill */
+  seal: "S" | "mic" | "quill";
+  /** "app" = the live --wax tokens (matches the running app exactly);
+   *  "wordmark" = the deeper wordmark blue (for the branded S). Default app. */
+  sealTint?: "app" | "wordmark";
+  /** scale multiplier off the app's 390px reference (default fits the box) */
+  scale?: number;
 }
 
 /** The live 3-D wax seal (WaxStamp), centred at (cx, cy). May overflow the
@@ -128,6 +153,7 @@ export type OgBlock =
   | OgWordmarkBlock
   | OgPlateBlock
   | OgLightBlock
+  | OgTodayZoneBlock
   | OgBoxBlock;
 
 export interface OgVariant {
