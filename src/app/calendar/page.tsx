@@ -1530,6 +1530,12 @@ function Calendar() {
       // its resting row, one pixel above where it landed, read as the line
       // settling down a pixel at the end; owner recording 2026-07-20)
       if (seatLineRef.current) seatLineRef.current.style.transitionProperty = "";
+      // …and the in-layer line it hands off to must come back in THIS paint,
+      // not the deferred heavy frame with the other hidden stand-ins: the
+      // camAnims cancel above just dropped the pad to opacity 0, and a frame
+      // between that and this reveal has NO line at the terminus (padprobe
+      // caught a ~50ms hole). One element — free to reveal synchronously.
+      if (bookLineRef.current) bookLineRef.current.style.visibility = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       // Hand input back NOW, synchronously: the shield goes and the landed
@@ -2553,56 +2559,39 @@ function Calendar() {
         const clock = camAnims[0]?.currentTime;
         if (typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
-        // DIVE: the crisp terminus stand-in (see the setup hide of the
-        // in-layer line) — the stage seat line, never scaled, ANIMATING INTO
-        // ITS SEAT: it rides the arriving book's top edge (which travels
-        // oy·(1−s) → 0 in stage space as the scale runs inFrom → 1) on the
-        // book scale's exact duration and easing, while fading in on the
-        // book-fade's clock. So the reader sees the hairline travel into
-        // position — crisp the whole way, because this element is outside
-        // every scaled layer (the in-layer line's texture is magnified all
-        // move long on iOS; the owner rejected both that blur and a static
-        // line waiting at the destination). finish()'s cancel returns it to
-        // its class opacity while the same frame's reveal restores the
-        // identical in-layer line beneath it, landed on the same row.
+        // DIVE: the LANDING PAD (see the setup hide of the in-layer line).
+        // The traveling hairline is the tapped day's OWN border-t riding the
+        // expanding book — the naturally-occurring line the owner prefers; a
+        // stand-in that rode alongside it doubled the moving lines. But that
+        // natural border lands sub-pixel and dims in the closing beats (the
+        // original settle-blink), so the stage seat line — never scaled,
+        // always crisp — fades in ONLY over the last ~15% of the move,
+        // already parked at the layer's final row, to catch the landing.
+        // finish()'s cancel removes it in the same frame the identical
+        // in-layer line is revealed beneath it, landed on the same row.
         const seatLine = seatLineRef.current;
         if (seatLine && zoom.from === "month" && zoom.to === "schedule") {
-          // no class transition while the stand-in works: finish()'s cancel
-          // must remove it in the SAME frame the identical in-layer line is
+          // no class transition while the pad works: finish()'s cancel must
+          // remove it in the SAME frame the identical in-layer line is
           // revealed — with transition-opacity live, the cancelled line faded
-          // out over 180ms at its resting row (1px above its landing), which
-          // read as the hairline nudging down a pixel at the end. Restored in
+          // out over 180ms, which read as a settle artifact. Restored in
           // finish so the year/entry seat fades keep their ease.
           seatLine.style.transitionProperty = "none";
-          const oy = o ? o.y : stageRect.height * 0.3;
-          const y0 = oy * (1 - inFrom);
-          const standFade = seatLine.animate(
+          // +1px: the seat row sits ONE ROW ABOVE the stage/layer top (the
+          // structural border), and the in-layer line the finish reveals
+          // lives at the LAYER's row — park there, not at the seat, or the
+          // hand-off drops the line a pixel (rideprobe: line@0 vs edge@1)
+          const standIn = seatLine.animate(
             [
-              { opacity: 0, offset: 0 },
-              { opacity: 1, offset: 300 / 440 },
-              { opacity: 1, offset: 1 },
+              { opacity: 0, transform: "translateY(1px)", offset: 0 },
+              { opacity: 0, offset: 0.8 },
+              { opacity: 1, offset: 0.95 },
+              { opacity: 1, transform: "translateY(1px)", offset: 1 },
             ],
             { duration: 440, easing: "linear", fill: "forwards" },
           );
-          if (typeof clock === "number") standFade.currentTime = clock;
-          // +1px: the seat row sits ONE ROW ABOVE the stage/layer top (the
-          // structural border), and the in-layer line the finish reveals
-          // lives at the LAYER's row — land there, not at the seat, or the
-          // hand-off drops the line a pixel (rideprobe: line@0 vs edge@1)
-          const standMove = seatLine.animate(
-            [
-              { transform: `translateY(${y0 + 1}px)` },
-              { transform: "translateY(1px)" },
-            ],
-            {
-              // the inCam's exact timing (created just below), so the line
-              // stays glued to the edge it rides
-              duration: Math.max(1, 440 - (Number(clock) || 0)),
-              easing: "cubic-bezier(0.33, 1, 0.68, 1)",
-              fill: "forwards",
-            },
-          );
-          camAnims.push(standFade, standMove);
+          if (typeof clock === "number") standIn.currentTime = clock;
+          camAnims.push(standIn);
         }
       }
       // The incoming book's camera scale, deferred from setup to HERE
