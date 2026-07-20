@@ -627,6 +627,9 @@ function SyncLines() {
       {/* the integrity counts (device · server) now ride the Synced readout
           line itself, so there's no separate count line beneath */}
       <ProtRow glyph={<SyncGlyph />} {...syncRow(sync, online)} />
+      <p className="voice-prose-sm text-ink-faint">
+        {copy.settings.sync.cadence}
+      </p>
       {sync.skewed && (
         <p className="voice-prose-sm text-ink-faint">
           {copy.settings.sync.skewed}

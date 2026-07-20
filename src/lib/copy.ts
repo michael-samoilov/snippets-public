@@ -458,6 +458,9 @@ export const copy = {
       offline: "Offline — changes will sync when you’re back.",
       error: "Sync hit a snag — retrying.",
       skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
+      /** how sync behaves — sets the expectation that idle cross-device isn't instant */
+      cadence:
+        "Your entries sync the moment you open Snippets and just after you write. While it stays open it also checks now and then for changes from your other devices, so an untouched second device catches up within a few minutes rather than instantly.",
       /** the tiny mono integrity line, e.g. "1,204 on device · 1,204 on server" */
       counts: (device: string, server: string) =>
         `${device} on device · ${server} on server`,
