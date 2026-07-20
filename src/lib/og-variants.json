@@ -2,7 +2,7 @@
   {
     "key": "bg-flat",
     "theme": "light",
-    "concept": "Reference \u2014 flat desk with the lamplight pool.",
+    "concept": "Reference \u2014 flat desk + lamplight pool.",
     "lens": "bg",
     "needs": [
       "plate"
@@ -74,9 +74,9 @@
     ]
   },
   {
-    "key": "bg-vertical",
+    "key": "bg-paper",
     "theme": "light",
-    "concept": "Subtle vertical desk gradient behind the fan.",
+    "concept": "Pure app paper texture behind the fan.",
     "lens": "bg",
     "needs": [
       "plate"
@@ -84,7 +84,7 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(180deg, #f1e8d4 0%, #e8dcc2 55%, #ded1b6 100%)"
+        "css": "url('/textures/sheet-light.webp') center / cover no-repeat"
       },
       {
         "kind": "plate",
@@ -145,9 +145,9 @@
     ]
   },
   {
-    "key": "bg-radial",
+    "key": "bg-paper-desk",
     "theme": "light",
-    "concept": "Subtle radial desk gradient behind the fan.",
+    "concept": "App paper texture, desk wash.",
     "lens": "bg",
     "needs": [
       "plate"
@@ -155,7 +155,7 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "radial-gradient(120% 120% at 66% 40%, #f4ebd8 0%, #e8dcc2 48%, #dccfb2 100%)"
+        "css": "linear-gradient(rgba(214,201,173,0.5), rgba(214,201,173,0.5)), url('/textures/sheet-light.webp') center / cover no-repeat"
       },
       {
         "kind": "plate",
@@ -216,9 +216,9 @@
     ]
   },
   {
-    "key": "bg-diagonal",
+    "key": "bg-paper-warm",
     "theme": "light",
-    "concept": "Subtle diagonal desk gradient behind the fan.",
+    "concept": "App paper texture, warm wash.",
     "lens": "bg",
     "needs": [
       "plate"
@@ -226,7 +226,78 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, #f2e9d5 0%, #e8dcc2 52%, #dbceb1 100%)"
+        "css": "radial-gradient(120% 120% at 66% 40%, rgba(255,244,214,0.34), rgba(214,201,173,0.42)), url('/textures/sheet-light.webp') center / cover no-repeat"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 205,
+        "cy": 315,
+        "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "bg-paper-vignette",
+    "theme": "light",
+    "concept": "App paper texture, vignette wash.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "radial-gradient(95% 105% at 50% 44%, rgba(255,248,224,0.10), rgba(188,174,144,0.46)), url('/textures/sheet-light.webp') center / cover no-repeat"
       },
       {
         "kind": "plate",
@@ -289,7 +360,7 @@
   {
     "key": "bg-vignette",
     "theme": "light",
-    "concept": "Subtle vignette desk gradient behind the fan.",
+    "concept": "Gradient vignette (no texture) for comparison.",
     "lens": "bg",
     "needs": [
       "plate"
@@ -298,77 +369,6 @@
       {
         "kind": "bg",
         "css": "radial-gradient(95% 105% at 50% 44%, #ece2ca 0%, #e4d7bb 66%, #d6c9ab 100%)"
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": -12,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": -4,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": 4,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "today",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": 12,
-        "originYpx": 1300,
-        "portrait": true
-      },
-      {
-        "kind": "seal",
-        "cx": 1054,
-        "cy": 534,
-        "sizePx": 155,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 205,
-        "cy": 315,
-        "fontPx": 60
-      }
-    ]
-  },
-  {
-    "key": "bg-corner",
-    "theme": "light",
-    "concept": "Subtle corner desk gradient behind the fan.",
-    "lens": "bg",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "bg",
-        "css": "radial-gradient(140% 140% at 15% 8%, #f5edda 0%, #e8dcc2 50%, #dccfb2 100%)"
       },
       {
         "kind": "plate",
