@@ -1,50 +1,357 @@
 [
   {
-    "key": "smoke-hero-light",
+    "key": "hero-classic-light",
     "theme": "light",
-    "concept": "Smoke test: monumental seal centered on the desk, wordmark beneath.",
-    "lens": "smoke",
+    "concept": "The seal monumental and centered, name beneath — the app icon grown into a poster.",
+    "lens": "hero-object",
     "blocks": [
-      { "kind": "light", "cx": 600, "cy": 200, "radius": 900, "strength": 0.5 },
-      { "kind": "seal", "cx": 600, "cy": 270, "sizePx": 340, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 400, "y": 470, "w": 400, "align": "center", "italic": true },
-      { "kind": "text", "text": "$tagline", "voice": "label", "sizePx": 22, "x": 300, "y": 555, "w": 600, "align": "center", "color": "ink-soft" }
+      { "kind": "light", "cx": 600, "cy": 180, "radius": 900, "strength": 0.45 },
+      { "kind": "seal", "cx": 600, "cy": 258, "sizePx": 350, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 72, "x": 400, "y": 448, "w": 400, "align": "center", "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 26, "x": 400, "y": 552, "w": 400, "align": "center", "color": "ink-soft" }
     ]
   },
   {
-    "key": "smoke-hero-dark",
+    "key": "hero-classic-dark",
     "theme": "dark",
-    "concept": "Smoke test: the same hero on the lamplight desk.",
-    "lens": "smoke",
+    "concept": "The same monument on the lamplight desk — wax glowing out of the dark.",
+    "lens": "hero-object",
     "blocks": [
-      { "kind": "light", "cx": 600, "cy": 200, "radius": 900, "strength": 0.6 },
-      { "kind": "seal", "cx": 600, "cy": 270, "sizePx": 340, "tint": "wordmark" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 400, "y": 470, "w": 400, "align": "center", "italic": true },
-      { "kind": "text", "text": "$tagline", "voice": "label", "sizePx": 22, "x": 300, "y": 555, "w": 600, "align": "center", "color": "ink-soft" }
+      { "kind": "light", "cx": 600, "cy": 180, "radius": 800, "strength": 0.7 },
+      { "kind": "seal", "cx": 600, "cy": 258, "sizePx": 350, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 72, "x": 400, "y": 448, "w": 400, "align": "center", "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 26, "x": 400, "y": 552, "w": 400, "align": "center", "color": "ink-soft" }
     ]
   },
   {
-    "key": "smoke-sheet-date",
+    "key": "hero-offcenter",
     "theme": "light",
-    "concept": "Smoke test: paper sheet with the today-zone date block and a modest seal.",
-    "lens": "smoke",
+    "concept": "Monumental seal off-center left, name and one line right — editorial poster balance.",
+    "lens": "hero-object",
     "blocks": [
-      { "kind": "sheet", "x": 210, "y": 60, "w": 780, "h": 570 },
-      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 26, "x": 300, "y": 170, "w": 600, "align": "center", "color": "ink-faint" },
-      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 76, "x": 300, "y": 205, "w": 600, "align": "center" },
-      { "kind": "seal", "cx": 600, "cy": 430, "sizePx": 190, "tint": "wordmark" }
+      { "kind": "light", "cx": 430, "cy": 240, "radius": 800, "strength": 0.4 },
+      { "kind": "seal", "cx": 430, "cy": 315, "sizePx": 440, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 88, "x": 650, "y": 218, "italic": true },
+      { "kind": "text", "text": "Catch the stray thoughts of your day.", "voice": "label", "sizePx": 24, "x": 654, "y": 340, "w": 260, "color": "ink-soft", "lineHeight": 1.5 }
     ]
   },
   {
-    "key": "smoke-tilt-stand-in",
+    "key": "hero-tilt-35",
     "theme": "light",
-    "concept": "Smoke test: CSS-tilt stand-in for the low-camera seal, macro crop.",
-    "lens": "smoke",
+    "concept": "The seal seen from a low camera, 35° — the wax as an object on the desk, name above.",
+    "lens": "hero-object",
     "needs": ["tilt"],
     "blocks": [
-      { "kind": "light", "cx": 600, "cy": 120, "radius": 900, "strength": 0.4 },
-      { "kind": "seal", "cx": 600, "cy": 360, "sizePx": 560, "cssTilt": 35, "tint": "icon" },
-      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 54, "x": 400, "y": 60, "w": 400, "align": "center", "italic": true }
+      { "kind": "light", "cx": 600, "cy": 140, "radius": 900, "strength": 0.4 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 66, "x": 400, "y": 62, "w": 400, "align": "center", "italic": true },
+      { "kind": "seal", "cx": 600, "cy": 372, "sizePx": 470, "tiltDeg": 35, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "hero-tilt-55-dark",
+    "theme": "dark",
+    "concept": "Steep low camera on a big seal in the dark, name floating above the horizon of wax.",
+    "lens": "hero-object",
+    "needs": ["tilt"],
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 130, "radius": 800, "strength": 0.65 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 72, "x": 400, "y": 84, "w": 400, "align": "center", "italic": true },
+      { "kind": "seal", "cx": 600, "cy": 400, "sizePx": 620, "tiltDeg": 55, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "type-cover-light",
+    "theme": "light",
+    "concept": "Book-cover discipline: the name dominant, a small seal as the single focal shape above.",
+    "lens": "editorial",
+    "blocks": [
+      { "kind": "seal", "cx": 600, "cy": 165, "sizePx": 150, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 148, "x": 300, "y": 268, "w": 600, "align": "center", "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 28, "x": 400, "y": 500, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "type-cover-dark",
+    "theme": "dark",
+    "concept": "The cover set at night — pale ink on the dark desk, wax catching the lamp.",
+    "lens": "editorial",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 160, "radius": 900, "strength": 0.55 },
+      { "kind": "seal", "cx": 600, "cy": 165, "sizePx": 150, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 148, "x": 300, "y": 268, "w": 600, "align": "center", "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 28, "x": 400, "y": 500, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "type-wordmark-solo",
+    "theme": "light",
+    "concept": "Nothing but the masthead wordmark, huge — the S pressed in wax, then “nippets”.",
+    "lens": "editorial",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 240, "radius": 900, "strength": 0.35 },
+      { "kind": "wordmark", "cx": 600, "cy": 315, "fontPx": 120 }
+    ]
+  },
+  {
+    "key": "type-tagline-lockstep",
+    "theme": "light",
+    "concept": "One sentence as the image — the promise set large, a small seal as the full stop.",
+    "lens": "editorial",
+    "blocks": [
+      { "kind": "text", "text": "Catch your days before they evaporate.", "voice": "display", "sizePx": 84, "x": 300, "y": 178, "w": 600, "align": "center", "italic": true, "lineHeight": 1.15 },
+      { "kind": "seal", "cx": 600, "cy": 468, "sizePx": 120, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "type-letterpress-dark",
+    "theme": "dark",
+    "concept": "The name in wax blue on near-black — letterpress ink under a low lamp.",
+    "lens": "editorial",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 220, "radius": 800, "strength": 0.35 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 170, "x": 200, "y": 218, "w": 800, "align": "center", "italic": true, "color": "wax" },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 26, "x": 400, "y": 448, "w": 400, "align": "center", "color": "ink-faint" }
+    ]
+  },
+  {
+    "key": "app-schedule-light",
+    "theme": "light",
+    "concept": "The schedule view itself — a phone-tall plate of real kept days, sealed at its corner.",
+    "lens": "app-truth",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "plate", "view": "schedule", "x": 448, "y": 40, "w": 304, "h": 550 },
+      { "kind": "seal", "cx": 742, "cy": 540, "sizePx": 140, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 54, "x": 90, "y": 260, "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 22, "x": 92, "y": 340, "w": 280, "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "app-year-light",
+    "theme": "light",
+    "concept": "The full-year view — a whole year of days as the hero, seal pressed over one of them.",
+    "lens": "app-truth",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "plate", "view": "year", "x": 320, "y": 46, "w": 560, "h": 440 },
+      { "kind": "seal", "cx": 800, "cy": 420, "sizePx": 130, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 56, "x": 400, "y": 528, "w": 400, "align": "center", "italic": true }
+    ]
+  },
+  {
+    "key": "app-calendar-dark",
+    "theme": "dark",
+    "concept": "The month calendar at night, seal in the corner — the app as it actually looks in Lamplight.",
+    "lens": "app-truth",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 200, "radius": 900, "strength": 0.5 },
+      { "kind": "plate", "view": "calendar", "x": 350, "y": 60, "w": 500, "h": 460 },
+      { "kind": "seal", "cx": 830, "cy": 130, "sizePx": 130, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 50, "x": 400, "y": 552, "w": 400, "align": "center", "italic": true }
+    ]
+  },
+  {
+    "key": "app-entry-light",
+    "theme": "light",
+    "concept": "A single kept entry as a card on the desk, slightly askew, sealed at its foot.",
+    "lens": "app-truth",
+    "needs": ["plate"],
+    "blocks": [
+      { "kind": "plate", "view": "entry", "x": 300, "y": 105, "w": 600, "h": 340, "rotateDeg": -2 },
+      { "kind": "seal", "cx": 810, "cy": 430, "sizePx": 130, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 52, "x": 400, "y": 520, "w": 400, "align": "center", "italic": true }
+    ]
+  },
+  {
+    "key": "app-today-date",
+    "theme": "light",
+    "concept": "The today zone re-set on a sheet: weekday, date, seal — the app’s daily doorway.",
+    "lens": "app-truth",
+    "blocks": [
+      { "kind": "sheet", "x": 240, "y": 50, "w": 720, "h": 580 },
+      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 28, "x": 300, "y": 152, "w": 600, "align": "center", "color": "ink-faint" },
+      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 84, "x": 300, "y": 192, "w": 600, "align": "center" },
+      { "kind": "seal", "cx": 600, "cy": 428, "sizePx": 180, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 24, "x": 400, "y": 556, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "macro-seal-fill-light",
+    "theme": "light",
+    "concept": "The seal so close it fills the frame — wax relief as landscape, name riding the top.",
+    "lens": "material",
+    "blocks": [
+      { "kind": "seal", "cx": 600, "cy": 385, "sizePx": 980, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 60, "x": 400, "y": 46, "w": 400, "align": "center", "italic": true }
+    ]
+  },
+  {
+    "key": "macro-seal-fill-dark",
+    "theme": "dark",
+    "concept": "The macro seal at night — glints and speckle carrying the whole image.",
+    "lens": "material",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 160, "radius": 900, "strength": 0.5 },
+      { "kind": "seal", "cx": 640, "cy": 400, "sizePx": 1060, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 60, "x": 90, "y": 52, "italic": true }
+    ]
+  },
+  {
+    "key": "macro-edge",
+    "theme": "light",
+    "concept": "Only the seal’s left arc enters from the right; the words hold the left half.",
+    "lens": "material",
+    "blocks": [
+      { "kind": "seal", "cx": 1010, "cy": 315, "sizePx": 860, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 96, "x": 100, "y": 200, "italic": true },
+      { "kind": "text", "text": "Catch the stray thoughts of your day.", "voice": "label", "sizePx": 24, "x": 104, "y": 340, "w": 330, "color": "ink-soft", "lineHeight": 1.5 }
+    ]
+  },
+  {
+    "key": "macro-tilt-horizon",
+    "theme": "dark",
+    "concept": "Extreme low camera: the seal as a horizon under the lamp, almost planetary.",
+    "lens": "material",
+    "needs": ["tilt"],
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 110, "radius": 800, "strength": 0.6 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 68, "x": 400, "y": 92, "w": 400, "align": "center", "italic": true },
+      { "kind": "seal", "cx": 600, "cy": 470, "sizePx": 900, "tiltDeg": 65, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "macro-paper-press",
+    "theme": "light",
+    "concept": "Full-bleed paper grain, one modest seal pressed into it — material intimacy, nothing else.",
+    "lens": "material",
+    "blocks": [
+      { "kind": "sheet", "x": 0, "y": 0, "w": 1200, "h": 630, "shadow": false },
+      { "kind": "seal", "cx": 600, "cy": 290, "sizePx": 170, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 28, "x": 400, "y": 424, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "scene-letter-light",
+    "theme": "light",
+    "concept": "A letter on the desk: sheet slightly askew, sealed at its lower corner, named at its head.",
+    "lens": "scene",
+    "blocks": [
+      { "kind": "light", "cx": 560, "cy": 160, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 250, "y": 55, "w": 700, "h": 520, "rotateDeg": 1.5 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 62, "x": 330, "y": 130, "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 334, "y": 222, "color": "ink-soft" },
+      { "kind": "seal", "cx": 790, "cy": 440, "sizePx": 190, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "scene-letter-dark",
+    "theme": "dark",
+    "concept": "The sealed letter under a strong lamp pool, edges falling into the night desk.",
+    "lens": "scene",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 220, "radius": 700, "strength": 0.8 },
+      { "kind": "sheet", "x": 280, "y": 85, "w": 640, "h": 460 },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 58, "x": 300, "y": 160, "w": 600, "align": "center", "italic": true },
+      { "kind": "seal", "cx": 600, "cy": 400, "sizePx": 170, "tint": "wordmark" }
+    ]
+  },
+  {
+    "key": "scene-corner-desk",
+    "theme": "light",
+    "concept": "The sheet enters from the corner, sealed where it lands; the name owns the open desk.",
+    "lens": "scene",
+    "blocks": [
+      { "kind": "light", "cx": 400, "cy": 150, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 520, "y": 200, "w": 800, "h": 560, "rotateDeg": -3 },
+      { "kind": "seal", "cx": 590, "cy": 268, "sizePx": 150, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 84, "x": 110, "y": 130, "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 114, "y": 248, "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "scene-diary-today",
+    "theme": "light",
+    "concept": "Today’s page: the sheet carries the date at its head and a fresh seal below — a diary sealed daily.",
+    "lens": "scene",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 140, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 290, "y": 75, "w": 620, "h": 480 },
+      { "kind": "text", "text": "$dateWeekday", "voice": "label", "sizePx": 24, "x": 300, "y": 150, "w": 600, "align": "center", "color": "ink-faint" },
+      { "kind": "text", "text": "$dateFull", "voice": "display", "sizePx": 68, "x": 300, "y": 186, "w": 600, "align": "center" },
+      { "kind": "seal", "cx": 600, "cy": 412, "sizePx": 160, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 24, "x": 400, "y": 584, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "scene-lamp-pool-dark",
+    "theme": "dark",
+    "concept": "Almost all shadow: one pool of lamplight finds the seal and the name; the rest is night.",
+    "lens": "scene",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 270, "radius": 480, "strength": 0.9 },
+      { "kind": "seal", "cx": 600, "cy": 260, "sizePx": 250, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 400, "y": 420, "w": 400, "align": "center", "italic": true }
+    ]
+  },
+  {
+    "key": "empty-tiny-light",
+    "theme": "light",
+    "concept": "A vast quiet desk, one small seal at center, the name in small caps beneath — restraint as confidence.",
+    "lens": "wild",
+    "blocks": [
+      { "kind": "seal", "cx": 600, "cy": 280, "sizePx": 120, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 30, "x": 400, "y": 378, "w": 400, "align": "center", "color": "ink-soft", "trackingEm": 0.18 }
+    ]
+  },
+  {
+    "key": "empty-tiny-dark",
+    "theme": "dark",
+    "concept": "The same near-empty mark at night, the seal barely lit.",
+    "lens": "wild",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 280, "radius": 420, "strength": 0.6 },
+      { "kind": "seal", "cx": 600, "cy": 280, "sizePx": 120, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "label", "sizePx": 30, "x": 400, "y": 378, "w": 400, "align": "center", "color": "ink-soft", "trackingEm": 0.18 }
+    ]
+  },
+  {
+    "key": "wild-week-of-days",
+    "theme": "light",
+    "concept": "A row of small seals like days kept, today’s pressed larger — the habit made visible.",
+    "lens": "wild",
+    "blocks": [
+      { "kind": "seal", "cx": 330, "cy": 265, "sizePx": 95, "tint": "wordmark" },
+      { "kind": "seal", "cx": 465, "cy": 265, "sizePx": 95, "tint": "wordmark" },
+      { "kind": "seal", "cx": 600, "cy": 258, "sizePx": 150, "tint": "wordmark" },
+      { "kind": "seal", "cx": 735, "cy": 265, "sizePx": 95, "tint": "wordmark" },
+      { "kind": "seal", "cx": 870, "cy": 265, "sizePx": 95, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 64, "x": 400, "y": 400, "w": 400, "align": "center", "italic": true },
+      { "kind": "text", "text": "Every day, one true moment.", "voice": "label", "sizePx": 24, "x": 400, "y": 496, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "wild-envelope",
+    "theme": "light",
+    "concept": "The classic gesture: a seal straddling the sheet’s top edge, closing it like an envelope.",
+    "lens": "wild",
+    "blocks": [
+      { "kind": "light", "cx": 600, "cy": 150, "radius": 900, "strength": 0.4 },
+      { "kind": "sheet", "x": 220, "y": 205, "w": 760, "h": 480 },
+      { "kind": "seal", "cx": 600, "cy": 208, "sizePx": 190, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 70, "x": 300, "y": 350, "w": 600, "align": "center", "italic": true },
+      { "kind": "text", "text": "A pocket notebook.", "voice": "label", "sizePx": 24, "x": 400, "y": 460, "w": 400, "align": "center", "color": "ink-soft" }
+    ]
+  },
+  {
+    "key": "wild-kept-count",
+    "theme": "light",
+    "concept": "Documentary micro-data: the seal, then a quiet data line — the app’s smallest voice.",
+    "lens": "wild",
+    "blocks": [
+      { "kind": "seal", "cx": 600, "cy": 250, "sizePx": 200, "tint": "wordmark" },
+      { "kind": "text", "text": "$name", "voice": "display", "sizePx": 58, "x": 400, "y": 392, "w": 400, "align": "center", "italic": true },
+      { "kind": "text", "text": "3 kept · 214 days running", "voice": "mono", "sizePx": 24, "x": 400, "y": 486, "w": 400, "align": "center", "color": "ink-faint" }
     ]
   }
 ]

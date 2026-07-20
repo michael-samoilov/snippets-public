@@ -392,3 +392,36 @@ when inactive/unavailable, green only when the state is actively good.
 Open: should these show in the header, settings (account section?), both,
 or as a separate status line? Should they include tooltips or does
 presence alone suffice?
+
+## 13. Link preview: dynamic today's-date and animated-seal variants
+
+The static link-preview image (src/app/opengraph-image.*, baked by
+`pnpm og` from the /lab/og variant lab) shipped first. Two richer
+variants were designed and deliberately deferred:
+
+**Dynamic today's date** (an `opengraph-image.tsx` ImageResponse route
+rendering the date live). Deferred because the honest version is hard:
+- Scrapers cache unfurls per-URL for days — a "live" date goes stale
+  the moment it's cached; only a date-stamped URL (`?d=YYYY-MM-DD`) on
+  per-day share links escapes that, which is a different feature than
+  the site-wide default image.
+- The server doesn't know the sender's timezone; the app computes day
+  keys in device-local time. Evening shares in the Americas would show
+  tomorrow's date.
+- satori can't run the canvas seal renderer — the seal must be a
+  pre-baked transparent PNG composited under live text, and Fraunces
+  needs a checked-in TTF subset (none exists; the app loads fonts via
+  next/font/google). Small-caps weekday must be faked (satori's
+  font-feature support is unreliable).
+If pursued: bake the seal + font assets via the existing `pnpm og`
+pipeline, and scope it to per-day share URLs, not the root.
+
+**Animated seal press** (`opengraph-image.gif`). Next's file convention
+accepts GIF; Discord animates GIF og:images and Slack usually does;
+iMessage / X / Facebook / WhatsApp show a static frame, so the FIRST
+frame must be the settled seal (never an empty desk). Risks: GIF's
+256-color palette bands on the wax gradients; size balloons (keep
+≤~1.5 MB; Facebook hard cap 8 MB). Capture: drive the /lab/og stage's
+WaxStamp press frame-by-frame with Playwright, assemble with sharp/
+gifsicle. Re-verify per-platform behavior against live unfurls at ship
+time — the platform matrix above is from research, not measurement.
