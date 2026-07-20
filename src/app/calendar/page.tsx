@@ -3801,8 +3801,14 @@ function Calendar() {
       <div className="relative mt-5 border-b border-transparent">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-rule-faint"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px"
           style={{
+            // OPAQUE (not bg-rule-faint): a dive slides this line over the first
+            // day's own rule-faint hairline, and two 8% layers would composite
+            // darker; an opaque line at the same rendered colour can't. It also
+            // keeps a crisp line at the junction when the day's sub-pixel-landed
+            // 8% border fades. See --terminus-line.
+            backgroundColor: "var(--terminus-line)",
             transform:
               view === "month" && railH ? `translateY(${railH}px)` : undefined,
             transition: "transform var(--dur-slow) var(--ease-out)",
