@@ -980,6 +980,11 @@ function Calendar() {
     (view === "schedule" && selected === dayKey());
 
   const stageRef = useRef<HTMLDivElement>(null);
+  // the terminus hairline pair (see their JSX): the stage seat line (static,
+  // outside the scaled layers) and the schedule layer's own in-layer line —
+  // the dive swaps between them so the line is never shown texture-magnified
+  const seatLineRef = useRef<HTMLDivElement>(null);
+  const bookLineRef = useRef<HTMLDivElement>(null);
   // the title's lift-fire bookkeeping (see the title button's onPointerUp)
   const titleTapRef = useRef({ x: 0, y: 0, id: -1, firedAt: 0 });
   const monthLayerRef = useRef<HTMLDivElement>(null);
@@ -1418,6 +1423,22 @@ function Calendar() {
     let flyerBox: HTMLDivElement | null = null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
+    // DIVE: the book's IN-LAYER terminus line stays dark through the move. On
+    // iOS the arriving layer is rasterized ONCE at its small initial scale and
+    // magnified for the whole zoom — a 1px line in that texture reads soft and
+    // double-width until the at-rest re-raster snaps it crisp (owner recording,
+    // 2026-07-20). A STATIC stand-in at the line's final position fades in on
+    // the layer-fade's own compositor clock instead (see joinIncoming): crisp
+    // by construction, never scaled. finish() reveals the in-layer line in the
+    // same swap paint the stand-in's cancel returns it to opacity-0 — identical
+    // pixels at the same row, so the hand-off cannot blank or double.
+    if (zoom.from === "month" && zoom.to === "schedule") {
+      const bookLine = bookLineRef.current;
+      if (bookLine) {
+        bookLine.style.visibility = "hidden";
+        hiddenNumbers.push(bookLine);
+      }
+    }
     // the straddling day's margin cell, held sticky through a frozen move
     // (inline style beats the frozen cells' static) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
@@ -2527,6 +2548,24 @@ function Calendar() {
         const clock = camAnims[0]?.currentTime;
         if (typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
+        // DIVE: the crisp STATIC terminus stand-in (see the setup hide of the
+        // in-layer line) — the stage seat line, never scaled, fading in on the
+        // book-fade's exact keyframes and clock. finish()'s cancel returns it
+        // to its class opacity (0 at the schedule altitude) while the same
+        // frame's reveal restores the identical in-layer line beneath it.
+        const seatLine = seatLineRef.current;
+        if (seatLine && zoom.from === "month" && zoom.to === "schedule") {
+          const standIn = seatLine.animate(
+            [
+              { opacity: 0, offset: 0 },
+              { opacity: 1, offset: 300 / 440 },
+              { opacity: 1, offset: 1 },
+            ],
+            { duration: 440, easing: "linear", fill: "forwards" },
+          );
+          if (typeof clock === "number") standIn.currentTime = clock;
+          camAnims.push(standIn);
+        }
       }
       // The incoming book's camera scale, deferred from setup to HERE
       // (behind motion) so its promotion/raster never lands on the input frame.
@@ -3790,6 +3829,7 @@ function Calendar() {
           ~140ms setup snap. */}
       <div className="relative mt-5 border-b border-transparent">
         <div
+          ref={seatLineRef}
           aria-hidden="true"
           className={cn(
             "pointer-events-none absolute inset-x-0 top-0 h-px transition-opacity",
@@ -3967,6 +4007,7 @@ function Calendar() {
               layers would composite darker. inset-x-2 matches the layer's
               px-2 content width (the seat line's span). */}
           <div
+            ref={bookLineRef}
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-2 top-0 z-10 h-px"
             style={{ backgroundColor: "var(--terminus-line)" }}
