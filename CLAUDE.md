@@ -191,6 +191,29 @@ Gotchas learned the hard way:
 - Screenshot at 1280px and 390px, Paper and Lamplight
   (`localStorage.setItem('theme','dark')` + reload).
 
+**WebKit testing IS available** — not via Playwright (`/opt/pw-browsers`
+has Chromium only and downloads are blocked; don't conclude WebKit is
+impossible from that). Drive the system WebKitGTK over raw W3C WebDriver
+HTTP (stdlib urllib, no selenium):
+
+```sh
+apt-get install -y webkit2gtk-driver xvfb        # once per sandbox
+xvfb-run -a /usr/bin/WebKitWebDriver --port=4599 &  # keep running
+```
+
+then POST to `127.0.0.1:4599/session` with capabilities
+`{"browserName":"MiniBrowser","webkitgtk:browserOptions":{"binary":
+"/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/MiniBrowser","args":
+["--automation"]}}` and use plain endpoints (`/url`, `/execute/sync`).
+**`scripts/measure-webkit-spans.py` is the complete working reference.**
+Caveats: single session only (on "session already exists":
+`pkill -9 -f WebKitWebDriver; pkill -9 -f MiniBrowser`, restart the
+driver); software-rendered under Xvfb, so paint costs read ~5× a real
+device and no rAF ticks fire while idle — use it for relative A/Bs and
+WebKit-specific pathologies (it has caught real ones Blink hides:
+selector-engine scans, pointer-events compositing walks), keep Chromium
+harnesses for correctness, and nothing replaces the on-device pass.
+
 ## Deploy
 
 Any Node host (Vercel works as-is). Sync/backup need
