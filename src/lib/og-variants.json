@@ -1,449 +1,9 @@
 [
   {
-    "key": "sq-entry-seal185-stackcur",
+    "key": "bg-flat",
     "theme": "light",
-    "concept": "Entry on top \u00b7 seal 185 \u00b7 current stack \u00b7 even fan.",
-    "lens": "stack",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "light",
-        "cx": 760,
-        "cy": 190,
-        "radius": 950,
-        "strength": 0.3
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -12,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "entry",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 12,
-        "originYpx": 770
-      },
-      {
-        "kind": "seal",
-        "cx": 864,
-        "cy": 448,
-        "sizePx": 185,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 220,
-        "cy": 310,
-        "fontPx": 62
-      }
-    ]
-  },
-  {
-    "key": "sq-entry-seal155-stackcur",
-    "theme": "light",
-    "concept": "Entry on top \u00b7 smaller seal 155 \u00b7 current stack \u00b7 even fan.",
-    "lens": "stack",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "light",
-        "cx": 760,
-        "cy": 190,
-        "radius": 950,
-        "strength": 0.3
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -12,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "entry",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 12,
-        "originYpx": 770
-      },
-      {
-        "kind": "seal",
-        "cx": 864,
-        "cy": 448,
-        "sizePx": 155,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 220,
-        "cy": 310,
-        "fontPx": 62
-      }
-    ]
-  },
-  {
-    "key": "sq-entry-seal185-stackbig",
-    "theme": "light",
-    "concept": "Entry on top \u00b7 seal 185 \u00b7 larger stack (cropped) \u00b7 even fan.",
-    "lens": "stack",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "light",
-        "cx": 880,
-        "cy": 210,
-        "radius": 1080,
-        "strength": 0.3
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": -12,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": -4,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": 4,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "entry",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": 12,
-        "originYpx": 1300
-      },
-      {
-        "kind": "seal",
-        "cx": 1054,
-        "cy": 534,
-        "sizePx": 185,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 205,
-        "cy": 315,
-        "fontPx": 60
-      }
-    ]
-  },
-  {
-    "key": "sq-entry-seal155-stackbig",
-    "theme": "light",
-    "concept": "Entry on top \u00b7 smaller seal 155 \u00b7 larger stack (cropped) \u00b7 even fan.",
-    "lens": "stack",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "light",
-        "cx": 880,
-        "cy": 210,
-        "radius": 1080,
-        "strength": 0.3
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": -12,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": -4,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": 4,
-        "originYpx": 1300
-      },
-      {
-        "kind": "plate",
-        "view": "entry",
-        "x": 680,
-        "y": 55,
-        "w": 400,
-        "h": 640,
-        "rotateDeg": 12,
-        "originYpx": 1300
-      },
-      {
-        "kind": "seal",
-        "cx": 1054,
-        "cy": 534,
-        "sizePx": 155,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 205,
-        "cy": 315,
-        "fontPx": 60
-      }
-    ]
-  },
-  {
-    "key": "sq-today-seal185-stackcur",
-    "theme": "light",
-    "concept": "Today zone on top \u00b7 seal 185 \u00b7 current stack \u00b7 even fan.",
-    "lens": "stack",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "light",
-        "cx": 760,
-        "cy": 190,
-        "radius": 950,
-        "strength": 0.3
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -12,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "today",
-        "portrait": true,
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 12,
-        "originYpx": 770
-      },
-      {
-        "kind": "seal",
-        "cx": 864,
-        "cy": 448,
-        "sizePx": 185,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 220,
-        "cy": 310,
-        "fontPx": 62
-      }
-    ]
-  },
-  {
-    "key": "sq-today-seal155-stackcur",
-    "theme": "light",
-    "concept": "Today zone on top \u00b7 smaller seal 155 \u00b7 current stack \u00b7 even fan.",
-    "lens": "stack",
-    "needs": [
-      "plate"
-    ],
-    "blocks": [
-      {
-        "kind": "light",
-        "cx": 760,
-        "cy": 190,
-        "radius": 950,
-        "strength": 0.3
-      },
-      {
-        "kind": "plate",
-        "view": "year",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -12,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "calendar",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": -4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "schedule",
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 4,
-        "originYpx": 770
-      },
-      {
-        "kind": "plate",
-        "view": "today",
-        "portrait": true,
-        "x": 620,
-        "y": 75,
-        "w": 320,
-        "h": 486,
-        "rotateDeg": 12,
-        "originYpx": 770
-      },
-      {
-        "kind": "seal",
-        "cx": 864,
-        "cy": 448,
-        "sizePx": 155,
-        "glyph": "e:quill",
-        "tint": "app",
-        "rotateDeg": 12
-      },
-      {
-        "kind": "wordmark",
-        "cx": 220,
-        "cy": 310,
-        "fontPx": 62
-      }
-    ]
-  },
-  {
-    "key": "sq-today-seal185-stackbig",
-    "theme": "light",
-    "concept": "Today zone on top \u00b7 seal 185 \u00b7 larger stack (cropped) \u00b7 even fan.",
-    "lens": "stack",
+    "concept": "Reference \u2014 flat desk with the lamplight pool.",
+    "lens": "bg",
     "needs": [
       "plate"
     ],
@@ -500,7 +60,7 @@
         "kind": "seal",
         "cx": 1054,
         "cy": 534,
-        "sizePx": 185,
+        "sizePx": 155,
         "glyph": "e:quill",
         "tint": "app",
         "rotateDeg": 12
@@ -514,20 +74,301 @@
     ]
   },
   {
-    "key": "sq-today-seal155-stackbig",
+    "key": "bg-vertical",
     "theme": "light",
-    "concept": "Today zone on top \u00b7 smaller seal 155 \u00b7 larger stack (cropped) \u00b7 even fan.",
-    "lens": "stack",
+    "concept": "Subtle vertical desk gradient behind the fan.",
+    "lens": "bg",
     "needs": [
       "plate"
     ],
     "blocks": [
       {
-        "kind": "light",
-        "cx": 880,
-        "cy": 210,
-        "radius": 1080,
-        "strength": 0.3
+        "kind": "bg",
+        "css": "linear-gradient(180deg, #f1e8d4 0%, #e8dcc2 55%, #ded1b6 100%)"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 205,
+        "cy": 315,
+        "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "bg-radial",
+    "theme": "light",
+    "concept": "Subtle radial desk gradient behind the fan.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "radial-gradient(120% 120% at 66% 40%, #f4ebd8 0%, #e8dcc2 48%, #dccfb2 100%)"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 205,
+        "cy": 315,
+        "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "bg-diagonal",
+    "theme": "light",
+    "concept": "Subtle diagonal desk gradient behind the fan.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, #f2e9d5 0%, #e8dcc2 52%, #dbceb1 100%)"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 205,
+        "cy": 315,
+        "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "bg-vignette",
+    "theme": "light",
+    "concept": "Subtle vignette desk gradient behind the fan.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "radial-gradient(95% 105% at 50% 44%, #ece2ca 0%, #e4d7bb 66%, #d6c9ab 100%)"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 205,
+        "cy": 315,
+        "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "bg-corner",
+    "theme": "light",
+    "concept": "Subtle corner desk gradient behind the fan.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "radial-gradient(140% 140% at 15% 8%, #f5edda 0%, #e8dcc2 50%, #dccfb2 100%)"
       },
       {
         "kind": "plate",

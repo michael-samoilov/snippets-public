@@ -154,6 +154,15 @@ export interface OgLightBlock {
   strength?: number;
 }
 
+/** A full-stage background gradient (behind everything). Put it FIRST in the
+ *  blocks array. `css` is a raw CSS gradient — keep it a subtle warm desk
+ *  wash, light pooling from above/one side (the desk-under-lamplight conceit),
+ *  never a flashy hero gradient. */
+export interface OgBgBlock {
+  kind: "bg";
+  css: string;
+}
+
 /** Generic blocking box for anything not yet buildable — renders as a dashed
  *  outline with its label, so a direction can be judged before its module exists. */
 export interface OgBoxBlock {
@@ -172,6 +181,7 @@ export type OgBlock =
   | OgWordmarkBlock
   | OgPlateBlock
   | OgLightBlock
+  | OgBgBlock
   | OgTodayZoneBlock
   | OgBoxBlock;
 

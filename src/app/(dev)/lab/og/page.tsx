@@ -422,6 +422,10 @@ function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
     }
     case "plate":
       return <Plate b={b} dark={dark} />;
+    case "bg":
+      return (
+        <div style={{ position: "absolute", inset: 0, background: b.css }} />
+      );
     case "light": {
       const a = 0.55 * (b.strength ?? 0.5);
       return (
