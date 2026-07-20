@@ -2,129 +2,589 @@
   {
     "key": "sq-entry-seal185-stackcur",
     "theme": "light",
-    "concept": "Entry on top · seal 185 · current stack · even fan.",
+    "concept": "Entry on top \u00b7 seal 185 \u00b7 current stack \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
-      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
-      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
-      { "kind": "plate", "view": "entry", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
-      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 760,
+        "cy": 190,
+        "radius": 950,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -12,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "entry",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 12,
+        "originYpx": 770
+      },
+      {
+        "kind": "seal",
+        "cx": 864,
+        "cy": 448,
+        "sizePx": 185,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 220,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-entry-seal155-stackcur",
     "theme": "light",
-    "concept": "Entry on top · smaller seal 155 · current stack · even fan.",
+    "concept": "Entry on top \u00b7 smaller seal 155 \u00b7 current stack \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
-      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
-      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
-      { "kind": "plate", "view": "entry", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
-      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 760,
+        "cy": 190,
+        "radius": 950,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -12,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "entry",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 12,
+        "originYpx": 770
+      },
+      {
+        "kind": "seal",
+        "cx": 864,
+        "cy": 448,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 220,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-entry-seal185-stackbig",
     "theme": "light",
-    "concept": "Entry on top · seal 185 · larger stack (cropped) · even fan.",
+    "concept": "Entry on top \u00b7 seal 185 \u00b7 larger stack (cropped) \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
-      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
-      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
-      { "kind": "plate", "view": "entry", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
-      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 850,
+        "cy": 210,
+        "radius": 1050,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "entry",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1000
+      },
+      {
+        "kind": "seal",
+        "cx": 987,
+        "cy": 528,
+        "sizePx": 185,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 230,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-entry-seal155-stackbig",
     "theme": "light",
-    "concept": "Entry on top · smaller seal 155 · larger stack (cropped) · even fan.",
+    "concept": "Entry on top \u00b7 smaller seal 155 \u00b7 larger stack (cropped) \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
-      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
-      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
-      { "kind": "plate", "view": "entry", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
-      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 850,
+        "cy": 210,
+        "radius": 1050,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "entry",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1000
+      },
+      {
+        "kind": "seal",
+        "cx": 987,
+        "cy": 528,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 230,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-today-seal185-stackcur",
     "theme": "light",
-    "concept": "Today zone on top · seal 185 · current stack · even fan.",
+    "concept": "Today zone on top \u00b7 seal 185 \u00b7 current stack \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
-      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
-      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
-      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 760,
+        "cy": 190,
+        "radius": 950,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -12,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "portrait": true,
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 12,
+        "originYpx": 770
+      },
+      {
+        "kind": "seal",
+        "cx": 864,
+        "cy": 448,
+        "sizePx": 185,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 220,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-today-seal155-stackcur",
     "theme": "light",
-    "concept": "Today zone on top · smaller seal 155 · current stack · even fan.",
+    "concept": "Today zone on top \u00b7 smaller seal 155 \u00b7 current stack \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
-      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
-      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
-      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 760,
+        "cy": 190,
+        "radius": 950,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -12,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": -4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 4,
+        "originYpx": 770
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "portrait": true,
+        "x": 620,
+        "y": 75,
+        "w": 320,
+        "h": 486,
+        "rotateDeg": 12,
+        "originYpx": 770
+      },
+      {
+        "kind": "seal",
+        "cx": 864,
+        "cy": 448,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 220,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-today-seal185-stackbig",
     "theme": "light",
-    "concept": "Today zone on top · seal 185 · larger stack (cropped) · even fan.",
+    "concept": "Today zone on top \u00b7 seal 185 \u00b7 larger stack (cropped) \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
-      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
-      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
-      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 850,
+        "cy": 210,
+        "radius": 1050,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1000,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 987,
+        "cy": 528,
+        "sizePx": 185,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 230,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   },
   {
     "key": "sq-today-seal155-stackbig",
     "theme": "light",
-    "concept": "Today zone on top · smaller seal 155 · larger stack (cropped) · even fan.",
+    "concept": "Today zone on top \u00b7 smaller seal 155 \u00b7 larger stack (cropped) \u00b7 even fan.",
     "lens": "stack",
-    "needs": ["plate"],
+    "needs": [
+      "plate"
+    ],
     "blocks": [
-      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
-      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
-      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
-      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
-      { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
+      {
+        "kind": "light",
+        "cx": 850,
+        "cy": 210,
+        "radius": 1050,
+        "strength": 0.3
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1000
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 675,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1000,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 987,
+        "cy": 528,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 230,
+        "cy": 310,
+        "fontPx": 62
+      }
     ]
   }
 ]
