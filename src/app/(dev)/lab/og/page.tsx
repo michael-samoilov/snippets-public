@@ -71,10 +71,22 @@ function Seal({ b, dark }: { b: OgSealBlock; dark: boolean }) {
   // tiltDeg = the real relight module; until it exists, stand in with the same
   // CSS tilt so the composition can be judged (the bake labels it a stand-in).
   const tilt = b.cssTilt ?? b.tiltDeg;
+  const glyph = b.glyph ?? "S";
+  const isIcon = glyph !== "S"; // e.g. "c:mic", "e:quill" — the app's capture faces
+  // tint: "app" reads the live --wax tokens (the running today-zone seal),
+  // "icon" the navy app-icon, else the wordmark blues
   const tint =
-    b.tint === "icon" ? ICON_SEAL.tint : dark ? DEEP_BLUE : LIGHT_BLUE;
-  const glyphColor =
-    b.tint === "icon"
+    b.tint === "app"
+      ? undefined
+      : b.tint === "icon"
+        ? ICON_SEAL.tint
+        : dark
+          ? DEEP_BLUE
+          : LIGHT_BLUE;
+  // an icon glyph is embossed (no ink fill); "S" gets the ink/wordmark colour
+  const glyphColor = isIcon
+    ? undefined
+    : b.tint === "icon"
       ? ICON_SEAL.glyphColor
       : dark
         ? LIGHT_S_INK
@@ -98,13 +110,15 @@ function Seal({ b, dark }: { b: OgSealBlock; dark: boolean }) {
       <WaxStamp
         playKey={ICON_SEAL.seed}
         size={b.sizePx}
-        glyph={b.glyph ?? "S"}
+        glyph={glyph}
+        iconScale={b.iconScale ?? (glyph.includes("quill") ? 0.36 : 0.46)}
         mode="press"
         still
         restGlyph
         variant="spring"
         superSample={2}
-        puck={b.tint === "icon" ? ICON_SEAL.puck : undefined}
+        cloud={isIcon ? 0.5 : 0}
+        puck={b.tint === "icon" ? ICON_SEAL.puck : isIcon ? 1 : undefined}
         glyphScale={b.tint === "icon" ? ICON_SEAL.glyphScale : undefined}
         tint={tint}
         glyphColor={glyphColor}
@@ -190,6 +204,7 @@ function TodayZone({
   const iconScale = b.seal === "quill" ? 0.36 : 0.46;
   const useWordmarkTint = b.sealTint === "wordmark" || b.seal === "S";
   const sealPx = Math.round(150 * s);
+  const even = b.distribute === "even";
   return (
     <div
       style={{
@@ -198,14 +213,39 @@ function TodayZone({
         top: b.y,
         width: b.w,
         height: b.h,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 16 * s,
-        textAlign: "center",
       }}
     >
+      {/* the app's paper material behind the content, raised off the desk */}
+      {b.paper && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "var(--paper)",
+            borderRadius: 10,
+            boxShadow: "var(--sheet-shadow)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            className="sheet-grain"
+            style={{ position: "absolute", inset: 0, height: "100%" }}
+          />
+        </div>
+      )}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: even ? "space-evenly" : "center",
+          gap: even ? 0 : 16 * s,
+          padding: even ? `${40 * s}px 0` : 0,
+          textAlign: "center",
+        }}
+      >
       {/* the date, in the today-zone voice (calendar/page.tsx:7373) */}
       <div style={{ lineHeight: 1 }}>
         <p
@@ -248,7 +288,7 @@ function TodayZone({
         </div>
       </div>
       {/* the wax seal — the app's mic/quill at default tint, or the brand S */}
-      <div style={{ width: sealPx, height: sealPx, marginTop: 8 * s }}>
+      <div style={{ width: sealPx, height: sealPx, marginTop: even ? 0 : 8 * s }}>
         <WaxStamp
           playKey={ICON_SEAL.seed}
           size={sealPx}
@@ -265,6 +305,7 @@ function TodayZone({
           glyphColor={b.seal === "S" ? (dark ? LIGHT_S_INK : DARK_S_INK) : undefined}
           ignoreReducedMotion
         />
+      </div>
       </div>
     </div>
   );

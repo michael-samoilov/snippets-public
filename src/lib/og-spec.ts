@@ -61,6 +61,12 @@ export interface OgTodayZoneBlock {
   sealTint?: "app" | "wordmark";
   /** scale multiplier off the app's 390px reference (default fits the box) */
   scale?: number;
+  /** paint the app's paper material (grain + a raised left edge) behind the
+   *  content, so the today zone reads on its own sheet, distinct from the desk */
+  paper?: boolean;
+  /** "even" spreads date / rules / seal evenly down the box; "center" (default)
+   *  groups them in the middle */
+  distribute?: "even" | "center";
 }
 
 /** The live 3-D wax seal (WaxStamp), centred at (cx, cy). May overflow the
@@ -75,11 +81,17 @@ export interface OgSealBlock {
   tiltDeg?: number;
   /** cheap CSS perspective tilt of the head-on render (comparison variant) */
   cssTilt?: number;
-  /** wordmark blues (per-theme) or the app icon's deep navy */
-  tint?: "wordmark" | "icon";
+  /** wordmark blues (per-theme), the app icon's deep navy, or "app" = the live
+   *  --wax tokens (matches the running today-zone seal exactly) */
+  tint?: "wordmark" | "icon" | "app";
   /** in-plane rotation, degrees */
   rotateDeg?: number;
+  /** "S" (brand, default), or an icon glyph like "c:mic" / "e:quill" — an icon
+   *  glyph renders embossed (no ink fill) with molten cloud, like the app's
+   *  capture seal. */
   glyph?: string;
+  /** icon glyph size as a fraction of the seal (mic 0.46, quill 0.36) */
+  iconScale?: number;
 }
 
 /** A sheet of paper on the desk — the app's real texture + shadow tokens. */

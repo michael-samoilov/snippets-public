@@ -115,10 +115,16 @@ async function capturePlates(browser) {
     // cards outside the render window are cv:hidden — "attached" is the signal
     await page.waitForSelector(".book-card", { state: "attached", timeout: 45000 });
     await page.waitForTimeout(2500); // fonts + motion settle
+    // today zone (tall) — the fresh load lands on today's foot; scroll to the
+    // very bottom to frame the composer (date, ruled lines, mic seal)
+    await page.mouse.move(195, 420);
+    await page.mouse.wheel(0, 4000);
+    await page.waitForTimeout(1200);
+    await page.screenshot({ path: `public/og-plates/today-${theme}.png` });
+    console.log(`plate today-${theme}`);
     // scroll up into the kept days so the plate shows the book alive, not the
     // (mostly empty) fresh today zone — today is the book's END, so scroll up
-    await page.mouse.move(195, 420);
-    await page.mouse.wheel(0, -1400);
+    await page.mouse.wheel(0, -2600);
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `public/og-plates/schedule-${theme}.png` });
     console.log(`plate schedule-${theme}`);
