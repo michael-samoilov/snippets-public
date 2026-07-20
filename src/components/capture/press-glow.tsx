@@ -300,8 +300,20 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       if (wait > 0) dwell = window.setTimeout(exit, wait);
       else exit();
     };
+    // a tap that lands on an ALREADY-FOCUSED editable field in this surface is
+    // text work — placing the caret, or summoning the paste edit-menu on the
+    // caret — not a press to bloom. The glow's arm()/bloom would relayer the
+    // field right as iOS presents that menu and kill it (same failure as the
+    // selection callout). The FIRST tap into an unfocused field isn't caught
+    // (focus lands on touchend/click, after this pointerdown), so the
+    // engage-to-write bloom still plays; only re-taps while focused stay dark.
+    const caretTap = (e: PointerEvent) => {
+      const t = e.target;
+      const field = t instanceof Element ? t.closest("textarea, input") : null;
+      return !!field && host.contains(field) && document.activeElement === field;
+    };
     const onDown = (e: PointerEvent) => {
-      if (selectionStands()) return; // the callout's tap — stay dark
+      if (selectionStands() || caretTap(e)) return; // text interaction — stay dark
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
       clearTimeout(dwell);
