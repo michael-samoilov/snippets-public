@@ -424,7 +424,14 @@ function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
       return <Plate b={b} dark={dark} />;
     case "bg":
       return (
-        <div style={{ position: "absolute", inset: 0, background: b.css }} />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: b.css,
+            backgroundBlendMode: b.blend,
+          }}
+        />
       );
     case "light": {
       const a = 0.55 * (b.strength ?? 0.5);

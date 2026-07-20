@@ -161,6 +161,9 @@ export interface OgLightBlock {
 export interface OgBgBlock {
   kind: "bg";
   css: string;
+  /** background-blend-mode (e.g. "multiply", "soft-light") for layering a
+   *  gradient over the paper texture */
+  blend?: string;
 }
 
 /** Generic blocking box for anything not yet buildable — renders as a dashed
