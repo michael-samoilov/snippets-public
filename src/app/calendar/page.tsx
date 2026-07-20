@@ -4282,15 +4282,6 @@ const BookRow = memo(function BookRow({
   );
 });
 
-/* Land a day 1px SHY of its top edge: the tapped day's own border-t then
-   rests a visible sliver BELOW the terminus hairline instead of at the exact
-   clip edge, where a sub-pixel settle half-clips it into the faded blink the
-   opaque --terminus-line fix addressed (the sliver also reads as "the page
-   starts here", the owner's ask). relandOnRow and scrollToRow's landing MUST
-   share this inset — a mismatch reads as drift and re-scrolls. exactness
-   tolerance: measure-dive-exactness's TOL (2px) absorbs the deliberate +1. */
-const LAND_INSET_PX = 1;
-
 /**
  * The deepest altitude is the book itself: every day that holds
  * something, stacked in time, the dates standing in the margin like a
@@ -4664,9 +4655,9 @@ function ScheduleFeedBase({
       if (!el || !row) return;
       let corrected = false;
       for (let i = 0; i < 3; i++) {
-        const drift = row.offsetTop - LAND_INSET_PX - el.scrollTop;
+        const drift = row.offsetTop - el.scrollTop;
         if (Math.abs(drift) <= 1) break;
-        el.scrollTop = Math.max(0, row.offsetTop - LAND_INSET_PX);
+        el.scrollTop = row.offsetTop;
         markOnStage(); // band shifted with the scroll — re-flip cv states + flush
         corrected = true;
       }
@@ -5052,10 +5043,7 @@ function ScheduleFeedBase({
     // still inside the tap's dwell; a climb that starts first widens it
     // itself (markOnStage), so the full band always stands by liftoff.
     warmBand(row.offsetTop, 0.35);
-    el.scrollTo({
-      top: Math.max(0, row.offsetTop - LAND_INSET_PX),
-      behavior: smooth ? "smooth" : "instant",
-    });
+    el.scrollTo({ top: row.offsetTop, behavior: smooth ? "smooth" : "instant" });
     if (!narrow)
       requestAnimationFrame(() => {
         if (climbingRef.current) return;
