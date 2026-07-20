@@ -10,7 +10,7 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
         "texture": "/textures/sheet-light.webp",
         "textureRotate": 90,
         "textureSize": "cover"
@@ -68,7 +68,7 @@
       {
         "kind": "wordmark",
         "cx": 205,
-        "cy": 315,
+        "cy": 272,
         "fontPx": 60
       }
     ]
@@ -84,7 +84,7 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
         "texture": "/textures/sheet-light.webp",
         "textureRotate": 90,
         "textureSize": "cover"
@@ -142,7 +142,7 @@
       {
         "kind": "wordmark",
         "cx": 178,
-        "cy": 150,
+        "cy": 107,
         "fontPx": 58
       },
       {
@@ -151,7 +151,7 @@
         "voice": "display",
         "sizePx": 46,
         "x": 58,
-        "y": 395,
+        "y": 438,
         "color": "ink",
         "italic": true,
         "lineHeight": 1.05
@@ -162,7 +162,7 @@
         "voice": "display",
         "sizePx": 46,
         "x": 58,
-        "y": 450,
+        "y": 493,
         "color": "ink",
         "italic": true,
         "lineHeight": 1.05
@@ -180,7 +180,7 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
         "texture": "/textures/sheet-light.webp",
         "textureRotate": 90,
         "textureSize": "cover"
@@ -238,7 +238,7 @@
       {
         "kind": "wordmark",
         "cx": 178,
-        "cy": 150,
+        "cy": 107,
         "fontPx": 58
       },
       {
@@ -247,7 +247,7 @@
         "voice": "display",
         "sizePx": 46,
         "x": 58,
-        "y": 395,
+        "y": 438,
         "color": "ink",
         "italic": false,
         "lineHeight": 1.05
@@ -258,7 +258,7 @@
         "voice": "display",
         "sizePx": 46,
         "x": 58,
-        "y": 450,
+        "y": 493,
         "color": "ink",
         "italic": false,
         "lineHeight": 1.05
@@ -276,7 +276,7 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
         "texture": "/textures/sheet-light.webp",
         "textureRotate": 90,
         "textureSize": "cover"
@@ -334,7 +334,7 @@
       {
         "kind": "wordmark",
         "cx": 175,
-        "cy": 148,
+        "cy": 105,
         "fontPx": 56
       },
       {
@@ -343,7 +343,7 @@
         "voice": "display",
         "sizePx": 44,
         "x": 58,
-        "y": 398,
+        "y": 441,
         "color": "ink-soft",
         "italic": true,
         "lineHeight": 1.05
@@ -354,7 +354,7 @@
         "voice": "display",
         "sizePx": 44,
         "x": 58,
-        "y": 452,
+        "y": 495,
         "color": "ink-soft",
         "italic": true,
         "lineHeight": 1.05
