@@ -404,7 +404,16 @@ thing, so "tap the seal" stays — or when it genuinely aids
 understanding; otherwise the plainer, more idiomatic word wins. A reader
 should never have to learn our theme to understand what a control does.
 
-## Architecture notes that protect the design
+**Be concrete, not vague.** When a thing has a real figure — a duration,
+a count, an interval, a limit — name it. *Checks every 15 minutes* beats
+*checks now and then*; *1,204 on this device* beats *your entries*; *at
+least ten characters* beats *long enough*. A soft quantifier makes the
+reader guess and can read as evasive; a specific number is both clearer
+and more trustworthy. Same instinct as naming things plainly — never make
+the reader decode, and don't hide behind a vague word when a precise one
+is truer. (The exception is a figure that would be a lie to state
+precisely — a gap you deliberately leave blank, an outcome you can't
+promise — where honesty is the vaguer word.)
 
 - Local-first Dexie; soft delete + undo; day keys in local time.
 - **Sync is strictly additive.** The device copy is always whole;

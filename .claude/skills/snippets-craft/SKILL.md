@@ -105,7 +105,11 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    it names an actual on-screen object — the **wax seal** you tap to
    record/keep is real, so "tap the seal" stays — or genuinely aids
    understanding; otherwise the plainer word wins. When in doubt, prefer
-   the word a non-user would understand.
+   the word a non-user would understand. **Be concrete, not vague:** when
+   a thing has a real figure — an interval, a count, a limit — name it
+   (*every 15 minutes*, not *now and then*; *at least ten characters*, not
+   *long enough*). A specific number is clearer, and reads as more honest,
+   than a soft quantifier that makes the reader guess.
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.
