@@ -285,6 +285,10 @@ html {
   --font-mono: var(--font-plex-mono), "SF Mono", ui-monospace, monospace;
   --font-sans: var(--font-fraunces), Georgia, serif;
 
+  /* the one size for serif control text — buttons, inputs, action titles.
+     Voices are used at named steps (base, -sm, text-ui), never text-[…]. */
+  --text-ui: 0.95rem;
+
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
@@ -670,6 +674,17 @@ textarea:focus-visible,
     color: var(--ink-soft);
   }
 
+  /* the label voice's one smaller step — tabs, status words, field labels */
+  .voice-label-sm {
+    font-family: var(--font-serif);
+    font-variant-caps: all-small-caps;
+    font-variant-numeric: oldstyle-nums;
+    font-weight: 540;
+    font-size: 0.8rem;
+    letter-spacing: 0.13em;
+    color: var(--ink-soft);
+  }
+
   /* data: mono strictly for true data — times, counts. lowercase, tiny */
   .voice-data {
     font-family: var(--font-mono);
@@ -689,6 +704,17 @@ textarea:focus-visible,
     letter-spacing: 0.001em;
     text-shadow: 0 0 0.45px currentColor;
   }
+
+  /* the prose voice's one smaller step — control-page body, hints,
+     dialog descriptions. Entry prose stays at the base size. */
+  .voice-prose-sm {
+    font-family: var(--font-serif);
+    font-weight: 420;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    letter-spacing: 0.001em;
+    text-shadow: 0 0 0.45px currentColor;
+  }
 }
 
 /* ── ink on paper ──────────────────────────────────────────────
@@ -696,10 +722,12 @@ textarea:focus-visible,
    of the PaperTexture show through the strokes — the paper drinks
    the ink. Lamplight ink is luminous; it stays unblended. */
 .voice-prose,
+.voice-prose-sm,
 .voice-display {
   mix-blend-mode: multiply;
 }
 .dark .voice-prose,
+.dark .voice-prose-sm,
 .dark .voice-display {
   mix-blend-mode: normal;
 }

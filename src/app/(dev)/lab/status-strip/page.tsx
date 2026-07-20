@@ -7,6 +7,8 @@
  * dot-vs-icon decisions can be seen, not argued. Dev-only (lab).
  */
 
+import { SectionHeading } from "@/components/section-heading";
+
 const iconProps = {
   "aria-hidden": true,
   viewBox: "0 0 24 24",
@@ -121,7 +123,7 @@ function Row({
   return (
     <div className="grid grid-cols-[1.25rem_1fr] items-center gap-x-3 gap-y-1">
       <span className={`flex justify-center ${tone[state]}`}>{mark}</span>
-      <span className={`voice-label text-[0.8rem] ${tone[state]}`}>{word}</span>
+      <span className={`voice-label-sm ${tone[state]}`}>{word}</span>
       <p className="col-start-2 voice-data text-ink-soft">
         {sub}
       </p>
@@ -197,9 +199,7 @@ function Panel({
 }) {
   return (
     <section className="max-w-[30rem]">
-      <h2 className="voice-label border-b border-rule pb-1.5 text-ink-faint">
-        {title}
-      </h2>
+      <SectionHeading className="text-ink-faint">{title}</SectionHeading>
       <div className="mt-4">{children}</div>
     </section>
   );

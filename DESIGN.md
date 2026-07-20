@@ -84,6 +84,29 @@ The Today masthead pattern: small-caps eyebrow (weekday) → huge display
 date → italic serif stat line with `<NumberFlow>`. Other pages: display
 title + italic stat line (no forced eyebrow).
 
+### Named steps (the size scale)
+
+A voice is set only at a **named step** — never with an ad-hoc
+`text-[…]`. The settings page once carried ~12 arbitrary sizes between
+0.7 and 1.05rem (seven visibly different treatments in one
+screen-height); the fix was to decide each size once and let it ripple.
+
+| Step | Size | Serves |
+|---|---|---|
+| `voice-label` | 0.86rem | section headings (via `<SectionHeading>`) |
+| `voice-label-sm` | 0.8rem | tabs, status words, field labels, TOC links |
+| `voice-prose` | 17px | entry text — nothing else |
+| `voice-prose-sm` | 0.9rem/1.55 | control-page body, hints, dialog descriptions |
+| `text-ui` | 0.95rem | ALL serif control text: buttons, inputs, action titles |
+| `text-lg` | — | dialog titles (on `voice-display`) |
+
+Action titles ("Disconnect Google Drive") are `voice-display text-ui` —
+the display voice IS the heading voice; there is no fifth voice.
+Hierarchy on control pages comes from the ink ramp (`ink` → `ink-soft`
+→ `ink-faint`), not from more sizes. One tuned exception: the calendar
+composer's textarea keeps a literal 0.9rem + line-height pairing so its
+wrapping matches the book card preview character-for-character.
+
 ## Motion
 
 Strong curves, short durations, springs for anything touchable.
