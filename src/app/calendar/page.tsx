@@ -1525,6 +1525,11 @@ function Calendar() {
       }
       if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
+      // the dive's terminus stand-in: restore its class transition (held off
+      // for the move so the cancel is INSTANT — a 180ms opacity fade-out at
+      // its resting row, one pixel above where it landed, read as the line
+      // settling down a pixel at the end; owner recording 2026-07-20)
+      if (seatLineRef.current) seatLineRef.current.style.transitionProperty = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       // Hand input back NOW, synchronously: the shield goes and the landed
@@ -2562,6 +2567,13 @@ function Calendar() {
         // identical in-layer line beneath it, landed on the same row.
         const seatLine = seatLineRef.current;
         if (seatLine && zoom.from === "month" && zoom.to === "schedule") {
+          // no class transition while the stand-in works: finish()'s cancel
+          // must remove it in the SAME frame the identical in-layer line is
+          // revealed — with transition-opacity live, the cancelled line faded
+          // out over 180ms at its resting row (1px above its landing), which
+          // read as the hairline nudging down a pixel at the end. Restored in
+          // finish so the year/entry seat fades keep their ease.
+          seatLine.style.transitionProperty = "none";
           const oy = o ? o.y : stageRect.height * 0.3;
           const y0 = oy * (1 - inFrom);
           const standFade = seatLine.animate(
