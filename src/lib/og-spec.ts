@@ -131,6 +131,10 @@ export interface OgPlateBlock {
   w: number;
   h: number;
   rotateDeg?: number;
+  /** transform-origin Y in px from the card's top edge (X fixed at 50%). Give
+   *  every card in a fan the same value (and the same x/y/w/h) so they share a
+   *  pivot: an even rotation step then yields an even fan. */
+  originYpx?: number;
   /** frameless full-bleed app UI (no border/shadow/radius) */
   bleed?: boolean;
   /** use the portrait bleed capture (<view>-bleed.png) instead of the tall

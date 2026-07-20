@@ -149,6 +149,10 @@ function Plate({ b, dark }: { b: Extract<OgBlock, { kind: "plate" }>; dark: bool
         width: b.w,
         height: b.h,
         transform: b.rotateDeg ? `rotate(${b.rotateDeg}deg)` : undefined,
+        // a shared pivot (below the cards, same for every card in a fan) makes
+        // an even angular fan — equal rotation step ⇒ equal corner step
+        transformOrigin:
+          b.originYpx !== undefined ? `50% ${b.originYpx}px` : undefined,
         border: bleed
           ? "none"
           : missing

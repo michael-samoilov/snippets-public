@@ -2,128 +2,128 @@
   {
     "key": "sq-entry-seal185-stackcur",
     "theme": "light",
-    "concept": "Entry on top · seal 185 · current stack. (The reference stackw-quill-wm.)",
+    "concept": "Entry on top · seal 185 · current stack · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
       { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 400, "y": 66, "w": 320, "h": 486, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 535, "y": 66, "w": 320, "h": 486, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 670, "y": 60, "w": 320, "h": 486, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 805, "y": 66, "w": 320, "h": 486, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 950, "cy": 430, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
-      { "kind": "wordmark", "cx": 225, "cy": 315, "fontPx": 62 }
+      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
+      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
+      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
+      { "kind": "plate", "view": "entry", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
+      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
+      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-entry-seal155-stackcur",
     "theme": "light",
-    "concept": "Entry on top · smaller seal 155 · current stack.",
+    "concept": "Entry on top · smaller seal 155 · current stack · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
       { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 400, "y": 66, "w": 320, "h": 486, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 535, "y": 66, "w": 320, "h": 486, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 670, "y": 60, "w": 320, "h": 486, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 805, "y": 66, "w": 320, "h": 486, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 950, "cy": 430, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
-      { "kind": "wordmark", "cx": 225, "cy": 315, "fontPx": 62 }
+      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
+      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
+      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
+      { "kind": "plate", "view": "entry", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
+      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
+      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-entry-seal185-stackbig",
     "theme": "light",
-    "concept": "Entry on top · seal 185 · larger stack cropped at bottom and right.",
+    "concept": "Entry on top · seal 185 · larger stack (cropped) · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
-      { "kind": "light", "cx": 820, "cy": 210, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 450, "y": 83, "w": 375, "h": 580, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 585, "y": 83, "w": 375, "h": 580, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 720, "y": 77, "w": 375, "h": 580, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 855, "y": 83, "w": 375, "h": 580, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 1025, "cy": 517, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
+      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
+      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
+      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
+      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
+      { "kind": "plate", "view": "entry", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
+      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
       { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-entry-seal155-stackbig",
     "theme": "light",
-    "concept": "Entry on top · smaller seal 155 · larger stack cropped at bottom and right.",
+    "concept": "Entry on top · smaller seal 155 · larger stack (cropped) · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
-      { "kind": "light", "cx": 820, "cy": 210, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 450, "y": 83, "w": 375, "h": 580, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 585, "y": 83, "w": 375, "h": 580, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 720, "y": 77, "w": 375, "h": 580, "rotateDeg": 2 },
-      { "kind": "plate", "view": "entry", "x": 855, "y": 83, "w": 375, "h": 580, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 1025, "cy": 517, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
+      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
+      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
+      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
+      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
+      { "kind": "plate", "view": "entry", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
+      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
       { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-today-seal185-stackcur",
     "theme": "light",
-    "concept": "Today zone on top · seal 185 · current stack.",
+    "concept": "Today zone on top · seal 185 · current stack · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
       { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 400, "y": 66, "w": 320, "h": 486, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 535, "y": 66, "w": 320, "h": 486, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 670, "y": 60, "w": 320, "h": 486, "rotateDeg": 2 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 805, "y": 66, "w": 320, "h": 486, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 950, "cy": 430, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
-      { "kind": "wordmark", "cx": 225, "cy": 315, "fontPx": 62 }
+      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
+      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
+      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
+      { "kind": "plate", "view": "today", "portrait": true, "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
+      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
+      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-today-seal155-stackcur",
     "theme": "light",
-    "concept": "Today zone on top · smaller seal 155 · current stack.",
+    "concept": "Today zone on top · smaller seal 155 · current stack · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
       { "kind": "light", "cx": 760, "cy": 190, "radius": 950, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 400, "y": 66, "w": 320, "h": 486, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 535, "y": 66, "w": 320, "h": 486, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 670, "y": 60, "w": 320, "h": 486, "rotateDeg": 2 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 805, "y": 66, "w": 320, "h": 486, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 950, "cy": 430, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
-      { "kind": "wordmark", "cx": 225, "cy": 315, "fontPx": 62 }
+      { "kind": "plate", "view": "year", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -12, "originYpx": 770 },
+      { "kind": "plate", "view": "calendar", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": -4, "originYpx": 770 },
+      { "kind": "plate", "view": "schedule", "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 4, "originYpx": 770 },
+      { "kind": "plate", "view": "today", "portrait": true, "x": 620, "y": 75, "w": 320, "h": 486, "rotateDeg": 12, "originYpx": 770 },
+      { "kind": "seal", "cx": 864, "cy": 448, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
+      { "kind": "wordmark", "cx": 220, "cy": 310, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-today-seal185-stackbig",
     "theme": "light",
-    "concept": "Today zone on top · seal 185 · larger stack cropped at bottom and right.",
+    "concept": "Today zone on top · seal 185 · larger stack (cropped) · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
-      { "kind": "light", "cx": 820, "cy": 210, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 450, "y": 83, "w": 375, "h": 580, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 585, "y": 83, "w": 375, "h": 580, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 720, "y": 77, "w": 375, "h": 580, "rotateDeg": 2 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 855, "y": 83, "w": 375, "h": 580, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 1025, "cy": 517, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
+      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
+      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
+      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
+      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
+      { "kind": "plate", "view": "today", "portrait": true, "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
+      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 185, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
       { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
     ]
   },
   {
     "key": "sq-today-seal155-stackbig",
     "theme": "light",
-    "concept": "Today zone on top · smaller seal 155 · larger stack cropped at bottom and right.",
+    "concept": "Today zone on top · smaller seal 155 · larger stack (cropped) · even fan.",
     "lens": "stack",
     "needs": ["plate"],
     "blocks": [
-      { "kind": "light", "cx": 820, "cy": 210, "radius": 1000, "strength": 0.3 },
-      { "kind": "plate", "view": "year", "x": 450, "y": 83, "w": 375, "h": 580, "rotateDeg": -8 },
-      { "kind": "plate", "view": "calendar", "x": 585, "y": 83, "w": 375, "h": 580, "rotateDeg": -3 },
-      { "kind": "plate", "view": "schedule", "x": 720, "y": 77, "w": 375, "h": 580, "rotateDeg": 2 },
-      { "kind": "plate", "view": "today", "portrait": true, "x": 855, "y": 83, "w": 375, "h": 580, "rotateDeg": 7 },
-      { "kind": "seal", "cx": 1025, "cy": 517, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 7 },
+      { "kind": "light", "cx": 810, "cy": 200, "radius": 1000, "strength": 0.3 },
+      { "kind": "plate", "view": "year", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -12, "originYpx": 900 },
+      { "kind": "plate", "view": "calendar", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": -4, "originYpx": 900 },
+      { "kind": "plate", "view": "schedule", "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 4, "originYpx": 900 },
+      { "kind": "plate", "view": "today", "portrait": true, "x": 615, "y": 60, "w": 375, "h": 580, "rotateDeg": 12, "originYpx": 900 },
+      { "kind": "seal", "cx": 899, "cy": 505, "sizePx": 155, "glyph": "e:quill", "tint": "app", "rotateDeg": 12 },
       { "kind": "wordmark", "cx": 215, "cy": 300, "fontPx": 62 }
     ]
   }
