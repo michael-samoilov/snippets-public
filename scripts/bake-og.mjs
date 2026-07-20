@@ -218,8 +218,17 @@ async function capturePlates(browser) {
   await bp.mouse.move(210, 420);
   await bp.mouse.wheel(0, 4000);
   await bp.waitForTimeout(1500);
+  // for the preview only: reveal the header's full date (the entry-view form,
+  // "Monday, July 20, 2026") instead of the schedule's "July 2026". The wipe is
+  // CSS-gated (grid-template-columns 0fr→1fr), so force it open just for this
+  // shot, then remove the rule so the other plates keep their normal headers.
+  const wipe = await bp.addStyleTag({
+    content: "[data-wipe]{grid-template-columns:1fr!important;opacity:1!important}",
+  });
+  await bp.waitForTimeout(300);
   await bp.screenshot({ path: "public/og-plates/today-bleed.png" });
   console.log("plate today-bleed");
+  await wipe.evaluate((el) => el.remove());
 
   // schedule — scroll up into the kept days
   await bp.mouse.wheel(0, -2600);
