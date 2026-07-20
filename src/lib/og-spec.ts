@@ -164,6 +164,18 @@ export interface OgBgBlock {
   /** background-blend-mode (e.g. "multiply", "soft-light") for layering a
    *  gradient over the paper texture */
   blend?: string;
+  /** paper texture on its OWN layer, painted UNDER `css`, so it can be scaled
+   *  and rotated independently of the gradient. Set this and `css` becomes the
+   *  gradient alone. The source sheet is portrait; on the landscape frame a
+   *  plain `cover` upscales it (grain reads zoomed-in), so a 90° `textureRotate`
+   *  turns it landscape and lets `cover` scale DOWN instead — finer grain, no
+   *  upscaling. */
+  texture?: string;
+  /** degrees to rotate the texture layer (90 turns the portrait sheet
+   *  landscape). Only 0/90/180/270 are box-fitted to fill the frame. */
+  textureRotate?: number;
+  /** background-size for the texture layer (default "cover"). */
+  textureSize?: string;
 }
 
 /** Generic blocking box for anything not yet buildable — renders as a dashed

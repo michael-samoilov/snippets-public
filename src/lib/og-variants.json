@@ -10,7 +10,10 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
       },
       {
         "kind": "plate",
@@ -81,7 +84,10 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
       },
       {
         "kind": "plate",
@@ -174,7 +180,10 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
       },
       {
         "kind": "plate",
@@ -267,7 +276,10 @@
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+        "css": "linear-gradient(140deg, rgba(248,240,221,0.80) 0%, rgba(230,218,190,0.40) 46%, rgba(198,182,148,0.90) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
       },
       {
         "kind": "plate",

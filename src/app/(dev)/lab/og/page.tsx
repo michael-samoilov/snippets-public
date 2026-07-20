@@ -422,17 +422,42 @@ function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
     }
     case "plate":
       return <Plate b={b} dark={dark} />;
-    case "bg":
+    case "bg": {
+      // a rotated texture layer (see OgBgBlock.texture): the portrait sheet is
+      // turned landscape so `cover` scales it DOWN instead of up. For a 90°/270°
+      // turn the pre-rotation box is the frame with width/height swapped, so the
+      // turned layer still fills every edge.
+      const quarter =
+        b.textureRotate != null && Math.abs(b.textureRotate) % 180 === 90;
       return (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: b.css,
-            backgroundBlendMode: b.blend,
-          }}
-        />
+        <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+          {b.texture && (
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                width: quarter ? H : W,
+                height: quarter ? W : H,
+                transform: `translate(-50%, -50%) rotate(${b.textureRotate ?? 0}deg)`,
+                backgroundImage: `url(${b.texture})`,
+                backgroundSize: b.textureSize ?? "cover",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
+              }}
+            />
+          )}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: b.css,
+              backgroundBlendMode: b.blend,
+            }}
+          />
+        </div>
       );
+    }
     case "light": {
       const a = 0.55 * (b.strength ?? 0.5);
       return (
