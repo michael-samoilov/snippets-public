@@ -27,8 +27,16 @@ for (const m of manifest) {
   imgs[m.key] = `data:image/jpeg;base64,${buf.toString("base64")}`;
 }
 
-const LENS_ORDER = ["hero-object", "editorial", "app-truth", "material", "scene", "wild", "smoke"];
+const LENS_ORDER = [
+  "letter", "corner", "diary", "envelope", "stack",
+  "hero-object", "editorial", "app-truth", "material", "scene", "wild", "smoke",
+];
 const LENS_TITLES = {
+  letter: "Letter — a sealed sheet on the desk",
+  corner: "Corner desk — the sheet arriving into open space",
+  diary: "Diary today — the dated page",
+  envelope: "Envelope — the seal closing the sheet",
+  stack: "Stacked altitudes — the app's zoom levels as a deck",
   "hero-object": "Hero object — the seal monumental",
   editorial: "Editorial — type leads",
   "app-truth": "App truth — the product itself",
@@ -42,6 +50,11 @@ for (const m of manifest) {
   if (!byLens.has(m.lens)) byLens.set(m.lens, []);
   byLens.get(m.lens).push(m);
 }
+// any lens not in the fixed order still renders, appended at the end
+const orderedLenses = [
+  ...LENS_ORDER.filter((l) => byLens.has(l)),
+  ...[...byLens.keys()].filter((l) => !LENS_ORDER.includes(l)),
+];
 
 const card = (m) => `
 <article class="variant" id="${esc(m.key)}">
@@ -81,7 +94,7 @@ const card = (m) => `
   </div>
 </article>`;
 
-const sections = LENS_ORDER.filter((l) => byLens.has(l))
+const sections = orderedLenses
   .map(
     (l) => `
 <section class="lens">
