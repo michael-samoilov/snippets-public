@@ -273,12 +273,17 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         }
         const next = `scale(${eff})`;
         if (bloomEl.style.transform !== next) bloomEl.style.transform = next;
+        bloomEl.style.transitionDuration = ""; // animate the bloom-in (class 500ms)
       } else if (bloomEl.style.transform !== "") {
-        // retract on release even while a selection stands: a transform is
-        // something iOS follows the callout around (like a scroll/zoom),
-        // not a relayer. The callout-killer is the compositing shed in
-        // level(), which stays deferred. If a device ever shows the callout
-        // dying on the retraction itself, gate this on selectionStands() too.
+        // retract on release even while a selection stands. WebKit engine
+        // testing (scripts/measure-webkit-callout.py) proved the retract
+        // never disturbs the DOM selection — so the iOS callout only ever
+        // hides because the ANIMATED transform moves the selection rect for
+        // 500ms, the sustained motion iOS hides the callout during. So while
+        // a selection stands, retract INSTANTLY: the rect jumps once (iOS
+        // repositions the callout to follow) instead of gliding. Otherwise
+        // the bloom deflates on its normal soft curve.
+        bloomEl.style.transitionDuration = selectionStands() ? "0ms" : "";
         bloomEl.style.transform = "";
       }
     };
