@@ -1049,18 +1049,6 @@ function Calendar() {
   const zooming = useRef(false);
   const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { weekStart } = useSettings();
-  // the weekday rail's height — the terminus hairline's month-view seat
-  // (measured, never hardcoded, so a type change can't strand the line).
-  // Measured in a layout effect (pre-paint: a deep link into month view
-  // never sees the line slide into place) and re-checked once the webfonts
-  // settle, since the rail's line box is set by the label face.
-  const railRef = useRef<HTMLDivElement | null>(null);
-  const [railH, setRailH] = useState(0);
-  useLayoutEffect(() => {
-    const measure = () => setRailH((h) => railRef.current?.offsetHeight ?? h);
-    measure();
-    void document.fonts?.ready.then(measure);
-  }, [weekStart]);
   useEffect(() => {
     return () => {
       if (urlTimer.current) clearTimeout(urlTimer.current);
@@ -3788,25 +3776,27 @@ function Calendar() {
       </div>
       </div>
 
-      {/* the header's bottom rule — ONE hairline for every view, and the
-          scroll area's top terminus: it seats under the title at the year/
-          schedule/entry altitudes and under the weekday rail (S M T W T F S)
-          at the month altitude, SLIDING between the two seats as the
-          altitude changes (setView fires at move start, so the slide rides
-          the camera). The visible line is a transform-only overlay on the
-          motion tokens; the STRUCTURAL 1px stays put as a transparent
-          border, so no view flip ever resizes the stage — resizing it was
-          the old rail-border's ~140ms setup snap (see the rail note in the
-          month layer). */}
+      {/* the header's bottom rule — the scroll area's top terminus at the
+          year/schedule/entry altitudes. At the MONTH altitude the terminus
+          is the weekday rail's own border-b, which fades/scales as part of
+          the calendar's image (see the rail in the month layer) — so this
+          seat renders only when no month image is on stage: hidden the
+          moment a rise begins (the arriving calendar brings its own line),
+          and appearing only at a dive's finish (the schedule's day-top
+          hairline already animates into place during the move — a second
+          moving line would double it). The STRUCTURAL 1px stays put as a
+          transparent border, so no view flip ever resizes the stage —
+          resizing it was the old rail-fold's ~140ms setup snap. */}
       <div className="relative mt-5 border-b border-transparent">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-rule-faint"
-          style={{
-            transform:
-              view === "month" && railH ? `translateY(${railH}px)` : undefined,
-            transition: "transform var(--dur-slow) var(--ease-out)",
-          }}
+          className={cn(
+            "pointer-events-none absolute inset-x-0 top-0 h-px bg-rule-faint transition-opacity",
+            view !== "month" && zoom?.from !== "month"
+              ? "opacity-100"
+              : "opacity-0",
+          )}
+          style={{ transitionDuration: "var(--dur-base)" }}
         />
       </div>
 
@@ -3869,10 +3859,13 @@ function Calendar() {
               tick ~140ms on device). Inside the layer, view flips never
               touch the stage's geometry at all. */}
           <div
-            ref={railRef}
             role="row"
             aria-hidden={view !== "month"}
-            className="grid shrink-0 grid-cols-7 pt-1.5"
+            // border-b: the month altitude's scroll terminus — INSIDE the
+            // layer, so it fades/scales as part of the calendar's image on
+            // every move (the header's seat line takes over only once no
+            // month image is on stage; see the header rule above)
+            className="grid shrink-0 grid-cols-7 border-b border-rule-faint pt-1.5"
           >
             {weekdays(weekStart).map((d, i) => (
               <span
