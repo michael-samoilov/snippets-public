@@ -22,11 +22,21 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    highlight, no seat shadow, because the schedule renders hundreds at once
    (unwindowed) and a blurred shadow per card jetsam-kills iOS. See the
    FLAT-BOOK LAW below (rule 6) and on `.book-card` in `globals.css`.
-2. **Four voices, two fonts.** `.voice-display` (Fraunces WONK,
-   letterpress) · `.voice-label` (small-caps serif — section headers,
-   nav, chips) · `.voice-data` (tiny lowercase mono — times, counts,
-   tags ONLY) · `.voice-prose` (entry text). Mono is never uppercase and
-   never used for labels. No Inter, no icon fonts; buttons are serif.
+2. **Four voices, two fonts, named steps.** `.voice-display` (Fraunces
+   WONK, letterpress) · `.voice-label` (small-caps serif — section
+   headers, nav, chips) · `.voice-data` (tiny lowercase mono — times,
+   counts, tags ONLY) · `.voice-prose` (entry text). Mono is never
+   uppercase and never used for labels. No Inter, no icon fonts; buttons
+   are serif. Voices are set only at their **named steps** — the base
+   class, its `-sm` variant (`voice-label-sm`, `voice-prose-sm`), or
+   `text-ui` (0.95rem, the ONE size for serif control text: buttons,
+   inputs, action titles) — **never `text-[…]` a voice**; if a new size
+   is truly needed it becomes a named step in `globals.css` first.
+   Section headers render through `<SectionHeading>`
+   (`src/components/section-heading.tsx`), not hand-rolled
+   `voice-label border-b` strings. (One tuned exception: the calendar
+   composer's textarea keeps its literal 0.9rem/line-height pairing —
+   it must wrap character-for-character like the book card preview.)
 3. **Everything pressable feels physical.** Use `.pressable` (it owns
    the `transition` property — never pair with `transition-*`
    utilities), or the raised-button recipe (inset top highlight + drop

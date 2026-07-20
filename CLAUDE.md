@@ -216,6 +216,10 @@ harnesses for correctness, and nothing replaces the on-device pass.
 
 ## Deploy
 
+**Production branch: `claude/nice-dijkstra-q7d285`** — this repo has no
+`main`/`master`; that branch is the GitHub default and what prod deploys
+from. Merge finished feature branches there (no need to ask).
+
 Any Node host (Vercel works as-is). Sync/backup need
 `DATABASE_URL`/`BETTER_AUTH_SECRET` (and the Google/Resend keys);
 without them the app stays whole and device-only.

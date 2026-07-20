@@ -50,6 +50,7 @@ import {
 import { formatBytes, useStorageHealth } from "@/lib/storage-health";
 import { PaperButton } from "@/components/paper-button";
 import { PageBackHeader } from "@/components/page-back-header";
+import { SectionHeading } from "@/components/section-heading";
 import { copy } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -142,7 +143,7 @@ function SettingsTabs({
             onClick={() => onSelect(t.id)}
             onKeyDown={(e) => onKeyDown(e, index)}
             className={cn(
-              "voice-label pressable relative -mb-px rounded-t-[5px] px-3 py-2 text-[0.82rem]",
+              "voice-label-sm pressable relative -mb-px rounded-t-[5px] px-3 py-2",
               active ? "text-wax" : "text-ink-soft hover:text-ink",
             )}
           >
@@ -225,6 +226,24 @@ function FolderGlyph() {
   );
 }
 
+// An action heading: a thing you can do, named in the display voice at
+// the control size, its consequence in quiet prose beneath. Every
+// settings action (danger, encryption off, backup disconnect) shares it.
+function SettingAction({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <p className="voice-display text-ui">{title}</p>
+      <p className="voice-prose-sm mt-0.5 text-ink-soft">{description}</p>
+    </div>
+  );
+}
+
 function formatDelivered(iso: string): string {
   const at = new Date(iso);
   if (isToday(at)) return format(at, "h:mm a");
@@ -248,7 +267,7 @@ function ProtRow({
   return (
     <div className="grid grid-cols-[1.25rem_1fr] items-center gap-x-3 gap-y-1">
       <span className={`flex justify-center ${protTone[state]}`}>{glyph}</span>
-      <span className={`voice-label text-[0.8rem] ${protTone[state]}`}>{word}</span>
+      <span className={`voice-label-sm ${protTone[state]}`}>{word}</span>
       {sub && <p className="col-start-2 voice-data text-ink-soft">{sub}</p>}
     </div>
   );
@@ -342,7 +361,7 @@ export default function SettingsPage() {
           className="space-y-10"
         >
         <section aria-label={copy.settings.appearance.themeLabel}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.appearance.themeLabel}</h2>
+          <SectionHeading>{copy.settings.appearance.themeLabel}</SectionHeading>
           <div className="mt-4 grid grid-cols-3 gap-3" role="radiogroup" aria-label={copy.settings.appearance.themeLabel}>
             <ThemeSwatch
               label={copy.themes.paper}
@@ -373,9 +392,9 @@ export default function SettingsPage() {
         </section>
 
         <section aria-label={copy.settings.calendar.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.calendar.heading}</h2>
+          <SectionHeading>{copy.settings.calendar.heading}</SectionHeading>
           <div className="mt-4 flex items-center justify-between gap-6">
-            <p className="font-serif text-[0.98rem]">{copy.settings.calendar.startWeek}</p>
+            <p className="voice-display text-ui">{copy.settings.calendar.startWeek}</p>
             <WeekStartChoice
               value={settings.weekStart}
               onChange={(v) => updateSettings({ weekStart: v })}
@@ -397,8 +416,8 @@ export default function SettingsPage() {
         {user && <BackupSection />}
 
         <section aria-label={copy.settings.data.heading}>
-          <h2 className="voice-label border-b border-rule pb-1.5">{copy.settings.data.heading}</h2>
-          <p className="voice-prose mt-4 text-[0.9rem] text-ink-soft">
+          <SectionHeading>{copy.settings.data.heading}</SectionHeading>
+          <p className="voice-prose-sm mt-4 text-ink-soft">
             {copy.settings.data.lead}
             {stats && stats.total > 0 && (
               <> {copy.settings.data.countSoFar(stats.total)}</>
@@ -443,7 +462,7 @@ export default function SettingsPage() {
           aria-labelledby="settings-tab-agreement"
           className="space-y-4"
         >
-          <p className="voice-prose max-w-[46ch] text-[0.9rem] text-ink-soft">
+          <p className="voice-prose-sm max-w-[46ch] text-ink-soft">
             {copy.settings.agreement.lead}
           </p>
           <div className="space-y-3">
@@ -485,10 +504,10 @@ function AgreementLink({
       className="pressable group flex items-center justify-between gap-3 rounded-[7px] border border-rule-faint px-4 py-3 hover:border-rule"
     >
       <span className="min-w-0">
-        <span className="voice-label block text-[0.75rem] text-ink-soft group-hover:text-ink">
+        <span className="voice-label-sm block text-ink-soft group-hover:text-ink">
           {title}
         </span>
-        <span className="voice-prose mt-0.5 block text-[0.85rem] text-ink-faint">
+        <span className="voice-prose-sm mt-0.5 block text-ink-faint">
           {sub}
         </span>
       </span>
@@ -535,7 +554,7 @@ function DangerZone({ user }: { user: { email: string } | null }) {
   return (
     <section aria-label={copy.settings.danger.heading}>
       <div className="rounded-2xl border border-ember/45 p-5 sm:p-6">
-        <h2 className="voice-label text-ember">{copy.settings.danger.heading}</h2>
+        <SectionHeading tone="ember">{copy.settings.danger.heading}</SectionHeading>
         <div className="mt-5 space-y-6">
           <DangerAction
             title={copy.settings.danger.eraseTitle}
@@ -575,12 +594,7 @@ function DangerAction({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <div>
-        <p className="font-serif text-[0.98rem] text-ink">{title}</p>
-        <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
-          {description}
-        </p>
-      </div>
+      <SettingAction title={title} description={description} />
       <HoldToErase label={hold} onComplete={() => void onComplete()} />
     </div>
   );
@@ -614,7 +628,7 @@ function SyncLines() {
           line itself, so there's no separate count line beneath */}
       <ProtRow glyph={<SyncGlyph />} {...syncRow(sync, online)} />
       {sync.skewed && (
-        <p className="voice-prose text-[0.9rem] text-ink-faint">
+        <p className="voice-prose-sm text-ink-faint">
           {copy.settings.sync.skewed}
         </p>
       )}
@@ -622,10 +636,10 @@ function SyncLines() {
         // the house pattern for actions: the state, then what pressing the
         // button will actually do, then the button (see turnOffHint)
         <div className="pt-1">
-          <p className="voice-prose text-[0.9rem] text-ember">
+          <p className="voice-prose-sm text-ember">
             {copy.settings.sync.outOfStep}
           </p>
-          <p className="voice-prose mt-1 text-[0.9rem] text-ink-faint">
+          <p className="voice-prose-sm mt-1 text-ink-faint">
             {copy.settings.sync.reconcileHint}
           </p>
           <div className="mt-3">
@@ -663,7 +677,7 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
           formatBytes(storage.quotaBytes),
         )}
       </p>
-      <p className="voice-prose text-[0.9rem] text-ink-faint">
+      <p className="voice-prose-sm text-ink-faint">
         {note}
       </p>
     </div>
@@ -740,7 +754,7 @@ function StrengthMeter({ score, label }: { score: number; label: string }) {
           />
         ))}
       </div>
-      <p className="voice-prose text-[0.8rem] text-ink-faint">{label}</p>
+      <p className="voice-prose-sm text-ink-faint">{label}</p>
     </div>
   );
 }
@@ -788,16 +802,18 @@ function EncryptionSection({ email }: { email: string }) {
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("seal") === "1",
   );
+  // NB: we do NOT strip ?seal=1 / ?unlock=1 here. Writing history
+  // (replaceState) from an arrival effect races Next's route-transition
+  // commit and, on WebKit, wedges the client router so the page can no
+  // longer navigate away at all — back AND a forward <Link> both dead
+  // (the locked-letter trap). The lingering param is harmless: a refresh
+  // just re-offers enroll / re-scrolls to unlock, both gated on real state.
   useEffect(() => {
-    if (wantSeal && enrolled === false) {
-      replaceUrl("/settings");
-      setEnrollOpen(true);
-    }
+    if (wantSeal && enrolled === false) setEnrollOpen(true);
   }, [wantSeal, enrolled]);
 
   // arriving from the calendar's locked letter ("Unlock in Settings"):
   // bring the unlock form into view once it's actually the section's body.
-  // Clean only the unlock param — the tab must survive a refresh.
   const sectionRef = useRef<HTMLElement>(null);
   const [wantUnlock] = useState(
     () =>
@@ -806,9 +822,6 @@ function EncryptionSection({ email }: { email: string }) {
   );
   useEffect(() => {
     if (!wantUnlock || !enrolled || hasKey !== false) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("unlock");
-    replaceUrl(url);
     sectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [wantUnlock, enrolled, hasKey]);
 
@@ -908,7 +921,7 @@ function EncryptionSection({ email }: { email: string }) {
             state="off"
           />
         </div>
-        <p className="voice-prose mt-4 text-[0.9rem] text-ink-soft">
+        <p className="voice-prose-sm mt-4 text-ink-soft">
           {copy.settings.encryption.offLead}
         </p>
         <div className="mt-4">
@@ -928,14 +941,10 @@ function EncryptionSection({ email }: { email: string }) {
           state="good"
         />
         <div className="mt-4 flex flex-col gap-3">
-          <div>
-            <p className="font-serif text-[0.98rem] text-ink">
-              {copy.settings.encryption.turnOff}
-            </p>
-            <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
-              {copy.settings.encryption.turnOffHint}
-            </p>
-          </div>
+          <SettingAction
+            title={copy.settings.encryption.turnOff}
+            description={copy.settings.encryption.turnOffHint}
+          />
           <HoldToErase
             // outline, not the solid ember of erase/delete: turning
             // encryption off is grave but loses nothing
@@ -987,7 +996,7 @@ function EncryptionSection({ email }: { email: string }) {
             }
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
-            className="h-10 flex-1 font-serif text-[1rem]"
+            className="h-10 flex-1 font-serif text-ui"
           />
           <PaperButton
             type="submit"
@@ -1001,7 +1010,7 @@ function EncryptionSection({ email }: { email: string }) {
         </div>
         <button
           type="button"
-          className="pressable mt-2 rounded-[5px] font-serif text-[0.9rem] text-ink-faint hover:text-ink-soft"
+          className="pressable mt-2 rounded-[5px] font-serif text-ui text-ink-faint hover:text-ink-soft"
           onClick={() => {
             setRecoveryMode((v) => !v);
             setError(null);
@@ -1017,12 +1026,10 @@ function EncryptionSection({ email }: { email: string }) {
 
   return (
     <section ref={sectionRef} aria-label={copy.settings.encryption.heading}>
-      <h2 className="voice-label border-b border-rule pb-1.5">
-        {copy.settings.encryption.heading}
-      </h2>
+      <SectionHeading>{copy.settings.encryption.heading}</SectionHeading>
       {body}
       {error && (
-        <p role="alert" className="voice-prose mt-3 text-[0.9rem] text-ember">
+        <p role="alert" className="voice-prose-sm mt-3 text-ember">
           {error}
         </p>
       )}
@@ -1031,10 +1038,10 @@ function EncryptionSection({ email }: { email: string }) {
       <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
         <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="voice-display text-left text-lg">
+            <DialogTitle>
               {copy.settings.encryption.enrollTitle}
             </DialogTitle>
-            <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
+            <DialogDescription>
               {copy.settings.encryption.enrollBody}
             </DialogDescription>
           </DialogHeader>
@@ -1045,7 +1052,7 @@ function EncryptionSection({ email }: { email: string }) {
               void doEnroll();
             }}
           >
-            <label className="voice-label block text-[0.75rem]" htmlFor="e2e-pass">
+            <label className="voice-label-sm block" htmlFor="e2e-pass">
               {copy.settings.encryption.passphraseLabel}
             </label>
             <div className="relative">
@@ -1057,7 +1064,7 @@ function EncryptionSection({ email }: { email: string }) {
                 value={pass}
                 onChange={(e) => setPass(e.target.value)}
                 onFocus={revealOnFocus}
-                className="h-10 pr-11 font-serif text-[1rem]"
+                className="h-10 pr-11 font-serif text-ui"
               />
               <EyeToggle shown={showPass} onToggle={() => setShowPass((v) => !v)} />
             </div>
@@ -1073,7 +1080,7 @@ function EncryptionSection({ email }: { email: string }) {
                 }
               />
             )}
-            <label className="voice-label block text-[0.75rem]" htmlFor="e2e-confirm">
+            <label className="voice-label-sm block" htmlFor="e2e-confirm">
               {copy.settings.encryption.passphraseConfirmLabel}
             </label>
             <Input
@@ -1083,10 +1090,10 @@ function EncryptionSection({ email }: { email: string }) {
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               onFocus={revealOnFocus}
-              className="h-10 font-serif text-[1rem]"
+              className="h-10 font-serif text-ui"
             />
             {error && (
-              <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+              <p role="alert" className="voice-prose-sm text-ember">
                 {error}
               </p>
             )}
@@ -1094,7 +1101,6 @@ function EncryptionSection({ email }: { email: string }) {
               <Button
                 variant="ghost"
                 type="button"
-                className="font-serif"
                 onClick={() => setEnrollOpen(false)}
               >
                 {copy.settings.erase.cancel}
@@ -1118,17 +1124,17 @@ function EncryptionSection({ email }: { email: string }) {
       >
         <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="voice-display text-left text-lg">
+            <DialogTitle>
               {copy.settings.encryption.recoveryTitle}
             </DialogTitle>
-            <DialogDescription className="voice-prose text-left text-[0.92rem] text-ink-soft">
+            <DialogDescription>
               {copy.settings.encryption.recoveryBody}
             </DialogDescription>
           </DialogHeader>
-          <p className="voice-data select-all break-all text-center text-[1.05rem] leading-relaxed">
+          <p className="voice-data select-all break-all text-center text-ui leading-relaxed">
             {recoveryCode}
           </p>
-          <p className="voice-prose text-center text-[0.8rem] text-ink-faint">
+          <p className="voice-prose-sm text-center text-ink-faint">
             {copy.settings.encryption.recoveryFileNote}
           </p>
           <DialogFooter className="gap-2">
@@ -1137,7 +1143,6 @@ function EncryptionSection({ email }: { email: string }) {
             </PaperButton>
             <Button
               variant="ghost"
-              className="font-serif"
               onClick={() => setRecoveryCode(null)}
             >
               {copy.settings.encryption.recoveryDone}
@@ -1180,7 +1185,6 @@ function BackupSection() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("drive") !== "connected") return;
-    replaceUrl("/settings");
     void (async () => {
       setConnecting(true);
       try {
@@ -1208,6 +1212,11 @@ function BackupSection() {
       } finally {
         setConnecting(false);
         requestSync();
+        // strip ?drive=connected only now — well after the route-transition
+        // commit — so this history write can't wedge WebKit's client router
+        // (see the seal/unlock effects above); a stray refresh mid-connect is
+        // harmless (connect is idempotent).
+        replaceUrl("/settings");
       }
     })();
   }, []);
@@ -1306,12 +1315,12 @@ function BackupSection() {
           }
           state="good"
         />
-        <p className="voice-prose text-[0.9rem] text-ink-faint">
+        <p className="voice-prose-sm text-ink-faint">
           {copy.settings.backup.mirrors}
         </p>
         {deviceHasToken === false && (
           <div className="space-y-3">
-            <p className="voice-prose text-[0.9rem] text-ink-faint">
+            <p className="voice-prose-sm text-ink-faint">
               {copy.settings.backup.deliversElsewhere}
             </p>
             {/* same consent, this device: Google mints it a grant of its own
@@ -1323,14 +1332,10 @@ function BackupSection() {
     );
     action = (
       <div className="flex flex-col gap-3">
-        <div>
-          <p className="font-serif text-[0.98rem] text-ink">
-            {copy.settings.backup.disconnectTitle}
-          </p>
-          <p className="voice-prose mt-0.5 text-[0.9rem] text-ink-soft">
-            {copy.settings.backup.disconnectDesc}
-          </p>
-        </div>
+        <SettingAction
+          title={copy.settings.backup.disconnectTitle}
+          description={copy.settings.backup.disconnectDesc}
+        />
         <PaperButton onClick={() => void disconnect()} disabled={disconnecting}>
           {disconnecting
             ? copy.settings.backup.disconnecting
@@ -1342,16 +1347,14 @@ function BackupSection() {
 
   return (
     <section aria-label={copy.settings.backup.heading}>
-      <h2 className="voice-label border-b border-rule pb-1.5">
-        {copy.settings.backup.heading}
-      </h2>
-      <p className="voice-prose mt-4 text-[0.9rem] text-ink-soft">
+      <SectionHeading>{copy.settings.backup.heading}</SectionHeading>
+      <p className="voice-prose-sm mt-4 text-ink-soft">
         {copy.settings.backup.lead}
       </p>
       <div className="mt-3 space-y-3">
         {statusLine}
         {error && (
-          <p role="alert" className="voice-prose text-[0.9rem] text-ember">
+          <p role="alert" className="voice-prose-sm text-ember">
             {error}
           </p>
         )}
@@ -1388,7 +1391,7 @@ function WeekStartChoice({
             aria-checked={active}
             onClick={() => onChange(v)}
             className={cn(
-              "pressable rounded-[5px] px-3.5 py-1.5 font-serif text-[0.9rem]",
+              "pressable rounded-[5px] px-3.5 py-1.5 font-serif text-ui",
               active
                 ? "bg-paper-raised text-ink shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.12)]"
                 : "text-ink-faint",
@@ -1464,7 +1467,7 @@ function ThemeSwatch({
       </span>
       <span
         className={cn(
-          "voice-label text-[0.8rem] transition-colors duration-150",
+          "voice-label-sm transition-colors duration-150",
           active ? "text-ink" : "text-ink-faint group-hover:text-ink-soft",
         )}
       >
@@ -1485,12 +1488,10 @@ function AccountSection() {
 
   return (
     <section aria-label={copy.settings.account.heading}>
-      <h2 className="voice-label border-b border-rule pb-1.5">
-        {copy.settings.account.heading}
-      </h2>
+      <SectionHeading>{copy.settings.account.heading}</SectionHeading>
       {user ? (
         <div className="mt-4">
-          <p className="font-serif text-[0.98rem]">
+          <p className="voice-display text-ui">
             {copy.settings.account.signedInAs(user.email)}
           </p>
           <SyncLines />
@@ -1498,14 +1499,14 @@ function AccountSection() {
             <PaperButton onClick={() => void signOut()}>
               {copy.settings.account.signOut}
             </PaperButton>
-            <p className="voice-prose text-[0.9rem] text-ink-faint">
+            <p className="voice-prose-sm text-ink-faint">
               {copy.settings.account.signOutHint}
             </p>
           </div>
         </div>
       ) : (
         <div className="mt-4">
-          <p className="voice-prose text-[0.9rem] text-ink-soft">
+          <p className="voice-prose-sm text-ink-soft">
             {copy.settings.account.signedOutLead}
           </p>
           <div className="mt-4">
@@ -1586,7 +1587,7 @@ function HoldToErase({
       onContextMenu={(e) => e.preventDefault()}
       // full-width so the hold fill sweeps past a covering thumb, staying visible
       className={cn(
-        "relative w-full select-none overflow-hidden rounded-[5px] px-4 py-2.5 text-center font-serif text-[0.95rem]",
+        "relative w-full select-none overflow-hidden rounded-[5px] px-4 py-2.5 text-center font-serif text-ui",
         variant === "fill"
           ? "bg-ember text-paper-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_1px_3px_rgb(var(--shadow-hue)/0.3)]"
           : "border border-ember/45 text-ember",
