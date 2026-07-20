@@ -17,8 +17,22 @@ pnpm dev          # dev server (Turbopack)
 pnpm build        # production build + typecheck (the de facto test gate)
 pnpm start        # serve the build
 pnpm lint         # eslint
+pnpm test         # vitest — merge/e2e/backup units + the copy-clarity linter
+pnpm check:copy   # just the STE-informed copy linter (copy-clarity.test.ts)
 pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
 ```
+
+**Technical-register copy is linted.** Copy that explains a mechanism
+(privacy, terms, the sync/backup/encryption Settings lines — never the
+literary prompts) is held to an STE-informed bar (after ASD-STE100): short
+one-idea sentences, active voice, one word per meaning (*encrypt*, never
+*seal*), no internal jargon (*payload*/*tombstone*/*cursor*/*LWW*),
+concrete figures. `src/lib/copy-clarity.test.ts` mechanises the
+low-false-positive rules over an allowlist (`TECH_COPY_PATHS` + `PAGES`)
+and rides `pnpm test` — banned/inconsistent terms and vague cadence fail
+the build; over-long sentences print as advisory. Add a new technical
+surface to the allowlist when you write one. Full standard: `DESIGN.md` →
+Copy voice; the rule lives in the `snippets-craft` skill (law 7).
 
 ## Architecture
 
@@ -135,7 +149,10 @@ pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
   vanished-device case no report can reach. The daily cron
   (`CRON_SECRET`, vercel.json) is a watchdog only — stale ledger +
   moving book → one email per silence — plus the tombstone
-  scrubber. Google OAuth
+  scrubber, plus an ops storage watchdog (`pg_database_size` vs the
+  Neon free-tier 0.5 GB cap → emails `OPS_ALERT_EMAIL` past ~70%, so
+  the owner upgrades before writes are refused; capture stays
+  local-first regardless). Google OAuth
   app must be *published to Production* or refresh tokens die in
   7 days. Plaintext Drive files are the key-loss safety net; never
   encrypt them.
@@ -191,7 +208,34 @@ Gotchas learned the hard way:
 - Screenshot at 1280px and 390px, Paper and Lamplight
   (`localStorage.setItem('theme','dark')` + reload).
 
+**WebKit testing IS available** — not via Playwright (`/opt/pw-browsers`
+has Chromium only and downloads are blocked; don't conclude WebKit is
+impossible from that). Drive the system WebKitGTK over raw W3C WebDriver
+HTTP (stdlib urllib, no selenium):
+
+```sh
+apt-get install -y webkit2gtk-driver xvfb        # once per sandbox
+xvfb-run -a /usr/bin/WebKitWebDriver --port=4599 &  # keep running
+```
+
+then POST to `127.0.0.1:4599/session` with capabilities
+`{"browserName":"MiniBrowser","webkitgtk:browserOptions":{"binary":
+"/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/MiniBrowser","args":
+["--automation"]}}` and use plain endpoints (`/url`, `/execute/sync`).
+**`scripts/measure-webkit-spans.py` is the complete working reference.**
+Caveats: single session only (on "session already exists":
+`pkill -9 -f WebKitWebDriver; pkill -9 -f MiniBrowser`, restart the
+driver); software-rendered under Xvfb, so paint costs read ~5× a real
+device and no rAF ticks fire while idle — use it for relative A/Bs and
+WebKit-specific pathologies (it has caught real ones Blink hides:
+selector-engine scans, pointer-events compositing walks), keep Chromium
+harnesses for correctness, and nothing replaces the on-device pass.
+
 ## Deploy
+
+**Production branch: `claude/nice-dijkstra-q7d285`** — this repo has no
+`main`/`master`; that branch is the GitHub default and what prod deploys
+from. Merge finished feature branches there (no need to ask).
 
 Any Node host (Vercel works as-is). Sync/backup need
 `DATABASE_URL`/`BETTER_AUTH_SECRET` (and the Google/Resend keys);

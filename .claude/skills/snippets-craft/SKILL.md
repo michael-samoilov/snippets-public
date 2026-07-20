@@ -22,11 +22,26 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    highlight, no seat shadow, because the schedule renders hundreds at once
    (unwindowed) and a blurred shadow per card jetsam-kills iOS. See the
    FLAT-BOOK LAW below (rule 6) and on `.book-card` in `globals.css`.
-2. **Four voices, two fonts.** `.voice-display` (Fraunces WONK,
-   letterpress) · `.voice-label` (small-caps serif — section headers,
-   nav, chips) · `.voice-data` (tiny lowercase mono — times, counts,
-   tags ONLY) · `.voice-prose` (entry text). Mono is never uppercase and
-   never used for labels. No Inter, no icon fonts; buttons are serif.
+2. **Four voices, two fonts, named steps.** `.voice-display` (Fraunces
+   WONK, letterpress) · `.voice-label` (small-caps serif — section
+   headers, nav, chips) · `.voice-data` (tiny lowercase mono — times,
+   counts, tags ONLY) · `.voice-prose` (entry text). Mono is never
+   uppercase and never used for labels. No Inter, no icon fonts; buttons
+   are serif. Voices are set only at their **named steps** — the base
+   class, its `-sm` variant (`voice-label-sm`, `voice-prose-sm`), or
+   `text-ui` (0.95rem, the ONE size for serif control text: buttons,
+   inputs, action titles) — **never `text-[…]` a voice**; if a new size
+   is truly needed it becomes a named step in `globals.css` first.
+   Section headers render through `<SectionHeading>`
+   (`src/components/section-heading.tsx`), not hand-rolled
+   `voice-label border-b` strings. (One tuned exception: the calendar
+   composer's textarea keeps its literal 0.9rem/line-height pairing —
+   it must wrap character-for-character like the book card preview.)
+   **One body shade:** full-sentence body prose is a single color
+   (`ink-soft`); hierarchy comes from headers + position, not from
+   fading paragraphs. `ink-faint` is for mono data, inactive/secondary
+   labels, placeholders, and icons — never a paragraph of body copy.
+   (`ink` is reserved for display/action titles; `ember` for errors.)
 3. **Everything pressable feels physical.** Use `.pressable` (it owns
    the `transition` property — never pair with `transition-*`
    utilities), or the raised-button recipe (inset top highlight + drop
@@ -95,7 +110,21 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    it names an actual on-screen object — the **wax seal** you tap to
    record/keep is real, so "tap the seal" stays — or genuinely aids
    understanding; otherwise the plainer word wins. When in doubt, prefer
-   the word a non-user would understand.
+   the word a non-user would understand. **Be concrete, not vague:** when
+   a thing has a real figure — an interval, a count, a limit — name it
+   (*every 15 minutes*, not *now and then*; *at least ten characters*, not
+   *long enough*). A specific number is clearer, and reads as more honest,
+   than a soft quantifier that makes the reader guess. **The technical
+   register** — copy that explains a mechanism (privacy, terms, the
+   sync/backup/encryption lines in Settings, *not* the literary prompts) —
+   is held to an STE-informed bar (after ASD-STE100): short one-idea
+   sentences (~25 words), active voice, ONE word per meaning (encrypt is
+   always *encrypt*, never *seal*), no internal jargon (*payload*,
+   *tombstone*, *cursor*, *LWW*), concrete figures. Still the house voice,
+   just more literal. A `pnpm test` linter enforces the mechanical rules
+   (`copy-clarity.test.ts` / `pnpm check:copy`) over an allowlist — extend
+   it when you add a technical surface. Full standard in `DESIGN.md` → Copy
+   voice.
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.

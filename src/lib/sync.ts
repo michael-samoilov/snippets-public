@@ -55,6 +55,16 @@ const PUSH_BATCH = 200;
 const MAX_BATCHES_PER_CYCLE = 50;
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
+// How often to poll while the app is merely OPEN and idle — the safety net
+// that catches an edit made on ANOTHER device you happen to have open at the
+// same moment. Every real trigger (open, write, tab-focus, back-online) syncs
+// at once, so this can be lazy. It is set well past Neon's 5-min scale-to-zero
+// window on purpose: a shorter interval re-wakes the database before it can
+// nap and keeps a free-tier compute burning ~24/7 for an idle tab. At 15 min
+// the compute sleeps ~two-thirds of the time. Do NOT shorten it back toward a
+// minute without weighing that compute cost.
+const IDLE_POLL_MS = 15 * 60 * 1000;
+
 export interface SyncStatus {
   phase: "idle" | "syncing" | "offline" | "error" | "signedOut";
   lastSyncedAt: number | null;
@@ -500,7 +510,7 @@ export function startSync(userId: string): () => void {
   document.addEventListener("visibilitychange", onVisible);
   const tick = window.setInterval(() => {
     if (document.visibilityState === "visible") requestSync();
-  }, 60_000);
+  }, IDLE_POLL_MS);
 
   return () => {
     window.removeEventListener("online", onOnline);

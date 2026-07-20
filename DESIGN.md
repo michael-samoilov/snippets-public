@@ -84,6 +84,34 @@ The Today masthead pattern: small-caps eyebrow (weekday) → huge display
 date → italic serif stat line with `<NumberFlow>`. Other pages: display
 title + italic stat line (no forced eyebrow).
 
+### Named steps (the size scale)
+
+A voice is set only at a **named step** — never with an ad-hoc
+`text-[…]`. The settings page once carried ~12 arbitrary sizes between
+0.7 and 1.05rem (seven visibly different treatments in one
+screen-height); the fix was to decide each size once and let it ripple.
+
+| Step | Size | Serves |
+|---|---|---|
+| `voice-label` | 0.86rem | section headings (via `<SectionHeading>`) |
+| `voice-label-sm` | 0.8rem | tabs, status words, field labels, TOC links |
+| `voice-prose` | 17px | entry text — nothing else |
+| `voice-prose-sm` | 0.9rem/1.55 | control-page body, hints, dialog descriptions |
+| `text-ui` | 0.95rem | ALL serif control text: buttons, inputs, action titles |
+| `text-lg` | — | dialog titles (on `voice-display`) |
+
+Action titles ("Disconnect Google Drive") are `voice-display text-ui` —
+the display voice IS the heading voice; there is no fifth voice.
+Hierarchy on control pages comes from the ink ramp and position, not
+from more sizes — but the ramp separates *roles*, not paragraph from
+paragraph. **Full-sentence body prose is one shade (`ink-soft`)**; a
+second, fainter paragraph reads as noise, not hierarchy. `ink` is the
+display/action title; `ink-soft` is body prose; `ink-faint` is for mono
+data, inactive/secondary labels, placeholders, and icons — never a body
+paragraph; `ember` is errors. One tuned exception: the calendar
+composer's textarea keeps a literal 0.9rem + line-height pairing so its
+wrapping matches the book card preview character-for-character.
+
 ## Motion
 
 Strong curves, short durations, springs for anything touchable.
@@ -381,7 +409,50 @@ thing, so "tap the seal" stays — or when it genuinely aids
 understanding; otherwise the plainer, more idiomatic word wins. A reader
 should never have to learn our theme to understand what a control does.
 
-## Architecture notes that protect the design
+**Be concrete, not vague.** When a thing has a real figure — a duration,
+a count, an interval, a limit — name it. *Checks every 15 minutes* beats
+*checks now and then*; *1,204 on this device* beats *your entries*; *at
+least ten characters* beats *long enough*. A soft quantifier makes the
+reader guess and can read as evasive; a specific number is both clearer
+and more trustworthy. Same instinct as naming things plainly — never make
+the reader decode, and don't hide behind a vague word when a precise one
+is truer. (The exception is a figure that would be a lie to state
+precisely — a gap you deliberately leave blank, an outcome you can't
+promise — where honesty is the vaguer word.)
+
+**The technical register (STE-informed).** The app has two registers.
+Most copy is the *literary* one above — the prompts, "Kept.", the intro —
+and it stays exactly as literary as it is. But copy that *explains a
+mechanism* — the privacy policy, the terms, the sync/backup/encryption
+lines in Settings — has one job: leave the reader understanding what is
+true, with no room to guess wrong. There we borrow the discipline of
+[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/)
+(the controlled-language standard aerospace uses for maintenance manuals,
+so a non-native reader can't misread a safety-critical instruction):
+
+- **Short sentences, one idea each.** Aim under ~25 words; split a clause
+  that carries a second thought into its own sentence.
+- **Active voice, real subject.** *Your device uploads the files*, not
+  *the files are uploaded* — the reader should always know who does what.
+- **One word per meaning.** Pick a term and keep it. If it's *encrypt*
+  here it's *encrypt* everywhere — never *seal* in one line and *encrypt*
+  in the next. (This is *name things plainly* mechanised: the metaphor
+  words the visual skin allows — *seal* — are exactly the ones that
+  mislead in a mechanism description.)
+- **No internal jargon.** *payload*, *tombstone*, *cursor*, *LWW*,
+  *advisory lock* are our words, not the reader's; the pages may *define*
+  a term deliberately, but the Settings status lines never leak one.
+- **Concrete figures**, per the rule above — *every 15 minutes*, not
+  *periodically*.
+
+This is a discipline, not a straitjacket: the technical register is still
+in the house voice — quiet, sentence case, curly quotes, no exclamation —
+just held to a higher bar of literalness. A `pnpm test` linter
+(`src/lib/copy-clarity.test.ts`, or `pnpm check:copy`) mechanises the
+low-false-positive rules over an allowlist of technical surfaces —
+banned/inconsistent terms and vague cadence *fail the build*; over-long
+sentences print as an advisory a human weighs. Add a new technical surface
+to its allowlist when you write one.
 
 - Local-first Dexie; soft delete + undo; day keys in local time.
 - **Sync is strictly additive.** The device copy is always whole;

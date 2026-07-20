@@ -273,12 +273,17 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         }
         const next = `scale(${eff})`;
         if (bloomEl.style.transform !== next) bloomEl.style.transform = next;
+        bloomEl.style.transitionDuration = ""; // animate the bloom-in (class 500ms)
       } else if (bloomEl.style.transform !== "") {
-        // retract on release even while a selection stands: a transform is
-        // something iOS follows the callout around (like a scroll/zoom),
-        // not a relayer. The callout-killer is the compositing shed in
-        // level(), which stays deferred. If a device ever shows the callout
-        // dying on the retraction itself, gate this on selectionStands() too.
+        // retract on release even while a selection stands. WebKit engine
+        // testing (scripts/measure-webkit-callout.py) proved the retract
+        // never disturbs the DOM selection — so the iOS callout only ever
+        // hides because the ANIMATED transform moves the selection rect for
+        // 500ms, the sustained motion iOS hides the callout during. So while
+        // a selection stands, retract INSTANTLY: the rect jumps once (iOS
+        // repositions the callout to follow) instead of gliding. Otherwise
+        // the bloom deflates on its normal soft curve.
+        bloomEl.style.transitionDuration = selectionStands() ? "0ms" : "";
         bloomEl.style.transform = "";
       }
     };
@@ -295,8 +300,20 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       if (wait > 0) dwell = window.setTimeout(exit, wait);
       else exit();
     };
+    // a tap that lands on an ALREADY-FOCUSED editable field in this surface is
+    // text work — placing the caret, or summoning the paste edit-menu on the
+    // caret — not a press to bloom. The glow's arm()/bloom would relayer the
+    // field right as iOS presents that menu and kill it (same failure as the
+    // selection callout). The FIRST tap into an unfocused field isn't caught
+    // (focus lands on touchend/click, after this pointerdown), so the
+    // engage-to-write bloom still plays; only re-taps while focused stay dark.
+    const caretTap = (e: PointerEvent) => {
+      const t = e.target;
+      const field = t instanceof Element ? t.closest("textarea, input") : null;
+      return !!field && host.contains(field) && document.activeElement === field;
+    };
     const onDown = (e: PointerEvent) => {
-      if (selectionStands()) return; // the callout's tap — stay dark
+      if (selectionStands() || caretTap(e)) return; // text interaction — stay dark
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
       clearTimeout(dwell);
