@@ -134,8 +134,6 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let stillDeath = 0;
     let dwell = 0;
     let litAt = 0;
-    let scaleHold = 0;
-    let levelHold = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
     // the recipe in force for the current press (re-read per press: theme
@@ -210,14 +208,6 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     };
     const level = () => {
       const lit = (down || riding) && !quenched;
-      // fading out is a paint change beside a possibly-open callout — while
-      // a selection stands on this surface, the light simply stays (the
-      // hand's work is ongoing) and fades once the selection collapses
-      if (!lit && glow.style.opacity !== "0" && selectionStands()) {
-        clearTimeout(levelHold);
-        levelHold = window.setTimeout(level, 350);
-        return;
-      }
       // per-direction envelopes, measured from iOS's Liquid Glass bar
       // (30fps frame analysis): the light swells in over ~200ms and leaves
       // on a long, near-linear ~380ms tail. One shared snappy ease-out
@@ -230,9 +220,15 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       glow.style.opacity = lit ? "1" : "0";
       if (!lit) {
         // shed the compositor hint once the fade has finished — but never
-        // while a selection stands (a long-press select ends with the
-        // callout open; the blend flip would knock it down). Re-check until
-        // the selection collapses.
+        // while a selection stands on this surface. This is the write that
+        // actually knocks down iOS's Cut/Copy/Paste callout: toggling
+        // mix-blend-mode / will-change creates or destroys a compositing
+        // layer right beside the selection anchor, and iOS reads that as a
+        // reason to dismiss. The light's fade and the bloom's retraction
+        // move with the finger's release (a transform/opacity change iOS
+        // repositions the callout around) — only the LAYER change waits for
+        // the selection to collapse. Keeping will-change set through the
+        // fade also means opacity→0 never demotes the layer mid-callout.
         clearTimeout(shedWC);
         const shed = () => {
           if (selectionStands()) {
@@ -278,13 +274,11 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
         const next = `scale(${eff})`;
         if (bloomEl.style.transform !== next) bloomEl.style.transform = next;
       } else if (bloomEl.style.transform !== "") {
-        if (selectionStands()) {
-          // a callout may be showing over this surface — retracting the
-          // bloom would relayer it away; retry once the selection collapses
-          clearTimeout(scaleHold);
-          scaleHold = window.setTimeout(scale, 350);
-          return;
-        }
+        // retract on release even while a selection stands: a transform is
+        // something iOS follows the callout around (like a scroll/zoom),
+        // not a relayer. The callout-killer is the compositing shed in
+        // level(), which stays deferred. If a device ever shows the callout
+        // dying on the retraction itself, gate this on selectionStands() too.
         bloomEl.style.transform = "";
       }
     };
@@ -455,8 +449,6 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       clearTimeout(scaleClear);
       clearTimeout(stillDeath);
       clearTimeout(dwell);
-      clearTimeout(scaleHold);
-      clearTimeout(levelHold);
       window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
