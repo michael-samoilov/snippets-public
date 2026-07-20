@@ -3911,7 +3911,12 @@ function Calendar() {
           ref={yearLayerRef}
           data-layer="year"
           className={cn(
-            "absolute inset-0",
+            // px-2 pads the stage's -mx-2 bleed back, exactly like the month/
+            // schedule/entry layers — without it the glance grid laid out 8px
+            // wider each side than every other altitude, spilling past the
+            // header terminus's left/right ends (less side gutter than the
+            // rest of the book).
+            "absolute inset-0 px-2",
             // content-visibility (not just visibility): a hidden-but-mounted
             // year glance still paid STYLE RECALC on every pass — and each
             // move triggers 5-17 passes (Performance.getMetrics: style

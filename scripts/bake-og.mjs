@@ -103,14 +103,40 @@ const PLATE_CSS = [
   "[data-app-shell] header{display:none!important}",
   "[data-app-shell]>div{padding-left:0!important;padding-right:0!important;max-width:none!important}",
   ".sheet{border-radius:0!important}",
+  // the dev server's Next indicator (the corner "N" / build-status badge) is a
+  // light-DOM host for its shadow overlay — hide the host so it never lands in
+  // a plate. Only present under `next dev`; harmless otherwise.
+  "nextjs-portal{display:none!important}",
 ].join("");
 async function hideHeader(page) {
   await page.addStyleTag({ content: PLATE_CSS }).catch(() => {});
 }
 
+// Reach the year glance the way the app itself does — tap the month title's
+// "Show <year> at a glance" control from the already-open month canvas — NOT
+// the ?y= deep link. The deep link is read from useSearchParams at mount,
+// which intermittently returns empty on the first client render (a param
+// race), and a stale crash-recovery loadmark count can disown it too; both
+// silently fall back to today's schedule, so a ?y= bake sometimes captured the
+// composer instead of the glance. Driving the real control is deterministic.
+const YEAR_READY = () => {
+  const y = document.querySelector('[data-layer="year"]');
+  return (
+    !!y &&
+    !y.className.includes("invisible") &&
+    document.querySelectorAll("[data-ym]").length >= 12
+  );
+};
+async function openYearFromMonth(page) {
+  const title = page
+    .locator('button[aria-label^="Show "][aria-label*="glance"]')
+    .first();
+  await title.click();
+  await page.waitForFunction(YEAR_READY, { timeout: 15000 });
+}
+
 async function capturePlates(browser) {
   await mkdir("public/og-plates", { recursive: true });
-  const year = new Date().getFullYear();
   for (const theme of ["light", "dark"]) {
     const ctx = await browser.newContext({
       viewport: { width: 390, height: 844 },
@@ -153,11 +179,11 @@ async function capturePlates(browser) {
     await page.screenshot({ path: `public/og-plates/calendar-${theme}.png` });
     console.log(`plate calendar-${theme}`);
 
-    // year glance — the ?y= deep link (safe now that the init script clears
-    // the crash-recovery load marks each navigation)
-    await page.goto(`${BASE}/calendar?y=${year}`, { waitUntil: "load", timeout: 60000 });
+    // year glance — driven from the month title (?y= races the mount-time
+    // param read; see openYearFromMonth). Page is already on the month canvas.
+    await openYearFromMonth(page);
     await hideHeader(page);
-    await page.waitForTimeout(2200);
+    await page.waitForTimeout(1600);
     await page.screenshot({ path: `public/og-plates/year-${theme}.png` });
     console.log(`plate year-${theme}`);
 
@@ -242,10 +268,11 @@ async function capturePlates(browser) {
   await bp.screenshot({ path: "public/og-plates/calendar-bleed.png" });
   console.log("plate calendar-bleed");
 
-  // year glance
-  await bp.goto(`${BASE}/calendar?y=${year}`, { waitUntil: "load", timeout: 60000 });
+  // year glance — driven from the month title (see openYearFromMonth); bp is
+  // already on the month canvas from the goBack above
+  await openYearFromMonth(bp);
   await hideHeader(bp);
-  await bp.waitForTimeout(2200);
+  await bp.waitForTimeout(1600);
   await bp.screenshot({ path: "public/og-plates/year-bleed.png" });
   console.log("plate year-bleed");
 
