@@ -3791,12 +3791,20 @@ function Calendar() {
         <div
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 h-px bg-rule-faint transition-opacity",
+            "pointer-events-none absolute inset-x-0 top-0 h-px transition-opacity",
             view !== "month" && zoom?.from !== "month"
               ? "opacity-100"
               : "opacity-0",
           )}
-          style={{ transitionDuration: "var(--dur-base)" }}
+          style={{
+            // OPAQUE (not bg-rule-faint): this line rests exactly where the
+            // landed day's own rule-faint border-t sits, and two 8% layers
+            // composite darker — an opaque line at the same rendered colour
+            // can't, and it stays crisp beside a sub-pixel-landed border.
+            // See --terminus-line in globals.css.
+            backgroundColor: "var(--terminus-line)",
+            transitionDuration: "var(--dur-base)",
+          }}
         />
       </div>
 
