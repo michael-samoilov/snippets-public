@@ -92,14 +92,20 @@ const esc = (s) =>
  * app's native form). Written to public/og-plates/ (gitignored — bake-time
  * inputs, not shipped assets).
  */
-// Drop the app's masthead ribbon (wordmark + account) via a <head> style so a
-// stacked plate doesn't repeat the wordmark on every card. Injected after each
-// navigation load and BEFORE scrolling, so the (now taller) sheet has settled
-// before the scroll positions are taken. An init-script style appended pre-head
-// gets dropped by Next's hydration, so addStyleTag is the reliable path.
-const HIDE_HEADER = "[data-app-shell] header{display:none!important}";
+// Strip the app chrome for a clean plate: drop the masthead ribbon (wordmark +
+// account) so a stacked plate doesn't repeat it, and remove the desk gutters —
+// the shell's horizontal padding + the sheet's rounded corners — so the paper
+// fills the frame edge to edge. Injected after each navigation load and BEFORE
+// scrolling, so the reflowed sheet settles before scroll positions are taken.
+// (An init-script style appended pre-<head> gets dropped by Next's hydration,
+// so addStyleTag is the reliable path.)
+const PLATE_CSS = [
+  "[data-app-shell] header{display:none!important}",
+  "[data-app-shell]>div{padding-left:0!important;padding-right:0!important;max-width:none!important}",
+  ".sheet{border-radius:0!important}",
+].join("");
 async function hideHeader(page) {
-  await page.addStyleTag({ content: HIDE_HEADER }).catch(() => {});
+  await page.addStyleTag({ content: PLATE_CSS }).catch(() => {});
 }
 
 async function capturePlates(browser) {
