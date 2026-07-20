@@ -98,8 +98,8 @@
     "concept": "One sentence as the image — the promise set large, a small seal as the full stop.",
     "lens": "editorial",
     "blocks": [
-      { "kind": "text", "text": "Catch your days before they evaporate.", "voice": "display", "sizePx": 84, "x": 300, "y": 178, "w": 600, "align": "center", "italic": true, "lineHeight": 1.15 },
-      { "kind": "seal", "cx": 600, "cy": 468, "sizePx": 120, "tint": "wordmark" }
+      { "kind": "text", "text": "Catch your days before they evaporate.", "voice": "display", "sizePx": 78, "x": 300, "y": 128, "w": 600, "align": "center", "italic": true, "lineHeight": 1.15 },
+      { "kind": "seal", "cx": 600, "cy": 512, "sizePx": 120, "tint": "wordmark" }
     ]
   },
   {

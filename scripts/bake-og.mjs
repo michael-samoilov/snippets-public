@@ -144,6 +144,19 @@ async function main() {
   await browser.close();
   if (pick) return;
 
+  // --only re-bakes must not clobber the rest of the manifest: merge with the
+  // existing one, keeping og-variants.json order
+  if (only) {
+    let prior = [];
+    try {
+      prior = JSON.parse(await readFile("og-review/manifest.json", "utf8"));
+    } catch { /* first bake */ }
+    const merged = new Map(prior.map((m) => [m.key, m]));
+    for (const m of manifest) merged.set(m.key, m);
+    manifest.length = 0;
+    for (const v of variants) if (merged.has(v.key)) manifest.push(merged.get(v.key));
+  }
+
   await writeFile("og-review/manifest.json", JSON.stringify(manifest, null, 2) + "\n");
 
   // contact sheet: labelled grid, 4 across
