@@ -415,6 +415,40 @@ is truer. (The exception is a figure that would be a lie to state
 precisely — a gap you deliberately leave blank, an outcome you can't
 promise — where honesty is the vaguer word.)
 
+**The technical register (STE-informed).** The app has two registers.
+Most copy is the *literary* one above — the prompts, "Kept.", the intro —
+and it stays exactly as literary as it is. But copy that *explains a
+mechanism* — the privacy policy, the terms, the sync/backup/encryption
+lines in Settings — has one job: leave the reader understanding what is
+true, with no room to guess wrong. There we borrow the discipline of
+[ASD-STE100 Simplified Technical English](https://www.asd-ste100.org/)
+(the controlled-language standard aerospace uses for maintenance manuals,
+so a non-native reader can't misread a safety-critical instruction):
+
+- **Short sentences, one idea each.** Aim under ~25 words; split a clause
+  that carries a second thought into its own sentence.
+- **Active voice, real subject.** *Your device uploads the files*, not
+  *the files are uploaded* — the reader should always know who does what.
+- **One word per meaning.** Pick a term and keep it. If it's *encrypt*
+  here it's *encrypt* everywhere — never *seal* in one line and *encrypt*
+  in the next. (This is *name things plainly* mechanised: the metaphor
+  words the visual skin allows — *seal* — are exactly the ones that
+  mislead in a mechanism description.)
+- **No internal jargon.** *payload*, *tombstone*, *cursor*, *LWW*,
+  *advisory lock* are our words, not the reader's; the pages may *define*
+  a term deliberately, but the Settings status lines never leak one.
+- **Concrete figures**, per the rule above — *every 15 minutes*, not
+  *periodically*.
+
+This is a discipline, not a straitjacket: the technical register is still
+in the house voice — quiet, sentence case, curly quotes, no exclamation —
+just held to a higher bar of literalness. A `pnpm test` linter
+(`src/lib/copy-clarity.test.ts`, or `pnpm check:copy`) mechanises the
+low-false-positive rules over an allowlist of technical surfaces —
+banned/inconsistent terms and vague cadence *fail the build*; over-long
+sentences print as an advisory a human weighs. Add a new technical surface
+to its allowlist when you write one.
+
 - Local-first Dexie; soft delete + undo; day keys in local time.
 - **Sync is strictly additive.** The device copy is always whole;
   signing in only adds a server copy on top (per-row last-write-wins,

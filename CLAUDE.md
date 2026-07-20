@@ -17,8 +17,22 @@ pnpm dev          # dev server (Turbopack)
 pnpm build        # production build + typecheck (the de facto test gate)
 pnpm start        # serve the build
 pnpm lint         # eslint
+pnpm test         # vitest — merge/e2e/backup units + the copy-clarity linter
+pnpm check:copy   # just the STE-informed copy linter (copy-clarity.test.ts)
 pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
 ```
+
+**Technical-register copy is linted.** Copy that explains a mechanism
+(privacy, terms, the sync/backup/encryption Settings lines — never the
+literary prompts) is held to an STE-informed bar (after ASD-STE100): short
+one-idea sentences, active voice, one word per meaning (*encrypt*, never
+*seal*), no internal jargon (*payload*/*tombstone*/*cursor*/*LWW*),
+concrete figures. `src/lib/copy-clarity.test.ts` mechanises the
+low-false-positive rules over an allowlist (`TECH_COPY_PATHS` + `PAGES`)
+and rides `pnpm test` — banned/inconsistent terms and vague cadence fail
+the build; over-long sentences print as advisory. Add a new technical
+surface to the allowlist when you write one. Full standard: `DESIGN.md` →
+Copy voice; the rule lives in the `snippets-craft` skill (law 7).
 
 ## Architecture
 

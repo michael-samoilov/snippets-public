@@ -109,7 +109,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    a thing has a real figure — an interval, a count, a limit — name it
    (*every 15 minutes*, not *now and then*; *at least ten characters*, not
    *long enough*). A specific number is clearer, and reads as more honest,
-   than a soft quantifier that makes the reader guess.
+   than a soft quantifier that makes the reader guess. **The technical
+   register** — copy that explains a mechanism (privacy, terms, the
+   sync/backup/encryption lines in Settings, *not* the literary prompts) —
+   is held to an STE-informed bar (after ASD-STE100): short one-idea
+   sentences (~25 words), active voice, ONE word per meaning (encrypt is
+   always *encrypt*, never *seal*), no internal jargon (*payload*,
+   *tombstone*, *cursor*, *LWW*), concrete figures. Still the house voice,
+   just more literal. A `pnpm test` linter enforces the mechanical rules
+   (`copy-clarity.test.ts` / `pnpm check:copy`) over an allowlist — extend
+   it when you add a technical surface. Full standard in `DESIGN.md` → Copy
+   voice.
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.
