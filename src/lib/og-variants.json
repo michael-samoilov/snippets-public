@@ -1,16 +1,16 @@
 [
   {
-    "key": "sq-today-seal155-stackbig",
+    "key": "ship-strong-notag",
     "theme": "light",
-    "concept": "SHIP \u2014 the winning fan on the diagonal gradient + app paper texture; today card shows the full date.",
-    "lens": "stack",
+    "concept": "Stronger diagonal-paper gradient, current layout (no tagline).",
+    "lens": "bg",
     "needs": [
       "plate"
     ],
     "blocks": [
       {
         "kind": "bg",
-        "css": "linear-gradient(140deg, rgba(242,233,213,0.62) 0%, rgba(232,220,194,0.58) 52%, rgba(219,206,177,0.66) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
       },
       {
         "kind": "plate",
@@ -67,6 +67,285 @@
         "cx": 205,
         "cy": 315,
         "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "ship-tagline-italic",
+    "theme": "light",
+    "concept": "Wordmark up, tagline below (Fraunces display italic).",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 178,
+        "cy": 150,
+        "fontPx": 58
+      },
+      {
+        "kind": "text",
+        "text": "Save a story",
+        "voice": "display",
+        "sizePx": 52,
+        "x": 58,
+        "y": 258,
+        "color": "ink",
+        "italic": true,
+        "lineHeight": 1.05
+      },
+      {
+        "kind": "text",
+        "text": "worth remembering",
+        "voice": "display",
+        "sizePx": 52,
+        "x": 58,
+        "y": 320,
+        "color": "ink",
+        "italic": true,
+        "lineHeight": 1.05
+      }
+    ]
+  },
+  {
+    "key": "ship-tagline-roman",
+    "theme": "light",
+    "concept": "Wordmark up, tagline below (Fraunces display, upright).",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 178,
+        "cy": 150,
+        "fontPx": 58
+      },
+      {
+        "kind": "text",
+        "text": "Save a story",
+        "voice": "display",
+        "sizePx": 52,
+        "x": 58,
+        "y": 258,
+        "color": "ink",
+        "italic": false,
+        "lineHeight": 1.05
+      },
+      {
+        "kind": "text",
+        "text": "worth remembering",
+        "voice": "display",
+        "sizePx": 52,
+        "x": 58,
+        "y": 320,
+        "color": "ink",
+        "italic": false,
+        "lineHeight": 1.05
+      }
+    ]
+  },
+  {
+    "key": "ship-tagline-soft",
+    "theme": "light",
+    "concept": "Wordmark up, smaller soft-ink tagline.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(247,239,220,0.75) 0%, rgba(231,219,192,0.42) 46%, rgba(205,190,157,0.80) 100%), url('/textures/sheet-light.webp') center / cover no-repeat"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 175,
+        "cy": 148,
+        "fontPx": 56
+      },
+      {
+        "kind": "text",
+        "text": "Save a story",
+        "voice": "display",
+        "sizePx": 44,
+        "x": 58,
+        "y": 252,
+        "color": "ink-soft",
+        "italic": true,
+        "lineHeight": 1.05
+      },
+      {
+        "kind": "text",
+        "text": "worth remembering",
+        "voice": "display",
+        "sizePx": 44,
+        "x": 58,
+        "y": 306,
+        "color": "ink-soft",
+        "italic": true,
+        "lineHeight": 1.05
       }
     ]
   }
