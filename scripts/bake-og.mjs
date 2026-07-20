@@ -92,6 +92,16 @@ const esc = (s) =>
  * app's native form). Written to public/og-plates/ (gitignored — bake-time
  * inputs, not shipped assets).
  */
+// Drop the app's masthead ribbon (wordmark + account) via a <head> style so a
+// stacked plate doesn't repeat the wordmark on every card. Injected after each
+// navigation load and BEFORE scrolling, so the (now taller) sheet has settled
+// before the scroll positions are taken. An init-script style appended pre-head
+// gets dropped by Next's hydration, so addStyleTag is the reliable path.
+const HIDE_HEADER = "[data-app-shell] header{display:none!important}";
+async function hideHeader(page) {
+  await page.addStyleTag({ content: HIDE_HEADER }).catch(() => {});
+}
+
 async function capturePlates(browser) {
   await mkdir("public/og-plates", { recursive: true });
   const year = new Date().getFullYear();
@@ -114,7 +124,8 @@ async function capturePlates(browser) {
     await page.goto(`${BASE}/calendar?seed=600&years=3`, { waitUntil: "load", timeout: 60000 });
     // cards outside the render window are cv:hidden — "attached" is the signal
     await page.waitForSelector(".book-card", { state: "attached", timeout: 45000 });
-    await page.waitForTimeout(2500); // fonts + motion settle
+    await hideHeader(page); // drop the masthead ribbon BEFORE scrolling
+    await page.waitForTimeout(2500); // fonts + motion + reflow settle
     // today zone (tall) — the fresh load lands on today's foot; scroll to the
     // very bottom to frame the composer (date, ruled lines, mic seal)
     await page.mouse.move(195, 420);
@@ -139,6 +150,7 @@ async function capturePlates(browser) {
     // year glance — the ?y= deep link (safe now that the init script clears
     // the crash-recovery load marks each navigation)
     await page.goto(`${BASE}/calendar?y=${year}`, { waitUntil: "load", timeout: 60000 });
+    await hideHeader(page);
     await page.waitForTimeout(2200);
     await page.screenshot({ path: `public/og-plates/year-${theme}.png` });
     console.log(`plate year-${theme}`);
@@ -168,6 +180,7 @@ async function capturePlates(browser) {
       waitUntil: "load",
       timeout: 60000,
     });
+    await hideHeader(page);
     await page.waitForTimeout(2500);
     await page.screenshot({ path: `public/og-plates/entry-${theme}.png` });
     console.log(`plate entry-${theme}`);
@@ -194,6 +207,7 @@ async function capturePlates(browser) {
   // on today's schedule foot; scroll to the very bottom to frame the composer.
   await bp.goto(`${BASE}/calendar?seed=600&years=3`, { waitUntil: "load", timeout: 60000 });
   await bp.waitForSelector(".book-card", { state: "attached", timeout: 45000 });
+  await hideHeader(bp);
   await bp.waitForTimeout(2500);
   await bp.mouse.move(210, 420);
   await bp.mouse.wheel(0, 4000);
@@ -215,6 +229,7 @@ async function capturePlates(browser) {
 
   // year glance
   await bp.goto(`${BASE}/calendar?y=${year}`, { waitUntil: "load", timeout: 60000 });
+  await hideHeader(bp);
   await bp.waitForTimeout(2200);
   await bp.screenshot({ path: "public/og-plates/year-bleed.png" });
   console.log("plate year-bleed");
@@ -239,6 +254,7 @@ async function capturePlates(browser) {
   );
   if (btarget) {
     await bp.goto(`${BASE}/calendar?d=${btarget.day}&e=${btarget.id}`, { waitUntil: "load", timeout: 60000 });
+    await hideHeader(bp);
     await bp.waitForTimeout(2500);
     await bp.screenshot({ path: "public/og-plates/entry-bleed.png" });
     console.log("plate entry-bleed");
