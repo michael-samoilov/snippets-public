@@ -2548,14 +2548,23 @@ function Calendar() {
         const clock = camAnims[0]?.currentTime;
         if (typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
-        // DIVE: the crisp STATIC terminus stand-in (see the setup hide of the
-        // in-layer line) — the stage seat line, never scaled, fading in on the
-        // book-fade's exact keyframes and clock. finish()'s cancel returns it
-        // to its class opacity (0 at the schedule altitude) while the same
-        // frame's reveal restores the identical in-layer line beneath it.
+        // DIVE: the crisp terminus stand-in (see the setup hide of the
+        // in-layer line) — the stage seat line, never scaled, ANIMATING INTO
+        // ITS SEAT: it rides the arriving book's top edge (which travels
+        // oy·(1−s) → 0 in stage space as the scale runs inFrom → 1) on the
+        // book scale's exact duration and easing, while fading in on the
+        // book-fade's clock. So the reader sees the hairline travel into
+        // position — crisp the whole way, because this element is outside
+        // every scaled layer (the in-layer line's texture is magnified all
+        // move long on iOS; the owner rejected both that blur and a static
+        // line waiting at the destination). finish()'s cancel returns it to
+        // its class opacity while the same frame's reveal restores the
+        // identical in-layer line beneath it, landed on the same row.
         const seatLine = seatLineRef.current;
         if (seatLine && zoom.from === "month" && zoom.to === "schedule") {
-          const standIn = seatLine.animate(
+          const oy = o ? o.y : stageRect.height * 0.3;
+          const y0 = oy * (1 - inFrom);
+          const standFade = seatLine.animate(
             [
               { opacity: 0, offset: 0 },
               { opacity: 1, offset: 300 / 440 },
@@ -2563,8 +2572,25 @@ function Calendar() {
             ],
             { duration: 440, easing: "linear", fill: "forwards" },
           );
-          if (typeof clock === "number") standIn.currentTime = clock;
-          camAnims.push(standIn);
+          if (typeof clock === "number") standFade.currentTime = clock;
+          // +1px: the seat row sits ONE ROW ABOVE the stage/layer top (the
+          // structural border), and the in-layer line the finish reveals
+          // lives at the LAYER's row — land there, not at the seat, or the
+          // hand-off drops the line a pixel (rideprobe: line@0 vs edge@1)
+          const standMove = seatLine.animate(
+            [
+              { transform: `translateY(${y0 + 1}px)` },
+              { transform: "translateY(1px)" },
+            ],
+            {
+              // the inCam's exact timing (created just below), so the line
+              // stays glued to the edge it rides
+              duration: Math.max(1, 440 - (Number(clock) || 0)),
+              easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+              fill: "forwards",
+            },
+          );
+          camAnims.push(standFade, standMove);
         }
       }
       // The incoming book's camera scale, deferred from setup to HERE
@@ -3832,7 +3858,9 @@ function Calendar() {
           ref={seatLineRef}
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 h-px transition-opacity",
+            // z-10: while riding a dive's edge (translateY below) it overlaps
+            // the stage box and must paint above the composited layers
+            "pointer-events-none absolute inset-x-0 top-0 z-10 h-px transition-opacity",
             // search hides every altitude layer (and their lines), so the
             // seat serves its results list at any altitude
             (searchActive || view === "year" || view === "entry") &&
