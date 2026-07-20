@@ -38,10 +38,11 @@ for (const m of manifest) {
 }
 
 const LENS_ORDER = [
-  "todayzone", "stack", "portrait-ui", "letter", "corner", "diary", "envelope",
+  "todayzone", "stack", "bighalf", "portrait-ui", "letter", "corner", "diary", "envelope",
   "hero-object", "editorial", "app-truth", "material", "scene", "wild", "smoke",
 ];
 const LENS_TITLES = {
+  bighalf: "Big seal — the mark fills the right, wordmark left",
   todayzone: "Today zone — the composer, split with the name",
   "portrait-ui": "Portrait UI — the app full-bleed",
   letter: "Letter — a sealed sheet on the desk",

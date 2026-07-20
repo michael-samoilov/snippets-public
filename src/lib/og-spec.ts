@@ -59,13 +59,16 @@ export interface OgTodayZoneBlock {
   /** "app" = the live --wax tokens (matches the running app exactly);
    *  "wordmark" = the deeper wordmark blue (for the branded S). Default app. */
   sealTint?: "app" | "wordmark";
-  /** scale multiplier off the app's 390px reference (default fits the box) */
+  /** scale multiplier off the app's 390px reference (default = w / 390) */
   scale?: number;
+  /** seal size before scaling, in the app's 390px reference px (default 118 —
+   *  smaller than the app's 128 so it doesn't dwarf the page metaphor) */
+  sealScale?: number;
   /** paint the app's paper material (grain + a raised left edge) behind the
    *  content, so the today zone reads on its own sheet, distinct from the desk */
   paper?: boolean;
-  /** "even" spreads date / rules / seal evenly down the box; "center" (default)
-   *  groups them in the middle */
+  /** "even" spreads date / rules / seal with equal gaps (above the date,
+   *  between each, below the seal); "center" (default) groups them */
   distribute?: "even" | "center";
 }
 

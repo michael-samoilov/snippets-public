@@ -197,13 +197,13 @@ function TodayZone({
   dark: boolean;
 }) {
   const now = new Date();
-  // scale off the app's 390px sheet; default to filling the box width nicely
-  const s = b.scale ?? b.w / 300;
+  // scale off the app's 390px sheet so the date/rules keep the app's proportion
+  const s = b.scale ?? b.w / 390;
   const rule = 20 * s; // the app's 20px ruled rhythm
   const glyph = b.seal === "S" ? "S" : b.seal === "mic" ? "c:mic" : "e:quill";
   const iconScale = b.seal === "quill" ? 0.36 : 0.46;
   const useWordmarkTint = b.sealTint === "wordmark" || b.seal === "S";
-  const sealPx = Math.round(150 * s);
+  const sealPx = Math.round((b.sealScale ?? 118) * s);
   const even = b.distribute === "even";
   return (
     <div
@@ -240,9 +240,10 @@ function TodayZone({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
+          // space-evenly puts equal space above the date, between each element,
+          // and below the seal — the even vertical rhythm the page metaphor wants
           justifyContent: even ? "space-evenly" : "center",
           gap: even ? 0 : 16 * s,
-          padding: even ? `${40 * s}px 0` : 0,
           textAlign: "center",
         }}
       >
