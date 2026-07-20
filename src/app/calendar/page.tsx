@@ -3777,31 +3777,32 @@ function Calendar() {
       </div>
 
       {/* the header's bottom rule — the scroll area's top terminus at the
-          year/schedule/entry altitudes. At the MONTH altitude the terminus
-          is the weekday rail's own border-b, which fades/scales as part of
-          the calendar's image (see the rail in the month layer) — so this
-          seat renders only when no month image is on stage: hidden the
-          moment a rise begins (the arriving calendar brings its own line),
-          and appearing only at a dive's finish (the schedule's day-top
-          hairline already animates into place during the move — a second
-          moving line would double it). The STRUCTURAL 1px stays put as a
-          transparent border, so no view flip ever resizes the stage —
-          resizing it was the old rail-fold's ~140ms setup snap. */}
+          YEAR and ENTRY altitudes only. The month's terminus is the weekday
+          rail's own border-b, and the schedule's is its layer's own top
+          hairline (see the schedule layer) — each altitude's image carries
+          its line, so it fades/scales WITH the view on every move and there
+          is never a hand-off frame with no line: this seat's old job of
+          appearing at a dive's finish left a few committed frames where the
+          landed day's sub-pixel border had slipped under the clip edge
+          before this line had faded in (owner recording, 2026-07-20). The
+          STRUCTURAL 1px stays put as a transparent border, so no view flip
+          ever resizes the stage — resizing it was the old rail-fold's
+          ~140ms setup snap. */}
       <div className="relative mt-5 border-b border-transparent">
         <div
           aria-hidden="true"
           className={cn(
             "pointer-events-none absolute inset-x-0 top-0 h-px transition-opacity",
-            view !== "month" && zoom?.from !== "month"
+            // search hides every altitude layer (and their lines), so the
+            // seat serves its results list at any altitude
+            (searchActive || view === "year" || view === "entry") &&
+              zoom?.from !== "month"
               ? "opacity-100"
               : "opacity-0",
           )}
           style={{
-            // OPAQUE (not bg-rule-faint): this line rests exactly where the
-            // landed day's own rule-faint border-t sits, and two 8% layers
-            // composite darker — an opaque line at the same rendered colour
-            // can't, and it stays crisp beside a sub-pixel-landed border.
-            // See --terminus-line in globals.css.
+            // OPAQUE (not bg-rule-faint): see --terminus-line in globals.css
+            // — two 8% layers composite darker where lines coincide.
             backgroundColor: "var(--terminus-line)",
             transitionDuration: "var(--dur-base)",
           }}
@@ -3955,6 +3956,21 @@ function Calendar() {
             !showScheduleLayer && "invisible",
           )}
         >
+          {/* the book's OWN terminus hairline, at its top clip edge — INSIDE
+              the layer, so on a dive it fades/scales in as part of the
+              arriving page (the rise's rail line, mirrored) and there is no
+              hand-off frame with no line: the stage seat used to appear only
+              at finish(), a couple of commits AFTER the landed day's
+              sub-pixel border had slipped under the clip edge (the blank-line
+              frames the owner recorded). Opaque terminus colour: it rests
+              exactly where that day's rule-faint border-t sits, and two 8%
+              layers would composite darker. inset-x-2 matches the layer's
+              px-2 content width (the seat line's span). */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-2 top-0 z-10 h-px"
+            style={{ backgroundColor: "var(--terminus-line)" }}
+          />
           {(view === "schedule" || warm >= 1) && (
             <ScheduleFeed
               handleRef={scheduleFeedRef}
