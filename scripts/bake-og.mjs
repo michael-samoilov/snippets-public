@@ -41,13 +41,13 @@ const flag = (name) => {
 };
 const only = flag("--only");
 const pick = flag("--pick");
+const plates = args.includes("--plates");
 
 const variants = JSON.parse(
   await readFile(new URL("../src/lib/og-variants.json", import.meta.url), "utf8"),
 );
-const targets = (pick ?? only)
-  ? variants.filter((v) => v.key === (pick ?? only))
-  : variants;
+const wanted = pick ? [pick] : only ? only.split(",") : null;
+const targets = wanted ? variants.filter((v) => wanted.includes(v.key)) : variants;
 if (targets.length === 0) {
   console.error(`no variant matches "${pick ?? only}"`);
   process.exit(1);
@@ -84,11 +84,102 @@ async function encodeFinal(raw) {
 const esc = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/**
+ * `--plates`: capture the app's four altitudes (schedule / month / year /
+ * entry) in both themes as plate images for the lab's `plate` blocks.
+ * Rides the standing dev-seed (`?seed=` — src/lib/dev-seed.ts, deterministic,
+ * inert on prod) for a realistic fictional book, at a phone viewport (the
+ * app's native form). Written to public/og-plates/ (gitignored — bake-time
+ * inputs, not shipped assets).
+ */
+async function capturePlates(browser) {
+  await mkdir("public/og-plates", { recursive: true });
+  const year = new Date().getFullYear();
+  for (const theme of ["light", "dark"]) {
+    const ctx = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+    });
+    await ctx.addInitScript((t) => {
+      try {
+        localStorage.setItem("theme", t);
+        // rapid successive bake loads would otherwise look like a crash loop
+        // and make the app ignore deep links (src/lib/crash-recovery.ts)
+        localStorage.removeItem("snip:loadmarks");
+      } catch {}
+    }, theme);
+    const page = await ctx.newPage();
+
+    // schedule (seeds the book on first load; live query paints the cards)
+    await page.goto(`${BASE}/calendar?seed=600&years=3`, { waitUntil: "load", timeout: 60000 });
+    // cards outside the render window are cv:hidden — "attached" is the signal
+    await page.waitForSelector(".book-card", { state: "attached", timeout: 45000 });
+    await page.waitForTimeout(2500); // fonts + motion settle
+    // scroll up into the kept days so the plate shows the book alive, not the
+    // (mostly empty) fresh today zone — today is the book's END, so scroll up
+    await page.mouse.move(195, 420);
+    await page.mouse.wheel(0, -1400);
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `public/og-plates/schedule-${theme}.png` });
+    console.log(`plate schedule-${theme}`);
+
+    // month canvas — the schedule sits on a synthesized month "floor" in
+    // history, so Back IS the zoom-out (the title's ‹ does the same)
+    await page.goBack();
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: `public/og-plates/calendar-${theme}.png` });
+    console.log(`plate calendar-${theme}`);
+
+    // year glance — the ?y= deep link (safe now that the init script clears
+    // the crash-recovery load marks each navigation)
+    await page.goto(`${BASE}/calendar?y=${year}`, { waitUntil: "load", timeout: 60000 });
+    await page.waitForTimeout(2200);
+    await page.screenshot({ path: `public/og-plates/year-${theme}.png` });
+    console.log(`plate year-${theme}`);
+
+    // entry — pick a recent medium-length seeded row straight from IndexedDB
+    const target = await page.evaluate(
+      () =>
+        new Promise((resolve, reject) => {
+          const req = indexedDB.open("snippets");
+          req.onerror = () => reject(req.error);
+          req.onsuccess = () => {
+            const dbx = req.result;
+            const all = dbx.transaction("snippets").objectStore("snippets").getAll();
+            all.onsuccess = () => {
+              const rows = all.result
+                .filter((r) => !r.deletedAt && r.text.length > 80 && r.text.length < 240)
+                .sort((a, b) => b.capturedAt - a.capturedAt);
+              const r = rows[0];
+              resolve(r ? { id: r.id, day: r.day } : null);
+            };
+            all.onerror = () => reject(all.error);
+          };
+        }),
+    );
+    if (!target) throw new Error("no seeded entry found for the entry plate");
+    await page.goto(`${BASE}/calendar?d=${target.day}&e=${target.id}`, {
+      waitUntil: "load",
+      timeout: 60000,
+    });
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: `public/og-plates/entry-${theme}.png` });
+    console.log(`plate entry-${theme}`);
+
+    await ctx.close();
+  }
+}
+
 async function main() {
   await waitUp();
   const browser = await chromium.launch(
     process.env.PW_CHROME ? { executablePath: process.env.PW_CHROME } : {},
   );
+  if (plates) {
+    await capturePlates(browser);
+    await browser.close();
+    return;
+  }
   const page = await browser.newPage({
     viewport: { width: W + 80, height: H + 80 },
     deviceScaleFactor: SCALE,

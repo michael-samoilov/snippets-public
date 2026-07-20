@@ -114,6 +114,54 @@ function Seal({ b, dark }: { b: OgSealBlock; dark: boolean }) {
   );
 }
 
+/** An app view ("altitude") captured by `pnpm og --plates` into
+ *  public/og-plates/<view>-<theme>.png (gitignored). Until that capture
+ *  exists, falls back to the labelled gray box so the composition can still
+ *  be judged. Sheet-like paint: paper ground, hairline, sheet shadow. */
+function Plate({ b, dark }: { b: Extract<OgBlock, { kind: "plate" }>; dark: boolean }) {
+  const [missing, setMissing] = useState(false);
+  const src = `/og-plates/${b.view}-${dark ? "dark" : "light"}.png`;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: b.x,
+        top: b.y,
+        width: b.w,
+        height: b.h,
+        transform: b.rotateDeg ? `rotate(${b.rotateDeg}deg)` : undefined,
+        border: missing ? "1px dashed var(--ink-faint)" : "1px solid var(--ink-faint)",
+        borderRadius: 6,
+        background: "var(--paper)",
+        boxShadow: "var(--sheet-shadow)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+      }}
+    >
+      {missing ? (
+        <span className="voice-data" style={{ color: "var(--ink-faint)" }}>
+          {b.view} view
+        </span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          onError={() => setMissing(true)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "top center",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
   switch (b.kind) {
     case "text": {
@@ -210,29 +258,7 @@ function Block({ b, dark }: { b: OgBlock; dark: boolean }) {
       );
     }
     case "plate":
-      // gray-box until the view-plate module lands (Phase B)
-      return (
-        <div
-          style={{
-            position: "absolute",
-            left: b.x,
-            top: b.y,
-            width: b.w,
-            height: b.h,
-            transform: b.rotateDeg ? `rotate(${b.rotateDeg}deg)` : undefined,
-            border: "1px dashed var(--ink-faint)",
-            borderRadius: 6,
-            background: "var(--paper)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span className="voice-data" style={{ color: "var(--ink-faint)" }}>
-            {b.view} view
-          </span>
-        </div>
-      );
+      return <Plate b={b} dark={dark} />;
     case "light": {
       const a = 0.55 * (b.strength ?? 0.5);
       return (
