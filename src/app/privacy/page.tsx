@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageBackHeader } from "@/components/page-back-header";
+import { SectionHeading } from "@/components/section-heading";
 
 export const metadata: Metadata = { title: "Privacy" };
 
@@ -22,7 +23,7 @@ function Sub({ id, children }: { id: string; children: React.ReactNode }) {
   return (
     <h3
       id={id}
-      className="voice-label scroll-mt-8 pt-3 text-[0.72rem] text-ink-soft"
+      className="voice-label-sm scroll-mt-8 pt-3 text-ink-soft"
     >
       {children}
     </h3>
@@ -40,7 +41,7 @@ function TocLink({
   return (
     <a
       href={href}
-      className="voice-prose text-[0.92rem] text-ink-soft underline-offset-2 hover:text-ink hover:underline"
+      className="voice-prose-sm text-ink-soft underline-offset-2 hover:text-ink hover:underline"
     >
       {children}
     </a>
@@ -57,7 +58,7 @@ function TocSubLink({
   return (
     <a
       href={href}
-      className="voice-prose text-[0.85rem] text-ink-faint underline-offset-2 hover:text-ink-soft hover:underline"
+      className="voice-prose-sm text-ink-faint underline-offset-2 hover:text-ink-soft hover:underline"
     >
       {children}
     </a>
@@ -73,7 +74,7 @@ export default function PrivacyPage() {
         </p>
 
         <nav aria-label="Contents" className="border-y border-rule-faint py-4">
-          <p className="voice-label text-[0.72rem] text-ink-faint">Contents</p>
+          <p className="voice-label-sm text-ink-faint">Contents</p>
           <ul className="mt-3 space-y-2">
             <li>
               <TocLink href="#can-you-read">Can you read what I write?</TocLink>
@@ -116,13 +117,10 @@ export default function PrivacyPage() {
         </nav>
 
         <section className="space-y-3">
-          <h2
-            id="can-you-read"
-            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
-          >
+          <SectionHeading id="can-you-read" className="scroll-mt-8">
             Can you read what I write?
-          </h2>
-          <p className="voice-prose text-[0.95rem]">
+          </SectionHeading>
+          <p className="voice-prose-sm">
             Whether we can read what you write is up to you. If you
             don&rsquo;t sign in, the answer is <Em>no</Em> — your entries stay
             in this browser and never reach us. If you sign in without
@@ -132,20 +130,20 @@ export default function PrivacyPage() {
             on end-to-end encryption, it&rsquo;s <Em>no</Em> again — only your
             devices hold the key.
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             Two features reach beyond the app. If you turn on the Google Drive
             backup, or record an entry with the microphone, then Google and the
             transcription service handle that data under their own privacy
             policies — see Google Drive backup and Voice, below.
           </p>
           <Sub id="before-you-sign-in">Before you sign in</Sub>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             Your entries are only written into this browser&rsquo;s own storage
             and never sent to our server,{" "}
             <Em>so we cannot read what you write</Em>.
           </p>
           <Sub id="if-you-sign-in">If you sign in</Sub>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             A copy of your entries rests on our server so you can add entries
             from your other devices. It has ordinary encryption where the
             service (us) holds the keys, just like Apple Notes or Google Keep.{" "}
@@ -155,19 +153,19 @@ export default function PrivacyPage() {
             </Em>
             .
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             Otherwise, the only data we collect about you is what signing in
             needs: your email address, and — if you use Google — the name and
             profile picture on your Google account.
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             We do not use or keep passwords for our sign-in process.{" "}
             <Em>Signing in is also never required to use the app</Em>.
           </p>
           <Sub id="end-to-end-encryption">
             If you turn on end-to-end encryption
           </Sub>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             Turn it on in Settings → Encryption, and{" "}
             <Em>we cannot read what you write</Em>. Before an entry
             leaves your device, your browser encrypts it: the words are turned
@@ -188,7 +186,7 @@ export default function PrivacyPage() {
             and Bitwarden use: the server keeps the encrypted data and never the
             key that decodes it.
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             Turning encryption on encrypts your existing entries too, not only
             the ones you write next. However: anything you had already synced arrived in
             the clear before you encrypted it, so it could have been read then,
@@ -196,7 +194,7 @@ export default function PrivacyPage() {
             Turning encryption back off does the reverse, re-uploading your
             entries readable again.
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             <Em>Two honest limits that every encrypted web app lives with</Em>.
             First, the app is a website: your browser downloads its code from us
             on each visit, so you are ultimately trusting that code. For us to
@@ -214,7 +212,7 @@ export default function PrivacyPage() {
               design costs nothing, since safety rests on the keys, not the
               secrecy of the method. Native <details>, no JS. */}
           <details className="group mt-2 rounded-[7px] border border-rule-faint px-4 py-3">
-            <summary className="voice-label cursor-pointer list-none text-[0.75rem] text-ink-soft marker:content-none hover:text-ink">
+            <summary className="voice-label-sm cursor-pointer list-none text-ink-soft marker:content-none hover:text-ink">
               The mechanics, for the curious
               {/* a stroke chevron (Feather, the app's 1.8/24 line), not the ›
                   glyph: the text glyph's ink sits off-centre in its em box,
@@ -236,7 +234,7 @@ export default function PrivacyPage() {
               </svg>
             </summary>
             <div className="mt-3 space-y-3">
-              <p className="voice-prose text-[0.9rem] text-ink-soft">
+              <p className="voice-prose-sm text-ink-soft">
                 Every entry is encrypted with{" "}
                 <span className="voice-data">AES-256-GCM</span> — an
                 authenticated cipher, so a tampered entry fails to open rather
@@ -244,7 +242,7 @@ export default function PrivacyPage() {
                 each time. All of your entries share one random 256-bit key,
                 generated on your device.
               </p>
-              <p className="voice-prose text-[0.9rem] text-ink-soft">
+              <p className="voice-prose-sm text-ink-soft">
                 That key is what&rsquo;s wrapped (encrypted) twice, so it
                 can travel between your devices without ever being exposed: once
                 under a key stretched from your passphrase with{" "}
@@ -256,7 +254,7 @@ export default function PrivacyPage() {
                 envelopes, written once and never silently replaced; it can open
                 neither.
               </p>
-              <p className="voice-prose text-[0.9rem] text-ink-soft">
+              <p className="voice-prose-sm text-ink-soft">
                 On your device, the unwrapped key is held as a{" "}
                 <span className="voice-data">non-extractable CryptoKey</span> —
                 the browser will use it to decrypt but will not export its
@@ -265,7 +263,7 @@ export default function PrivacyPage() {
                 needs in the clear: an identifier, timestamps, and a change
                 counter. No title, text, tags, or kind.
               </p>
-              <p className="voice-prose text-[0.9rem] text-ink-soft">
+              <p className="voice-prose-sm text-ink-soft">
                 Drive backups are rendered and uploaded by your own device from
                 its decrypted copy, so the readable files exist only where your
                 key already is. The server never keeps your Drive credentials —
@@ -279,14 +277,11 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2
-            id="outside-services"
-            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
-          >
+          <SectionHeading id="outside-services" className="scroll-mt-8">
             Outside services
-          </h2>
+          </SectionHeading>
           <Sub id="google-drive-backup">Google Drive backup</Sub>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             If you connect Google Drive, readable copies land in a
             folder in your own Drive named &ldquo;Snippets&rdquo; — so that (A)
             if you use encryption and lose your passphrase and recovery code, you
@@ -310,7 +305,7 @@ export default function PrivacyPage() {
             </a>
             ).
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             The permission this app uses (
             <span className="voice-data">drive.file</span>) lets the app see
             only files it created; it cannot read, list, or touch anything else
@@ -328,7 +323,7 @@ export default function PrivacyPage() {
           </p>
 
           <Sub id="voice">Voice</Sub>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             If you speak an entry with the in-app microphone, the app
             streams your audio to a transcription service — currently{" "}
             <a
@@ -355,13 +350,10 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2
-            id="what-we-dont-do"
-            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
-          >
+          <SectionHeading id="what-we-dont-do" className="scroll-mt-8">
             What we don&rsquo;t do
-          </h2>
-          <p className="voice-prose text-[0.95rem]">
+          </SectionHeading>
+          <p className="voice-prose-sm">
             No ads, no selling or sharing of your words, no analytics on what
             you write. The only measurement is anonymous page-view counting. The
             only emails are the ones you cause: a sign-in code, or a warning
@@ -370,13 +362,10 @@ export default function PrivacyPage() {
         </section>
 
         <section className="space-y-3">
-          <h2
-            id="leaving"
-            className="voice-label scroll-mt-8 border-b border-rule pb-1.5"
-          >
+          <SectionHeading id="leaving" className="scroll-mt-8">
             Leaving
-          </h2>
-          <p className="voice-prose text-[0.95rem]">
+          </SectionHeading>
+          <p className="voice-prose-sm">
             <Em>Erasing your entries</Em> (
             <Link href="/settings" className="underline underline-offset-2">
               Settings
@@ -388,20 +377,20 @@ export default function PrivacyPage() {
             it is automatically scrubbed, leaving only a contentless marker (an
             id and timestamps, no words) that stops the entry reappearing.
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             <Em>Deleting your account</Em> (Settings → Account) deletes the
             account itself — your sign-in, the Google connection, every synced
             entry and its deletion-marker, and the backup record — from the
             server immediately and for good; we also ask Google to revoke the
             Drive connection.
           </p>
-          <p className="voice-prose text-[0.95rem]">
+          <p className="voice-prose-sm">
             Copies on your devices, and backup files already delivered to your
             Drive, remain yours.
           </p>
         </section>
 
-        <p className="voice-prose text-[0.9rem] text-ink-soft">
+        <p className="voice-prose-sm text-ink-soft">
           Questions about any of this can go to{" "}
           <a
             href="mailto:snippets.support@gmail.com"

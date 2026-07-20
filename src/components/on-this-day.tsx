@@ -2,6 +2,7 @@
 
 import { useOnThisDay } from "@/hooks/use-snippets";
 import { SnippetEntry } from "@/components/snippet/snippet-entry";
+import { SectionHeading } from "@/components/section-heading";
 import { copy } from "@/lib/copy";
 
 /**
@@ -14,7 +15,7 @@ export function OnThisDay() {
 
   return (
     <section aria-label={copy.memories.heading} className="mt-12">
-      <h2 className="voice-label border-b border-rule pb-1.5">{copy.memories.heading}</h2>
+      <SectionHeading>{copy.memories.heading}</SectionHeading>
       {groups.map((group) => (
         <div key={group.label} className="mt-4">
           <h3 className="voice-display text-[1.05rem] italic text-ink-soft">
