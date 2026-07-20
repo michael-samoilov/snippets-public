@@ -788,16 +788,18 @@ function EncryptionSection({ email }: { email: string }) {
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("seal") === "1",
   );
+  // NB: we do NOT strip ?seal=1 / ?unlock=1 here. Writing history
+  // (replaceState) from an arrival effect races Next's route-transition
+  // commit and, on WebKit, wedges the client router so the page can no
+  // longer navigate away at all — back AND a forward <Link> both dead
+  // (the locked-letter trap). The lingering param is harmless: a refresh
+  // just re-offers enroll / re-scrolls to unlock, both gated on real state.
   useEffect(() => {
-    if (wantSeal && enrolled === false) {
-      replaceUrl("/settings");
-      setEnrollOpen(true);
-    }
+    if (wantSeal && enrolled === false) setEnrollOpen(true);
   }, [wantSeal, enrolled]);
 
   // arriving from the calendar's locked letter ("Unlock in Settings"):
   // bring the unlock form into view once it's actually the section's body.
-  // Clean only the unlock param — the tab must survive a refresh.
   const sectionRef = useRef<HTMLElement>(null);
   const [wantUnlock] = useState(
     () =>
@@ -806,9 +808,6 @@ function EncryptionSection({ email }: { email: string }) {
   );
   useEffect(() => {
     if (!wantUnlock || !enrolled || hasKey !== false) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("unlock");
-    replaceUrl(url);
     sectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [wantUnlock, enrolled, hasKey]);
 
@@ -1180,7 +1179,6 @@ function BackupSection() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("drive") !== "connected") return;
-    replaceUrl("/settings");
     void (async () => {
       setConnecting(true);
       try {
@@ -1208,6 +1206,11 @@ function BackupSection() {
       } finally {
         setConnecting(false);
         requestSync();
+        // strip ?drive=connected only now — well after the route-transition
+        // commit — so this history write can't wedge WebKit's client router
+        // (see the seal/unlock effects above); a stray refresh mid-connect is
+        // harmless (connect is idempotent).
+        replaceUrl("/settings");
       }
     })();
   }, []);
