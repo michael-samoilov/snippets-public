@@ -42,15 +42,9 @@ function EntryViewBase({
       className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border [border-color:var(--card-seat-border)] bg-paper [box-shadow:var(--card-seat)]"
       style={{ transformOrigin: "0 0" }}
     >
-      {/* Light pools under a press on the words (the rewrite affordance made
-          visible) — but NO bloom here: this card SCROLLS a long entry, and the
-          bloom scales an ancestor of the scroller. iOS kills a live scroll the
-          instant an ancestor's transform changes (see the ride notes in
-          press-glow), so the grow="parent" bloom turned a drag-to-scroll into a
-          dead press that only lit and swelled — worst near the right edge, where
-          there are no words to grab. The light still answers the finger and
-          rides the scroll; only the scale is gone. */}
-      <PressGlow />
+      {/* light pools under a press on the words (the rewrite affordance made
+          visible); the bloom rides the wrapper above */}
+      <PressGlow grow="parent" />
       {snippet ? (
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (
