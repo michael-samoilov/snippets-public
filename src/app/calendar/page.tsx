@@ -4292,8 +4292,31 @@ const BookRow = memo(function BookRow({
     () => probeStore.get() === day,
     () => false,
   );
+  // Bug fix (backfill seal animation skipped): the "yesterday, if empty"
+  // nudge composer is only meant to show while yesterday is genuinely blank
+  // — but `keep()` WRITES to Dexie at submit, before any of the press→card→
+  // wipe choreography plays (a write deferred into an animation timer would
+  // be lost if the reader left mid-sequence). The live query then updates
+  // `snippets` to length 1 almost immediately — often within a couple of
+  // frames — flipping this `isYesterday && snippets.length === 0` clause
+  // false and UNMOUNTING the whole composer (seal, timers, in-flight state)
+  // well before its ~1700ms press animation even starts. The entry still
+  // saves; it just lands as a plain, unanimated list-insert instead of the
+  // designed reveal — reads as "the seal animation didn't play". A long
+  // paste doesn't cause this any more than a short one does, but it makes
+  // the vanish far more visually obvious (a big just-typed block snaps away
+  // instantly rather than a one-liner). Fix: once this day's composer starts
+  // a keep, hold the door open (independent of the live snippet count) until
+  // that keep's own choreography actually finishes.
+  const [keepInFlight, setKeepInFlight] = useState(false);
+  // stable identity (setKeepInFlight itself is React-guaranteed stable) —
+  // FlowBackfillCapture's own effect keys off these in its dependency
+  // array, and a fresh closure every render would re-fire it on every
+  // unrelated re-render, not just on a genuine seq.phase transition
+  const onComposerKeepStart = useCallback(() => setKeepInFlight(true), []);
+  const onComposerKeepSettled = useCallback(() => setKeepInFlight(false), []);
   const showComposer =
-    isToday || probed || (isYesterday && snippets.length === 0);
+    isToday || probed || (isYesterday && (snippets.length === 0 || keepInFlight));
   const d = dateFromDayKey(day);
   const pageRow = (
     <section
@@ -4368,7 +4391,13 @@ const BookRow = memo(function BookRow({
       <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
         <ScheduleCards snippets={snippets} day={day} onOpen={onOpen} />
         {showComposer && (
-          <BackfillCapture key={day} day={day} snippets={snippets} />
+          <BackfillCapture
+            key={day}
+            day={day}
+            snippets={snippets}
+            onKeepStart={onComposerKeepStart}
+            onKeepSettled={onComposerKeepSettled}
+          />
         )}
       </div>
     </section>
@@ -5870,7 +5899,14 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 // seal. Today's capture lives in the big fill zone, so today's inline composer
 // steps aside — but other days keep theirs (yesterday's "add something from
 // yesterday" invite, or any page you opened to backfill).
-function BackfillCapture(props: { day: string; snippets: Snippet[] }) {
+function BackfillCapture(props: {
+  day: string;
+  snippets: Snippet[];
+  // told to the parent so it can hold a "yesterday, if empty" composer open
+  // through its own keep — see showComposer's comment in BookRow
+  onKeepStart?: () => void;
+  onKeepSettled?: () => void;
+}) {
   if (props.day === dayKey()) return null;
   return <FlowBackfillCapture {...props} />;
 }
@@ -5883,9 +5919,13 @@ function BackfillCapture(props: { day: string; snippets: Snippet[] }) {
 function FlowBackfillCapture({
   day,
   snippets,
+  onKeepStart,
+  onKeepSettled,
 }: {
   day: string;
   snippets: Snippet[];
+  onKeepStart?: () => void;
+  onKeepSettled?: () => void;
 }) {
   const reduce = useReducedMotion() ?? false;
   const [text, setText] = useState("");
@@ -5906,6 +5946,26 @@ function FlowBackfillCapture({
   // data-facing steps (abortedRef) and puts the words back.
   const heldKeepRef = useRef<string | null>(null);
   const keepAbortedRef = useRef(false);
+  // Bug fix (backfill double-submit): `seq.phase` only leaves "idle" inside
+  // `seq.start()`, which fires from `settleSealIntoView`'s async callback —
+  // never synchronously inside `keep()`. A long, multi-line paste inflates
+  // the textarea and disturbs the keyboard/scroll settle for much longer
+  // than a short entry does, widening the gap between "tap registered" and
+  // "seq.phase actually flips". A second tap landing in that gap (an
+  // impatient re-tap when nothing visibly happens yet — or, on a fast
+  // double-tap, even with short text) sailed past the `seq.phase !== "idle"`
+  // guard, started a SECOND overlapping keep() sharing the same
+  // settleCancel/heldKeepRef refs, and the second call's setup unconditionally
+  // cancelled the first's pending settle-watch and reassigned heldKeepRef —
+  // releasing the first call's held (and already-written) row as a silent,
+  // unanimated list-insert while its own seal choreography never played.
+  // Net effect: the seal animation appears to skip, and the entry that
+  // surfaces can be an earlier, unrelated stuck attempt rather than the one
+  // just typed. This ref closes the gap: set synchronously the instant a tap
+  // is accepted, before any async work, and released only once something
+  // else (seq.phase, a write failure, or the reduced-motion instant path)
+  // is actually in a position to guard re-entry correctly.
+  const submittingRef = useRef(false);
   useEffect(
     () => () => {
       settleCancel.current?.();
@@ -5915,6 +5975,19 @@ function FlowBackfillCapture({
     [],
   );
   const seq = useKeepSequence(KEEP_BEATS, reduce);
+  // Bug fix (backfill seal animation skipped): told to the parent so the
+  // "yesterday, if empty" nudge composer can hold itself open through a keep
+  // in flight — see showComposer's comment in BookRow. `seq.phase` returning
+  // to "idle" is this composer's own signal that its choreography (success
+  // OR an aborted write) has fully played out; the ref guards against firing
+  // on first mount (phase starts "idle" before any keep has ever run).
+  const keepInFlightRef = useRef(false);
+  useEffect(() => {
+    if (seq.phase === "idle" && keepInFlightRef.current) {
+      keepInFlightRef.current = false;
+      onKeepSettled?.();
+    }
+  }, [seq.phase, onKeepSettled]);
   const draftStore = useKeptDraft();
   // Does a VISIBLE entry sit above this composer? (Governs the mt-1 gap that
   // separates the composer from the cards above it.) Count only shown rows:
@@ -5959,7 +6032,16 @@ function FlowBackfillCapture({
 
   const keep = () => {
     const trimmed = text.trim();
-    if (!trimmed || seq.phase !== "idle") return;
+    if (!trimmed || submittingRef.current || seq.phase !== "idle") return;
+    // Set synchronously, before any async work, so a second tap landing
+    // before `seq.phase` catches up (see submittingRef's comment above)
+    // is blocked outright rather than racing this call.
+    submittingRef.current = true;
+    // Told to the parent NOW, before the write below — its live-query update
+    // can land within a couple of frames, well before the choreography even
+    // starts (see keepInFlightRef's comment above).
+    keepInFlightRef.current = true;
+    onKeepStart?.();
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
     const capturedAt = isToday ? Date.now() : at.getTime();
@@ -5984,6 +6066,11 @@ function FlowBackfillCapture({
         if (heldKeepRef.current === id) heldKeepRef.current = null;
         draftStore?.release(id);
         draftStore?.clear(day);
+        submittingRef.current = false; // the words are back — a retry must be allowed
+        // the write never landed, so the day is still genuinely empty —
+        // showComposer's own snippets.length===0 clause already covers it
+        keepInFlightRef.current = false;
+        onKeepSettled?.();
         setPressedDown(false);
         setText(trimmed);
         if (areaRef.current) {
@@ -6016,6 +6103,11 @@ function FlowBackfillCapture({
       file();
       setText("");
       if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
+      submittingRef.current = false; // this path never reaches seq.start(); nothing else will release it
+      // reduced motion means an instant transition IS the intended result —
+      // no choreography to protect, so release straight away
+      keepInFlightRef.current = false;
+      onKeepSettled?.();
       return;
     }
     // Sequence: (1) hold the seal PRESSED while it scrolls fully into view and the
@@ -6060,6 +6152,9 @@ function FlowBackfillCapture({
         // beat; the unmounting field needs no imperative resize.
         setText("");
       });
+      // seq.phase is about to flip to "pressing" (React flushes before the next
+      // event) and correctly guards re-entry itself from here on — hand off.
+      submittingRef.current = false;
     };
     const btn = sealBtnRef.current;
     if (btn) settleCancel.current = settleSealIntoView(btn, play);
