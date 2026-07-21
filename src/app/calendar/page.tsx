@@ -1826,6 +1826,28 @@ function Calendar() {
           entryFoot.style.willChange = "opacity";
           willChanged.push(entryFoot);
         }
+        // …but a press-glow left mid-fade under the card DEFEATS that: its
+        // layer carries mix-blend-mode (an isolated blend group) and
+        // will-change straight through the scale, forcing the exact per-frame
+        // re-raster the promotion above exists to avoid — the card's edges
+        // shimmer on iOS (its own FLAT-BOOK LAW). PressGlow sheds it 400ms
+        // after release, but scroll-then-close (now that a long entry scrolls)
+        // arms it and closes well inside that window. The card is leaving; its
+        // press light is moot — shed the blend NOW so the card scales as one
+        // cached layer. (arm() re-sets it on the next press.)
+        const pressGlow = entryCard.querySelector<HTMLElement>("[data-press-glow]");
+        if (pressGlow) {
+          pressGlow.style.mixBlendMode = "";
+          const glowInner = pressGlow.firstElementChild as HTMLElement | null;
+          if (glowInner) {
+            glowInner.style.willChange = "";
+            // hard-cut, not the 380ms fade: unblended (mix-blend just cleared)
+            // the light would otherwise read as a plain bright pool fading over
+            // the shrinking card — vanish it with the press it belonged to
+            glowInner.style.transition = "none";
+            glowInner.style.opacity = "0";
+          }
+        }
         // a hand-rolled rAF drives the whole shared-element move off one
         // eased value (Motion's numeric animate was being cancelled after
         // a single frame here, alone among the transitions)
