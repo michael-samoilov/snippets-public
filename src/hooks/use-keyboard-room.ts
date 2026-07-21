@@ -153,6 +153,25 @@ export function useKeyboardRoom(
         return;
       }
       lastElMoveAt = performance.now();
+      // A pinned composer must hold even mid-fling. Its freeze gets thawed by a
+      // stray touch (onTouchStart), and while the book is still coasting arm()
+      // refuses to re-commit — it waits for a stillness a momentum fling never
+      // reaches — so frozenSt stays null, the clamp below is skipped, and the
+      // composer coasts off-screen (the "slides out of view while typing" case,
+      // confirmed on-device: a long run of scroll events with froz=null). Re-
+      // assert its centred target right here, on every scroll, independent of the
+      // arm lifecycle, so a coasting fling is stopped on its first frame. A real
+      // finger scroll (touchDown) still passes through untouched.
+      if (
+        frozenSt == null &&
+        !touchDown &&
+        field &&
+        field.hasAttribute("data-room-pin") &&
+        document.activeElement === field
+      ) {
+        correct(); // recompute the centred target, snap to it, re-freeze
+        return;
+      }
       if (frozenSt == null || touchDown) return;
       if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
     };
