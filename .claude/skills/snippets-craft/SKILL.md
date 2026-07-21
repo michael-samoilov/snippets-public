@@ -37,11 +37,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    `voice-label border-b` strings. (One tuned exception: the calendar
    composer's textarea keeps its literal 0.9rem/line-height pairing —
    it must wrap character-for-character like the book card preview.)
-   **One body shade:** full-sentence body prose is a single color
-   (`ink-soft`); hierarchy comes from headers + position, not from
-   fading paragraphs. `ink-faint` is for mono data, inactive/secondary
+   **One body shade — the primary ink.** Reading text (full-sentence
+   body prose) is the default `ink`; `voice-prose`/`voice-prose-sm` set
+   no color, so leave it unset — do NOT mute paragraphs with `ink-soft`
+   or `ink-faint`. Hierarchy comes from headers + position + voice, not
+   from fading the prose. `ink-soft` is the quiet small-caps label voice
+   (`voice-label`); `ink-faint` is for mono data, inactive/secondary
    labels, placeholders, and icons — never a paragraph of body copy.
-   (`ink` is reserved for display/action titles; `ember` for errors.)
+   `ember` is errors. (This settled over three passes: the settings
+   page first drifted to ~12 sizes, then to two prose shades
+   (soft/faint), before landing here — one reading shade, the primary
+   ink, matching the privacy page.)
 3. **Everything pressable feels physical.** Use `.pressable` (it owns
    the `transition` property — never pair with `transition-*`
    utilities), or the raised-button recipe (inset top highlight + drop
