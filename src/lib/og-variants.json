@@ -277,7 +277,7 @@
       {
         "kind": "bg",
         "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
-        "texture": "/textures/sheet-light.webp",
+        "texture": "/textures/sheet-light-og.webp",
         "textureRotate": 90,
         "textureSize": "cover"
       },
@@ -333,7 +333,7 @@
       },
       {
         "kind": "wordmark",
-        "cx": 175,
+        "cx": 162,
         "cy": 105,
         "fontPx": 56
       },
@@ -342,7 +342,7 @@
         "text": "Delight in the everyday",
         "voice": "display",
         "sizePx": 39,
-        "x": 58,
+        "x": 45,
         "y": 454,
         "color": "ink-soft",
         "italic": true,
@@ -353,7 +353,7 @@
         "text": "Every day is all there is",
         "voice": "display",
         "sizePx": 39,
-        "x": 58,
+        "x": 45,
         "y": 502,
         "color": "ink-soft",
         "italic": true,
