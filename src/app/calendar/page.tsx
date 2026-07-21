@@ -2827,6 +2827,35 @@ function Calendar() {
     setView("year");
   }, []);
 
+  // snap out of an entry back to the book — no dive. A browser back-swipe
+  // already slid the schedule in, so the entry→schedule morph on top re-shows
+  // the card and re-shrinks it (the redundant flash). The book's scroll is
+  // untouched from the open, so it lands exactly where the swipe left it.
+  const snapToScheduleFromEntry = useCallback(() => {
+    if (viewRef.current !== "entry") return;
+    wakeLayer(scheduleLayerRef.current);
+    setView("schedule");
+  }, []);
+
+  // snap forward from the canvas into the book on a day — no dive (a native
+  // forward-swipe already slid it in; a re-dive on top would double the move)
+  const snapToScheduleFromMonth = useCallback((d: string) => {
+    if (viewRef.current !== "month") return;
+    wakeLayer(scheduleLayerRef.current);
+    liveDayRef.current = d;
+    setSelected(d);
+    scheduleFeedRef.current?.goTo(d, false);
+    setView("schedule");
+  }, []);
+
+  // snap forward from the book into an entry — no dive
+  const snapToEntryFromSchedule = useCallback((e: string) => {
+    if (viewRef.current !== "schedule") return;
+    wakeLayer(entryLayerRef.current);
+    setFocusedId(e);
+    setView("entry");
+  }, []);
+
   const descendFromEntry = useCallback(() => {
     const id = focusedIdRef.current ?? "";
     // Pre-measure the rise's shared-element boxes NOW — the entry view is still
@@ -2886,8 +2915,10 @@ function Calendar() {
       appNavRef.current = false;
       if (DEPTH[target] < DEPTH[cur]) {
         // climbing to a higher altitude (the camera pulls out / up)
-        if (cur === "entry") descendFromEntry();
-        else if (cur === "schedule") {
+        if (cur === "entry") {
+          if (viaApp) descendFromEntry();
+          else snapToScheduleFromEntry();
+        } else if (cur === "schedule") {
           if (viaApp) descendFromSchedule();
           else snapToMonthFromSchedule();
         } else if (cur === "month" && target === "year") {
@@ -2904,13 +2935,17 @@ function Calendar() {
           if (viaApp) descendFromYear();
           else snapToMonthFromYear();
         } else if (cur === "month" && d) {
-          liveDayRef.current = d;
-          setSelected(d);
-          scheduleFeedRef.current?.goTo(d);
-          runZoom("month", "schedule", d);
+          if (viaApp) {
+            liveDayRef.current = d;
+            setSelected(d);
+            scheduleFeedRef.current?.goTo(d);
+            runZoom("month", "schedule", d);
+          } else snapToScheduleFromMonth(d);
         } else if (cur === "schedule" && e) {
-          setFocusedId(e);
-          runZoom("schedule", "entry", e);
+          if (viaApp) {
+            setFocusedId(e);
+            runZoom("schedule", "entry", e);
+          } else snapToEntryFromSchedule(e);
         }
       }
     };
@@ -2924,6 +2959,9 @@ function Calendar() {
     snapToYear,
     descendFromYear,
     snapToMonthFromYear,
+    snapToScheduleFromEntry,
+    snapToScheduleFromMonth,
+    snapToEntryFromSchedule,
     runZoom,
   ]);
 
