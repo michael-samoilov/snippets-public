@@ -220,11 +220,14 @@ async function capturePlates(browser) {
     await ctx.close();
   }
 
-  // PORTRAIT BLEED SET (light only): each altitude captured at the target
-  // portrait aspect (2:3) so a full-bleed portrait variant shows the real app
-  // UI edge-to-edge with no cropping. Written to <view>-bleed.png.
+  // PORTRAIT BLEED SET (light only): each altitude captured at the stacked
+  // plate's box aspect (400×640 = 5:8) so `cover` neither up-scales nor crops
+  // the sides — a wider capture (the old 2:3 = 420×640) fills the box by HEIGHT
+  // and shears ~10px off each edge, halving the today card's side gutter
+  // relative to the tall plates (which fill by width and keep theirs).
+  // Written to <view>-bleed.png.
   const bctx = await browser.newContext({
-    viewport: { width: 420, height: 640 },
+    viewport: { width: 400, height: 640 },
     deviceScaleFactor: 2,
   });
   await bctx.addInitScript(() => {
