@@ -29,6 +29,8 @@ export const copy = {
     titleTemplate: "%s · Snippets",
     description:
       "A pocket notebook. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
+    /** alt text for the link-preview image (src/app/opengraph-image.alt.txt is generated from this — keep them matched) */
+    ogAlt: "The Snippets wordmark over the words 'Appreciate the everyday — every day is all there is,' beside a fanned stack of the app's pages — a year, a month, kept days, and today — sealed with blue wax. A pocket notebook.",
   },
 
   /** primary navigation — the desktop links and the mobile dock */
@@ -458,6 +460,10 @@ export const copy = {
       offline: "Offline — changes will sync when you’re back.",
       error: "Sync hit a snag — retrying.",
       skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
+      /** how sync behaves — concrete on the cadence; keep the "15 minutes"
+          in step with IDLE_POLL_MS in sync.ts if that interval ever changes */
+      cadence:
+        "Your entries sync the moment you open Snippets and just after you write. While it stays open, it also checks your other devices for changes about every 15 minutes — so a second device you’ve left open catches up within 15 minutes, not instantly.",
       /** the tiny mono integrity line, e.g. "1,204 on device · 1,204 on server" */
       counts: (device: string, server: string) =>
         `${device} on device · ${server} on server`,

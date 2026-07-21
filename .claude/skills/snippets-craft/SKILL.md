@@ -37,6 +37,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    `voice-label border-b` strings. (One tuned exception: the calendar
    composer's textarea keeps its literal 0.9rem/line-height pairing —
    it must wrap character-for-character like the book card preview.)
+   **One body shade — the primary ink.** Reading text (full-sentence
+   body prose) is the default `ink`; `voice-prose`/`voice-prose-sm` set
+   no color, so leave it unset — do NOT mute paragraphs with `ink-soft`
+   or `ink-faint`. Hierarchy comes from headers + position + voice, not
+   from fading the prose. `ink-soft` is the quiet small-caps label voice
+   (`voice-label`); `ink-faint` is for mono data, inactive/secondary
+   labels, placeholders, and icons — never a paragraph of body copy.
+   `ember` is errors. (This settled over three passes: the settings
+   page first drifted to ~12 sizes, then to two prose shades
+   (soft/faint), before landing here — one reading shade, the primary
+   ink, matching the privacy page.)
 3. **Everything pressable feels physical.** Use `.pressable` (it owns
    the `transition` property — never pair with `transition-*`
    utilities), or the raised-button recipe (inset top highlight + drop
@@ -105,7 +116,21 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    it names an actual on-screen object — the **wax seal** you tap to
    record/keep is real, so "tap the seal" stays — or genuinely aids
    understanding; otherwise the plainer word wins. When in doubt, prefer
-   the word a non-user would understand.
+   the word a non-user would understand. **Be concrete, not vague:** when
+   a thing has a real figure — an interval, a count, a limit — name it
+   (*every 15 minutes*, not *now and then*; *at least ten characters*, not
+   *long enough*). A specific number is clearer, and reads as more honest,
+   than a soft quantifier that makes the reader guess. **The technical
+   register** — copy that explains a mechanism (privacy, terms, the
+   sync/backup/encryption lines in Settings, *not* the literary prompts) —
+   is held to an STE-informed bar (after ASD-STE100): short one-idea
+   sentences (~25 words), active voice, ONE word per meaning (encrypt is
+   always *encrypt*, never *seal*), no internal jargon (*payload*,
+   *tombstone*, *cursor*, *LWW*), concrete figures. Still the house voice,
+   just more literal. A `pnpm test` linter enforces the mechanical rules
+   (`copy-clarity.test.ts` / `pnpm check:copy`) over an allowlist — extend
+   it when you add a technical surface. Full standard in `DESIGN.md` → Copy
+   voice.
 8. **Capture friction is sacred.** Nothing may add a decision, dialog,
    or required field to the moment of capture; the app stays whole with
    no API key and no network. `enriched: "manual"` always wins.

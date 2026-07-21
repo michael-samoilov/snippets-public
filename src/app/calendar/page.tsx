@@ -980,6 +980,11 @@ function Calendar() {
     (view === "schedule" && selected === dayKey());
 
   const stageRef = useRef<HTMLDivElement>(null);
+  // the terminus hairline pair (see their JSX): the stage seat line (static,
+  // outside the scaled layers) and the schedule layer's own in-layer line —
+  // the dive swaps between them so the line is never shown texture-magnified
+  const seatLineRef = useRef<HTMLDivElement>(null);
+  const bookLineRef = useRef<HTMLDivElement>(null);
   // the title's lift-fire bookkeeping (see the title button's onPointerUp)
   const titleTapRef = useRef({ x: 0, y: 0, id: -1, firedAt: 0 });
   const monthLayerRef = useRef<HTMLDivElement>(null);
@@ -1039,9 +1044,6 @@ function Calendar() {
   const monthActiveRef = useRef(false);
   const yearActiveRef = useRef(false);
   const schedActiveRef = useRef(false);
-  // the weekday rail (S M T W T F S) — held frozen through a move's setup so
-
-
   useLayoutEffect(() => {
     monthActiveRef.current = view === "month" && !zoom;
     yearActiveRef.current = view === "year" && !zoom;
@@ -1421,6 +1423,22 @@ function Calendar() {
     let flyerBox: HTMLDivElement | null = null;
     let underBox: HTMLDivElement | null = null;
     const hiddenNumbers: HTMLElement[] = [];
+    // DIVE: the book's IN-LAYER terminus line stays dark through the move. On
+    // iOS the arriving layer is rasterized ONCE at its small initial scale and
+    // magnified for the whole zoom — a 1px line in that texture reads soft and
+    // double-width until the at-rest re-raster snaps it crisp (owner recording,
+    // 2026-07-20). A STATIC stand-in at the line's final position fades in on
+    // the layer-fade's own compositor clock instead (see joinIncoming): crisp
+    // by construction, never scaled. finish() reveals the in-layer line in the
+    // same swap paint the stand-in's cancel returns it to opacity-0 — identical
+    // pixels at the same row, so the hand-off cannot blank or double.
+    if (zoom.from === "month" && zoom.to === "schedule") {
+      const bookLine = bookLineRef.current;
+      if (bookLine) {
+        bookLine.style.visibility = "hidden";
+        hiddenNumbers.push(bookLine);
+      }
+    }
     // the straddling day's margin cell, held sticky through a frozen move
     // (inline style beats the frozen cells' static) — cleared a frame after finish
     const repinned: HTMLElement[] = [];
@@ -1507,6 +1525,17 @@ function Calendar() {
       }
       if (entryFoot) entryFoot.style.opacity = "";
       for (const el of willChanged) el.style.willChange = "";
+      // the dive's terminus stand-in: restore its class transition (held off
+      // for the move so the cancel is INSTANT — a 180ms opacity fade-out at
+      // its resting row, one pixel above where it landed, read as the line
+      // settling down a pixel at the end; owner recording 2026-07-20)
+      if (seatLineRef.current) seatLineRef.current.style.transitionProperty = "";
+      // …and the in-layer line it hands off to must come back in THIS paint,
+      // not the deferred heavy frame with the other hidden stand-ins: the
+      // camAnims cancel above just dropped the pad to opacity 0, and a frame
+      // between that and this reveal has NO line at the terminus (padprobe
+      // caught a ~50ms hole). One element — free to reveal synchronously.
+      if (bookLineRef.current) bookLineRef.current.style.visibility = "";
       deleteCloseRef.current = false;
       setDeletingSnippet(null);
       // Hand input back NOW, synchronously: the shield goes and the landed
@@ -2530,6 +2559,40 @@ function Calendar() {
         const clock = camAnims[0]?.currentTime;
         if (typeof clock === "number") fade.currentTime = clock;
         camAnims.push(fade); // finish() cancels it with the rest
+        // DIVE: the LANDING PAD (see the setup hide of the in-layer line).
+        // The traveling hairline is the tapped day's OWN border-t riding the
+        // expanding book — the naturally-occurring line the owner prefers; a
+        // stand-in that rode alongside it doubled the moving lines. But that
+        // natural border lands sub-pixel and dims in the closing beats (the
+        // original settle-blink), so the stage seat line — never scaled,
+        // always crisp — fades in ONLY over the last ~15% of the move,
+        // already parked at the layer's final row, to catch the landing.
+        // finish()'s cancel removes it in the same frame the identical
+        // in-layer line is revealed beneath it, landed on the same row.
+        const seatLine = seatLineRef.current;
+        if (seatLine && zoom.from === "month" && zoom.to === "schedule") {
+          // no class transition while the pad works: finish()'s cancel must
+          // remove it in the SAME frame the identical in-layer line is
+          // revealed — with transition-opacity live, the cancelled line faded
+          // out over 180ms, which read as a settle artifact. Restored in
+          // finish so the year/entry seat fades keep their ease.
+          seatLine.style.transitionProperty = "none";
+          // +1px: the seat row sits ONE ROW ABOVE the stage/layer top (the
+          // structural border), and the in-layer line the finish reveals
+          // lives at the LAYER's row — park there, not at the seat, or the
+          // hand-off drops the line a pixel (rideprobe: line@0 vs edge@1)
+          const standIn = seatLine.animate(
+            [
+              { opacity: 0, transform: "translateY(1px)", offset: 0 },
+              { opacity: 0, offset: 0.8 },
+              { opacity: 1, offset: 0.95 },
+              { opacity: 1, transform: "translateY(1px)", offset: 1 },
+            ],
+            { duration: 440, easing: "linear", fill: "forwards" },
+          );
+          if (typeof clock === "number") standIn.currentTime = clock;
+          camAnims.push(standIn);
+        }
       }
       // The incoming book's camera scale, deferred from setup to HERE
       // (behind motion) so its promotion/raster never lands on the input frame.
@@ -3817,19 +3880,41 @@ function Calendar() {
       </div>
       </div>
 
-      {/* the weekday rail exists only at the month altitude; elsewhere
-          it folds shut so content sits flush under the title, and its
-          hairline — the line where the scroll area terminates — rides
-          along to sit beneath the month header. The zoom effect HOLDS it
-          (inline grid-template-rows) through a move's setup and releases it
-          when the camera starts, so the fold rides the move — without the
-          hold it began folding at the COMMIT paint, a frame (or three, under
-          device raster) before the animations played: the reader saw the
-          weekday bar change as the ONLY thing moving. */}
-      {/* the header's bottom rule — constant across every view (it used to
-          be the weekday rail's border, and the rail's fold resized the stage;
-          the rail itself now lives inside the month layer) */}
-      <div className="mt-5 border-b border-rule-faint" />
+      {/* the header's bottom rule — the scroll area's top terminus at the
+          YEAR and ENTRY altitudes only. The month's terminus is the weekday
+          rail's own border-b, and the schedule's is its layer's own top
+          hairline (see the schedule layer) — each altitude's image carries
+          its line, so it fades/scales WITH the view on every move and there
+          is never a hand-off frame with no line: this seat's old job of
+          appearing at a dive's finish left a few committed frames where the
+          landed day's sub-pixel border had slipped under the clip edge
+          before this line had faded in (owner recording, 2026-07-20). The
+          STRUCTURAL 1px stays put as a transparent border, so no view flip
+          ever resizes the stage — resizing it was the old rail-fold's
+          ~140ms setup snap. */}
+      <div className="relative mt-5 border-b border-transparent">
+        <div
+          ref={seatLineRef}
+          aria-hidden="true"
+          className={cn(
+            // z-10: while riding a dive's edge (translateY below) it overlaps
+            // the stage box and must paint above the composited layers
+            "pointer-events-none absolute inset-x-0 top-0 z-10 h-px transition-opacity",
+            // search hides every altitude layer (and their lines), so the
+            // seat serves its results list at any altitude
+            (searchActive || view === "year" || view === "entry") &&
+              zoom?.from !== "month"
+              ? "opacity-100"
+              : "opacity-0",
+          )}
+          style={{
+            // OPAQUE (not bg-rule-faint): see --terminus-line in globals.css
+            // — two 8% layers composite darker where lines coincide.
+            backgroundColor: "var(--terminus-line)",
+            transitionDuration: "var(--dur-base)",
+          }}
+        />
+      </div>
 
       {/* the stage: one fixed frame for every altitude. It fills the
           column, and its terminating hairline sits the same distance
@@ -3892,7 +3977,11 @@ function Calendar() {
           <div
             role="row"
             aria-hidden={view !== "month"}
-            className="grid shrink-0 grid-cols-7 pt-1.5"
+            // border-b: the month altitude's scroll terminus — INSIDE the
+            // layer, so it fades/scales as part of the calendar's image on
+            // every move (the header's seat line takes over only once no
+            // month image is on stage; see the header rule above)
+            className="grid shrink-0 grid-cols-7 border-b border-rule-faint pt-1.5"
           >
             {weekdays(weekStart).map((d, i) => (
               <span
@@ -3925,7 +4014,12 @@ function Calendar() {
           ref={yearLayerRef}
           data-layer="year"
           className={cn(
-            "absolute inset-0",
+            // px-2 pads the stage's -mx-2 bleed back, exactly like the month/
+            // schedule/entry layers — without it the glance grid laid out 8px
+            // wider each side than every other altitude, spilling past the
+            // header terminus's left/right ends (less side gutter than the
+            // rest of the book).
+            "absolute inset-0 px-2",
             // content-visibility (not just visibility): a hidden-but-mounted
             // year glance still paid STYLE RECALC on every pass — and each
             // move triggers 5-17 passes (Performance.getMetrics: style
@@ -3969,6 +4063,22 @@ function Calendar() {
             !showScheduleLayer && "invisible",
           )}
         >
+          {/* the book's OWN terminus hairline, at its top clip edge — INSIDE
+              the layer, so on a dive it fades/scales in as part of the
+              arriving page (the rise's rail line, mirrored) and there is no
+              hand-off frame with no line: the stage seat used to appear only
+              at finish(), a couple of commits AFTER the landed day's
+              sub-pixel border had slipped under the clip edge (the blank-line
+              frames the owner recorded). Opaque terminus colour: it rests
+              exactly where that day's rule-faint border-t sits, and two 8%
+              layers would composite darker. inset-x-2 matches the layer's
+              px-2 content width (the seat line's span). */}
+          <div
+            ref={bookLineRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-2 top-0 z-10 h-px"
+            style={{ backgroundColor: "var(--terminus-line)" }}
+          />
           {(view === "schedule" || warm >= 1) && (
             <ScheduleFeed
               handleRef={scheduleFeedRef}

@@ -317,7 +317,7 @@ export default function PrivacyPage() {
             storing nothing. A compromised server could abuse that moment of
             transit — the same honest ceiling as the app&rsquo;s own code — but
             only to reach these Drive files, which are readable by design
-            anyway; your encrypted entries stay sealed on our server whatever
+            anyway; your entries stay encrypted on our server whatever
             happens to the token. In normal use, the files never pass through us
             at all.
           </p>

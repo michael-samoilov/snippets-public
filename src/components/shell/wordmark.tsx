@@ -20,8 +20,9 @@ import { copy } from "@/lib/copy";
    embossed S's baseline meets "nippets". The press plays once on load and again
    on tap; reduced motion and re-renders settle without replaying. */
 
-const LIGHT_BLUE: Tint = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
-const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a1a2e" };
+// Exported for the OG-image lab (/lab/og), which restates the wordmark statically.
+export const LIGHT_BLUE: Tint = { wax: "#5b8cc0", bright: "#6f9fd0", shadow: "#142841" };
+export const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a1a2e" };
 const DARK_S_INK = "#120f0b";  // the deep-ink S on Paper
 const LIGHT_S_INK = "#eae1cd"; // the light S on Lamplight
 

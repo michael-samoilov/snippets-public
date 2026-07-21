@@ -239,7 +239,7 @@ function SettingAction({
   return (
     <div>
       <p className="voice-display text-ui">{title}</p>
-      <p className="voice-prose-sm mt-0.5 text-ink-soft">{description}</p>
+      <p className="voice-prose-sm mt-0.5">{description}</p>
     </div>
   );
 }
@@ -417,7 +417,7 @@ export default function SettingsPage() {
 
         <section aria-label={copy.settings.data.heading}>
           <SectionHeading>{copy.settings.data.heading}</SectionHeading>
-          <p className="voice-prose-sm mt-4 text-ink-soft">
+          <p className="voice-prose-sm mt-4">
             {copy.settings.data.lead}
             {stats && stats.total > 0 && (
               <> {copy.settings.data.countSoFar(stats.total)}</>
@@ -462,7 +462,7 @@ export default function SettingsPage() {
           aria-labelledby="settings-tab-agreement"
           className="space-y-4"
         >
-          <p className="voice-prose-sm max-w-[46ch] text-ink-soft">
+          <p className="voice-prose-sm max-w-[46ch]">
             {copy.settings.agreement.lead}
           </p>
           <div className="space-y-3">
@@ -507,7 +507,7 @@ function AgreementLink({
         <span className="voice-label-sm block text-ink-soft group-hover:text-ink">
           {title}
         </span>
-        <span className="voice-prose-sm mt-0.5 block text-ink-faint">
+        <span className="voice-prose-sm mt-0.5 block">
           {sub}
         </span>
       </span>
@@ -627,8 +627,11 @@ function SyncLines() {
       {/* the integrity counts (device · server) now ride the Synced readout
           line itself, so there's no separate count line beneath */}
       <ProtRow glyph={<SyncGlyph />} {...syncRow(sync, online)} />
+      <p className="voice-prose-sm">
+        {copy.settings.sync.cadence}
+      </p>
       {sync.skewed && (
-        <p className="voice-prose-sm text-ink-faint">
+        <p className="voice-prose-sm">
           {copy.settings.sync.skewed}
         </p>
       )}
@@ -639,7 +642,7 @@ function SyncLines() {
           <p className="voice-prose-sm text-ember">
             {copy.settings.sync.outOfStep}
           </p>
-          <p className="voice-prose-sm mt-1 text-ink-faint">
+          <p className="voice-prose-sm mt-1">
             {copy.settings.sync.reconcileHint}
           </p>
           <div className="mt-3">
@@ -677,7 +680,7 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
           formatBytes(storage.quotaBytes),
         )}
       </p>
-      <p className="voice-prose-sm text-ink-faint">
+      <p className="voice-prose-sm">
         {note}
       </p>
     </div>
@@ -754,7 +757,7 @@ function StrengthMeter({ score, label }: { score: number; label: string }) {
           />
         ))}
       </div>
-      <p className="voice-prose-sm text-ink-faint">{label}</p>
+      <p className="voice-prose-sm">{label}</p>
     </div>
   );
 }
@@ -921,7 +924,7 @@ function EncryptionSection({ email }: { email: string }) {
             state="off"
           />
         </div>
-        <p className="voice-prose-sm mt-4 text-ink-soft">
+        <p className="voice-prose-sm mt-4">
           {copy.settings.encryption.offLead}
         </p>
         <div className="mt-4">
@@ -1134,7 +1137,7 @@ function EncryptionSection({ email }: { email: string }) {
           <p className="voice-data select-all break-all text-center text-ui leading-relaxed">
             {recoveryCode}
           </p>
-          <p className="voice-prose-sm text-center text-ink-faint">
+          <p className="voice-prose-sm text-center">
             {copy.settings.encryption.recoveryFileNote}
           </p>
           <DialogFooter className="gap-2">
@@ -1315,12 +1318,12 @@ function BackupSection() {
           }
           state="good"
         />
-        <p className="voice-prose-sm text-ink-faint">
+        <p className="voice-prose-sm">
           {copy.settings.backup.mirrors}
         </p>
         {deviceHasToken === false && (
           <div className="space-y-3">
-            <p className="voice-prose-sm text-ink-faint">
+            <p className="voice-prose-sm">
               {copy.settings.backup.deliversElsewhere}
             </p>
             {/* same consent, this device: Google mints it a grant of its own
@@ -1348,7 +1351,7 @@ function BackupSection() {
   return (
     <section aria-label={copy.settings.backup.heading}>
       <SectionHeading>{copy.settings.backup.heading}</SectionHeading>
-      <p className="voice-prose-sm mt-4 text-ink-soft">
+      <p className="voice-prose-sm mt-4">
         {copy.settings.backup.lead}
       </p>
       <div className="mt-3 space-y-3">
@@ -1499,14 +1502,14 @@ function AccountSection() {
             <PaperButton onClick={() => void signOut()}>
               {copy.settings.account.signOut}
             </PaperButton>
-            <p className="voice-prose-sm text-ink-faint">
+            <p className="voice-prose-sm">
               {copy.settings.account.signOutHint}
             </p>
           </div>
         </div>
       ) : (
         <div className="mt-4">
-          <p className="voice-prose-sm text-ink-soft">
+          <p className="voice-prose-sm">
             {copy.settings.account.signedOutLead}
           </p>
           <div className="mt-4">

@@ -55,6 +55,12 @@ html {
   --ink-faint: #988c77;
   --rule: rgb(36 30 21 / 0.14);
   --rule-faint: rgb(36 30 21 / 0.08);
+  /* the scroll terminus is an OPAQUE rendering of --rule-faint over the paper:
+     the same line, but it can't double-darken when it slides over a day's own
+     rule-faint hairline during a dive (two 8% layers composite darker), and it
+     stays crisp instead of fading to near-nothing at a sub-pixel landing. Keep
+     it == rule-faint composited on --paper (#f7f1e3 ⊕ ink@0.08). */
+  --terminus-line: #e6e0d3;
 
   /* sealing wax, blue — the recording light, the margin rule, the
      accent. Blue so the writer's color can never be mistaken for the
@@ -183,6 +189,8 @@ html {
   --ink-faint: #6e6450;
   --rule: rgb(234 225 205 / 0.16);
   --rule-faint: rgb(234 225 205 / 0.09);
+  /* opaque terminus (== rule-faint composited on --paper #1d1812 ⊕ light-ink@0.09) */
+  --terminus-line: #2f2a23;
 
   --wax: #5b8cc0;
   --wax-deep: #46739f;

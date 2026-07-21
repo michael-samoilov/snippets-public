@@ -1,0 +1,364 @@
+[
+  {
+    "key": "ship-strong-notag",
+    "theme": "light",
+    "concept": "Stronger diagonal-paper gradient, current layout (no tagline).",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 205,
+        "cy": 272,
+        "fontPx": 60
+      }
+    ]
+  },
+  {
+    "key": "ship-tagline-italic",
+    "theme": "light",
+    "concept": "Wordmark up, tagline below (Fraunces display italic).",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 178,
+        "cy": 107,
+        "fontPx": 58
+      },
+      {
+        "kind": "text",
+        "text": "Save a story",
+        "voice": "display",
+        "sizePx": 46,
+        "x": 58,
+        "y": 438,
+        "color": "ink",
+        "italic": true,
+        "lineHeight": 1.05
+      },
+      {
+        "kind": "text",
+        "text": "worth remembering",
+        "voice": "display",
+        "sizePx": 46,
+        "x": 58,
+        "y": 493,
+        "color": "ink",
+        "italic": true,
+        "lineHeight": 1.05
+      }
+    ]
+  },
+  {
+    "key": "ship-tagline-roman",
+    "theme": "light",
+    "concept": "Wordmark up, tagline below (Fraunces display, upright).",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
+        "texture": "/textures/sheet-light.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1054,
+        "cy": 534,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 178,
+        "cy": 107,
+        "fontPx": 58
+      },
+      {
+        "kind": "text",
+        "text": "Save a story",
+        "voice": "display",
+        "sizePx": 46,
+        "x": 58,
+        "y": 438,
+        "color": "ink",
+        "italic": false,
+        "lineHeight": 1.05
+      },
+      {
+        "kind": "text",
+        "text": "worth remembering",
+        "voice": "display",
+        "sizePx": 46,
+        "x": 58,
+        "y": 493,
+        "color": "ink",
+        "italic": false,
+        "lineHeight": 1.05
+      }
+    ]
+  },
+  {
+    "key": "ship-tagline-soft",
+    "theme": "light",
+    "concept": "Wordmark up, smaller soft-ink tagline.",
+    "lens": "bg",
+    "needs": [
+      "plate"
+    ],
+    "blocks": [
+      {
+        "kind": "bg",
+        "css": "linear-gradient(140deg, rgba(252,246,231,0.96) 0%, rgba(223,206,172,0.58) 45%, rgba(173,152,112,0.97) 100%)",
+        "texture": "/textures/sheet-light-og.webp",
+        "textureRotate": 90,
+        "textureSize": "cover"
+      },
+      {
+        "kind": "plate",
+        "view": "year",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -12,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "calendar",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": -4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "schedule",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 4,
+        "originYpx": 1300
+      },
+      {
+        "kind": "plate",
+        "view": "today",
+        "x": 680,
+        "y": 55,
+        "w": 400,
+        "h": 640,
+        "rotateDeg": 12,
+        "originYpx": 1300,
+        "portrait": true
+      },
+      {
+        "kind": "seal",
+        "cx": 1051,
+        "cy": 548,
+        "sizePx": 155,
+        "glyph": "e:quill",
+        "tint": "app",
+        "rotateDeg": 12
+      },
+      {
+        "kind": "wordmark",
+        "cx": 162,
+        "cy": 105,
+        "fontPx": 56
+      },
+      {
+        "kind": "text",
+        "text": "Appreciate the everyday",
+        "voice": "display",
+        "sizePx": 39,
+        "x": 45,
+        "y": 454,
+        "color": "ink-soft",
+        "italic": true,
+        "lineHeight": 1.05
+      },
+      {
+        "kind": "text",
+        "text": "Every day is all there is",
+        "voice": "display",
+        "sizePx": 39,
+        "x": 45,
+        "y": 502,
+        "color": "ink-soft",
+        "italic": true,
+        "lineHeight": 1.05
+      }
+    ]
+  }
+]
