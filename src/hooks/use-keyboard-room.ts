@@ -221,10 +221,17 @@ export function useKeyboardRoom(
       // target is recomputed (not captured), onElScroll snaps any iOS reveal
       // straight back to it — the hold self-heals no matter when the walk begins.
       if (isPinned) {
-        const topCeil = layoutTop + 72;
+        // the ceiling is the SCROLLER'S OWN visible top (below the calendar
+        // header), not a fixed layoutTop+72: the book scroller sits well below
+        // the viewport top, so centring against layoutTop parked the card's head
+        // ABOVE the header and clipped its first lines (observed on-device typing
+        // a long entry — the top rows vanished under "July 2026"). Centre — and
+        // clamp — within [ceil, bandTop] so the whole card stays on screen.
+        const ceil = el.getBoundingClientRect().top + 8;
+        const room = bandTop - ceil;
         const overflowing = field.scrollHeight > field.clientHeight + 1;
         const desiredTop = overflowing
-          ? topCeil + Math.max(0, (bandTop - topCeil - r.height) / 2)
+          ? ceil + Math.max(0, (room - r.height) / 2)
           : bandTop - r.height;
         const delta = r.top - desiredTop;
         if (Math.abs(delta) > 0.5) el.scrollTop += delta;
