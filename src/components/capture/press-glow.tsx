@@ -89,6 +89,12 @@ const DWELL_MS = 220;
     drag and abandoned — iOS's own scroll slop is ~10px */
 const GROW_SLOP = 10;
 
+/** a scroll-aware surface stays dark for a beat after its scroller last moved:
+    iOS delays a scroll-candidate touch's pointerdown and delivers it at
+    RELEASE, so a plain scroll would otherwise light the glow at the
+    last-pressed spot just as the finger lifts. Covers the momentum tail too. */
+const SCROLL_TAIL_MS = 350;
+
 export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs = 0, className }: {
   /** bloom the surface a hair while pressed/focused. `true` scales the host
       itself; `"parent"` scales the host's parent — for surfaces whose own
@@ -136,6 +142,11 @@ export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs
     const amb = ambientRef.current;
     const host = layer?.parentElement;
     if (!layer || !glow || !core || !amb || !host) return;
+
+    // a surface that scrolls its own words (growConfirmMs set) is scroll-aware:
+    // it watches that scroller so the glow never fights a scroll (the bloom's
+    // transform freezing it, or the light stranding at the release point)
+    const scrollAware = growConfirmRef.current > 0;
 
     let raf = 0;
     let down = false;
@@ -336,6 +347,13 @@ export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs
     };
     const onDown = (e: PointerEvent) => {
       if (selectionStands() || caretTap(e)) return; // text interaction — stay dark
+      // scroll-aware surfaces (a card that scrolls its own words) ignore a
+      // touchdown that is really a scroll's tail: iOS holds the pointerdown of
+      // a scroll gesture back and fires it at RELEASE, which would light the
+      // glow at the last-pressed spot the instant the finger lifts (recording:
+      // "comes up where you last pressed after you've released, then vanishes")
+      if (growConfirmRef.current > 0 && performance.now() - lastScrollAt < SCROLL_TAIL_MS)
+        return;
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
       clearTimeout(dwell);
@@ -497,6 +515,23 @@ export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs
         scale();
       }
     };
+    // scroll-aware only: a persistent CAPTURE listener catches the card's own
+    // scroller moving (scroll events don't bubble, but capture runs
+    // ancestor→target, so a listener on the card sees its inner scroller). The
+    // instant it scrolls the live gesture is a scroll — drop any pending
+    // press-bloom so its transform can't land mid-scroll and freeze it
+    // (recording: the entry scrolled a moment, then stuck). lastScrollAt also
+    // feeds the touchdown tail-guard above. An already-applied bloom, the
+    // light's ride, and their retract-after-settle stay with the ride
+    // machinery — this only stops the bloom from arriving DURING a scroll.
+    const onCardScroll = () => {
+      lastScrollAt = performance.now();
+      if (bloomHold) {
+        clearTimeout(bloomHold);
+        bloomHold = 0;
+      }
+    };
+    if (scrollAware) host.addEventListener("scroll", onCardScroll, true);
     host.addEventListener("pointerdown", onDown);
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerup", onUp);
@@ -515,6 +550,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs
       clearTimeout(dwell);
       clearTimeout(bloomHold);
       window.removeEventListener("scroll", onScrollRide, true);
+      host.removeEventListener("scroll", onCardScroll, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
       host.removeEventListener("touchcancel", onRideEnd);
