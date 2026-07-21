@@ -90,7 +90,13 @@ export function useKeyboardRoom(
           armT = setTimeout(arm, 400);
           return;
         }
-        if (field && document.activeElement === field && !touchDown) frozenSt = el.scrollTop;
+        if (field && document.activeElement === field && !touchDown) {
+          // a pinned composer freezes to its COMPUTED centred target (correct()
+          // writes it), never to wherever the book happens to sit; every other
+          // field holds the position it settled at
+          if (field.hasAttribute("data-room-pin")) correct();
+          else frozenSt = el.scrollTop;
+        }
       };
       armT = setTimeout(arm, 900);
     };
@@ -153,7 +159,11 @@ export function useKeyboardRoom(
 
     const correct = () => {
       if (selLocked) return; // a handle drag owns the view outright
-      if (frozenSt != null) return; // a walk owns the view; the box reveals its own caret
+      const isPinned = !!field && field.hasAttribute("data-room-pin");
+      // a walk owns the view; the box reveals its own caret — EXCEPT a pinned
+      // composer, whose book must never follow the caret at all: for it, correct()
+      // re-asserts the centred anchor on every pass instead of standing down.
+      if (frozenSt != null && !isPinned) return;
       if (!field) {
         clearPad();
         return;
@@ -181,6 +191,27 @@ export function useKeyboardRoom(
       el.style.paddingBottom = `${kb + FLOAT}px`;
       el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
       const r = field.getBoundingClientRect();
+      // A contained composer (data-room-pin) gets caret-walked with the spacebar
+      // trackpad. iOS reveal-scrolls the WHOLE book when the caret nears the
+      // field's foot — flinging the card up behind the notch, where the generic
+      // arm-delayed freeze then captured that bad position and held it. The box
+      // scrolls its own words, so the book need not move at all: anchor the card
+      // in the visible band and FREEZE to that computed target. A tall (already
+      // scrolling) entry centres between the top chrome and the keyboard band; a
+      // short one keeps its foot above the band, as every field does. Because the
+      // target is recomputed (not captured), onElScroll snaps any iOS reveal
+      // straight back to it — the hold self-heals no matter when the walk begins.
+      if (isPinned) {
+        const topCeil = layoutTop + 72;
+        const overflowing = field.scrollHeight > field.clientHeight + 1;
+        const desiredTop = overflowing
+          ? topCeil + Math.max(0, (bandTop - topCeil - r.height) / 2)
+          : bandTop - r.height;
+        const delta = r.top - desiredTop;
+        if (Math.abs(delta) > 0.5) el.scrollTop += delta;
+        frozenSt = el.scrollTop; // hold the centred target; drift snaps back
+        return;
+      }
       const over = r.bottom - bandTop;
       if (over > 0.5) {
         el.scrollTop += over;
