@@ -324,8 +324,8 @@
       },
       {
         "kind": "seal",
-        "cx": 1046,
-        "cy": 573,
+        "cx": 1050,
+        "cy": 555,
         "sizePx": 155,
         "glyph": "e:quill",
         "tint": "app",
