@@ -43,8 +43,13 @@ function EntryViewBase({
       style={{ transformOrigin: "0 0" }}
     >
       {/* light pools under a press on the words (the rewrite affordance made
-          visible); the bloom rides the wrapper above */}
-      <PressGlow grow="parent" />
+          visible); the bloom rides the wrapper above. This card WRAPS ITS OWN
+          SCROLLER (a long entry scrolls inside), so the press bloom must wait
+          out the scroll-vs-press decision — a scale written to this ancestor
+          at touchdown cancels the scroll iOS was about to start (the finger
+          blooms the card instead of moving it). Held ~110ms: a drag scrolls,
+          a hold blooms; the light itself is instant either way. */}
+      <PressGlow grow="parent" growConfirmMs={110} />
       {snippet ? (
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (

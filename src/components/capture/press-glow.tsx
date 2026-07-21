@@ -85,7 +85,11 @@ const ink = (alpha: number) =>
    rise had gotten). The exit may not begin until the swell has finished. */
 const DWELL_MS = 220;
 
-export function PressGlow({ grow = false, growWhileFocused = true, className }: {
+/** how far the finger may stray before a pending press-bloom is read as a
+    drag and abandoned — iOS's own scroll slop is ~10px */
+const GROW_SLOP = 10;
+
+export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs = 0, className }: {
   /** bloom the surface a hair while pressed/focused. `true` scales the host
       itself; `"parent"` scales the host's parent — for surfaces whose own
       transform belongs to another animation (the entry card's open/close
@@ -96,6 +100,18 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       surface (an entry tile) keeps DOM focus long after the press opened
       something else — set false so its bloom is press-only, never stuck */
   growWhileFocused?: boolean;
+  /** hold the PRESS bloom back this many ms after touchdown — only bloom
+      once the gesture is confirmed a press (finger still down, hasn't
+      dragged). Its whole reason: the bloom scales the surface, and when the
+      surface WRAPS ITS OWN SCROLLER (the entry card), a transform written to
+      that ancestor at the very moment iOS is deciding scroll-vs-press cancels
+      the scroll — the finger blooms the card instead of moving it. Delaying
+      the scale past that decision window lets a drag scroll and a hold bloom.
+      The light (which never touches an ancestor of the scroller) stays
+      instant; the FOCUS bloom, applied static well before any scroll, is
+      unaffected. 0 = bloom on touchdown (every surface without its own
+      scroller — no scroll to cancel). */
+  growConfirmMs?: number;
   /** extra classes for the clipping layer — e.g. a corner radius when the
       host itself carries none (the layer inherits the host's otherwise) */
   className?: string;
@@ -106,9 +122,11 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
   const ambientRef = useRef<HTMLDivElement>(null);
   const growRef = useRef(grow);
   const growFocusRef = useRef(growWhileFocused);
+  const growConfirmRef = useRef(growConfirmMs);
   useEffect(() => {
     growRef.current = grow;
     growFocusRef.current = growWhileFocused;
+    growConfirmRef.current = growConfirmMs;
   });
 
   useEffect(() => {
@@ -134,6 +152,10 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     let stillDeath = 0;
     let dwell = 0;
     let litAt = 0;
+    // a held-back press bloom (growConfirmMs): the timer that confirms the
+    // press, and where the finger first landed so a drag can abandon it
+    let bloomHold = 0;
+    let downX = 0, downY = 0;
     // finger target and the glow's eased position, host-local
     let tx = 0, ty = 0, x = 0, y = 0;
     // the recipe in force for the current press (re-read per press: theme
@@ -317,25 +339,46 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       if (riding) settleRide(); // a new press takes over from a live ride
       clearTimeout(scaleClear);
       clearTimeout(dwell);
+      clearTimeout(bloomHold);
       arm();
       litAt = performance.now();
       down = true;
+      downX = e.clientX;
+      downY = e.clientY;
       local(e.clientX, e.clientY);
       // first light lands where the finger did — no glide-in from a stale spot
       x = tx;
       y = ty;
       place();
-      level();
-      scale();
+      level(); // the LIGHT is instant — it never transforms an ancestor of a scroller
+      // the BLOOM (an ancestor transform) waits out the scroll-vs-press
+      // decision when asked to: writing it at touchdown cancels a scroll the
+      // card hosts. Once the finger has held still past the window, bloom.
+      if (growConfirmRef.current > 0) {
+        bloomHold = window.setTimeout(() => {
+          bloomHold = 0;
+          if (down && !riding) scale();
+        }, growConfirmRef.current);
+      } else {
+        scale();
+      }
     };
     const onMove = (e: PointerEvent) => {
       if (!down) return;
+      // a pending press-bloom that turns into a drag is a scroll, not a press:
+      // abandon the bloom so its transform never lands on the scrolling card
+      if (bloomHold && Math.hypot(e.clientX - downX, e.clientY - downY) > GROW_SLOP) {
+        clearTimeout(bloomHold);
+        bloomHold = 0;
+      }
       local(e.clientX, e.clientY);
       nudge();
     };
     const onUp = () => {
       if (!down) return; // a swallowed press (standing selection) exits nothing
       down = false;
+      clearTimeout(bloomHold); // lifted before the press confirmed — never bloom
+      bloomHold = 0;
       afterDwell(() => {
         level();
         scale();
@@ -411,6 +454,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     const onCancel = () => {
       if (!down) return;
       down = false;
+      clearTimeout(bloomHold); // the scroll took the gesture — the bloom never lands
+      bloomHold = 0;
       riding = true;
       window.addEventListener("scroll", onScrollRide, true);
       host.addEventListener("touchmove", onRideMove, { passive: true });
@@ -442,6 +487,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
     const onHidden = () => {
       if (document.visibilityState !== "hidden") return;
       down = false;
+      clearTimeout(bloomHold);
+      bloomHold = 0;
       focused = false;
       litAt = 0; // no dwell theatre with the app away — rest at once
       if (riding) settleRide();
@@ -466,6 +513,7 @@ export function PressGlow({ grow = false, growWhileFocused = true, className }: 
       clearTimeout(scaleClear);
       clearTimeout(stillDeath);
       clearTimeout(dwell);
+      clearTimeout(bloomHold);
       window.removeEventListener("scroll", onScrollRide, true);
       host.removeEventListener("touchmove", onRideMove);
       host.removeEventListener("touchend", onRideEnd);
