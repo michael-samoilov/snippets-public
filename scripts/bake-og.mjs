@@ -135,6 +135,33 @@ async function openYearFromMonth(page) {
   await page.waitForFunction(YEAR_READY, { timeout: 15000 });
 }
 
+// Easter egg: the preview always renders the day this app was started
+// (2026-06-10), not the machine's "today", so the shipped image stays fixed on
+// that date on every re-bake. Applied as a Date shim in each capture context —
+// Date is offset by a constant, so it still ADVANCES normally (timers/rAF and
+// the app's animation-settle logic are unaffected) but reads ~June 10. Every
+// altitude then reflects that day: the today-zone header, the month grid's and
+// year glance's "today" highlight, and the seeded book's foot.
+const PLATE_DATE_MS = new Date("2026-06-10T12:00:00").getTime();
+const DATE_OFFSET = PLATE_DATE_MS - Date.now();
+async function pinDate(ctx) {
+  await ctx.addInitScript((offset) => {
+    const RealDate = Date;
+    class FakeDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length ? args : [RealDate.now() + offset]));
+      }
+      static now() {
+        return RealDate.now() + offset;
+      }
+    }
+    FakeDate.parse = RealDate.parse;
+    FakeDate.UTC = RealDate.UTC;
+    window.Date = FakeDate;
+    globalThis.Date = FakeDate;
+  }, DATE_OFFSET);
+}
+
 async function capturePlates(browser) {
   await mkdir("public/og-plates", { recursive: true });
   for (const theme of ["light", "dark"]) {
@@ -150,6 +177,7 @@ async function capturePlates(browser) {
         localStorage.removeItem("snip:loadmarks");
       } catch {}
     }, theme);
+    await pinDate(ctx);
     const page = await ctx.newPage();
 
     // schedule (seeds the book on first load; live query paints the cards)
@@ -236,6 +264,7 @@ async function capturePlates(browser) {
       localStorage.removeItem("snip:loadmarks");
     } catch {}
   });
+  await pinDate(bctx);
   const bp = await bctx.newPage();
 
   // today — the composer/doorway (date, write line, mic seal). Fresh load lands
