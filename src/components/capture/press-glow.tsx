@@ -85,7 +85,7 @@ const ink = (alpha: number) =>
    rise had gotten). The exit may not begin until the swell has finished. */
 const DWELL_MS = 220;
 
-export function PressGlow({ grow = false, growWhileFocused = true, bloomFromPointer = false, className }: {
+export function PressGlow({ grow = false, growWhileFocused = true, className }: {
   /** bloom the surface a hair while pressed/focused. `true` scales the host
       itself; `"parent"` scales the host's parent — for surfaces whose own
       transform belongs to another animation (the entry card's open/close
@@ -96,14 +96,6 @@ export function PressGlow({ grow = false, growWhileFocused = true, bloomFromPoin
       surface (an entry tile) keeps DOM focus long after the press opened
       something else — set false so its bloom is press-only, never stuck */
   growWhileFocused?: boolean;
-  /** anchor the bloom's scale origin at the TOUCH point instead of the host
-      centre. A centre-origin scale displaces the content under the finger by
-      (its distance from centre × the scale) — a couple px at a wide card's
-      edge — and iOS reads that motion under a starting drag as "not a scroll"
-      and cancels it (worst near the edges). Anchoring at the touch keeps the
-      touched content still, so a drag on a SCROLLABLE bloomed surface (the
-      entry card) still scrolls. The swell simply grows from the finger. */
-  bloomFromPointer?: boolean;
   /** extra classes for the clipping layer — e.g. a corner radius when the
       host itself carries none (the layer inherits the host's otherwise) */
   className?: string;
@@ -114,11 +106,9 @@ export function PressGlow({ grow = false, growWhileFocused = true, bloomFromPoin
   const ambientRef = useRef<HTMLDivElement>(null);
   const growRef = useRef(grow);
   const growFocusRef = useRef(growWhileFocused);
-  const bloomFromPointerRef = useRef(bloomFromPointer);
   useEffect(() => {
     growRef.current = grow;
     growFocusRef.current = growWhileFocused;
-    bloomFromPointerRef.current = bloomFromPointer;
   });
 
   useEffect(() => {
@@ -278,14 +268,8 @@ export function PressGlow({ grow = false, growWhileFocused = true, bloomFromPoin
         // near a possible iOS callout, which dismisses on relayering)
         if (bloomEl !== host && !bloomEl.style.transform) {
           const b = bloomEl.getBoundingClientRect();
-          // origin at the touch (tx,ty are host-local) when asked, else the
-          // host centre. The touch anchor keeps the content under a starting
-          // drag still, so a scrollable bloomed surface still scrolls (iOS
-          // cancels a drag whose content moves under the finger).
-          const ox = bloomFromPointerRef.current ? tx : r.width / 2;
-          const oy = bloomFromPointerRef.current ? ty : r.height / 2;
           bloomEl.style.transformOrigin =
-            `${r.left + ox - b.left}px ${r.top + oy - b.top}px`;
+            `${r.left + r.width / 2 - b.left}px ${r.top + r.height / 2 - b.top}px`;
         }
         const next = `scale(${eff})`;
         if (bloomEl.style.transform !== next) bloomEl.style.transform = next;

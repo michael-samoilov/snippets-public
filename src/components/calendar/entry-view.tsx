@@ -43,13 +43,8 @@ function EntryViewBase({
       style={{ transformOrigin: "0 0" }}
     >
       {/* light pools under a press on the words (the rewrite affordance made
-          visible); the bloom rides the wrapper above. bloomFromPointer: this
-          card SCROLLS a long entry, and a centre-origin bloom shoves the
-          content under the finger by a couple px near the edges — iOS then
-          cancels the drag (a dead press that only lights, worst at the right
-          edge). Anchoring the swell at the touch keeps that content still, so
-          the drag scrolls; the bloom just grows from the finger. */}
-      <PressGlow grow="parent" bloomFromPointer />
+          visible); the bloom rides the wrapper above */}
+      <PressGlow grow="parent" />
       {snippet ? (
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (
