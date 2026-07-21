@@ -339,22 +339,22 @@
       },
       {
         "kind": "text",
-        "text": "Save a story",
+        "text": "Delight in the everyday",
         "voice": "display",
-        "sizePx": 44,
+        "sizePx": 39,
         "x": 58,
-        "y": 441,
+        "y": 454,
         "color": "ink-soft",
         "italic": true,
         "lineHeight": 1.05
       },
       {
         "kind": "text",
-        "text": "worth remembering",
+        "text": "Every day is all there is",
         "voice": "display",
-        "sizePx": 44,
+        "sizePx": 39,
         "x": 58,
-        "y": 495,
+        "y": 502,
         "color": "ink-soft",
         "italic": true,
         "lineHeight": 1.05
