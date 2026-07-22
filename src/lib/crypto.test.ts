@@ -48,6 +48,14 @@ describe("recovery codes", () => {
   it("normalize strips separators and case", () => {
     expect(normalizeRecoveryCode("ab2c3-de4f5")).toBe("AB2C3DE4F5");
   });
+  it("draws across the whole alphabet (rejection sampling maps every symbol)", () => {
+    const ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
+    const seen = new Set<string>();
+    for (let n = 0; n < 500 && seen.size < ALPHABET.length; n++) {
+      for (const ch of generateRecoveryCode().replace(/-/g, "")) seen.add(ch);
+    }
+    expect([...seen].sort().join("")).toBe([...ALPHABET].sort().join(""));
+  });
 });
 
 describe("payload encryption", () => {
