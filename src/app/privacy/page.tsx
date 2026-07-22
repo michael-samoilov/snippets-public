@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageBackHeader } from "@/components/page-back-header";
-import { SectionHeading } from "@/components/section-heading";
+import { PolicySection, PolicySub } from "@/components/policy";
 
 export const metadata: Metadata = { title: "Privacy" };
 
@@ -16,18 +16,6 @@ const LAST_UPDATED = "July 11, 2026";
 /** Emphasis — bold against the 420 prose, so load-bearing lines stand out. */
 function Em({ children }: { children: React.ReactNode }) {
   return <strong className="font-bold">{children}</strong>;
-}
-
-/** A subheading inside a section — small-caps, quieter than the section head. */
-function Sub({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h3
-      id={id}
-      className="voice-label-sm scroll-mt-8 pt-3 text-ink-soft"
-    >
-      {children}
-    </h3>
-  );
 }
 
 /** Contents links — a top-level one, and the nested (subheading) variant. */
@@ -116,10 +104,7 @@ export default function PrivacyPage() {
           </ul>
         </nav>
 
-        <section className="space-y-3">
-          <SectionHeading id="can-you-read" className="scroll-mt-8">
-            Can you read what I write?
-          </SectionHeading>
+        <PolicySection id="can-you-read" title="Can you read what I write?">
           <p className="voice-prose-sm">
             Whether we can read what you write is up to you. If you
             don&rsquo;t sign in, the answer is <Em>no</Em> — your entries stay
@@ -136,35 +121,39 @@ export default function PrivacyPage() {
             transcription service handle that data under their own privacy
             policies — see Google Drive backup and Voice, below.
           </p>
-          <Sub id="before-you-sign-in">Before you sign in</Sub>
-          <p className="voice-prose-sm">
-            Your entries are only written into this browser&rsquo;s own storage
-            and never sent to our server,{" "}
-            <Em>so we cannot read what you write</Em>.
-          </p>
-          <Sub id="if-you-sign-in">If you sign in</Sub>
-          <p className="voice-prose-sm">
-            A copy of your entries rests on our server so you can add entries
-            from your other devices. It has ordinary encryption where the
-            service (us) holds the keys, just like Apple Notes or Google Keep.{" "}
-            <Em>
-              In principle your entries here could be accessed, but in practice
-              we don&rsquo;t
-            </Em>
-            .
-          </p>
-          <p className="voice-prose-sm">
-            Otherwise, the only data we collect about you is what signing in
-            needs: your email address, and — if you use Google — the name and
-            profile picture on your Google account.
-          </p>
-          <p className="voice-prose-sm">
-            We do not use or keep passwords for our sign-in process.{" "}
-            <Em>Signing in is also never required to use the app</Em>.
-          </p>
-          <Sub id="end-to-end-encryption">
-            If you turn on end-to-end encryption
-          </Sub>
+          <PolicySub id="before-you-sign-in" title="Before you sign in">
+            <p className="voice-prose-sm">
+              Your entries are only written into this browser&rsquo;s own
+              storage and never sent to our server,{" "}
+              <Em>so we cannot read what you write</Em>.
+            </p>
+          </PolicySub>
+          <PolicySub id="if-you-sign-in" title="If you sign in">
+            <p className="voice-prose-sm">
+              A copy of your entries rests on our server so you can add entries
+              from your other devices. It has ordinary encryption where the
+              service (us) holds the keys, just like Apple Notes or Google
+              Keep.{" "}
+              <Em>
+                In principle your entries here could be accessed, but in
+                practice we don&rsquo;t
+              </Em>
+              .
+            </p>
+            <p className="voice-prose-sm">
+              Otherwise, the only data we collect about you is what signing in
+              needs: your email address, and — if you use Google — the name and
+              profile picture on your Google account.
+            </p>
+            <p className="voice-prose-sm">
+              We do not use or keep passwords for our sign-in process.{" "}
+              <Em>Signing in is also never required to use the app</Em>.
+            </p>
+          </PolicySub>
+          <PolicySub
+            id="end-to-end-encryption"
+            title="If you turn on end-to-end encryption"
+          >
           <p className="voice-prose-sm">
             Turn it on in Settings → Encryption, and{" "}
             <Em>we cannot read what you write</Em>. Before an entry
@@ -174,9 +163,13 @@ export default function PrivacyPage() {
             key — a long random number created on your device and never sent to
             our server. Your browser stores it as what&rsquo;s called a
             &ldquo;non-extractable key,&rdquo; whose raw value cannot be read by
-            any code, including this app&rsquo;s. When you turn on encryption,
+            any code, including this app&rsquo;s.
+          </p>
+          <p className="voice-prose-sm">
+            When you turn on encryption,
             you set a passphrase and receive a recovery code; each one is used,
-            on your device, to encrypt its own copy of that key, and only those
+            on your device, to encrypt its own copy of the non-extractable key,
+            and only those
             two encrypted copies are sent to our server — so that any of your
             devices can rebuild the key once you enter your passphrase or
             recovery code there. The passphrase and recovery code themselves
@@ -274,13 +267,11 @@ export default function PrivacyPage() {
               </p>
             </div>
           </details>
-        </section>
+          </PolicySub>
+        </PolicySection>
 
-        <section className="space-y-3">
-          <SectionHeading id="outside-services" className="scroll-mt-8">
-            Outside services
-          </SectionHeading>
-          <Sub id="google-drive-backup">Google Drive backup</Sub>
+        <PolicySection id="outside-services" title="Outside services">
+          <PolicySub id="google-drive-backup" title="Google Drive backup">
           <p className="voice-prose-sm">
             If you connect Google Drive, readable copies land in a
             folder in your own Drive named &ldquo;Snippets&rdquo; — so that (A)
@@ -321,8 +312,9 @@ export default function PrivacyPage() {
             happens to the token. In normal use, the files never pass through us
             at all.
           </p>
+          </PolicySub>
 
-          <Sub id="voice">Voice</Sub>
+          <PolicySub id="voice" title="Voice">
           <p className="voice-prose-sm">
             If you speak an entry with the in-app microphone, the app
             streams your audio to a transcription service — currently{" "}
@@ -347,24 +339,19 @@ export default function PrivacyPage() {
             back, the audio is not kept, and none of it is stored by us. Typing
             never touches the network.
           </p>
-        </section>
+          </PolicySub>
+        </PolicySection>
 
-        <section className="space-y-3">
-          <SectionHeading id="what-we-dont-do" className="scroll-mt-8">
-            What we don&rsquo;t do
-          </SectionHeading>
+        <PolicySection id="what-we-dont-do" title="What we don’t do">
           <p className="voice-prose-sm">
             No ads, no selling or sharing of your words, no analytics on what
             you write. The only measurement is anonymous page-view counting. The
             only emails are the ones you cause: a sign-in code, or a warning
             that your backups have stopped going through.
           </p>
-        </section>
+        </PolicySection>
 
-        <section className="space-y-3">
-          <SectionHeading id="leaving" className="scroll-mt-8">
-            Leaving
-          </SectionHeading>
+        <PolicySection id="leaving" title="Leaving">
           <p className="voice-prose-sm">
             <Em>Erasing your entries</Em> (
             <Link href="/settings" className="underline underline-offset-2">
@@ -388,7 +375,7 @@ export default function PrivacyPage() {
             Copies on your devices, and backup files already delivered to your
             Drive, remain yours.
           </p>
-        </section>
+        </PolicySection>
 
         <p className="voice-prose-sm text-ink-soft">
           Questions about any of this can go to{" "}

@@ -765,6 +765,52 @@ textarea:focus-visible,
   hanging-punctuation: first;
 }
 
+/* ── policy pages: two-level sticky section headings ───────────
+   Privacy and Terms are long single-scroll documents, so the section
+   heading you're reading under stays pinned at the top of the scroller,
+   and — where a section has subheadings — the subheading pins just
+   beneath it. Sequential subheadings push each other out (each lives in
+   its own containing block); the next section's main heading pushes the
+   last one out (its containing block is the whole <section>). The main
+   head sits above the sub (z-index) so a sub sliding away tucks under it.
+
+   NO flat fill over the textured sheet — that reads as a white band (the
+   same lesson the calendar's month header learned). Instead the paper
+   backing is SOLID only behind the heading text, then dissolves downward
+   to nothing, so the moving lower edge never draws a hard line across the
+   grain: content emerges from under the words, not from under a bar. */
+.policy-head,
+.policy-sub {
+  position: sticky;
+  /* Opaque paper behind the words, closed by a hairline: content tucks
+     cleanly UNDER the rule instead of colliding with the heading, and the
+     rule (not a fill edge) is what the eye reads — so the band never looks
+     like a painted bar dropped on the sheet. The grain is tone-matched to
+     --paper, so the fill itself is all but invisible; the rule is the line
+     that was always there under a section heading, now holding still. */
+  background: var(--paper);
+}
+.policy-head {
+  top: 0;
+  z-index: 2;
+  padding-top: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--rule);
+}
+.policy-sub {
+  /* Pins just below the pinned main head. The main head is 2.25rem tall;
+     this pins ~0.2rem HIGHER so the sub's top edge tucks a hair UNDER the
+     head (which paints above it, z-index) — that overlap closes the 1px
+     seam where a scrolling line's ascenders would otherwise show between
+     the two pinned bands. padding-top keeps the sub's own text clear of
+     the head. */
+  top: 2.05rem;
+  z-index: 1;
+  padding-top: 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--rule-faint);
+}
+
 /* ── pressable physics (Emil: the interface must listen) ───── */
 
 /* the let-go undo toast: a paper pill with an ember countdown along its foot.
