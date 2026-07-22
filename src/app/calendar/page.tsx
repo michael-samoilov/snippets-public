@@ -301,7 +301,7 @@ function LedgerRows() {
         <div
           key={i}
           aria-hidden="true"
-          className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
+          className="-mx-[5px] grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint px-[5px] pb-2.5 pt-2.5"
         >
           {/* the margin date: a small weekday bar over a taller day-number bar */}
           <div className="flex flex-col items-center gap-1.5 pt-[3.5px]">
@@ -373,7 +373,7 @@ function CalendarSkeleton({ view = "auto" }: { view?: SkeletonView }) {
           layout arrives. */}
       <div
         className={cn(
-          "mt-5 grid border-b border-rule-faint",
+          "-mx-[5px] mt-5 grid border-b border-rule-faint px-[5px]",
           view === "month" ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
@@ -399,7 +399,9 @@ function CalendarSkeleton({ view = "auto" }: { view?: SkeletonView }) {
           pulled up, or they'd land a pixel high. */}
       <div
         className={cn(
-          "relative min-h-0 flex-1 overflow-hidden",
+          // -mx-2/px-2: the same 8px bleed lane the real stage borrows, so
+          // the ledger rows' RULE_BLEED overhang isn't clipped here either
+          "relative -mx-2 min-h-0 flex-1 overflow-hidden px-2",
           (view === "schedule" || view === "month") && "-mt-px",
         )}
       >
@@ -3921,7 +3923,10 @@ function Calendar() {
           className={cn(
             // z-10: while riding a dive's edge (translateY below) it overlaps
             // the stage box and must paint above the composited layers
-            "pointer-events-none absolute inset-x-0 top-0 z-10 h-px transition-opacity",
+            // -inset-x-[5px]: every altitude's rule overhangs the content
+            // edge by RULE_BLEED (see ZoneFootRule) so a blooming card
+            // (max ~4.2px/side, press-glow eff) never outgrows its hairline
+            "pointer-events-none absolute -inset-x-[5px] top-0 z-10 h-px transition-opacity",
             // search hides every altitude layer (and their lines), so the
             // seat serves its results list at any altitude
             (searchActive || view === "year" || view === "entry") &&
@@ -4003,7 +4008,7 @@ function Calendar() {
             // layer, so it fades/scales as part of the calendar's image on
             // every move (the header's seat line takes over only once no
             // month image is on stage; see the header rule above)
-            className="grid shrink-0 grid-cols-7 border-b border-rule-faint pt-1.5"
+            className="-mx-[5px] grid shrink-0 grid-cols-7 border-b border-rule-faint px-[5px] pt-1.5"
           >
             {weekdays(weekStart).map((d, i) => (
               <span
@@ -4093,12 +4098,13 @@ function Calendar() {
               sub-pixel border had slipped under the clip edge (the blank-line
               frames the owner recorded). Opaque terminus colour: it rests
               exactly where that day's rule-faint border-t sits, and two 8%
-              layers would composite darker. inset-x-2 matches the layer's
-              px-2 content width (the seat line's span). */}
+              layers would composite darker. inset-x-[3px]: the layer's px-2
+              content edge minus the shared RULE_BLEED overhang, so this line
+              spans exactly what the seat line and the day rules do. */}
           <div
             ref={bookLineRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-2 top-0 z-10 h-px"
+            className="pointer-events-none absolute inset-x-[3px] top-0 z-10 h-px"
             style={{ backgroundColor: "var(--terminus-line)" }}
           />
           {(view === "schedule" || warm >= 1) && (
@@ -4176,7 +4182,7 @@ function Calendar() {
                     <section
                       data-found={g.day}
                       aria-label={friendlyDay(g.day)}
-                      className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint"
+                      className="-mx-[5px] grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint px-[5px]"
                     >
                       <div className="self-start pb-3 pt-2 text-center">
                         <span
@@ -4346,7 +4352,10 @@ const BookRow = memo(function BookRow({
       data-day={day}
       aria-label={friendlyDay(day)}
       className={cn(
-        "grid grid-cols-[2.1rem_1fr] gap-x-2",
+        // -mx/px: the rule overhangs the content edge by RULE_BLEED per side
+        // (padding hands the content its old width back), so a blooming card
+        // still ends inside its hairline — every altitude's rules share this
+        "-mx-[5px] grid grid-cols-[2.1rem_1fr] gap-x-2 px-[5px]",
         // every day rules off from the one above. Today's empty section
         // collapses to nothing but KEEPS the rule (once the book holds
         // anything) — so a hairline still marks where the prior days end
@@ -6340,6 +6349,12 @@ function FlowBackfillCapture({
       bottom), so it never extends past the border;
     • scrolled fully to the bottom → hidden (the zone's rounded bottom shows). */
 const ZONE_CORNER = 16; // matches the zone box's rounded-2xl radius
+// every altitude's hairline overhangs the content edge by this much per side
+// (the `-mx-[5px] px-[5px]` / `-inset-x-[5px]` / `inset-x-[3px]` classes on the
+// rail, seat line, book line, and day rules are this same value), so a card in
+// bloom — press-glow grows it up to ~4.2px past each edge — still ends inside
+// its rule instead of poking past it (owner screenshot, 2026-07-22)
+const RULE_BLEED = 5;
 // the rounded rect's horizontal inset `t`px from a corner's edge (0 at the very
 // edge → the straight top/bottom segment is inset by R; R away → full width)
 const cornerInset = (t: number) =>
@@ -6385,9 +6400,11 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
           // (which read darker than the rest of the outline).
           show = false;
         } else if (r.top > vpBottom) {
-          // the zone is still entirely below the fold → grey terminus over the days
+          // the zone is still entirely below the fold → grey terminus over the
+          // days, overhanging like every other rule so the spans all match
           show = true;
           blue = false;
+          inset = -RULE_BLEED;
         } else {
           // the zone's body crosses the clip line → blue edge at the clip,
           // tracking whichever rounded corner the clip point is passing through
