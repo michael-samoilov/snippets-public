@@ -14,8 +14,9 @@
  * KDF: PBKDF2-SHA256 at 600,000 iterations (OWASP's floor for this
  * construction) — native to WebCrypto everywhere, zero WASM. The
  * envelope's `kdf`/`iterations` fields leave the door open to
- * Argon2id later. The recovery code is 128 bits of real entropy, so
- * its derivation uses a lighter round count by design.
+ * Argon2id later. The recovery code carries ~123 bits of real entropy
+ * (25 uniform picks from a 30-symbol alphabet), so its derivation uses
+ * a lighter round count by design.
  */
 
 export interface WrappedKey {
@@ -39,7 +40,7 @@ export interface EncryptedPayload {
 }
 
 const PASSPHRASE_ITERATIONS = 600_000;
-const RECOVERY_ITERATIONS = 10_000; // the code itself carries 128 bits
+const RECOVERY_ITERATIONS = 10_000; // the code itself carries ~123 bits
 
 // ── small codecs ────────────────────────────────────────────────
 
@@ -61,12 +62,31 @@ function fromB64(s: string): Uint8Array {
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789"; // no 0/O/1/I/L/U
 
-/** e.g. "F7QZM-K2WXA-9RTBH-4NPCV-D8JSE" — ~120 bits over 25 chars */
+/**
+ * Draw `n` uniform indices into an alphabet of `range` symbols. A raw
+ * byte is uniform over 0..255, but `byte % range` is not when `range`
+ * doesn't divide 256 — for our 30-symbol alphabet it favours the first
+ * 16 symbols (256 % 30 = 16). Rejection sampling fixes that: discard any
+ * byte at or above the largest multiple of `range` (240 for 30) before
+ * taking the modulo, so every symbol is equally likely.
+ */
+function uniformIndices(n: number, range: number): number[] {
+  const limit = 256 - (256 % range);
+  const out: number[] = [];
+  while (out.length < n) {
+    for (const b of crypto.getRandomValues(new Uint8Array(n - out.length))) {
+      if (b < limit) out.push(b % range);
+    }
+  }
+  return out;
+}
+
+/** e.g. "F7QZM-K2WXA-9RTBH-4NPCV-D8JSE" — ~123 bits over 25 chars */
 export function generateRecoveryCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(25));
+  const idx = uniformIndices(25, CODE_ALPHABET.length);
   let code = "";
   for (let i = 0; i < 25; i++) {
-    code += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+    code += CODE_ALPHABET[idx[i]];
     if (i % 5 === 4 && i < 24) code += "-";
   }
   return code;

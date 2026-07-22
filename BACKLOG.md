@@ -344,34 +344,6 @@ Design notes:
   ships that becomes true of the *envelope* too — tighten the copy to
   say so (today it slightly overclaims).
 
-## 9. E2E: refuse weak passphrases at enrollment (+ two crypto tidies)
-
-> Adversarial security review, 2026-07-08.
-
-Enrollment gates only on length (`pass.length < 10`,
-`src/app/settings/page.tsx`), so `password12` seals a book. PBKDF2 at
-600k iterations slows a guesser but can't rescue a guessable passphrase
-— it is the weakest link in the whole scheme, and the copy implies
-stronger protection than a weak phrase delivers. Add real strength
-enforcement at the "Seal the book?" dialog: a zxcvbn-style estimator +
-a common-password blocklist, with a **quiet, in-voice** strength read
-(not a coloured nagging meter — laws 6/7) and a floor below which "Seal
-it" won't fire.
-
-Design notes:
-- Dependency call: `@zxcvbn-ts/core` with lazy-loaded dictionaries, or a
-  lighter estimator — load it **only** in the enrollment path, never
-  anywhere near capture (law 8) and never in the main bundle.
-- The read is one line in the house voice ("that phrase is easy to
-  guess — try a longer, stranger one"), not a rainbow bar. The floor is
-  a strength score, not a character count; keep the ten-character
-  minimum as a floor beneath it.
-- Two small hardening tidies to fold in while in `crypto.ts`:
-  (a) `generateRecoveryCode` uses `bytes[i] % 30` — modulo bias over the
-  30-char alphabet; switch to rejection sampling so every symbol is
-  uniform. (b) A comment claims "128 bits"; reconcile it with the true
-  figure (~120). Neither is exploitable, but both should read honestly.
-
 ## 11. Status indicators: green icons for active security + sync features
 
 Visual signals for user confidence — a quick scan confirms the features
