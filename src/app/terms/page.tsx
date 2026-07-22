@@ -70,7 +70,7 @@ export default function TermsPage() {
           </p>
         </PolicySection>
 
-        <PolicySection id="encryption" title="Encryption puts the only key in your hands">
+        <PolicySection id="encryption" title="Encryption gives you the only key">
           <p className="voice-prose text-[0.95rem]">
             If you turn on end-to-end encryption, your passphrase and recovery
             code become the only ways to read your synced entries — that is
