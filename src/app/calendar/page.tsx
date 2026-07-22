@@ -4345,6 +4345,14 @@ const BookRow = memo(function BookRow({
   const onComposerKeepSettled = useCallback(() => setKeepInFlight(false), []);
   const showComposer =
     isToday || probed || (isYesterday && (snippets.length === 0 || keepInFlight));
+  // Does this composer stay after its keep, or is it the "yesterday, if empty"
+  // invite that vanishes the moment the day holds something? Only a staying
+  // composer (today, or a page the reader opened) should wipe its empty self
+  // back in after a keep — the vanishing invite would reveal that empty line
+  // just to unmount it a beat later (the keepInFlight window). After a keep,
+  // the isYesterday-empty clause is always false (the day now has the entry),
+  // so persistence reduces to exactly this.
+  const composerPersistsAfterKeep = isToday || probed;
   const d = dateFromDayKey(day);
   const pageRow = (
     <section
@@ -4427,6 +4435,7 @@ const BookRow = memo(function BookRow({
             key={day}
             day={day}
             snippets={snippets}
+            persistsAfterKeep={composerPersistsAfterKeep}
             onKeepStart={onComposerKeepStart}
             onKeepSettled={onComposerKeepSettled}
           />
@@ -5934,6 +5943,9 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 function BackfillCapture(props: {
   day: string;
   snippets: Snippet[];
+  // false for the "yesterday, if empty" invite that unmounts once the day
+  // holds an entry — it must NOT wipe its empty self back in after a keep
+  persistsAfterKeep?: boolean;
   // told to the parent so it can hold a "yesterday, if empty" composer open
   // through its own keep — see showComposer's comment in BookRow
   onKeepStart?: () => void;
@@ -5951,15 +5963,24 @@ function BackfillCapture(props: {
 function FlowBackfillCapture({
   day,
   snippets,
+  persistsAfterKeep = true,
   onKeepStart,
   onKeepSettled,
 }: {
   day: string;
   snippets: Snippet[];
+  persistsAfterKeep?: boolean;
   onKeepStart?: () => void;
   onKeepSettled?: () => void;
 }) {
   const reduce = useReducedMotion() ?? false;
+  // true once THIS keep's card has been born (the carding beat). A composer
+  // that won't persist (the empty yesterday invite) goes dark from carding
+  // onward — no composing wipe-back-in, no resting idle line, just the card
+  // and then unmount. Reset when a fresh keep begins. (Gating on carding, not
+  // merely "a keep started", keeps the composer visible through the
+  // settle-into-view wait and the press, which are still pre-card.)
+  const postCardRef = useRef(false);
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const sealBtnRef = useRef<HTMLButtonElement>(null);
@@ -6020,6 +6041,11 @@ function FlowBackfillCapture({
       onKeepSettled?.();
     }
   }, [seq.phase, onKeepSettled]);
+  // latch "the card is born" at the carding beat — the line past which a
+  // non-persisting composer stays dark (see composerOpen below)
+  useEffect(() => {
+    if (seq.phase === "carding") postCardRef.current = true;
+  }, [seq.phase]);
   const draftStore = useKeptDraft();
   // Does a VISIBLE entry sit above this composer? (Governs the mt-1 gap that
   // separates the composer from the cards above it.) Count only shown rows:
@@ -6073,6 +6099,7 @@ function FlowBackfillCapture({
     // can land within a couple of frames, well before the choreography even
     // starts (see keepInFlightRef's comment above).
     keepInFlightRef.current = true;
+    postCardRef.current = false; // a fresh keep — the card isn't born yet
     onKeepStart?.();
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
@@ -6198,8 +6225,15 @@ function FlowBackfillCapture({
   // the composer card stays through the PRESS with its words (so the card never
   // blinks out mid-seal-animation); it hands off to the settled card at CARDING,
   // where this goes false and the just-filed card takes its slot.
+  // A composer that won't persist (the empty yesterday invite) stays dark from
+  // the carding beat onward: no composing wipe-back-in, no resting idle line —
+  // the card is born and the composer simply unmounts, never flashing "Add
+  // something from yesterday" only to vanish. Everything up to the card (the
+  // resting invite, the settle-into-view wait, the press) still shows.
+  const composerReturnsEmpty = persistsAfterKeep || !postCardRef.current;
   const composerOpen =
-    seq.phase === "idle" || seq.phase === "composing" || seq.phase === "pressing";
+    seq.phase === "pressing" ||
+    ((seq.phase === "idle" || seq.phase === "composing") && composerReturnsEmpty);
   // the seal shows at rest (typed) and through the press; it's gone once the
   // empty composer wipes back in. Reduced motion files instantly, no theatre.
   const showSeal = hasText || (pressing && !reduce);
