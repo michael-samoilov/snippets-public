@@ -8,7 +8,6 @@ import { db, purgeOldDeleted } from "@/lib/db";
 import { checkStorageHealth } from "@/lib/storage-health";
 import { startSync } from "@/lib/sync";
 import { useSession } from "@/lib/auth";
-import { applyTextScale, getStoredTextScale, useSettings } from "@/lib/settings";
 import { KeptDraftContext, type KeptDraftStore } from "@/lib/kept-draft";
 import { useZoomRelief } from "@/hooks/use-zoom-relief";
 import type { Snippet } from "@/lib/types";
@@ -57,34 +56,6 @@ function ThemeRestore() {
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, [setTheme]);
-  return null;
-}
-
-/**
- * Keep the document's text size in step with the setting.
- *
- * The root layout's pre-paint script sets `data-text-scale` first (no flash);
- * this handles the two moments it can't:
- *  · a LIVE change — picking a size in Settings re-renders this and re-applies;
- *  · a bfcache restore — WebKit restores the book FROZEN, so a size chosen in
- *    Settings then Back leaves the restored page at the OLD size (its cached
- *    <html> never got the new attribute, and this component's module state is
- *    frozen too). On pageshow.persisted we re-read live localStorage — not the
- *    frozen store cache — and re-apply. Same failure mode as ThemeRestore above.
- */
-function TextScaleController() {
-  const { textScale } = useSettings();
-  useEffect(() => {
-    applyTextScale(textScale);
-  }, [textScale]);
-  useEffect(() => {
-    const onShow = (event: PageTransitionEvent) => {
-      if (!event.persisted) return;
-      applyTextScale(getStoredTextScale());
-    };
-    window.addEventListener("pageshow", onShow);
-    return () => window.removeEventListener("pageshow", onShow);
-  }, []);
   return null;
 }
 
@@ -196,7 +167,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <MotionConfig reducedMotion="user">
         <KeptDraftContext.Provider value={draftStore}>
           <ThemeRestore />
-          <TextScaleController />
           <SyncManager />
           {children}
         </KeptDraftContext.Provider>

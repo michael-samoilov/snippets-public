@@ -4376,17 +4376,13 @@ const BookRow = memo(function BookRow({
       )}>
         {!hideToday && (() => {
           const dateInner = (
-            // Size this block to EXACTLY a single-line card's height so the
+            // py-[3.96px] sizes the block to exactly a single-line card's
+            // height (measured 44.72px: its 36.8px of text + 7.92px), so the
             // date reads centre-aligned beside a one-line entry — and a
-            // single-line day then has zero sticky travel, killing the tiny
-            // header-crawl while scrolling past it. The match is a closed form
-            // that holds at every text-size step: card = 1.42rem line +
-            // 1.25rem padding + 2px border; date text = 2.3rem (its two
-            // leading-tight lines); so py = (card − dateText)/2 =
-            // (0.37rem + 2px)/2 = 0.185rem + 1px. All rem tracks the scale;
-            // the lone +1px is half the card's fixed hairline border.
-            // (At 1rem: measured card 44.72px, block 44.70px.)
-            <div className="py-[calc(0.185rem_+_1px)]">
+            // single-line day has zero sticky travel, killing the tiny
+            // header-crawl while scrolling past it. Retuned from py-[3.5px]
+            // (the old 0.9rem tuning) when the card + label text grew to 1rem.
+            <div className="py-[3.96px]">
               <span
                 className={cn(
                   "voice-label block text-[0.69rem] leading-tight",
@@ -5383,25 +5379,6 @@ function ScheduleFeedBase({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, scrollToRow, measureRows]);
 
-  // Text size changes every row's height, so the render window's measured --cis
-  // reservations go stale (the ResizeObserver above watches the scroller's own
-  // box, which a font-size change doesn't resize — so it won't fire). Re-measure
-  // on a live change, and after a bfcache restore (WebKit brings the book back
-  // FROZEN carrying the old --cis under the new size — pageshow.persisted is the
-  // only signal). rAF lets the new root font-size lay out first.
-  const textScale = useSettings().textScale;
-  useEffect(() => {
-    const id = requestAnimationFrame(() => measureRows());
-    return () => cancelAnimationFrame(id);
-  }, [textScale, measureRows]);
-  useEffect(() => {
-    const onShow = (e: PageTransitionEvent) => {
-      if (e.persisted) requestAnimationFrame(() => measureRows());
-    };
-    window.addEventListener("pageshow", onShow);
-    return () => window.removeEventListener("pageshow", onShow);
-  }, [measureRows]);
-
   // once the first (windowed) paint is on screen, mount the rest of the history
   // off the critical path — a frame later, as a low-priority transition. In
   // recovery we DON'T: mounting the whole book is the suspected crash, and a
@@ -6309,7 +6286,7 @@ function FlowBackfillCapture({
               // outer height and same 11px text inset, so the composer→card
               // hand-off neither jumps 2px taller nor nudges the words sideways.
               // autosizeArea adds the border back into the measured height.
-              "book-card-prose voice-prose relative block max-h-[calc(9.77rem_+_2px)] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[1rem] leading-[1.42] outline-none placeholder:italic",
+              "book-card-prose voice-prose relative block max-h-[158px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[1rem] leading-[1.42] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -7808,17 +7785,16 @@ function TodayZoneFill({
               // local, so the rules always track the words exactly). The rule
               // sits just below the baseline — standard characters rest ON the
               // line, only descenders dip across — and the period is a whole
-              // PIXEL matched exactly by the line-height: a fractional
+              // PIXEL (23px ≈ the card preview's 1rem × 1.42 = 22.72px
+              // rhythm) matched exactly by the line-height: a fractional
               // line-height lets WebKit snap line boxes to device pixels while
               // the gradient stays fractional, so text drifts off its rules
-              // over dozens of lines. --ruled-line/--ruled-gap carry that
-              // whole-pixel rhythm per text-size step (globals.css) — it can't
-              // be a plain calc BECAUSE it must round to whole device pixels.
+              // over dozens of lines.
               style={{
-                lineHeight: "var(--ruled-line)",
-                minHeight: "calc(var(--ruled-line) * 3)",
+                lineHeight: "23px",
+                minHeight: "69px",
                 backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0, transparent var(--ruled-gap), var(--rule-faint) var(--ruled-gap), var(--rule-faint) var(--ruled-line))",
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent 22px, var(--rule-faint) 22px, var(--rule-faint) 23px)",
                 backgroundPositionY: "-4px",
                 backgroundAttachment: "local",
               }}

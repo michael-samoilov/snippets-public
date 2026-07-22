@@ -35,7 +35,7 @@ import {
 } from "@/lib/backup-client";
 import { backupHealth } from "@/lib/backup-shared";
 import { exportJSON, exportMarkdown, importJSON } from "@/lib/export";
-import { applyTextScale, updateSettings, useSettings, type TextScale } from "@/lib/settings";
+import { updateSettings, useSettings } from "@/lib/settings";
 import { useStats } from "@/hooks/use-snippets";
 import { useOnline } from "@/hooks/use-online";
 import { signOut, useSession } from "@/lib/auth";
@@ -387,19 +387,6 @@ export default function SettingsPage() {
               paper="#f7f1e3"
               desk="#e8dcc2"
               ink="#241e15"
-            />
-          </div>
-        </section>
-
-        <section aria-label={copy.settings.appearance.textSizeLabel}>
-          <SectionHeading>{copy.settings.appearance.textSizeLabel}</SectionHeading>
-          <div className="mt-4">
-            <TextSizeChoice
-              value={settings.textScale}
-              onChange={(v) => {
-                updateSettings({ textScale: v });
-                applyTextScale(v); // immediate, ahead of the store's effect
-              }}
             />
           </div>
         </section>
@@ -1381,57 +1368,6 @@ function BackupSection() {
 }
 
 /** A two-way segmented choice: a raised paper chip sits in a recessed trough. */
-/** The text-size picker: four "A"s at graduated fixed sizes — the universal
- *  small-to-large affordance. The glyph previews stay in px so the control
- *  itself doesn't resize as you tap through the (rem-scaling) options. */
-function TextSizeChoice({
-  value,
-  onChange,
-}: {
-  value: TextScale;
-  onChange: (v: TextScale) => void;
-}) {
-  const steps: { v: TextScale; px: number }[] = [
-    { v: "small", px: 13 },
-    { v: "default", px: 15 },
-    { v: "large", px: 17 },
-    { v: "larger", px: 20 },
-  ];
-  return (
-    <div
-      role="radiogroup"
-      aria-label={copy.settings.appearance.textSizeLabel}
-      className="inline-flex shrink-0 items-baseline gap-0.5 rounded-[7px] bg-paper-recessed p-0.5 shadow-[inset_0_1px_2px_rgb(var(--shadow-hue)/0.1)]"
-    >
-      {steps.map(({ v, px }) => {
-        const active = value === v;
-        const label = copy.settings.appearance.textSizes[v];
-        return (
-          <button
-            key={v}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={label}
-            title={label}
-            onClick={() => onChange(v)}
-            className={cn(
-              "pressable flex h-9 w-11 items-baseline justify-center rounded-[5px] font-serif leading-none",
-              active
-                ? "bg-paper-raised text-ink shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.12)]"
-                : "text-ink-faint",
-            )}
-          >
-            <span style={{ fontSize: `${px}px` }} aria-hidden="true">
-              A
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function WeekStartChoice({
   value,
   onChange,
