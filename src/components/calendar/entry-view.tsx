@@ -354,7 +354,7 @@ function EntryBody({
             // contained cap (see useContainedField): the box follows its
             // own caret; overscroll-contain keeps that from chaining out.
             "voice-prose block resize-none overflow-y-auto overscroll-contain whitespace-pre-wrap bg-transparent outline-none [overflow-wrap:anywhere]",
-            compact ? "text-[0.9rem] leading-[1.42]" : "leading-[1.5]",
+            compact ? "text-[0.94rem] leading-[1.42]" : "leading-[1.5]",
             // hidden: inset-x-4 (not left-4 + w-full) so its box can't
             // poke past the right padding and force a sideways scroll
             editing
@@ -563,12 +563,12 @@ export function MarkedPreview({
       ref={wrapRef}
       data-mark-clip
       className="relative overflow-hidden"
-      style={{ maxHeight: `calc(0.9rem * 1.42 * ${PREVIEW_LINES})` }}
+      style={{ maxHeight: `calc(0.94rem * 1.42 * ${PREVIEW_LINES})` }}
     >
       <p
         ref={pRef}
         className={cn(
-          "voice-prose whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+          "voice-prose whitespace-pre-wrap text-[0.94rem] leading-[1.42]",
           // once windowed, clamp to the 6-line view so the last visible line
           // gets a trailing "…" (the measuring pass renders the full text, so
           // it must stay unclamped for the line maths to be right)

@@ -257,7 +257,7 @@ export function EntrySkeleton() {
         {/* the card's lit top edge, as on the real card */}
         <div className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] shadow-[inset_0_1px_0_var(--press-highlight)]" />
         {/* the words */}
-        <div className="min-h-0 px-4 pt-3 text-[0.9rem] leading-[1.42]">
+        <div className="min-h-0 px-4 pt-3 text-[0.94rem] leading-[1.42]">
           {ENTRY_LINES.map((w, i) =>
             w === 0 ? (
               <div key={i} className="h-[1.42em]" />

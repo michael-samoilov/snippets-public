@@ -169,7 +169,7 @@ export default function SignInPage() {
             </PaperButton>
             <button
               type="button"
-              className="pressable rounded-[5px] font-serif text-[0.9rem] text-ink-faint hover:text-ink-soft"
+              className="pressable rounded-[5px] font-serif text-[0.94rem] text-ink-faint hover:text-ink-soft"
               onClick={() => {
                 setStep("email");
                 setEmailError(null);
@@ -182,7 +182,7 @@ export default function SignInPage() {
       )}
 
       {emailError && (
-        <p role="alert" className="voice-prose mt-4 text-[0.9rem] text-ember">
+        <p role="alert" className="voice-prose mt-4 text-[0.94rem] text-ember">
           {emailError}
         </p>
       )}
@@ -192,7 +192,7 @@ export default function SignInPage() {
         className="mt-9 flex items-center gap-3 text-ink-faint"
       >
         <span className="h-px flex-1 bg-rule-faint" />
-        <span className="voice-label text-[0.75rem]">{copy.signin.or}</span>
+        <span className="voice-label text-[0.78rem]">{copy.signin.or}</span>
         <span className="h-px flex-1 bg-rule-faint" />
       </div>
 
@@ -208,14 +208,14 @@ export default function SignInPage() {
           </span>
         </PaperButton>
         {googleError && (
-          <p role="alert" className="voice-prose mt-3 text-[0.9rem] text-ember">
+          <p role="alert" className="voice-prose mt-3 text-[0.94rem] text-ember">
             {googleError}
           </p>
         )}
       </div>
 
       {/* the agreement, said once and quietly — both documents one tap away */}
-      <p className="voice-prose mt-6 text-[0.82rem] text-ink-faint">
+      <p className="voice-prose mt-6 text-[0.86rem] text-ink-faint">
         {copy.signin.agree}{" "}
         <Link
           href="/terms"
