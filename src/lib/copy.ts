@@ -217,8 +217,8 @@ export const copy = {
   /** the inline composer that backfills a past — or reopened — day */
   backfill: {
     today: "Add something from today…",
-    yesterday: "Add something from yesterday…",
-    other: "Add something you want to remember…",
+    yesterday: "Add a story from yesterday",
+    other: "Add a story worth remembering",
     /** accessible name, e.g. "Add an entry to Yesterday" */
     ariaAddTo: (dayLabel: string) => `Add an entry to ${dayLabel}`,
   },

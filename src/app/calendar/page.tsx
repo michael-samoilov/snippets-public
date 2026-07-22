@@ -4376,12 +4376,14 @@ const BookRow = memo(function BookRow({
       )}>
         {!hideToday && (() => {
           const dateInner = (
-            // py-[3.5px] sizes the block to exactly a single-line
-            // card's height (42.5px: its 35.4px of text + 7.1px), so
+            // py-[3.96px] sizes the block to exactly a single-line
+            // card's height (44.72px: its 36.8px of text + 7.92px), so
             // the date reads centre-aligned beside a one-line entry —
             // and a single-line day has zero sticky travel, killing
-            // the tiny header-crawl while scrolling past it
-            <div className="py-[3.5px]">
+            // the tiny header-crawl while scrolling past it. Retuned
+            // from py-[3.5px]/42.5px when the card+label text grew to
+            // the 1rem step (measured, not guessed).
+            <div className="py-[3.96px]">
               <span
                 className={cn(
                   "voice-label block text-[0.69rem] leading-tight",
