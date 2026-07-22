@@ -243,7 +243,7 @@ export function Capture() {
               animate={{ opacity: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, filter: "blur(2px)" }}
               transition={{ duration: 0.14, ease: "easeOut" }}
-              className="font-serif text-[0.88rem] italic text-ink-faint"
+              className="font-serif text-[0.98rem] italic text-ink-faint"
             >
               {listening ? (
                 <span className="not-italic text-wax">
