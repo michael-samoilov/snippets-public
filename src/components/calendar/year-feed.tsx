@@ -265,7 +265,7 @@ function YearFeedBase({
               className="absolute inset-x-0"
               style={{ top: geom.offsets[from + k] }}
             >
-              <p className="voice-label mb-1.5 text-[0.86rem] text-ink-soft">{y}</p>
+              <p className="voice-label mb-1.5 text-[0.91rem] text-ink-soft">{y}</p>
               <div
                 className="grid"
                 style={{
@@ -296,7 +296,7 @@ function YearFeedBase({
                       <span
                         data-flymonth={ym(start)}
                         className={cn(
-                          "voice-label text-[0.84rem]",
+                          "voice-label text-[0.89rem]",
                           isCurrent ? "text-wax" : "text-ink-soft",
                         )}
                       >
@@ -334,14 +334,14 @@ function YearFeedBase({
       <p
         ref={probeRef}
         aria-hidden="true"
-        className="voice-label invisible absolute text-[0.86rem]"
+        className="voice-label invisible absolute text-[0.91rem]"
       >
         2026
       </p>
       <span
         ref={miniProbeRef}
         aria-hidden="true"
-        className="voice-label invisible absolute text-[0.84rem]"
+        className="voice-label invisible absolute text-[0.89rem]"
       >
         Jan
       </span>

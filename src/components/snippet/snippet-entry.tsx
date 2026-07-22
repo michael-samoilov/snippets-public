@@ -38,7 +38,7 @@ export function SnippetEntry({
         className={cn(
           "voice-prose whitespace-pre-wrap",
           isQuote && "hang-quotes italic",
-          compact ? "text-[0.94rem] leading-[1.42]" : dense && "leading-[1.5]",
+          compact ? "text-[1rem] leading-[1.42]" : dense && "leading-[1.5]",
         )}
       >
         {snippet.text}

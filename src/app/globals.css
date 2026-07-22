@@ -677,7 +677,7 @@ textarea:focus-visible,
     font-variant-caps: all-small-caps;
     font-variant-numeric: oldstyle-nums;
     font-weight: 540;
-    font-size: 0.9rem;
+    font-size: 0.96rem;
     letter-spacing: 0.13em;
     color: var(--ink-soft);
   }
@@ -688,7 +688,7 @@ textarea:focus-visible,
     font-variant-caps: all-small-caps;
     font-variant-numeric: oldstyle-nums;
     font-weight: 540;
-    font-size: 0.84rem;
+    font-size: 0.89rem;
     letter-spacing: 0.13em;
     color: var(--ink-soft);
   }
@@ -696,7 +696,7 @@ textarea:focus-visible,
   /* data: mono strictly for true data — times, counts. lowercase, tiny */
   .voice-data {
     font-family: var(--font-mono);
-    font-size: 0.73rem;
+    font-size: 0.78rem;
     font-weight: 450;
     letter-spacing: 0.02em;
     font-variant-numeric: tabular-nums lining-nums;
@@ -718,7 +718,7 @@ textarea:focus-visible,
   .voice-prose-sm {
     font-family: var(--font-serif);
     font-weight: 420;
-    font-size: 0.94rem;
+    font-size: 1rem;
     line-height: 1.55;
     letter-spacing: 0.001em;
     text-shadow: 0 0 0.45px currentColor;

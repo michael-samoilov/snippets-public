@@ -273,12 +273,12 @@ const LEDGER_SHAPE: number[][] = [
 
 // one blank entry tile: the book-card recipe (bg-paper, hairline, inset top
 // highlight) with faint bars where the prose would sit. Each bar rides a line
-// box of the real prose rhythm (0.94rem × 1.42 ≈ 21px), so a six-line tile
+// box of the real prose rhythm (1rem × 1.42 ≈ 23px), so a six-line tile
 // stands exactly as tall as a full six-line card; the last line is short, as a
 // paragraph's is. The bars shimmer while the book settles in.
 function LedgerCard({ lines }: { lines: number }) {
   return (
-    <div className="book-card rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[0.94rem] leading-[1.42]">
+    <div className="book-card rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[1rem] leading-[1.42]">
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className="flex h-[1.42em] items-center">
           <span
@@ -455,7 +455,7 @@ function SkeletonDebug() {
     <>
       <CalendarSkeleton view={view} />
       <div className="float fixed bottom-3 left-3 z-50 rounded-full px-2.5 py-1">
-        <span className="voice-label text-[0.75rem] text-ink-soft">
+        <span className="voice-label text-[0.8rem] text-ink-soft">
           {view} skeleton — held
         </span>
       </div>
@@ -3894,7 +3894,7 @@ function Calendar() {
                 type="button"
                 onClick={closeSearch}
                 tabIndex={searching ? 0 : -1}
-                className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.75rem] text-ink-faint hover:bg-accent hover:text-ink"
+                className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.8rem] text-ink-faint hover:bg-accent hover:text-ink"
               >
                 Clear
               </button>
@@ -4014,7 +4014,7 @@ function Calendar() {
               <span
                 key={`${d}${i}`}
                 role="columnheader"
-                className="voice-label pb-2 text-center text-[0.82rem] text-ink-faint"
+                className="voice-label pb-2 text-center text-[0.87rem] text-ink-faint"
               >
                 {d}
               </span>
@@ -4172,7 +4172,7 @@ function Calendar() {
                     {newMonth && (
                       <p
                         className={cn(
-                          "voice-label px-1 pb-1.5 pt-5 text-[0.86rem]",
+                          "voice-label px-1 pb-1.5 pt-5 text-[0.91rem]",
                           isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
                         )}
                       >
@@ -4187,7 +4187,7 @@ function Calendar() {
                       <div className="self-start pb-3 pt-2 text-center">
                         <span
                           className={cn(
-                            "voice-label block text-[0.65rem] leading-tight",
+                            "voice-label block text-[0.69rem] leading-tight",
                             isToday ? "text-wax" : "text-ink-faint",
                           )}
                         >
@@ -4384,7 +4384,7 @@ const BookRow = memo(function BookRow({
             <div className="py-[3.5px]">
               <span
                 className={cn(
-                  "voice-label block text-[0.65rem] leading-tight",
+                  "voice-label block text-[0.69rem] leading-tight",
                   isToday ? "text-wax" : "text-ink-faint",
                 )}
               >
@@ -4438,7 +4438,7 @@ const BookRow = memo(function BookRow({
       {newMonth && !hideToday && (
         <p
           className={cn(
-            "voice-label px-1 pb-1.5 pt-5 text-[0.86rem]",
+            "voice-label px-1 pb-1.5 pt-5 text-[0.91rem]",
             isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
           )}
         >
@@ -5868,7 +5868,7 @@ const ScheduleCards = memo(function ScheduleCards({
               <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
               <p
                 className={cn(
-                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[0.94rem] leading-[1.42]",
+                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[1rem] leading-[1.42]",
                   s.kind === "quote" && "hang-quotes italic",
                 )}
               >
@@ -6285,7 +6285,7 @@ function FlowBackfillCapture({
               // outer height and same 11px text inset, so the composer→card
               // hand-off neither jumps 2px taller nor nudges the words sideways.
               // autosizeArea adds the border back into the measured height.
-              "book-card-prose voice-prose relative block max-h-[150px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[0.94rem] leading-[1.42] outline-none placeholder:italic",
+              "book-card-prose voice-prose relative block max-h-[158px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[1rem] leading-[1.42] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -7657,7 +7657,7 @@ function TodayZoneFill({
               offsets here and on the button equalize the gaps the EYE sees
               (~110px above the date, ~110px below the wax). */}
           <div className="mt-[83px] leading-none">
-            <p className="voice-label text-[0.75rem] text-ink-faint">{format(d, "EEEE")}</p>
+            <p className="voice-label text-[0.8rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
           {/* the letters on the sheet: prose, retiring itself the instant the
@@ -7776,24 +7776,24 @@ function TodayZoneFill({
                         : copy.todayZone.placeholder
               }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
-              // 0.94rem: the SAME type as the schedule card's preview, at the
+              // 1rem: the SAME type as the schedule card's preview, at the
               // same width — so the wrapping here is character-for-character
               // the wrapping there, and N rules filled = N preview lines.
-              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.94rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[1rem] outline-none placeholder:italic placeholder:text-ink-faint"
               // The ruled paper lives ON the textarea (background-attachment:
               // local, so the rules always track the words exactly). The rule
               // sits just below the baseline — standard characters rest ON the
               // line, only descenders dip across — and the period is a whole
-              // PIXEL (21px ≈ the card preview's 0.94rem × 1.42 = 21.36px
+              // PIXEL (23px ≈ the card preview's 1rem × 1.42 = 22.72px
               // rhythm) matched exactly by the line-height: a fractional
               // line-height lets WebKit snap line boxes to device pixels while
               // the gradient stays fractional, so text drifts off its rules
               // over dozens of lines.
               style={{
-                lineHeight: "21px",
-                minHeight: "63px",
+                lineHeight: "23px",
+                minHeight: "69px",
                 backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0, transparent 20px, var(--rule-faint) 20px, var(--rule-faint) 21px)",
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent 22px, var(--rule-faint) 22px, var(--rule-faint) 23px)",
                 backgroundPositionY: "-4px",
                 backgroundAttachment: "local",
               }}

@@ -338,7 +338,7 @@ function MonthFeedBase({
       <p
         ref={probeRef}
         aria-hidden="true"
-        className="voice-label invisible absolute text-[0.86rem]"
+        className="voice-label invisible absolute text-[0.91rem]"
       >
         June 2026
       </p>
@@ -485,7 +485,7 @@ const MonthBlock = memo(function MonthBlock({
           // optically centres the lettering between the rail and the
           // rule rather than centring its (taller) line box
           className={cn(
-            "voice-label absolute bottom-[3.25px] text-center text-[0.86rem]",
+            "voice-label absolute bottom-[3.25px] text-center text-[0.91rem]",
             isCurrent ? "text-wax" : "text-ink-soft",
           )}
           style={{ left: leadingBlanks * cell, width: cell }}
@@ -584,7 +584,7 @@ const MonthBlock = memo(function MonthBlock({
                 <span
                   data-flydate={key}
                   className={cn(
-                    "relative font-mono text-[0.82rem] tabular-nums",
+                    "relative font-mono text-[0.87rem] tabular-nums",
                     isToday && "font-semibold text-wax",
                   )}
                 >
