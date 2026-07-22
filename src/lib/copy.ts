@@ -562,6 +562,15 @@ export const copy = {
       heading: "Appearance",
       /** the theme radiogroup's accessible name */
       themeLabel: "Theme",
+      /** the text-size radiogroup's accessible name */
+      textSizeLabel: "Text size",
+      /** the four text-size steps, by their setting value */
+      textSizes: {
+        small: "Small",
+        default: "Default",
+        large: "Large",
+        larger: "Larger",
+      },
     },
     calendar: {
       heading: "Calendar",

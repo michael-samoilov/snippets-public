@@ -109,6 +109,11 @@ const APP_HEIGHT_SCRIPT = `(function(){var d=document.documentElement,vv=window.
 // only for a plain today landing (no entry/year/past-day deep-link).
 const FIRST_RUN_SCRIPT = `(function(){try{if(location.pathname!=="/calendar")return;if(localStorage.getItem("snippets:book-empty")!=="1")return;var p=new URLSearchParams(location.search);if(p.has("e")||p.has("y"))return;var t=new Date(),k=t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0"),d=p.get("d");if(d&&d!==k)return;document.documentElement.setAttribute("data-first-run","")}catch(e){}})()`;
 
+// Text size, applied BEFORE first paint so the page never flashes at the wrong
+// size. Reads the same store the Settings control writes (snippets:settings);
+// "default" (or unset) leaves no attribute, so the CSS resolves to 1x.
+const TEXT_SCALE_SCRIPT = `(function(){try{var r=localStorage.getItem("snippets:settings");if(!r)return;var v=(JSON.parse(r)||{}).textScale;if(v&&v!=="default")document.documentElement.setAttribute("data-text-scale",v)}catch(e){}})()`;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -135,6 +140,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full">
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SCALE_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: APP_HEIGHT_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: FIRST_RUN_SCRIPT }} />
         <Providers>

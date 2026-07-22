@@ -25,6 +25,38 @@
    (it's painted on the root), just with no findable scroll. */
 html {
   overscroll-behavior: none;
+  /* Text size (Settings → Appearance): ONE multiplier on the root font size, so
+     the whole rem-based type scale rides it in a single line. `100%` respects
+     the reader's own browser font setting; the multiplier layers on top. Media
+     queries evaluate rem against the INITIAL root size, so layout breakpoints
+     don't shift — only type and the rem-based rhythm grow. The default (no
+     `data-text-scale` attribute) resolves to 1×, i.e. exactly today's sizes. */
+  font-size: calc(100% * var(--text-scale, 1));
+}
+
+/* the text-size steps. --text-scale drives every rem; --ruled-line/--ruled-gap
+   carry the today-zone textarea's ruled rhythm, which must snap to WHOLE device
+   pixels (a fractional rhythm drifts against its background rules — see the
+   textarea in calendar/page.tsx), so it can't be a pure calc and is precomputed
+   per step: line = round(1rem × 1.42) at that step's root size, gap = line − 1. */
+:root {
+  --ruled-line: 23px; /* default · 1rem  → round(22.72) */
+  --ruled-gap: 22px;
+}
+:root[data-text-scale="small"] {
+  --text-scale: 0.9;
+  --ruled-line: 20px; /* 0.9rem·14.4px → round(20.45) */
+  --ruled-gap: 19px;
+}
+:root[data-text-scale="large"] {
+  --text-scale: 1.1;
+  --ruled-line: 25px; /* 1.1rem·17.6px → round(24.99) */
+  --ruled-gap: 24px;
+}
+:root[data-text-scale="larger"] {
+  --text-scale: 1.2;
+  --ruled-line: 27px; /* 1.2rem·19.2px → round(27.26) */
+  --ruled-gap: 26px;
 }
 
 :root {
