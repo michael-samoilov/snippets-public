@@ -138,7 +138,11 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    quiet additive layer (its states are terse Settings lines — "Synced
    3:12 pm.", counts in the data voice — never banners or spinners in
    the capture path), and no keep ever fails silently — a failed write
-   un-stamps, restores the words, and says why.
+   un-stamps, restores the words, and says why. Signing in implies
+   end-to-end encryption: enrollment (the passphrase step) is part of
+   sign-in, sync WAITS for it — loudly, in letters and Settings lines —
+   and capture never does. There is no way to turn encryption off, and
+   no UI may offer one.
 9. **Quality floor:** wax focus ring on controls (caret + darkened rule
    on text fields), hit targets ≥44px touch, URL reflects view state,
    `touch-action: manipulation`, both themes + reduced-motion checked,

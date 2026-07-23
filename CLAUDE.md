@@ -127,21 +127,39 @@ Copy voice; the rule lives in the `snippets-craft` skill (law 7).
   Tombstones live forever server-side; client purge only drops
   server-acknowledged ones. Erase-all on a synced book soft-deletes
   (propagates) — never `clear()`.
-- **End-to-end encryption (opt-in):** `payloadFormat: 2` seals entry
-  payloads with AES-GCM under a per-user book key
-  (`src/lib/crypto.ts`, unit-tested; state machine in `src/lib/e2e.ts`).
-  The key is wrapped under the passphrase AND a recovery code; only
-  the wrapped envelopes rest server-side (`/api/keys` — PUT once,
-  never replaceable, that's deliberate). On-device the key is a
-  NON-extractable CryptoKey in the meta table. Enrolled + no key =
-  the `locked` sync state: sync pauses loudly, capture never does.
-  A key that no longer opens pulled rows (encryption turned off→on
-  elsewhere) throws `KeyMismatchError`: the device forgets the stale
-  key and re-enters `locked` — never an endless retry. On outages the
-  enrollment probe may reuse a cached "enrolled", never a cached
-  "not enrolled" (that could push plaintext into a sealed book;
-  unit-tested in `e2e.test.ts`). Decrypt/encrypt OUTSIDE Dexie
-  transactions (foreign awaits kill them).
+- **End-to-end encryption (REQUIRED at sign-in, 2026-07):** there is no
+  plaintext sync. `payloadFormat: 3` seals entry payloads with AES-GCM
+  under a per-user book key, with the row's cleartext fields
+  (`id`/`updatedAt`/`deletedAt`/`payloadFormat`) bound in as AAD
+  (`aadForRow` in `src/lib/crypto.ts` — the canonical pipe string is
+  pinned by a test; changing it orphans every sealed book) so a moved /
+  rolled-back / resurrected / format-downgraded envelope fails to open.
+  Formats 1|2 remain READABLE on pull (legacy rows re-seal to 3 via the
+  one-time per-device sweep + the pull re-dirty rule in `sync.ts`);
+  nothing can WRITE them — `pushAll`/`pullAll`/`toWireChange` take the
+  key as a required argument, and the push route accepts 2|3 only
+  (format 1 → 409 `encryption_required`, sealed payloads must be shaped
+  `{v:1,iv,ct}`). `disableEncryption` was deleted deliberately — do not
+  reintroduce any path that re-pushes plaintext. The key is wrapped
+  under the passphrase AND a recovery code; only the wrapped envelopes
+  rest server-side (`/api/keys` — PUT once, never replaceable or
+  deletable over the API, that's deliberate; account deletion cascades
+  them away). On-device the key is a NON-extractable CryptoKey in the
+  meta table. Signed in + never enrolled = the `needsSetup` sync state
+  (mirror of `locked`): NO push, NO pull, counts only — enrollment is
+  the `/welcome` step (shared `EnrollFlow` component, also mounted by
+  Settings; the calendar's needs-setup letter carries stragglers to
+  `?seal=1`). Enrolled + no key = `locked`: same pause; unlock in
+  Settings. Both pause sync loudly, never capture. A key that no longer
+  opens pulled rows throws `KeyMismatchError`: the device forgets the
+  stale key and re-enters `locked` — never an endless retry. On outages
+  the enrollment probe may reuse a cached "enrolled", never a cached
+  "not enrolled" (unit-tested in `e2e.test.ts`). Decrypt/encrypt
+  OUTSIDE Dexie transactions (foreign awaits kill them). The whole
+  no-plaintext-window guarantee is OBSERVED, not assumed:
+  `tests/e2e/forced_e2e.py` (see also `tests/e2e/speech_adapters.py`
+  for the voice wire) — run it via `with_server.py` after touching
+  sync/e2e/crypto.
 - **Drive backup (device-delivered):** the writer's device renders
   (keep `src/lib/render-book.ts` the single renderer — the JSON stays
   bit-compatible with Restore from JSON) and uploads to the visible
@@ -249,6 +267,15 @@ harnesses for correctness, and nothing replaces the on-device pass.
 **Production branch: `claude/nice-dijkstra-q7d285`** — this repo has no
 `main`/`master`; that branch is the GitHub default and what prod deploys
 from. Merge finished feature branches there (no need to ask).
+
+Every production page ships a strict Content-Security-Policy from
+`next.config.ts` — its `connect-src` is the browser-enforced list of
+everywhere the app may send data, derived from
+`src/lib/speech-providers.ts`, and `/verify` tells users to curl it. A
+new external origin is a privacy event: update the provider table (or
+config), `/verify`, and the privacy page in the same commit, and re-run
+the zero-violation sweep. `CSP_REPORT_ONLY=1` de-fangs the header in an
+emergency without new code.
 
 Any Node host (Vercel works as-is). Sync/backup need
 `DATABASE_URL`/`BETTER_AUTH_SECRET` (and the Google/Resend keys);

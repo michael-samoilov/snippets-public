@@ -489,12 +489,30 @@ to its allowlist when you write one.
 - The shader layer is progressive enhancement: gated on mount + Save-Data,
   static (`speed 0`), masked, plain paper always beneath.
 
+## Privacy is architecture, not copy
+
+The privacy pages may only print sentences the system makes true — the
+push of 2026-07 worked backwards from the sentences we wanted: sign-in
+implies end-to-end encryption (no plaintext window: the engine holds an
+unenrolled book, the server refuses readable entries, and the guarantee
+is *observed* by `tests/e2e/forced_e2e.py`, not argued); voice streams
+only to providers whose self-serve default is no-storage/no-training
+(`src/lib/speech-providers.ts` is the single table the privacy page,
+Settings, and the CSP all read); and the strict CSP's `connect-src` is
+the browser-enforced list of everywhere words can go, with `/verify`
+teaching a worried reader to check it themselves (airplane-mode test,
+network-tab walkthrough, the one-line curl). Corollaries: encryption
+has no off switch; a new external origin is a privacy event (table +
+`/verify` + privacy page move in the same commit); and the Drive backup
+stays plaintext on purpose — it is the key-loss safety net, in storage
+the writer owns.
+
 ## Deferred (intentionally)
 
 Weekly digest · push nudges · more backup channels (email digest,
-Dropbox — the `backup_status.provider` column is the seam) · optional
-per-user end-to-end encryption (the sync payload is already a
-versioned envelope; a client-encrypted format is a `payloadFormat`
-bump, at the cost of server-rendered Markdown backups) · vaul drawer
-editor on touch · opt-in UI sound (paper-thud at 440→220Hz, gain ≤0.08,
-default off) · view transitions (no list→detail route pair yet).
+Dropbox — the `backup_status.provider` column is the seam) · vaul
+drawer editor on touch · opt-in UI sound (paper-thud at 440→220Hz,
+gain ≤0.08, default off) · view transitions (no list→detail route pair
+yet). (Per-user end-to-end encryption graduated from this list — it is
+now required at sign-in; Drive backups are client-rendered, so the
+server-rendered-Markdown cost named here never materialized.)
