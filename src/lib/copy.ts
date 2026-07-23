@@ -534,9 +534,10 @@ export const copy = {
       recoveryFileNote:
         "Downloading saves a plain-text file holding your account email and this recovery code — keep it somewhere private.",
       /** the safety-net nudge under the code — Drive backup, surfaced at the
-          exact moment key loss becomes imaginable */
+          exact moment key loss becomes imaginable; the link renders after it */
       recoveryDrive:
-        "One more net: connect the Google Drive backup in Settings, and readable copies of your entries rest in your own Drive — so even losing the passphrase and this code never costs you the words.",
+        "One more net: connect the Google Drive backup, and readable copies of your entries rest in your own Drive — so even losing the passphrase and this code never costs you the words.",
+      recoveryDriveLink: "Connect it in Settings",
       recoveryDone: "I’ve saved it",
     },
     backup: {

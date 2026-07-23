@@ -205,7 +205,7 @@ export function EnrollFlow({
         <p className="voice-prose-sm text-ink-soft">
           {copy.settings.encryption.recoveryDrive}{" "}
           <Link href="/settings" className="underline underline-offset-2">
-            {copy.settings.backup.heading}
+            {copy.settings.encryption.recoveryDriveLink}
           </Link>
         </p>
         <div className="flex flex-wrap items-center gap-3 pt-1">

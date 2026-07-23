@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth";
 import { getBookKey, refreshEnrollment } from "@/lib/e2e";
@@ -22,10 +22,15 @@ export default function WelcomePage() {
   const { user, status } = useSession();
   const [show, setShow] = useState(false);
   // once the passphrase is set the recovery code is on screen — the
-  // escape link leaves with the flow, so the only door is "I've saved it"
+  // escape link leaves with the flow, so the only door is "I've saved it".
+  // The ref mirrors it for the effect below: the session hook refetches
+  // after enrollment, re-running the step-aside — which must NOT fire
+  // mid-flow, or it would yank the once-only recovery code off screen.
   const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
 
   useEffect(() => {
+    if (startedRef.current) return;
     if (status === "loading") return;
     if (status === "signed-out" || !user) {
       router.replace("/calendar");
@@ -37,7 +42,7 @@ export default function WelcomePage() {
         refreshEnrollment(),
         getBookKey(),
       ]);
-      if (!alive) return;
+      if (!alive || startedRef.current) return;
       // enrolled (or unknowable right now) → the book handles it: a
       // second device shows the locked letter, an outage retries. Only a
       // confirmed not-enrolled account needs this step.
@@ -66,7 +71,10 @@ export default function WelcomePage() {
         <div className="mt-8">
           <EnrollFlow
             email={user.email ?? ""}
-            onEnrolled={() => setStarted(true)}
+            onEnrolled={() => {
+              startedRef.current = true;
+              setStarted(true);
+            }}
             onDone={() => router.push("/calendar")}
           />
         </div>
