@@ -375,6 +375,10 @@ const deepgramAdapter: StreamAdapter = {
       channels: "1",
       interim_results: "true",
       smart_format: "true",
+      // opt out of Deepgram's Model Improvement Partnership: without this,
+      // pay-as-you-go audio may be retained and used to train their models —
+      // the privacy page's "the audio is not kept" depends on this param
+      mip_opt_out: "true",
     });
     return new WebSocket(`${g.ws}/v1/listen?${params}`, ["bearer", g.token]);
   },
