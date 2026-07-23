@@ -39,6 +39,7 @@ const TECH_COPY_PATHS = [
 const PAGES = [
   "../app/privacy/page.tsx",
   "../app/terms/page.tsx",
+  "../app/verify/page.tsx",
   // not a page, but its retention lines render verbatim ON the privacy
   // page — they carry the same register and ride the same bar
   "../lib/speech-providers.ts",
