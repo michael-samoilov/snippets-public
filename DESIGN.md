@@ -404,7 +404,15 @@ a thing literally does, in words the user already owns: *encrypt your
 entries*, not *seal your book*; *your entries*, not *your book*. "Book"
 (or "notebook") is allowed only in warm, descriptive prose where it
 reads deliberately, and the non-idiomatic "commonplace book" is retired
-everywhere. Metaphor earns its place only when it names an actual
+everywhere. **Entries are entries** — never *your words*, *your book*, or
+*what you've written*; an entry is **saved** (not *kept* or *written into
+the device*); a voice recording is a **recording** (not *a take*).
+*words / book / keeps / take* are the skin-words that read fine in warm
+prose but turn ambiguous the instant copy explains a mechanism, so the
+technical register uses the concrete noun; "book"/"notebook" live on only
+as code identifiers (`book-card`, the crypto *book key*), never in copy.
+The linter hard-bans *your book* and warns on *your words* / *it keeps*.
+Metaphor earns its place only when it names an actual
 on-screen object — the **wax seal** you tap to record/keep is a real
 thing, so "tap the seal" stays — or when it genuinely aids
 understanding; otherwise the plainer, more idiomatic word wins. A reader

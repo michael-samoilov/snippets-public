@@ -50,13 +50,6 @@ html {
   --paper: #f7f1e3;
   --paper-raised: #fdf9ef;
   --paper-recessed: #eee6d2;
-  /* the sheet's paper is not flat --paper on screen — the grain overlay
-     (.sheet-grain) darkens it by ~15 units. A sticky policy heading paints
-     OVER that grain, so a --paper fill reads as a stark light band. This is
-     the grain's on-screen tone, measured off the rendered sheet, so the
-     pinned heading's solid fill matches the sheet it sits on, erring a hair
-     light so it never reads darker than the paper (see .policy-head). */
-  --policy-fill: #f4eddf;
   --ink: #241e15;
   --ink-soft: #6f6553;
   --ink-faint: #988c77;
@@ -189,10 +182,6 @@ html {
   --desk-deep: #090706;
 
   --paper: #1d1812;
-  /* dark grain LIGHTENS the sheet a touch — match that on-screen tone */
-  --policy-fill: #221d15;
-  --policy-fill-hi: #251f17; /* top/strong grain — lighter in dark mode */
-  --policy-fill-lo: #1d1812; /* bottom/faded — back to flat --paper */
   --paper-raised: #292219;
   --paper-recessed: #15100b;
   --ink: #eae1cd;
@@ -774,52 +763,6 @@ textarea:focus-visible,
 .voice-prose blockquote,
 .hang-quotes {
   hanging-punctuation: first;
-}
-
-/* ── policy pages: two-level sticky section headings ───────────
-   Privacy and Terms are long single-scroll documents, so the section
-   heading you're reading under stays pinned at the top of the scroller,
-   and — where a section has subheadings — the subheading pins just
-   beneath it. Sequential subheadings push each other out (each lives in
-   its own containing block); the next section's main heading pushes the
-   last one out (its containing block is the whole <section>). The main
-   head sits above the sub (z-index) so a sub sliding away tucks under it.
-
-   The fill is the sheet's own paper colour, so it matches the background
-   and reads as no fill, while still hiding the text that scrolls under it.
-   (A DIFFERENT flat colour would read as a band — the calendar's month
-   header learned the same; the paper grain, a fixed texture, is the one
-   thing the fill can't match near the top.) */
-.policy-head,
-.policy-sub {
-  position: sticky;
-  /* A plain solid fill in the sheet's own on-screen tone, so it reads as the
-     background colour while staying opaque enough to hide the text scrolling
-     under it. The grain is a faint vertical gradient (darker at the very top,
-     fading down), so no single tone can match every pixel — this one is set
-     to the tone the sheet actually shows, erring a hair LIGHT so it never
-     reads darker than the paper. */
-  background-color: var(--policy-fill);
-}
-.policy-head {
-  top: 0;
-  z-index: 2;
-  padding-top: 0.5rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--rule);
-}
-.policy-sub {
-  /* Pins just below the pinned main head. The main head is 2.25rem tall;
-     this pins ~0.2rem HIGHER so the sub's top edge tucks a hair UNDER the
-     head (which paints above it, z-index) — that overlap closes the 1px
-     seam where a scrolling line's ascenders would otherwise show between
-     the two pinned bands. padding-top keeps the sub's own text clear of
-     the head. */
-  top: 2.05rem;
-  z-index: 1;
-  padding-top: 0.5rem;
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid var(--rule-faint);
 }
 
 /* ── pressable physics (Emil: the interface must listen) ───── */

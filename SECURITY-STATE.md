@@ -116,10 +116,23 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   configured speech WebSocket origins. Plus `frame-ancestors/object-src/
   base-uri 'none'`, `form-action 'self'`, DNS-prefetch off, same-origin
   referrer, microphone-to-self Permissions-Policy.
-- **Source:** `next.config.ts` (speech origins derived from
-  `speech-providers.ts`). Escape hatch: `CSP_REPORT_ONLY=1`.
+- **Source:** `src/lib/security-headers.ts` (built from `speech-providers.ts`),
+  applied by `next.config.ts`. Escape hatch: `CSP_REPORT_ONLY=1`.
 - **A new external origin is a privacy event:** update the provider table
   (or config), `/verify`, and the privacy page in the same commit.
+- **`script-src` keeps `'unsafe-inline'`** — it is genuinely required by
+  Next.js's inline RSC bootstrap scripts (unhashable per-build; SRI is
+  webpack-only, broken on Turbopack). Removing it needs a per-request
+  nonce, which forces every page to render dynamically (loses Vercel's
+  static-HTML edge cache). Judged not worth that trade for now; every
+  other directive is tight. The nonce path is written up in BACKLOG.
+- **`access-control-allow-origin: *` is benign, not ours.** Vercel's CDN
+  stamps it on public static assets and the static `/`→`/calendar`
+  redirect only — never on our cookie-authed Node API routes, and `*` is
+  spec-incompatible with credentials, so it cannot expose logged-in data.
+  No code sets it; no action taken. (Confirm live if wanted:
+  `curl -sI https://www.snippets.ink/api/sync/status | grep -i access-control`
+  → expect no line.)
 
 ### Data we collect
 - Sign-in needs your email (and, with Google, your name + profile
@@ -160,9 +173,13 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   "We cannot read your entries. Not won't, can't." + 4-row data-flow
   table is **gated** on the pre-2026-07-23 accounts re-encrypting — see
   BACKLOG #14. Do not swap it in until the gate check passes.
-- **Database-backup retention figure** on the privacy page (currently
-  "within 24 hours") is a placeholder pending confirmation of the Neon
-  point-in-time-restore window for this project.
+- **The short privacy page + digestibility revision** is on preview branch
+  `claude/privacy-short-page-preview`, pending owner review and merge. The
+  gate is met, so the unqualified
+  "We cannot read your entries" headline is architecturally true. Not yet
+  on prod.
+- The old "early accounts / plaintext lingers" note is removed from the
+  privacy page, because the re-encryption gate in BACKLOG #14 passed.
 - **Soniox / Speechmatics are wired but dormant** until their API keys
   are set in the environment. Until then the active chain is whatever
   keys exist (likely Deepgram, mip-opted-out). The privacy page names
@@ -177,6 +194,23 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-07-23 — privacy/verify digestibility revision (preview)
+Seven-pass audit → shorter, plainer pages. Trust fixes: the voice glance
+line no longer overclaims "then it is gone" (it contradicted our own
+Deepgram retention line); Backup now says "unencrypted" and states
+"Google can read them" in the glance; a "no catch — no ads, no selling,
+no training" row surfaces that concern up top. De-jargon: "your entries"
+not "your words", "saved" not "kept/written into", the verify network
+table made plain (no "payload / v/iv/ct / API-key" register). Consolidation:
+duplicate encryption/Drive explanations cut, Voice reordered above Drive.
+Styling: all three policy pages unified on `SectionHeading` (sticky
+`policy.tsx` + CSS retired). Copy voice updated (law 7 + DESIGN.md) with
+new lint rules (`your book`, `v/iv/ct`, `payload`-on-pages banned). CORS
+finding documented as benign; CSP `unsafe-inline` kept (nonce backlogged).
+Also fixed a real render bug: the JSX transform drops the literal space
+after a closing tag, so "cannotsend"/"Content-Security-Policyheader" — now
+explicit `{" "}`. On preview branch, pending merge.
 
 ### 2026-07-23 — the privacy & security push
 - **Deepgram opted out of model-improvement** (`mip_opt_out=true` on every

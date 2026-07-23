@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageBackHeader } from "@/components/page-back-header";
-import { PolicySection } from "@/components/policy";
+import { SectionHeading } from "@/components/section-heading";
+import { Em } from "@/components/prose";
 
 export const metadata: Metadata = { title: "Terms of service" };
 
@@ -13,9 +14,22 @@ export const metadata: Metadata = { title: "Terms of service" };
  */
 const LAST_UPDATED = "July 23, 2026";
 
-/** Emphasis — bold against the 420 prose, so load-bearing lines stand out. */
-function Em({ children }: { children: React.ReactNode }) {
-  return <strong className="font-bold">{children}</strong>;
+/** A titled clause: the shared heading over its body, matching privacy. */
+function Clause({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <SectionHeading id={id}>{title}</SectionHeading>
+      {children}
+    </section>
+  );
 }
 
 export default function TermsPage() {
@@ -38,10 +52,10 @@ export default function TermsPage() {
           that into the design, not just the fine print.
         </p>
 
-        <PolicySection id="your-words" title="Your words are yours">
+        <Clause id="your-words" title="Your words are yours">
           <p className="voice-prose text-[0.95rem]">
             Everything you write or speak into Snippets belongs to you. We
-            claim <Em>no ownership and no rights over your entries</Em> beyond
+            claim <Em>no ownership and no rights over your entries</Em>{" "}beyond
             the narrow, technical permission needed to run the features you
             turn on: storing a copy so your other devices can fetch it,
             carrying a voice recording to a transcription service and back,
@@ -50,9 +64,9 @@ export default function TermsPage() {
             them for advertising, train AI on them, or use them for anything
             but carrying them where you pointed.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="promises" title="What we promise, and what we can’t">
+        <Clause id="promises" title="What we promise, and what we can’t">
           <p className="voice-prose text-[0.95rem]">
             Snippets is free, and we work to keep it fast, private, and
             durable. But it is provided <Em>as is</Em>: we can&rsquo;t promise
@@ -68,9 +82,9 @@ export default function TermsPage() {
             is nothing. Nothing in these terms takes away rights your local
             law says can&rsquo;t be waived.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="encryption" title="Encryption gives you the only key">
+        <Clause id="encryption" title="Encryption gives you the only key">
           <p className="voice-prose text-[0.95rem]">
             Signing in encrypts your entries end-to-end: your passphrase and
             recovery code are the only ways to read your synced entries — that
@@ -79,9 +93,9 @@ export default function TermsPage() {
             readable files in your Drive exist precisely so a lost key never
             costs you the words.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="account" title="Your account">
+        <Clause id="account" title="Your account">
           <p className="voice-prose text-[0.95rem]">
             You need to be at least 13 years old — or older, where your
             country sets a higher age for agreeing to services like this one.
@@ -89,9 +103,9 @@ export default function TermsPage() {
             it: anything done under your sign-in is yours to answer for.
             Signing in is never required to use the app on one device.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="fair-use" title="Fair use">
+        <Clause id="fair-use" title="Fair use">
           <p className="voice-prose text-[0.95rem]">
             Snippets is a private notebook, and what you write in it is your
             business. What we ask is narrow: don&rsquo;t use the service to
@@ -102,9 +116,9 @@ export default function TermsPage() {
             suspend an account that attacks the service, and we&rsquo;ll act
             on unlawful material where the law requires it.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="leaving" title="Leaving, and endings">
+        <Clause id="leaving" title="Leaving, and endings">
           <p className="voice-prose text-[0.95rem]">
             You can leave whenever you like: export your entries, disconnect
             Drive, or delete your account in Settings — deletion is immediate
@@ -116,9 +130,9 @@ export default function TermsPage() {
             </Em>
             , and we&rsquo;ll give whatever notice we can.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="other-services" title="Other people’s services">
+        <Clause id="other-services" title="Other people’s services">
           <p className="voice-prose text-[0.95rem]">
             Google handles Google sign-in and your Drive under Google&rsquo;s
             own terms. Voice transcription runs through the speech services
@@ -126,18 +140,18 @@ export default function TermsPage() {
             process your data, their terms and privacy policies govern that
             processing.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="changes" title="Changes">
+        <Clause id="changes" title="Changes">
           <p className="voice-prose text-[0.95rem]">
             The app will keep changing — features will arrive, shift, and
             sometimes retire. These terms may change with it; when they do,
             the date at the top moves, and if a change matters we&rsquo;ll say
             so in the app. Using Snippets after a change means you accept it.
           </p>
-        </PolicySection>
+        </Clause>
 
-        <PolicySection id="questions" title="Questions">
+        <Clause id="questions" title="Questions">
           <p className="voice-prose text-[0.95rem]">
             About these terms, or anything the app does:{" "}
             <a
@@ -148,7 +162,7 @@ export default function TermsPage() {
             </a>
             .
           </p>
-        </PolicySection>
+        </Clause>
       </div>
     </PageBackHeader>
   );

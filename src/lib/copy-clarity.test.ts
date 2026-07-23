@@ -51,22 +51,41 @@ const PAGES = [
 const BANNED_EVERYWHERE: { re: RegExp; msg: string }[] = [
   { re: /\bcommonplace book\b/i, msg: `"commonplace book" is retired — say "entries" / "notebook"` },
   { re: /\bseal(ed|ing|s)?\b/i, msg: `"seal" as a stand-in for encrypt — say "encrypt" / "encrypted"` },
+  // entries are ENTRIES — never a user's "book" (the desk/paper metaphor is
+  // the visual skin, never a vocabulary the copy makes the reader learn).
+  // "book"/"notebook" survive only as code identifiers (.book-card, the
+  // crypto "book key"), never in copy.
+  { re: /\byour book\b/i, msg: `never call a user's entries their "book" — say "your entries"` },
+  // the sealed envelope's field names must never be user-facing
+  { re: /v\/iv\/ct/i, msg: `don't expose the envelope's field names — say "random-looking characters"` },
   { re: /\bnow and then\b/i, msg: `vague cadence — name the interval (e.g. "every 15 minutes")` },
   { re: /\bfrom time to time\b/i, msg: `vague cadence — name the interval` },
   { re: /\bevery so often\b/i, msg: `vague cadence — name the interval` },
   { re: /\bonce in a while\b/i, msg: `vague cadence — name the interval` },
   { re: /\bperiodically\b/i, msg: `vague cadence — name the interval` },
 ];
+// internal wire terms with a plain synonym — never user-facing ANYWHERE, even
+// on a page that legitimately defines other technical terms (AES-256-GCM etc.).
+const JARGON_ALWAYS: { re: RegExp; msg: string }[] = [
+  { re: /\bpayload\b/i, msg: `internal term "payload" — say "what it sends" / "the encrypted block"` },
+];
 // internal / implementation words that must never reach the settings status
-// copy (the pages may DEFINE technical terms deliberately, so this is copy-only)
+// copy (the pages may DEFINE technical terms deliberately, so these stay copy-only)
 const JARGON_COPY_ONLY: { re: RegExp; msg: string }[] = [
-  { re: /\bpayload\b/i, msg: `internal term "payload"` },
   { re: /\btombstone\b/i, msg: `internal term "tombstone"` },
   { re: /\bidempotent\b/i, msg: `internal term "idempotent"` },
   { re: /\bcursor\b/i, msg: `internal term "cursor"` },
   { re: /\bLWW\b/, msg: `internal term "LWW"` },
   { re: /\badvisory lock\b/i, msg: `internal term "advisory lock"` },
   { re: /\bmutex\b/i, msg: `internal term "mutex"` },
+];
+// register words that turn ambiguous the moment copy explains a mechanism —
+// advisory only (printed, not enforced): "your words" has a legitimate
+// literary home (the terms title "Your words are yours", the intro), and
+// "keeps"/"take" over-match warm prose ("keep writing", "take five minutes").
+const REGISTER_ADVISORY: { re: RegExp; msg: string }[] = [
+  { re: /\byour words\b/i, msg: `ambiguous register — prefer "your entries" outside deliberate literary lines` },
+  { re: /\bit keeps\b/i, msg: `register verb — an entry is "saved", not "kept"` },
 ];
 const SENTENCE_WORD_LIMIT = 28; // STE descriptive cap (~25), a little slack
 
@@ -146,6 +165,8 @@ describe("copy clarity — STE-informed checks on the technical register", () =>
       const hay = text.replace(/\bwax seal\b/gi, "«object»"); // the real object is exempt
       for (const { re, msg } of BANNED_EVERYWHERE)
         if (re.test(hay)) errors.push(`[${where}] ${msg}\n    “${text}”`);
+      for (const { re, msg } of JARGON_ALWAYS)
+        if (re.test(text)) errors.push(`[${where}] ${msg}\n    “${text}”`);
       if (scope === "copy")
         for (const { re, msg } of JARGON_COPY_ONLY)
           if (re.test(text)) errors.push(`[${where}] ${msg}\n    “${text}”`);
@@ -154,19 +175,22 @@ describe("copy clarity — STE-informed checks on the technical register", () =>
     expect(errors).toEqual([]);
   });
 
-  // advisory: over-long sentences (STE ~25 words). Printed, not enforced —
-  // some long lines are honestly clearer whole; a human decides.
-  it("flags over-long sentences (advisory)", () => {
-    const longOnes: string[] = [];
+  // advisory: over-long sentences (STE ~25 words) and register words that
+  // read fine in warm prose but blur when copy explains a mechanism.
+  // Printed, not enforced — a human decides.
+  it("flags over-long sentences and register words (advisory)", () => {
+    const notes: string[] = [];
     for (const { where, text, scope } of items) {
+      for (const { re, msg } of REGISTER_ADVISORY)
+        if (re.test(text)) notes.push(`[${where}] ${msg}: “${text}”`);
       if (scope !== "copy") continue; // page JSXText fragments split unreliably
       for (const n of wordsPerSentence(text))
-        if (n > SENTENCE_WORD_LIMIT) longOnes.push(`[${where}] ${n} words: “${text}”`);
+        if (n > SENTENCE_WORD_LIMIT) notes.push(`[${where}] ${n} words: “${text}”`);
     }
-    if (longOnes.length)
+    if (notes.length)
       console.warn(
-        `\n⚠ copy clarity — ${longOnes.length} long sentence(s) (>${SENTENCE_WORD_LIMIT} words), consider splitting:\n` +
-          longOnes.join("\n"),
+        `\n⚠ copy clarity — ${notes.length} advisory note(s) (long sentences / register words):\n` +
+          notes.join("\n"),
       );
     expect(true).toBe(true);
   });
