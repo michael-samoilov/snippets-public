@@ -6726,6 +6726,13 @@ function TodayZoneFill({
   // NOT gated on the book being empty: keeping an entry while locked must
   // not dismiss the letter — it stands until the device actually unlocks
   const lockedLetter = hiddenBehindLock || LOCK_DEBUG !== null;
+  // The needs-setup letter — signed in, but no encryption passphrase yet,
+  // so the engine holds the book (sync.needsSetup) and nothing moves. It
+  // carries the same door as the welcome step for whoever stepped past it
+  // (or signed in before encryption became part of sign-in). Same retire
+  // rule as the locked letter: gone the moment the writer starts.
+  const needsSetupLetter =
+    sessionStatus === "signed-in" && sync.needsSetup && !lockedLetter;
   const lockedCount =
     LOCK_DEBUG !== null
       ? LOCK_DEBUG || null
@@ -7732,6 +7739,35 @@ function TodayZoneFill({
                   </PaperButton>
                 </div>
               </motion.div>
+            ) : needsSetupLetter && text.trim().length === 0 ? (
+              <motion.div
+                key="needs-setup-letter"
+                // like the locked letter, the state is only known once the
+                // first sync cycle answers — always fade in, never pop
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                transition={{ duration: 0.24, ease: "easeOut" }}
+                className="w-full space-y-3 text-left"
+              >
+                {copy.todayZone.needsSetup.body.map((para, i) => (
+                  <p
+                    key={i}
+                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                  >
+                    {renderInline(para, `needs-setup-${i}`)}
+                  </p>
+                ))}
+                <div className="flex justify-center pt-1">
+                  <PaperButton
+                    onClick={() =>
+                      router.push("/settings?tab=account&seal=1")
+                    }
+                  >
+                    {copy.todayZone.needsSetup.action}
+                  </PaperButton>
+                </div>
+              </motion.div>
             ) : firstEver && text.trim().length === 0 ? (
               <motion.div
                 key="intro"
@@ -7801,10 +7837,11 @@ function TodayZoneFill({
                   ? copy.capture.listeningPlaceholder
                   : transcribing
                     ? copy.capture.settingWords
-                    : firstEver && !lockedLetter
+                    : firstEver && !lockedLetter && !needsSetupLetter
                       // a locked device's book is empty too, but its writer is
                       // no newcomer — the first-ever invitation would jar
-                      // against the letter's "welcome back"
+                      // against the letter's "welcome back" (and against the
+                      // needs-setup letter's one-step-left framing alike)
                       ? copy.todayZone.placeholderFirstEver
                       : hasEntry
                         ? copy.todayZone.placeholderHasEntry

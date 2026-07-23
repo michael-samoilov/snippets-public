@@ -22,8 +22,8 @@
  * Every failure lands in a visible status — never a silent stall.
  */
 import { useSyncExternalStore } from "react";
-import { db, setWriteNotifier, reencryptSweep } from "@/lib/db";
-import { incomingWins, type MergeSide } from "@/lib/merge";
+import { db, getMeta, setWriteNotifier, reencryptSweep } from "@/lib/db";
+import { bumpClock, incomingWins, type MergeSide } from "@/lib/merge";
 import {
   clearSyncState,
   currentDbName,
@@ -37,17 +37,13 @@ import {
   toWireChange,
   KeyMismatchError,
   LockedError,
+  PAYLOAD_FORMAT_SEALED_AAD,
   type BackupStatusSummary,
   type PullResponse,
   type PushResponse,
   type StatusResponse,
 } from "@/lib/sync-wire";
-import {
-  getBookKey,
-  refreshEnrollment,
-  clearLocalKey,
-  deleteServerKeys,
-} from "@/lib/e2e";
+import { getBookKey, refreshEnrollment, clearLocalKey } from "@/lib/e2e";
 import { maybeDeliverBackup } from "@/lib/backup-client";
 import type { Snippet } from "@/lib/types";
 
@@ -77,6 +73,9 @@ export interface SyncStatus {
   backup: BackupStatusSummary | null;
   /** the account is end-to-end encrypted and this device holds no key */
   locked: boolean;
+  /** signed in but not yet enrolled in encryption — sync waits (never
+      pushes) until a passphrase is set; capture is unaffected */
+  needsSetup: boolean;
 }
 
 // ── status store (useSyncExternalStore, as settings.ts does) ────
@@ -90,6 +89,7 @@ let status: SyncStatus = {
   skewed: false,
   backup: null,
   locked: false,
+  needsSetup: false,
 };
 const listeners = new Set<() => void>();
 
@@ -117,6 +117,7 @@ const SERVER_SNAPSHOT: SyncStatus = {
   skewed: false,
   backup: null,
   locked: false,
+  needsSetup: false,
 };
 
 export function useSyncStatus(): SyncStatus {
@@ -164,6 +165,11 @@ let retryAttempt = 0;
 
 class SignedOut extends Error {}
 
+/** The server refused a push because the account isn't enrolled in
+    encryption (a stale client pushing plaintext gets this too). Not a
+    transient snag — retrying identically can never succeed. */
+class EncryptionRequired extends Error {}
+
 export function requestSync(): void {
   if (typeof navigator === "undefined") return;
   if (!readSyncState().ownerUserId) return; // unadopted — nothing to do
@@ -197,38 +203,40 @@ export function requestSync(): void {
 async function runCycle(): Promise<void> {
   setStatus({ phase: "syncing" });
   try {
-    // The on-device book key — not the server — decides whether we
-    // encrypt. If this device holds a key, every wire write is sealed,
-    // full stop: a server that reports "not enrolled" (by fault or by
-    // malice) can never coax a plaintext upload out of a sealed book.
+    // The on-device book key — not the server — decides whether the
+    // book moves at all. Encryption is required: without a key on this
+    // device there is NO push and NO pull, only a loud pause. The
+    // plaintext code path does not exist (pushAll/pullAll take the key
+    // as a required argument), so no server answer — by fault or by
+    // malice — can coax a plaintext upload out of this client.
     const key = await getBookKey();
     if (key) {
-      setStatus({ locked: false });
+      setStatus({ locked: false, needsSetup: false });
+      await maybeAadSweep();
       await pushAll(key);
       await pullAll(key);
     } else {
       // No key on this device. Either an enrolled account missing its
-      // key (→ locked, pause loudly; Settings shows the unlock), a
-      // plaintext account (→ sync in the clear), or we can't tell. When
-      // we can't tell, we refuse to guess: a plaintext push to what
-      // might be a sealed account would leak, so retry rather than risk
-      // it. Capture is never blocked either way.
+      // key (→ locked; Settings shows the unlock), an account that has
+      // never set a passphrase (→ needsSetup; the welcome step and
+      // Settings both lead to enrollment), or we can't tell — and then
+      // we refuse to guess and retry later. All three pause the book;
+      // none of them block capture.
       const enrolled = await refreshEnrollment();
       if (enrolled === "unknown")
-        throw new Error("enrollment unconfirmed — refusing a plaintext push");
-      if (enrolled) {
-        setStatus({ phase: "idle", locked: true });
-        // the calendar's locked letter says how much waits behind the
-        // lock — the status endpoint needs no key, so the counts are
-        // safe to fetch even though the book itself must not move
-        try {
-          await refreshCounts();
-        } catch {}
-        return;
-      }
-      setStatus({ locked: false });
-      await pushAll(undefined);
-      await pullAll(undefined);
+        throw new Error("enrollment unconfirmed — the book stays paused");
+      // the calendar's letters say how much waits behind the pause —
+      // the status endpoint needs no key, so the counts are safe to
+      // fetch even though the book itself must not move
+      setStatus({
+        phase: "idle",
+        locked: enrolled === true,
+        needsSetup: enrolled === false,
+      });
+      try {
+        await refreshCounts();
+      } catch {}
+      return;
     }
     await refreshCounts();
     const now = Date.now();
@@ -244,7 +252,7 @@ async function runCycle(): Promise<void> {
       // about the signed-in account; without a session it can't be verified,
       // and the surfaces it drives (the calendar's locked letter, the
       // Settings unlock form) have nowhere to lead — so it clears here
-      setStatus({ phase: "signedOut", locked: false });
+      setStatus({ phase: "signedOut", locked: false, needsSetup: false });
       return;
     }
     if (error instanceof LockedError) {
@@ -252,13 +260,21 @@ async function runCycle(): Promise<void> {
       return;
     }
     if (error instanceof KeyMismatchError) {
-      // this device's key no longer opens the account (encryption was
-      // turned off and back on elsewhere). The key here only guards the
-      // wire — local entries are stored plainly — so dropping it is safe,
-      // and it turns a permanent "retrying…" wedge into the locked state,
-      // whose unlock form takes the CURRENT passphrase.
+      // this device's key no longer opens the account (re-sealed under a
+      // new key elsewhere, or a format-3 envelope whose cleartext fields
+      // were tampered with). The key here only guards the wire — local
+      // entries are stored plainly — so dropping it is safe, and it turns
+      // a permanent "retrying…" wedge into the locked state, whose unlock
+      // form takes the CURRENT passphrase.
       await clearLocalKey().catch(() => {});
       setStatus({ phase: "idle", locked: true });
+      return;
+    }
+    if (error instanceof EncryptionRequired) {
+      // the server refused the push pending enrollment — surface the
+      // needs-setup pause and do NOT schedule a retry: an identical
+      // retry can never succeed, only enrollment can.
+      setStatus({ phase: "idle", needsSetup: true });
       return;
     }
     setStatus({
@@ -281,7 +297,20 @@ function scheduleRetry(): void {
   }, delay);
 }
 
-async function pushAll(key?: CryptoKey): Promise<void> {
+/**
+ * One-time per-device sweep to the AAD-bound format: re-dirty + re-clock
+ * the whole book so its next pushes re-seal every row as format 3. Runs
+ * once per database (meta flag), and reencryptSweep sets the same flag
+ * itself — so a fresh enrollment never sweeps twice. On a brand-new
+ * device the book is still empty when this runs (flag set on nothing),
+ * and the pull rule below re-seals older rows as they arrive instead.
+ */
+async function maybeAadSweep(): Promise<void> {
+  if (await getMeta<number>("e2e:aadSweepDone")) return;
+  await reencryptSweep();
+}
+
+async function pushAll(key: CryptoKey): Promise<void> {
   for (let batch = 0; batch < MAX_BATCHES_PER_CYCLE; batch++) {
     const dirty = await db.snippets
       .where("_dirty")
@@ -297,6 +326,7 @@ async function pushAll(key?: CryptoKey): Promise<void> {
       body: JSON.stringify({ changes }),
     });
     if (response.status === 401) throw new SignedOut();
+    if (response.status === 409) throw new EncryptionRequired();
     if (!response.ok) throw new Error(`push ${response.status}`);
     const data = (await response.json()) as PushResponse;
 
@@ -340,7 +370,7 @@ async function pushAll(key?: CryptoKey): Promise<void> {
   }
 }
 
-async function pullAll(key?: CryptoKey): Promise<void> {
+async function pullAll(key: CryptoKey): Promise<void> {
   for (;;) {
     const cursor = readSyncState().lastPulledSeq;
     const response = await fetch(
@@ -363,8 +393,24 @@ async function pullAll(key?: CryptoKey): Promise<void> {
         for (const { row, snippet } of prepared) {
           const local = await db.snippets.get(row.id);
           if (!local || local._dirty !== 1) {
-            // clean rows mirror the server verbatim
-            await db.snippets.put(snippet);
+            // clean rows mirror the server verbatim — except a row still
+            // resting on the server in an older format (plaintext 1 or
+            // AAD-less 2): store it dirty with a fresh clock so its own
+            // next push re-seals it as format 3. Content is unchanged, so
+            // the bump is LWW-safe, and the rule is idempotent — the
+            // re-pushed row arrives back as format 3 and rests clean.
+            const reseal =
+              row.payload !== null &&
+              row.payloadFormat < PAYLOAD_FORMAT_SEALED_AAD;
+            await db.snippets.put(
+              reseal
+                ? {
+                    ...snippet,
+                    _dirty: 1,
+                    updatedAt: bumpClock(snippet.updatedAt),
+                  }
+                : snippet,
+            );
             continue;
           }
           const localSide: MergeSide = {
@@ -385,8 +431,13 @@ async function pullAll(key?: CryptoKey): Promise<void> {
       writeSyncState({ lastPulledSeq: data.nextCursor });
     }
 
-    if (!data.hasMore) return;
+    if (!data.hasMore) break;
   }
+
+  // rows re-dirtied by the re-seal rule wait for a push, and this cycle's
+  // push already ran — queue one more cycle so the book converges on
+  // format 3 now rather than at the next natural trigger
+  if (await db.snippets.where("_dirty").equals(1).count()) requestSync();
 }
 
 async function refreshCounts(): Promise<void> {
@@ -418,37 +469,11 @@ export async function reconcile(): Promise<void> {
   requestSync();
 }
 
-/**
- * Turn off end-to-end encryption. Order is chosen so an interruption
- * can never strand sealed rows the server has no key for:
- *   1. pull the whole book down WITH the key (every row now plaintext
- *      on this device — encryption only ever lived at the wire);
- *   2. mark it all dirty + bump, and push it back as PLAINTEXT (a
- *      no-key push writes format 1), overwriting every sealed server row;
- *   3. only then drop the server's wrapped keys, and finally
- *   4. forget the on-device key.
- * If the tab dies between 2 and 3, the keys still exist and the book
- * is already plaintext — re-running is a safe no-op. Requires the key
- * to be present (you must be unlocked to read your own book).
- */
-export async function disableEncryption(): Promise<void> {
-  const key = await getBookKey();
-  if (!key) throw new LockedError();
-  await navigator.locks.request(
-    `snippets-sync:${currentDbName()}`,
-    async () => {
-      setStatus({ phase: "syncing" });
-      writeSyncState({ lastPulledSeq: 0 }); // re-walk the whole feed
-      await pullAll(key); // decrypt every server row into local plaintext
-      await reencryptSweep(); // all dirty, fresh clocks
-      await pushAll(undefined); // re-push as plaintext, overwriting seals
-      await deleteServerKeys();
-      await clearLocalKey();
-      setStatus({ phase: "idle", locked: false });
-    },
-  );
-  requestSync();
-}
+// `disableEncryption` used to live here. It was deleted deliberately —
+// encryption is required, and a supported path that re-pushes the book
+// as plaintext would contradict both the server (which refuses format 1)
+// and the privacy page (whose "we cannot read your entries" depends on
+// no such path existing). Don't reintroduce it.
 
 /**
  * After account deletion: the book returns to local-only. Forget the
@@ -470,6 +495,7 @@ export async function releaseBinding(): Promise<void> {
     backup: null,
     skewed: false,
     locked: false,
+    needsSetup: false,
   });
 }
 

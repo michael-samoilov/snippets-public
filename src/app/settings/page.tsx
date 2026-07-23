@@ -3,7 +3,6 @@
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -18,16 +17,13 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { eraseAll } from "@/lib/db";
 import { replaceUrl } from "@/lib/history";
-import { enroll, getBookKey, recoveryKitText, refreshEnrollment, unlock } from "@/lib/e2e";
-import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
+import { getBookKey, refreshEnrollment, unlock } from "@/lib/e2e";
 import {
   adoptDriveToken,
   forgetDriveTokens,
@@ -41,12 +37,12 @@ import { useOnline } from "@/hooks/use-online";
 import { signOut, useSession } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
 import {
-  disableEncryption,
   releaseBinding,
   reconcile,
   requestSync,
   useSyncStatus,
 } from "@/lib/sync";
+import { EnrollFlow } from "@/components/encryption/enroll-flow";
 import { formatBytes, useStorageHealth } from "@/lib/storage-health";
 import { PaperButton } from "@/components/paper-button";
 import { PageBackHeader } from "@/components/page-back-header";
@@ -290,6 +286,14 @@ function syncRow(
         sync.localCount !== null ? sync.localCount.toLocaleString() : null,
         sync.serverCount !== null ? sync.serverCount.toLocaleString() : null,
       ),
+      state: "attention",
+    };
+  if (sync.needsSetup)
+    // signed in, no passphrase yet — the engine holds the book until one
+    // exists (encryption is part of the account, not an option)
+    return {
+      word: c.syncPaused,
+      sub: c.syncNeedsSetupSub,
       state: "attention",
     };
   if (sync.phase === "signedOut")
@@ -618,6 +622,7 @@ function SyncLines() {
   const outOfStep =
     online &&
     !sync.locked &&
+    !sync.needsSetup &&
     sync.localCount !== null &&
     sync.serverCount !== null &&
     Math.abs(sync.localCount - sync.serverCount) > sync.pendingCount;
@@ -688,118 +693,34 @@ function StorageLine({ signedIn }: { signedIn: boolean }) {
 }
 
 /** Feather-style eye / eye-off, in the account menu's glyph language. */
-function EyeToggle({
-  shown,
-  onToggle,
-}: {
-  shown: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      // pointer-down + preventDefault so tapping the eye never steals focus
-      // (and the keyboard) from the field
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onToggle}
-      aria-label={shown ? "Hide passphrase" : "Show passphrase"}
-      aria-pressed={shown}
-      className="pressable absolute right-1.5 top-1/2 -translate-y-1/2 rounded-[5px] p-1.5 text-ink-faint hover:text-ink-soft"
-    >
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {shown ? (
-          <>
-            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20C5 20 1 12 1 12a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-            <line x1="1" y1="1" x2="23" y2="23" />
-          </>
-        ) : (
-          <>
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
-          </>
-        )}
-      </svg>
-    </button>
-  );
-}
-
-/** Passphrase strength — four bars, ember-weak climbing to green-strong. */
-function StrengthMeter({ score, label }: { score: number; label: string }) {
-  const filled = Math.min(4, Math.max(1, score));
-  const tone =
-    score <= 1
-      ? "--strength-weak"
-      : score === 2
-        ? "--strength-fair"
-        : score === 3
-          ? "--strength-good"
-          : "--strength-strong";
-  return (
-    <div className="space-y-1.5">
-      <div className="flex gap-1.5" aria-hidden="true">
-        {[0, 1, 2, 3].map((i) => (
-          <span
-            key={i}
-            className="h-1 flex-1 rounded-full transition-colors duration-200"
-            style={{
-              backgroundColor: `var(${i < filled ? tone : "--strength-track"})`,
-            }}
-          />
-        ))}
-      </div>
-      <p className="voice-prose-sm">{label}</p>
-    </div>
-  );
-}
-
 /**
- * End-to-end encryption. Three states: not yet sealed (offer it),
- * sealed and this device holds the key (one quiet line), sealed and
- * locked (the unlock form — sync waits on it, capture never does).
- * Enrollment shows the recovery code exactly once, with the recovery-
- * file download; the code is not reconstructable afterward.
+ * End-to-end encryption — required for every signed-in account. Three
+ * states: no passphrase yet (sync waits; set one here), enrolled and
+ * this device holds the key (one quiet line — there is no way to turn
+ * encryption off, on purpose), enrolled and locked (the unlock form —
+ * sync waits on it, capture never does). Enrollment shows the recovery
+ * code exactly once, with the recovery-file download; the code is not
+ * reconstructable afterward.
  */
 function EncryptionSection({ email }: { email: string }) {
   const sync = useSyncStatus();
   const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
-  const [pass, setPass] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [enrollStarted, setEnrollStarted] = useState(false);
   const [secret, setSecret] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
-  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
-  const [strength, setStrength] = useState<PassphraseStrength | null>(null);
-  const [showPass, setShowPass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // nudge a focused field above the keyboard, within the now-scrollable
-  // dialog — 'center' keeps it comfortably in view without ever pushing a
-  // field that's already visible out of the way
-  const revealOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    const el = e.currentTarget;
-    setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250);
-  };
 
   useEffect(() => {
     void refreshEnrollment().then((e) => setEnrolled(e === "unknown" ? null : e));
     void getBookKey().then((k) => setHasKey(!!k));
-  }, [sync.locked]);
+  }, [sync.locked, sync.needsSetup]);
 
-  // arriving from the post-sign-in offer (/welcome → "Set up encryption"):
-  // open the enroll dialog straight away, once we know the account isn't
-  // already sealed. Clean the query so a refresh doesn't reopen it.
+  // arriving from the welcome step or the calendar's needs-setup letter:
+  // open the enrollment dialog straight away, once we know the account
+  // isn't already enrolled.
   const [wantSeal] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -828,62 +749,6 @@ function EncryptionSection({ email }: { email: string }) {
     sectionRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [wantUnlock, enrolled, hasKey]);
 
-  // the things a guesser tries first: the account's email and its local part
-  const guessHints = useMemo(
-    () => [email, email.split("@")[0], "snippets"].filter(Boolean),
-    [email],
-  );
-
-  // quiet live strength read; the dynamic zxcvbn import is memoized so
-  // only the first keystroke pays for it
-  useEffect(() => {
-    if (!pass) {
-      setStrength(null);
-      return;
-    }
-    let alive = true;
-    void checkPassphrase(pass, guessHints).then((s) => {
-      if (alive) setStrength(s);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [pass, guessHints]);
-
-  const doEnroll = async () => {
-    if (pass.length < 10) {
-      setError(copy.settings.encryption.tooShort);
-      return;
-    }
-    if (pass !== confirm) {
-      setError(copy.settings.encryption.mismatch);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      // the passphrase is the weakest link once its wrapped copy rests
-      // on the server — refuse a guessable one rather than seal behind it
-      const graded = await checkPassphrase(pass, guessHints);
-      if (!graded.ok) {
-        setError(copy.settings.encryption.tooWeak);
-        setBusy(false);
-        return;
-      }
-      const code = await enroll(pass);
-      setPass("");
-      setConfirm("");
-      setEnrollOpen(false);
-      setRecoveryCode(code);
-      setEnrolled(true);
-      setHasKey(true);
-      requestSync();
-    } catch {
-      setError(copy.settings.encryption.enrollFailed);
-    }
-    setBusy(false);
-  };
-
   const doUnlock = async () => {
     setBusy(true);
     setError(null);
@@ -898,19 +763,6 @@ function EncryptionSection({ email }: { email: string }) {
     setBusy(false);
   };
 
-  const downloadKit = () => {
-    if (!recoveryCode) return;
-    const blob = new Blob([recoveryKitText(recoveryCode, email)], {
-      type: "text/plain",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "snippets-recovery-code.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   let body: React.ReactNode;
   if (enrolled === null) body = null;
   else if (!enrolled) {
@@ -920,16 +772,16 @@ function EncryptionSection({ email }: { email: string }) {
           <ProtRow
             glyph={<ShieldGlyph />}
             word={copy.settings.protection.notEncrypted}
-            sub=""
-            state="off"
+            sub={copy.settings.protection.notEncryptedSub}
+            state="attention"
           />
         </div>
         <p className="voice-prose-sm mt-4">
-          {copy.settings.encryption.offLead}
+          {copy.settings.encryption.pausedLead}
         </p>
         <div className="mt-4">
           <PaperButton onClick={() => setEnrollOpen(true)}>
-            {copy.settings.encryption.turnOn}
+            {copy.settings.encryption.setUp}
           </PaperButton>
         </div>
       </>
@@ -943,29 +795,6 @@ function EncryptionSection({ email }: { email: string }) {
           sub={copy.settings.protection.encryptedSub}
           state="good"
         />
-        <div className="mt-4 flex flex-col gap-3">
-          <SettingAction
-            title={copy.settings.encryption.turnOff}
-            description={copy.settings.encryption.turnOffHint}
-          />
-          <HoldToErase
-            // outline, not the solid ember of erase/delete: turning
-            // encryption off is grave but loses nothing
-            variant="outline"
-            label={copy.settings.encryption.turnOffHold}
-            onComplete={() => {
-              void (async () => {
-                try {
-                  await disableEncryption();
-                  setHasKey(false);
-                  setEnrolled(false);
-                } catch {
-                  setError(copy.settings.encryption.turnOffFailed);
-                }
-              })();
-            }}
-          />
-        </div>
       </div>
     );
   } else {
@@ -1037,120 +866,36 @@ function EncryptionSection({ email }: { email: string }) {
         </p>
       )}
 
-      {/* enrollment: choose the passphrase */}
-      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
-        <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {copy.settings.encryption.enrollTitle}
-            </DialogTitle>
-            <DialogDescription>
-              {copy.settings.encryption.enrollBody}
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className="space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void doEnroll();
-            }}
-          >
-            <label className="voice-label-sm block" htmlFor="e2e-pass">
-              {copy.settings.encryption.passphraseLabel}
-            </label>
-            <div className="relative">
-              <Input
-                id="e2e-pass"
-                type={showPass ? "text" : "password"}
-                autoComplete="new-password"
-                placeholder={copy.settings.encryption.passphrasePlaceholder}
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                onFocus={revealOnFocus}
-                className="h-10 pr-11 font-serif text-ui"
-              />
-              <EyeToggle shown={showPass} onToggle={() => setShowPass((v) => !v)} />
-            </div>
-            {pass.length > 0 && strength && (
-              <StrengthMeter
-                score={strength.score}
-                label={
-                  strength.score >= 4
-                    ? copy.settings.encryption.strengthStrong
-                    : strength.ok
-                      ? copy.settings.encryption.strengthOk
-                      : copy.settings.encryption.strengthWeak
-                }
-              />
-            )}
-            <label className="voice-label-sm block" htmlFor="e2e-confirm">
-              {copy.settings.encryption.passphraseConfirmLabel}
-            </label>
-            <Input
-              id="e2e-confirm"
-              type={showPass ? "text" : "password"}
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              onFocus={revealOnFocus}
-              className="h-10 font-serif text-ui"
-            />
-            {error && (
-              <p role="alert" className="voice-prose-sm text-ember">
-                {error}
-              </p>
-            )}
-            <DialogFooter className="gap-2">
-              <Button
-                variant="ghost"
-                type="button"
-                onClick={() => setEnrollOpen(false)}
-              >
-                {copy.settings.erase.cancel}
-              </Button>
-              <PaperButton type="submit" disabled={busy}>
-                {busy
-                  ? copy.settings.encryption.enrolling
-                  : copy.settings.encryption.enrollConfirm}
-              </PaperButton>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* the recovery code — shown exactly once */}
+      {/* enrollment: the shared flow (welcome mounts the same one inline).
+          Once the passphrase is submitted the recovery code is on screen —
+          from there only "I've saved it" closes the dialog, so an overlay
+          tap can never discard a code that is shown exactly once. */}
       <Dialog
-        open={recoveryCode !== null}
+        open={enrollOpen}
         onOpenChange={(open) => {
-          if (!open) setRecoveryCode(null);
+          if (!open && enrollStarted) return;
+          setEnrollOpen(open);
         }}
       >
         <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {copy.settings.encryption.recoveryTitle}
-            </DialogTitle>
+            <DialogTitle>{copy.settings.encryption.enrollTitle}</DialogTitle>
             <DialogDescription>
-              {copy.settings.encryption.recoveryBody}
+              {copy.settings.encryption.enrollBody}
             </DialogDescription>
           </DialogHeader>
-          <p className="voice-data select-all break-all text-center text-ui leading-relaxed">
-            {recoveryCode}
-          </p>
-          <p className="voice-prose-sm text-center">
-            {copy.settings.encryption.recoveryFileNote}
-          </p>
-          <DialogFooter className="gap-2">
-            <PaperButton onClick={downloadKit}>
-              {copy.settings.encryption.downloadKit}
-            </PaperButton>
-            <Button
-              variant="ghost"
-              onClick={() => setRecoveryCode(null)}
-            >
-              {copy.settings.encryption.recoveryDone}
-            </Button>
-          </DialogFooter>
+          <EnrollFlow
+            email={email}
+            onEnrolled={() => {
+              setEnrollStarted(true);
+              setEnrolled(true);
+              setHasKey(true);
+            }}
+            onDone={() => {
+              setEnrollStarted(false);
+              setEnrollOpen(false);
+            }}
+          />
         </DialogContent>
       </Dialog>
     </section>

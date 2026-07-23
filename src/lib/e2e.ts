@@ -109,12 +109,10 @@ export async function clearLocalKey(): Promise<void> {
   enrolledCache = false;
 }
 
-/** Drop the server's wrapped keys — the account is no longer enrolled. */
-export async function deleteServerKeys(): Promise<void> {
-  const response = await fetch("/api/keys", { method: "DELETE" });
-  if (!response.ok && response.status !== 404)
-    throw new Error(`keys delete ${response.status}`);
-}
+// `deleteServerKeys` used to live here. Removed with the ability to turn
+// encryption off: enrollment is one-way (account deletion is the only
+// path that removes the wrapped keys, by server-side cascade), which is
+// also what lets the keys route stay write-once.
 
 /** The downloadable recovery file, in plain text. */
 export function recoveryKitText(recoveryCode: string, email: string): string {

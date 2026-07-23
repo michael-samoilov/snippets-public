@@ -212,6 +212,20 @@ export const copy = {
       ],
       action: "Unlock in Settings",
     },
+    /**
+     * The needs-setup letter — signed in, but no encryption passphrase
+     * yet (they stepped past the welcome step, or signed in before
+     * encryption became part of sign-in). Sync waits for the passphrase;
+     * nothing is lost. Same rules as the locked letter: recognition, no
+     * scolding, retires the moment the writer starts.
+     */
+    needsSetup: {
+      body: [
+        "You’re signed in — one step left. Set an encryption passphrase, and your entries will sync to the server encrypted, readable only on your devices. Not even we can read them.",
+        "Until then, everything you write stays safe on this device.",
+      ],
+      action: "Set your passphrase",
+    },
   },
 
   /** the inline composer that backfills a past — or reopened — day */
@@ -358,16 +372,16 @@ export const copy = {
   },
 
   /**
-   * The one-time offer shown just after signing in: now that a copy of
-   * your entries rests on the server, this is the honest moment to offer
-   * to encrypt them. Never required — "Not now" leaves it exactly where
-   * it is, in Settings, and the offer doesn't return on this device.
+   * The post-sign-in enrollment step. Signing in implies end-to-end
+   * encryption — the server refuses unencrypted entries — so both
+   * sign-in paths land here until a passphrase exists. Capture is never
+   * gated (law 8): the quiet escape returns to the book, where sync
+   * simply waits and the needs-setup letter carries the same door.
    */
   welcome: {
-    title: "Encrypt your entries?",
-    body: "Your entries now keep a copy on our server, so you can reach them from another device. If you like, you can encrypt them — with a key only your devices hold, so no one else can read them, us included. It takes a minute, and you can always turn it on later in Settings.",
-    seal: "Set up encryption",
-    later: "Not now",
+    title: "Set your passphrase",
+    body: "Signing in keeps a copy of your entries on the server, so any device you sign in on can carry them. That copy is always encrypted, with a key only your devices hold — and your passphrase is what guards the key. It never leaves your device, so no one else can read what you write. Not even us.",
+    later: "Later — until then, new entries stay on this device",
   },
 
   /** the Settings page */
@@ -402,7 +416,8 @@ export const copy = {
       encryptedSub: "Even we can’t see your entries — only your devices hold the key.",
       locked: "Locked",
       lockedSub: "This device holds no key yet — unlock below to read.",
-      notEncrypted: "Not encrypted",
+      notEncrypted: "Not encrypted yet",
+      notEncryptedSub: "Sync waits for a passphrase — set one below.",
       synced: "Synced",
       /** time, then the device/server integrity counts — one line, no repeat below */
       syncedSub: (when: string, counts: string | null) =>
@@ -418,6 +433,9 @@ export const copy = {
         device !== null && server !== null
           ? `Unlock encryption to sync — ${device} on this device, ${server} waiting on the server.`
           : "Unlock encryption to sync this device.",
+      /** signed in but never enrolled — the passphrase is the missing piece */
+      syncNeedsSetupSub:
+        "Set an encryption passphrase to start syncing — your entries stay on this device until then.",
       signedOut: "Signed out",
       signedOutSub: "Your session ended — sign in again to keep syncing.",
       offline: "Offline",
@@ -479,22 +497,11 @@ export const copy = {
     },
     encryption: {
       heading: "Encryption",
-      offLead:
-        "Turn on end-to-end encryption and your entries are encrypted with a key only your devices hold — unreadable on the server, by anyone, including us. Your Drive backups stay readable; they’re yours.",
-      turnOn: "Turn on end-to-end encryption",
-      onLead: "End-to-end encryption is on. Only your devices hold the key.",
-      turnOff: "Turn off encryption",
-      turnOffHold: "Hold to turn off",
-      // no "must be unlocked" caveat: the turn-off control only renders on a
-      // device that already holds the key, so the precondition can never be
-      // read anywhere it isn't already met (and "unlocked" read as the phone's
-      // own lock screen anyway)
-      turnOffHint:
-        "Every entry — including ones written while encrypted — returns to ordinary encryption, where the service holds the keys and could read them again.",
-      turningOff: "Turning off…",
-      turnOffFailed: "Couldn’t turn it off just now. Try again in a moment.",
-      lockedLead:
-        "This account is end-to-end encrypted, and this device doesn’t hold the key yet.",
+      /** signed in, no passphrase yet — encryption is part of the account,
+          so this is the one thing standing between the book and the server */
+      pausedLead:
+        "Your entries are always encrypted before they reach the server, with a key only your devices hold. Sync is paused until you set the passphrase that guards that key. Entries you write stay on this device in the meantime.",
+      setUp: "Set your passphrase",
       passphraseLabel: "Choose a passphrase",
       passphraseConfirmLabel: "Once more",
       passphrasePlaceholder: "a phrase only you would know",
@@ -504,10 +511,10 @@ export const copy = {
       useRecovery: "Use my recovery code instead",
       usePassphrase: "Use my passphrase instead",
       recoveryLabel: "Your recovery code",
-      enrollTitle: "Encrypt your entries?",
+      enrollTitle: "Set your passphrase",
       enrollBody:
-        "Your entries — including everything you’ve already written — will be encrypted with a key only your devices hold. If you forget the passphrase, the recovery code — shown once, next — is the only other way in. Your Google Drive backups stay readable either way, so even a lost key never costs you the words.",
-      enrollConfirm: "Encrypt",
+        "Your entries — including everything you’ve already written — are encrypted with a key only your devices hold before anything reaches the server. Your passphrase guards that key. If you forget it, the recovery code — shown once, next — is the only other way in.",
+      enrollConfirm: "Encrypt my entries",
       enrolling: "Encrypting…",
       tooShort: "A passphrase needs at least ten characters.",
       tooWeak:
@@ -526,6 +533,10 @@ export const copy = {
       downloadKit: "Download recovery file",
       recoveryFileNote:
         "Downloading saves a plain-text file holding your account email and this recovery code — keep it somewhere private.",
+      /** the safety-net nudge under the code — Drive backup, surfaced at the
+          exact moment key loss becomes imaginable */
+      recoveryDrive:
+        "One more net: connect the Google Drive backup in Settings, and readable copies of your entries rest in your own Drive — so even losing the passphrase and this code never costs you the words.",
       recoveryDone: "I’ve saved it",
     },
     backup: {

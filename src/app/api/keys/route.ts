@@ -71,20 +71,10 @@ export async function PUT(request: Request) {
   return Response.json({ ok: true });
 }
 
-/**
- * Turn off encryption: drop the wrapped keys. The client only calls
- * this AFTER it has re-pushed the whole book as plaintext, so the
- * server never ends up holding sealed rows it has no key for. A 404
- * is success too — already off.
- */
-export async function DELETE(request: Request) {
-  if (!serverDb)
-    return Response.json({ error: "accounts are not configured" }, { status: 503 });
-  const session = await getSession(request.headers);
-  if (!session) return Response.json({ error: "signed out" }, { status: 401 });
-
-  await serverDb
-    .delete(schema.userKeys)
-    .where(eq(schema.userKeys.userId, session.user.id));
-  return Response.json({ ok: true });
-}
+// There is deliberately no DELETE. Encryption cannot be turned off, and
+// the wrapped keys can never be replaced or removed over the API — the
+// write-once PUT above is the whole lifecycle. The only thing that
+// removes a user's keys is deleting the account (server-side cascade).
+// This is a documented invariant the privacy page leans on: a
+// compromised client can't brick other devices by swapping the
+// envelopes, and a compromised server admin can't "reset" a passphrase.

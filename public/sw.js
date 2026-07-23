@@ -21,7 +21,9 @@
       iOS, where the full-navigation fallback doesn't reliably fire). So we cache
       each route's RSC payload by pathname and serve it offline — client-side nav
       then resolves from cache, no browser-specific fallback required. */
-const VERSION = "snippets-v14";
+// v15: encryption became part of sign-in (wire format 3) — force the
+// update so stale clients can't keep pushing plaintext against the 409
+const VERSION = "snippets-v15";
 // The app's real entry (start_url). Its own document is a clean 200 — used as the
 // offline fallback for any route we haven't cached yet, and pre-cached on install
 // alongside the other first-party pages so a first offline visit still has a doc.

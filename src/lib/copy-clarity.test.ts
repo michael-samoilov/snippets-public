@@ -32,6 +32,7 @@ const TECH_COPY_PATHS = [
   "settings.danger",
   "settings.erase",
   "todayZone.locked",
+  "todayZone.needsSetup",
   "welcome",
 ] as const;
 

@@ -2,33 +2,32 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PaperButton } from "@/components/paper-button";
 import { useSession } from "@/lib/auth";
 import { getBookKey, refreshEnrollment } from "@/lib/e2e";
+import { EnrollFlow } from "@/components/encryption/enroll-flow";
 import { copy } from "@/lib/copy";
 
-const seenKey = (userId: string) => `snippets:e2eOfferSeen:${userId}`;
-
 /**
- * The one-time, post-sign-in encryption offer. Both sign-in paths — the
- * code flow and Google's redirect — land here first; it either makes the
- * offer or steps quietly aside to the book. Never required (law 8):
- * "Not now" is a first-class choice, and the offer is shown at most once
- * per device per account. Already-sealed accounts never see it.
+ * The post-sign-in enrollment step. Signing in implies end-to-end
+ * encryption — the sync engine holds the book (needsSetup) and the
+ * server refuses unencrypted entries — so both sign-in paths land here
+ * until a passphrase exists. The page itself is not the gate (the
+ * engine is): the quiet escape link returns to the book, where sync
+ * simply waits and the calendar's needs-setup letter carries the same
+ * door. Already-enrolled accounts (including a second device, which
+ * lands locked) step straight aside.
  */
 export default function WelcomePage() {
   const router = useRouter();
   const { user, status } = useSession();
   const [show, setShow] = useState(false);
+  // once the passphrase is set the recovery code is on screen — the
+  // escape link leaves with the flow, so the only door is "I've saved it"
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
     if (status === "loading") return;
     if (status === "signed-out" || !user) {
-      router.replace("/calendar");
-      return;
-    }
-    // already offered on this device → step aside
-    if (localStorage.getItem(seenKey(user.id))) {
       router.replace("/calendar");
       return;
     }
@@ -39,7 +38,9 @@ export default function WelcomePage() {
         getBookKey(),
       ]);
       if (!alive) return;
-      // already sealed, or we can't confirm the account isn't — don't nag
+      // enrolled (or unknowable right now) → the book handles it: a
+      // second device shows the locked letter, an outage retries. Only a
+      // confirmed not-enrolled account needs this step.
       if (enrolled !== false || key) {
         router.replace("/calendar");
         return;
@@ -51,21 +52,7 @@ export default function WelcomePage() {
     };
   }, [status, user, router]);
 
-  const markSeen = () => {
-    if (user) localStorage.setItem(seenKey(user.id), "1");
-  };
-
-  const seal = () => {
-    markSeen();
-    router.push("/settings?seal=1");
-  };
-
-  const later = () => {
-    markSeen();
-    router.push("/calendar");
-  };
-
-  if (!show) return null;
+  if (!show || !user) return null;
 
   return (
     <div className="page-settle">
@@ -76,16 +63,24 @@ export default function WelcomePage() {
         <p className="voice-prose mt-5 text-[1rem] text-ink-soft">
           {copy.welcome.body}
         </p>
-        <div className="mt-8 flex items-center gap-5">
-          <PaperButton onClick={seal}>{copy.welcome.seal}</PaperButton>
-          <button
-            type="button"
-            onClick={later}
-            className="pressable rounded-[5px] font-serif text-[0.95rem] text-ink-faint hover:text-ink-soft"
-          >
-            {copy.welcome.later}
-          </button>
+        <div className="mt-8">
+          <EnrollFlow
+            email={user.email ?? ""}
+            onEnrolled={() => setStarted(true)}
+            onDone={() => router.push("/calendar")}
+          />
         </div>
+        {!started && (
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={() => router.push("/calendar")}
+              className="pressable rounded-[5px] font-serif text-[0.95rem] text-ink-faint hover:text-ink-soft"
+            >
+              {copy.welcome.later}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

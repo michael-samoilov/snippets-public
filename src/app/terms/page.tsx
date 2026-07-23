@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Terms of service" };
  * page, it states only what the service actually does; when the service
  * changes, this page changes in the same commit and the date moves.
  */
-const LAST_UPDATED = "July 11, 2026";
+const LAST_UPDATED = "July 23, 2026";
 
 /** Emphasis — bold against the 420 prose, so load-bearing lines stand out. */
 function Em({ children }: { children: React.ReactNode }) {
@@ -72,9 +72,9 @@ export default function TermsPage() {
 
         <PolicySection id="encryption" title="Encryption gives you the only key">
           <p className="voice-prose text-[0.95rem]">
-            If you turn on end-to-end encryption, your passphrase and recovery
-            code become the only ways to read your synced entries — that is
-            the feature. If you lose both, neither we nor anyone else can
+            Signing in encrypts your entries end-to-end: your passphrase and
+            recovery code are the only ways to read your synced entries — that
+            is the feature. If you lose both, neither we nor anyone else can
             unlock them, and we can&rsquo;t be responsible for that loss. The
             readable files in your Drive exist precisely so a lost key never
             costs you the words.

@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Privacy" };
  * code changes, this page changes in the same commit, and the date
  * below moves with it.
  */
-const LAST_UPDATED = "July 11, 2026";
+const LAST_UPDATED = "July 23, 2026";
 
 /** Emphasis — bold against the 420 prose, so load-bearing lines stand out. */
 function Em({ children }: { children: React.ReactNode }) {
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
                 </li>
                 <li>
                   <TocSubLink href="#end-to-end-encryption">
-                    If you turn on end-to-end encryption
+                    How the encryption works
                   </TocSubLink>
                 </li>
               </ul>
@@ -106,14 +106,12 @@ export default function PrivacyPage() {
 
         <PolicySection id="can-you-read" title="Can you read what I write?">
           <p className="voice-prose-sm">
-            Whether we can read what you write is up to you. If you
-            don&rsquo;t sign in, the answer is <Em>no</Em> — your entries stay
-            in this browser and never reach us. If you sign in without
-            enabling end-to-end encryption, it&rsquo;s <Em>yes</Em> — a copy
-            rests on our server under ordinary encryption whose keys we hold,
-            so in principle we could (in practice, we don&rsquo;t). If you turn
-            on end-to-end encryption, it&rsquo;s <Em>no</Em> again — only your
-            devices hold the key.
+            <Em>No.</Em> If you don&rsquo;t sign in, your entries stay in this
+            browser and never reach us. If you do sign in, your entries are
+            end-to-end encrypted on your device before anything reaches our
+            server — with a key only your devices hold — so what rests with us
+            is unreadable, to anyone, including us. There is no unencrypted
+            way to sync: our server refuses entries that arrive readable.
           </p>
           <p className="voice-prose-sm">
             Two features reach beyond the app. If you turn on the Google Drive
@@ -130,15 +128,12 @@ export default function PrivacyPage() {
           </PolicySub>
           <PolicySub id="if-you-sign-in" title="If you sign in">
             <p className="voice-prose-sm">
-              A copy of your entries rests on our server so you can add entries
-              from your other devices. It has ordinary encryption where the
-              service (us) holds the keys, just like Apple Notes or Google
-              Keep.{" "}
-              <Em>
-                In principle your entries here could be accessed, but in
-                practice we don&rsquo;t
-              </Em>
-              .
+              An encrypted copy of your entries rests on our server so your
+              other devices can fetch it. Encryption is part of signing in —
+              when you create your account you set a passphrase, and from then
+              on <Em>every entry is encrypted on your device before it is
+              sent</Em>. Our server cannot decode what it stores, and it
+              refuses entries that arrive readable.
             </p>
             <p className="voice-prose-sm">
               Otherwise, the only data we collect about you is what signing in
@@ -152,22 +147,20 @@ export default function PrivacyPage() {
           </PolicySub>
           <PolicySub
             id="end-to-end-encryption"
-            title="If you turn on end-to-end encryption"
+            title="How the encryption works"
           >
           <p className="voice-prose-sm">
-            Turn it on in Settings → Encryption, and{" "}
-            <Em>we cannot read what you write</Em>. Before an entry
-            leaves your device, your browser encrypts it: the words are turned
-            into a random-looking string of characters (what our server
-            receives) that can only be decoded back into text with one specific
-            key — a long random number created on your device and never sent to
-            our server. Your browser stores it as what&rsquo;s called a
-            &ldquo;non-extractable key,&rdquo; whose raw value cannot be read by
-            any code, including this app&rsquo;s.
+            Before an entry leaves your device, your browser encrypts it: the
+            words are turned into a random-looking string of characters (what
+            our server receives) that can only be decoded back into text with
+            one specific key — a long random number created on your device and
+            never sent to our server. Your browser stores it as what&rsquo;s
+            called a &ldquo;non-extractable key,&rdquo; whose raw value cannot
+            be read by any code, including this app&rsquo;s.
           </p>
           <p className="voice-prose-sm">
-            When you turn on encryption,
-            you set a passphrase and receive a recovery code; each one is used,
+            When you set your passphrase,
+            you also receive a recovery code; each one is used,
             on your device, to encrypt its own copy of the non-extractable key,
             and only those
             two encrypted copies are sent to our server — so that any of your
@@ -177,15 +170,17 @@ export default function PrivacyPage() {
             device, so at no point do we receive what would be needed to read
             your entries. This is the same design apps like Signal, Proton Mail,
             and Bitwarden use: the server keeps the encrypted data and never the
-            key that decodes it.
+            key that decodes it. Encryption cannot be turned off, and the two
+            encrypted copies of the key can never be replaced or removed over
+            the network — only deleting the whole account removes them.
           </p>
           <p className="voice-prose-sm">
-            Turning encryption on encrypts your existing entries too, not only
-            the ones you write next. However: anything you had already synced arrived in
-            the clear before you encrypted it, so it could have been read then,
-            and a plaintext copy may linger a while in routine database backups.
-            Turning encryption back off does the reverse, re-uploading your
-            entries readable again.
+            One note for early accounts: before July 2026, encryption was
+            optional. If you signed in before then, entries you synced arrived
+            readable and could have been read at that time. They were encrypted
+            in place when you set your passphrase, and the last readable copies
+            age out of our database&rsquo;s automatic backups within 24 hours
+            after that.
           </p>
           <p className="voice-prose-sm">
             <Em>Two honest limits that every encrypted web app lives with</Em>.

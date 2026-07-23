@@ -181,13 +181,41 @@ export async function unwrapBookKey(
 
 // ── entry payloads ──────────────────────────────────────────────
 
+/**
+ * The additional authenticated data for a sealed entry: the row's
+ * identity and clocks, which must travel in the clear (the server
+ * merges on them) but must not be *editable* in the clear. Binding
+ * them into the cipher as AES-GCM AAD makes decryption fail if a
+ * sealed payload is moved onto another row, rolled back to an earlier
+ * clock, or has its tombstone flag flipped — a hostile or buggy server
+ * can no longer rearrange the book without reading it.
+ *
+ * A fixed-order pipe string, not JSON: no key-ordering ambiguity, and
+ * `payloadFormat` rides inside so a format downgrade also fails loudly.
+ */
+export function aadForRow(row: {
+  id: string;
+  updatedAt: number;
+  deletedAt: number | null;
+  payloadFormat: number;
+}): Uint8Array {
+  return new TextEncoder().encode(
+    `snippets/aad/v1|${row.id}|${row.updatedAt}|${row.deletedAt ?? ""}|${row.payloadFormat}`,
+  );
+}
+
 export async function encryptJSON(
   key: CryptoKey,
   value: unknown,
+  aad?: Uint8Array,
 ): Promise<EncryptedPayload> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv as BufferSource },
+    {
+      name: "AES-GCM",
+      iv: iv as BufferSource,
+      ...(aad ? { additionalData: aad as BufferSource } : {}),
+    },
     key,
     new TextEncoder().encode(JSON.stringify(value)),
   );
@@ -197,9 +225,14 @@ export async function encryptJSON(
 export async function decryptJSON<T>(
   key: CryptoKey,
   payload: EncryptedPayload,
+  aad?: Uint8Array,
 ): Promise<T> {
   const pt = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: fromB64(payload.iv) as BufferSource },
+    {
+      name: "AES-GCM",
+      iv: fromB64(payload.iv) as BufferSource,
+      ...(aad ? { additionalData: aad as BufferSource } : {}),
+    },
     key,
     fromB64(payload.ct) as BufferSource,
   );
