@@ -48,27 +48,40 @@ Copy voice; the rule lives in the `snippets-craft` skill (law 7).
 - **Speech:** `src/hooks/use-speech.ts` is one hook, wired to the today
   zone's wax seal in `src/app/calendar/page.tsx`. **Streaming providers**
   are pluggable `StreamAdapter`s (shared mic/worklet/downsample/settle
-  code; each adapter supplies only socket/send/parse/finalize/doneOnClose).
-  Two ship: **deepgram** — Nova-3 (`DEEPGRAM_API_KEY`, `DEEPGRAM_MODEL`/
-  `DEEPGRAM_LANGUAGE`; token at `src/app/api/deepgram-token/route.ts`
-  mints a short-lived JWT, browser connects with a `["bearer", jwt]`
-  subprotocol and streams raw binary PCM; ~2x lower latency, `language=multi`
-  code-switching) — and **scribe** — ElevenLabs Scribe v2 Realtime
-  (`ELEVENLABS_API_KEY`, `SCRIBE_MODEL`/`ELEVENLABS_BASE_URL`; token in
-  the WS query, base64-JSON audio). Order/default set by
-  `NEXT_PUBLIC_SPEECH_PROVIDERS` (default `deepgram,scribe`) — first
-  available wins, the rest are automatic backups; the token is pre-minted
-  (warm grant) so the tap opens the socket instantly. Partial/final
-  transcripts land in the hook's `interim`/`segments`. Fallback: **batch**
-  — a Whisper-dialect
+  code; each adapter supplies only socket/send/parse/finalize/doneOnClose),
+  and `src/lib/speech-providers.ts` is the one table of provider truth
+  (labels, privacy links, WS origins for the CSP, retention lines the
+  privacy page prints — keep it in step when providers change). Four ship,
+  ordered privacy-first by `NEXT_PUBLIC_SPEECH_PROVIDERS` (default
+  `soniox,speechmatics,deepgram`) — first AVAILABLE wins (a name without
+  its API key stands aside), the rest are automatic backups: **soniox** —
+  realtime multilingual with mid-sentence code-switching, memory-only /
+  no-training at self-serve (`SONIOX_API_KEY`, `SONIOX_MODEL` default
+  `stt-rt-v5`; temp key minted at `/api/soniox-token` rides the socket's
+  first JSON config frame, then raw binary PCM; empty frame finalizes);
+  **speechmatics** — realtime, stores nothing by architecture, EU endpoint
+  (`SPEECHMATICS_API_KEY`, one language per session via
+  `SPEECHMATICS_LANGUAGE` — no code-switching mode; JWT from
+  `/api/speechmatics-token` rides the `?jwt=` query; StartRecognition →
+  binary AddAudio frames → EndOfStream with the sent-frame count);
+  **deepgram** — Nova-3 (`DEEPGRAM_API_KEY`; short-lived JWT from
+  `/api/deepgram-token` on a `["bearer", jwt]` subprotocol; every request
+  sends `mip_opt_out=true` — the privacy page depends on it); and
+  **scribe** — ElevenLabs Scribe v2 Realtime, OUT of the default chain
+  (zero-retention is enterprise-only there) but wired for explicit env
+  use. The token is pre-minted (warm grant) so the tap opens the socket
+  instantly. Partial/final transcripts land in the hook's
+  `interim`/`segments`. Fallback: **batch** — a Whisper-dialect
   proxy at `src/app/api/transcribe/route.ts` (`TRANSCRIBE_API_KEY`,
   optional `TRANSCRIBE_BASE_URL`/`TRANSCRIBE_MODEL`; `AQUA_*` honored
   as aliases; default Aqua's Avalon — swap recipes in README.md) —
   MediaRecorder → upload on stop → text settles ~450ms later.
   Fallback: Web Speech API streaming live words (tap-to-toggle,
   auto-restarts dropped mobile sessions, iOS runs non-continuous,
-  circuit breaker against dead services). Engines chosen by probing
-  `GET /api/scribe-token` and `GET /api/transcribe`. Every failure
+  circuit breaker against dead services; NOTE it is the browser's own
+  dictation — audio goes to Google/Apple, invisible to our CSP and
+  network tab, and the privacy page says so). Engines chosen by probing
+  each provider's token route + `GET /api/transcribe`. Every failure
   surfaces a typed reason (`SpeechFailure`) turned into specific copy
   from `copy.capture.voiceFailures`.
 - **Enrichment (removed 2026-07):** automatic filing — Claude-generated

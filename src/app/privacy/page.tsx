@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageBackHeader } from "@/components/page-back-header";
 import { PolicySection, PolicySub } from "@/components/policy";
+import { activeSpeechProviders } from "@/lib/speech-providers";
 
 export const metadata: Metadata = { title: "Privacy" };
 
@@ -311,28 +312,37 @@ export default function PrivacyPage() {
 
           <PolicySub id="voice" title="Voice">
           <p className="voice-prose-sm">
-            If you speak an entry with the in-app microphone, the app
-            streams your audio to a transcription service — currently{" "}
-            <a
-              href="https://deepgram.com/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2"
-            >
-              Deepgram
-            </a>{" "}
-            or{" "}
-            <a
-              href="https://elevenlabs.io/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2"
-            >
-              ElevenLabs
-            </a>
-            , whose privacy policies apply to that processing. The words come
-            back, the audio is not kept, and none of it is stored by us. Typing
-            never touches the network.
+            If you speak an entry with the in-app microphone, the app streams
+            your audio to a transcription service and the words come back as
+            you speak. None of it is stored by us. Typing never touches the
+            network.
+            {activeSpeechProviders().length > 0 &&
+              " The services, in the order the app tries them:"}
+          </p>
+          {activeSpeechProviders().length > 0 && (
+            <ul className="ml-4 list-disc space-y-1.5">
+              {activeSpeechProviders().map((p) => (
+                <li key={p.name} className="voice-prose-sm">
+                  <a
+                    href={p.privacyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    {p.label}
+                  </a>{" "}
+                  — {p.retentionLine}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="voice-prose-sm">
+            One honest edge: if none of those services can be reached, the app
+            falls back to your browser&rsquo;s own dictation (the Web Speech
+            API). That path is the browser&rsquo;s, not ours — on most devices
+            the browser sends the audio to its maker&rsquo;s speech servers
+            (Google&rsquo;s or Apple&rsquo;s), under their policies, and that
+            traffic does not show in this app&rsquo;s network activity.
           </p>
           </PolicySub>
         </PolicySection>

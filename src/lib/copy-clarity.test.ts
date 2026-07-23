@@ -36,7 +36,13 @@ const TECH_COPY_PATHS = [
   "welcome",
 ] as const;
 
-const PAGES = ["../app/privacy/page.tsx", "../app/terms/page.tsx"] as const;
+const PAGES = [
+  "../app/privacy/page.tsx",
+  "../app/terms/page.tsx",
+  // not a page, but its retention lines render verbatim ON the privacy
+  // page — they carry the same register and ride the same bar
+  "../lib/speech-providers.ts",
+] as const;
 
 // ── the standard, as rules ───────────────────────────────────────
 // forbidden → why. Word-boundary, case-insensitive. "wax seal" (the real

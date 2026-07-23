@@ -281,7 +281,7 @@ type StreamEvent =
   | { kind: "ignore" };
 
 interface StreamAdapter {
-  name: "scribe" | "deepgram";
+  name: "scribe" | "deepgram" | "soniox" | "speechmatics";
   tokenPath: string;
   /** open the socket from a fresh grant */
   socket: (g: Grant) => WebSocket;
@@ -402,9 +402,177 @@ const deepgramAdapter: StreamAdapter = {
   doneOnClose: true,
 };
 
+/* Soniox realtime — temp key + config as the FIRST JSON frame, then raw
+   binary PCM; per-token is_final results where non-finals REPLACE the
+   previous non-final set; an "<end>"/"<fin>" token closes an utterance;
+   an empty frame flushes and a terminal message carries finished:true.
+   Natively multilingual with mid-sentence code-switching — no language
+   mode to configure (language_hints only bias). */
+let sonioxFinalBuf = ""; // finals of the utterance in progress (reset per take)
+let sonioxEnded = false; // finalize sent — no audio may follow the end frame
+
+const sonioxAdapter: StreamAdapter = {
+  name: "soniox",
+  tokenPath: "/api/soniox-token",
+  socket: (g) => {
+    sonioxFinalBuf = "";
+    sonioxEnded = false;
+    const ws = new WebSocket(`${g.ws}/transcribe-websocket`);
+    // the credential rides the first config message, not a header or the
+    // query — registered here so it beats the shared pipeline's handlers
+    ws.addEventListener("open", () => {
+      ws.send(
+        JSON.stringify({
+          api_key: g.token,
+          model: g.model,
+          audio_format: "pcm_s16le",
+          sample_rate: SCRIBE_RATE,
+          num_channels: 1,
+          enable_endpoint_detection: true,
+          ...(g.language
+            ? { language_hints: g.language.split(",").map((s) => s.trim()) }
+            : {}),
+        }),
+      );
+    });
+    return ws;
+  },
+  send: (ws, pcm) => {
+    // the empty frame IS end-of-audio; the worklet's last buffered flush
+    // can land after it, and audio past the end is a protocol breach
+    if (sonioxEnded) return;
+    ws.send(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
+  },
+  parse: (raw) => {
+    let m: {
+      tokens?: { text?: string; is_final?: boolean }[];
+      finished?: boolean;
+      error_code?: number | null;
+      error_message?: string;
+    };
+    try {
+      m = JSON.parse(raw);
+    } catch {
+      return { kind: "ignore" };
+    }
+    if (m.error_code != null)
+      return { kind: "fail", reason: m.error_code === 401 || m.error_code === 403 ? "service" : "transcribe" };
+    let endOfUtterance = false;
+    let interim = "";
+    for (const t of m.tokens ?? []) {
+      const text = t.text ?? "";
+      if (text === "<end>" || text === "<fin>") {
+        endOfUtterance = true;
+        continue;
+      }
+      if (t.is_final) sonioxFinalBuf += text;
+      else interim += text; // non-finals replace wholesale each message
+    }
+    if (m.finished || endOfUtterance) {
+      const settled = sonioxFinalBuf.trim();
+      sonioxFinalBuf = "";
+      if (settled) return { kind: "final", text: settled };
+      return m.finished ? { kind: "end" } : { kind: "ignore" };
+    }
+    if (interim || sonioxFinalBuf)
+      return { kind: "partial", text: (sonioxFinalBuf + interim).trim() };
+    return { kind: "ignore" };
+  },
+  // an empty frame = end of audio: the server finalizes everything,
+  // answers finished:true, and closes cleanly
+  finalize: (ws) => {
+    sonioxEnded = true;
+    ws.send("");
+  },
+  doneOnClose: true,
+};
+
+/* Speechmatics realtime — JWT in the query (?jwt=), StartRecognition as
+   the first frame, raw binary PCM (each binary frame IS an AddAudio),
+   AddPartialTranscript/AddTranscript results whose ready-made text is
+   metadata.transcript, EndOfStream{last_seq_no} → EndOfTranscript.
+   One configured language per session — no code-switching mode. */
+let smSentFrames = 0; // binary frames sent, for EndOfStream (reset per take)
+let smEnded = false; // EndOfStream sent — audio after it is a protocol breach
+
+const speechmaticsAdapter: StreamAdapter = {
+  name: "speechmatics",
+  tokenPath: "/api/speechmatics-token",
+  socket: (g) => {
+    smSentFrames = 0;
+    smEnded = false;
+    const ws = new WebSocket(`${g.ws}?jwt=${encodeURIComponent(g.token)}`);
+    ws.addEventListener("open", () => {
+      ws.send(
+        JSON.stringify({
+          message: "StartRecognition",
+          audio_format: {
+            type: "raw",
+            encoding: "pcm_s16le",
+            sample_rate: SCRIBE_RATE,
+          },
+          transcription_config: {
+            language: g.language ?? "en",
+            operating_point: g.model || "enhanced",
+            enable_partials: true,
+            max_delay: 1,
+          },
+        }),
+      );
+    });
+    return ws;
+  },
+  send: (ws, pcm) => {
+    if (smEnded) return; // the worklet's tail flush must not follow EndOfStream
+    ws.send(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
+    smSentFrames += 1;
+  },
+  parse: (raw) => {
+    let m: {
+      message?: string;
+      metadata?: { transcript?: string };
+      type?: string;
+    };
+    try {
+      m = JSON.parse(raw);
+    } catch {
+      return { kind: "ignore" };
+    }
+    const text = (m.metadata?.transcript ?? "").trim();
+    switch (m.message) {
+      case "AddPartialTranscript":
+        return { kind: "partial", text };
+      case "AddTranscript":
+        return { kind: "final", text };
+      case "EndOfTranscript":
+        return { kind: "end" };
+      case "Error":
+        return {
+          kind: "fail",
+          reason:
+            m.type === "not_authorised" ||
+            m.type === "quota_exceeded" ||
+            m.type === "timelimit_exceeded"
+              ? "service"
+              : "transcribe",
+        };
+      default:
+        // AudioAdded acks, Info, Warning — nothing to surface
+        return { kind: "ignore" };
+    }
+  },
+  finalize: (ws) => {
+    smEnded = true;
+    ws.send(JSON.stringify({ message: "EndOfStream", last_seq_no: smSentFrames }));
+  },
+  doneOnClose: false,
+};
+
 const STREAM_ADAPTERS: Record<string, StreamAdapter> = {
   scribe: scribeAdapter,
   deepgram: deepgramAdapter,
+  soniox: sonioxAdapter,
+  speechmatics: speechmaticsAdapter,
 };
 
 /** A batch token in the provider order selects the upload proxy
@@ -414,13 +582,16 @@ const STREAM_ADAPTERS: Record<string, StreamAdapter> = {
  *  server-side. Words land on stop, not as you speak. */
 const BATCH_ALIASES = new Set(["aqua", "batch"]);
 
-/** The configured engine order: streaming provider names (deepgram,
- *  scribe) and/or a batch token (aqua/batch). First available wins;
- *  the rest are automatic backups. Set NEXT_PUBLIC_SPEECH_PROVIDERS
- *  (e.g. "aqua,deepgram,scribe" to benchmark Avalon first) and redeploy —
- *  no code change. */
+/** The configured engine order: streaming provider names (soniox,
+ *  speechmatics, deepgram, scribe) and/or a batch token (aqua/batch).
+ *  First AVAILABLE wins (a name without its API key stands aside); the
+ *  rest are automatic backups. The default puts the no-storage
+ *  providers first and Deepgram (mip-opted-out) as the deep fallback;
+ *  keep it in step with speech-providers.ts. Set
+ *  NEXT_PUBLIC_SPEECH_PROVIDERS (e.g. "deepgram,soniox" to A/B) and
+ *  redeploy — no code change. */
 const CONFIGURED_ORDER = (
-  process.env.NEXT_PUBLIC_SPEECH_PROVIDERS ?? "deepgram,scribe"
+  process.env.NEXT_PUBLIC_SPEECH_PROVIDERS ?? "soniox,speechmatics,deepgram"
 )
   .split(",")
   .map((s) => s.trim())
@@ -431,7 +602,20 @@ const PROVIDER_ORDER = CONFIGURED_ORDER.filter((s) => s in STREAM_ADAPTERS);
 
 /* ── public surface ────────────────────────────────────────────────── */
 
-export type SpeechEngineKind = "scribe" | "deepgram" | "batch" | "web";
+export type SpeechEngineKind =
+  | "scribe"
+  | "deepgram"
+  | "soniox"
+  | "speechmatics"
+  | "batch"
+  | "web";
+
+/** any streaming StreamAdapter engine (vs the batch proxy / Web Speech) —
+ *  membership in the adapter table, so a new provider can never be
+ *  forgotten in the start/stop dispatch */
+function isStreamEngine(engine: SpeechEngineKind | null): boolean {
+  return engine !== null && engine in STREAM_ADAPTERS;
+}
 
 export type SpeechStatus =
   | "idle"
@@ -1159,7 +1343,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     setLive(false); // stays dark until the mic actually starts capturing
     setStatus("listening");
     navigator.vibrate?.(40);
-    if (engine === "scribe" || engine === "deepgram") {
+    if (isStreamEngine(engine)) {
       void startStream();
     } else if (engine === "batch") {
       void startBatch();
@@ -1176,7 +1360,7 @@ export function useSpeech(onSettled?: (spoken: string) => void): UseSpeech {
     if (!wantedRef.current) return;
     wantedRef.current = false;
     navigator.vibrate?.([25, 40, 25]);
-    if (engine === "scribe" || engine === "deepgram") {
+    if (isStreamEngine(engine)) {
       stopStream();
       return;
     }
