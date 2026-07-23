@@ -50,3 +50,5 @@ scripts/.header-align/
 
 # agent worktrees (transient, isolation: "worktree")
 .claude/worktrees/
+tests/e2e/__pycache__/
+tests/e2e/shots/
