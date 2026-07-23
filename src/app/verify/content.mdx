@@ -1,0 +1,55 @@
+import { Steps, Step, Requests, Req, ProviderRow } from "@/components/policy-mdx";
+
+The [privacy policy](/privacy) makes claims. This page is how you check them yourself — three tests, a few minutes, no trust required. If any of them ever fails, the claims are false and we want to know: [snippets.support@gmail.com](mailto:snippets.support@gmail.com).
+
+## Test 1 — Airplane mode
+
+The claim: signed out, your entries never leave this device — writing needs no network at all.
+
+<Steps>
+  <Step n={1}>Open Snippets once, so it can install itself.</Step>
+  <Step n={2}>Turn on airplane mode.</Step>
+  <Step n={3}>Write an entry and press the wax seal. It saves. Look through your entries. Everything works. (Voice is the exception — transcription runs over the network, so the microphone needs a connection.)</Step>
+  <Step n={4}>Close the app, reopen it, still offline: your entry is there.</Step>
+</Steps>
+
+**There is nothing to disconnect from:** signed out, the app has no server side. Your entries are saved in this device's own storage.
+
+## Test 2 — Watch the network
+
+The claim: every request this app makes is one you can predict — and none of them carries readable entries.
+
+<Steps>
+  <Step n={1}>On a computer, open the browser's developer tools (usually F12) and pick the Network tab.</Step>
+  <Step n={2}>Use Snippets: write, browse, sign in if you like.</Step>
+  <Step n={3}>Read the request list against this table:</Step>
+</Steps>
+
+<Requests>
+  <Req name="snippets.ink">the app itself — pages, scripts, styles, fonts, paper textures.</Req>
+  <Req name="/_vercel/insights">anonymous page-view counting. It carries no entry data — open one and look.</Req>
+  <Req name="/api/auth/…">signing in and the session check. Only if you use an account.</Req>
+  <Req name="/api/sync/push, /api/sync/pull">your entries to and from the server, encrypted. **Open a push request and read what it sends: a block of random-looking characters, not words.** That block is exactly what our server stores.</Req>
+  <Req name="/api/keys">the two encrypted copies of your key (made when you set your passphrase). The passphrase itself never appears — search the request for it.</Req>
+  <Req name="/api/…-token">a temporary pass for the transcription service, fetched just before the microphone opens — the permanent key never leaves our server.</Req>
+  <ProviderRow />
+  <Req name="www.googleapis.com">backup files traveling from this device to your own Google Drive. Only if you connected the backup.</Req>
+</Requests>
+
+One honest gap: if the app ever falls back to your browser's built-in dictation, that audio is sent by the browser itself (to Google's or Apple's speech servers) and does not show in this tab. The privacy policy's Voice section covers it.
+
+## Test 3 — The list your browser enforces
+
+The claim: this app **cannot** send data anywhere you haven't seen above — not by policy, but because your browser refuses to let it.
+
+Every page we serve carries a `Content-Security-Policy` header. Its `connect-src` line names every web address this app is allowed to contact; the browser blocks anything else before it leaves. Check the header from any terminal:
+
+```
+curl -sI https://www.snippets.ink | grep -i content-security
+```
+
+Or paste `snippets.ink` into [securityheaders.com](https://securityheaders.com). The addresses you find in `connect-src` are the ones from Test 2 — the whole list, enforced.
+
+**What this test can and cannot prove.** It proves where data can go. It cannot prove the code itself is honest — a web app's code arrives fresh from the server on each visit, so you are trusting that delivery. Tests 1 and 2 narrow the question to what the code you were served actually does; the deeper protection is that any altered code would run in your own browser, open to inspection — not a silent query on a server you can't see.
+
+Want to go deeper? The privacy policy's [“How the encryption works”](/privacy#how-the-encryption-works) section names the exact algorithms and what rests on the server.

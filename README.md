@@ -1,6 +1,6 @@
 # Snippets
 
-*A pocket commonplace book.* Catch the stories, jokes, quotes, and stray
+*A pocket notebook for the day's stories.* Catch the stories, jokes, quotes, and stray
 thoughts of your day before they evaporate — by voice, in one breath.
 
 Built in the spirit of **Homework for Life** (Matthew Dicks,

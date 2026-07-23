@@ -37,9 +37,11 @@ const TECH_COPY_PATHS = [
 ] as const;
 
 const PAGES = [
-  "../app/privacy/page.tsx",
-  "../app/terms/page.tsx",
-  "../app/verify/page.tsx",
+  // the policy pages are authored in Markdown now (content.mdx, rendered by
+  // the thin page.tsx wrappers) — scan the prose the reader actually sees
+  "../app/privacy/content.mdx",
+  "../app/terms/content.mdx",
+  "../app/verify/content.mdx",
   // not a page, but its retention lines render verbatim ON the privacy
   // page — they carry the same register and ride the same bar
   "../lib/speech-providers.ts",
@@ -126,18 +128,51 @@ function copyItems(): Item[] {
   return items;
 }
 
+// the Markdown prose a reader sees on a policy page: strip the module lines,
+// fenced/inline code (deliberate technical literals), JSX tags and their
+// props (parity with the old JSXText scan — labels/names weren't linted),
+// and Markdown syntax, leaving the sentences. One prose line per item.
+function mdxProse(src: string): string[] {
+  return src
+    .replace(/```[\s\S]*?```/g, "") // fenced code blocks
+    .split("\n")
+    .filter((l) => !/^\s*(import|export)\b/.test(l)) // module lines
+    .map((l) =>
+      l
+        .replace(/<[^>]*>/g, " ") // JSX tags (open/close/self-closing) + their props
+        .replace(/`[^`]*`/g, " ") // inline code literals (AES-256-GCM, connect-src…)
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links → their visible text
+        .replace(/^\s{0,3}#+\s+/, "") // heading markers
+        .replace(/^\s{0,3}[-*]\s+/, "") // list markers
+        .replace(/\*\*|\*|_/g, "") // emphasis
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
 function pageItems(): Item[] {
   const items: Item[] = [];
   for (const rel of PAGES) {
     const abs = fileURLToPath(new URL(rel, import.meta.url));
     if (!existsSync(abs)) continue;
     const src = readFileSync(abs, "utf8");
-    // JSXText only: text sitting between a tag close `>` and the next `<`,
-    // never inside {expressions} — so JS code and prop values aren't scanned.
+    const where = rel
+      .replace("../app/", "")
+      .replace("../lib/", "")
+      .replace("/content.mdx", "");
+    if (rel.endsWith(".mdx")) {
+      for (const text of mdxProse(src))
+        if (text.length > 2 && /[a-z]/i.test(text))
+          items.push({ where, text, scope: "page" });
+      continue;
+    }
+    // .tsx/.ts — JSXText only: text sitting between a tag close `>` and the
+    // next `<`, never inside {expressions} — so JS code and prop values aren't
+    // scanned.
     for (const m of src.matchAll(/>\s*([^<>{}]+?)\s*</g)) {
       const text = m[1].replace(/&rsquo;|&lsquo;/g, "'").replace(/&ldquo;|&rdquo;/g, '"').trim();
       if (text.length > 2 && /[a-z]/i.test(text))
-        items.push({ where: rel.replace("../app/", "").replace("/page.tsx", ""), text, scope: "page" });
+        items.push({ where, text, scope: "page" });
     }
   }
   return items;
