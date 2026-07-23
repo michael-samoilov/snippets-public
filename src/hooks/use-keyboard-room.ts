@@ -75,9 +75,12 @@ export function useKeyboardRoom(
     let frozenSt: number | null = null;
     let touchDown = false;
     let lastElMoveAt = 0; // the scroller's last movement (any cause)
-    let lastInputAt = 0; // the field's last keystroke — tells typing from a caret drag
     let armT: ReturnType<typeof setTimeout> | undefined;
-    const thaw = () => { frozenSt = null; };
+    // A focused pinned composer holds its centred target for the WHOLE focus, so
+    // thaw must not null it (overflow:hidden alone can't stop a programmatic
+    // caret-reveal — only snapping back to a still-set frozenSt does). correct()
+    // keeps that target fresh as the box grows / the keyboard rises.
+    const thaw = () => { if (!pinFocused) frozenSt = null; };
     const rearm = () => {
       thaw();
       clearTimeout(armT);
@@ -101,19 +104,12 @@ export function useKeyboardRoom(
       };
       armT = setTimeout(arm, 900);
     };
-    // A caret drag keeps the finger down without being a page scroll, so it must
-    // not thaw the pinned freeze (that snap-back is what holds the book); its own
-    // quiet timer ends it. Every other touch thaws/re-arms as before.
-    const onTouchStart = () => { touchDown = true; if (!caretDragging) thaw(); clearTimeout(armT); };
-    const onTouchEnd = () => {
-      touchDown = false;
-      // A caret drag that delivered page touch events ends crisply on lift —
-      // releasing the book the instant the finger is up, not after the quiet
-      // timer. (A spacebar-trackpad walk delivers none, so that path leans on the
-      // timer instead.) endCaretDrag re-arms; every other touch re-arms directly.
-      if (caretDragging) endCaretDrag();
-      else rearm();
-    };
+    // While a pinned composer is focused the book is held unscrollable outright
+    // (pinFocused, below), so a touch can neither thaw its freeze nor re-arm it —
+    // the hold, not the arm lifecycle, keeps it put. Every other touch thaws and
+    // re-arms as before.
+    const onTouchStart = () => { touchDown = true; if (!pinFocused) thaw(); clearTimeout(armT); };
+    const onTouchEnd = () => { touchDown = false; if (!pinFocused) rearm(); };
 
     // A SELECTION-HANDLE drag is the freeze's hardest case: iOS delivers no
     // touch events under a native handle, and WebKit's auto-scroll chases the
@@ -132,12 +128,12 @@ export function useKeyboardRoom(
     // While the selection stands, the lock simply holds — every word the
     // writer could want is inside the contained box, and any tap outside
     // collapses the selection and frees the scroller.
-    // Both the range-selection hold and the caret-drag hold (below) make the
+    // Both the range-selection hold and the pinned-composer hold (below) make the
     // outer book unscrollable the same way — overflow:hidden, with frozenSt as
     // the snap fallback for engines that still scroll a hidden box. Refcounted
     // over the two owners so releasing one never lifts the other's lock.
     let selLocked = false;
-    let caretDragging = false;
+    let pinFocused = false;
     let savedOverflowY = "";
     let overflowHeld = false;
     const holdOverflow = () => {
@@ -149,7 +145,7 @@ export function useKeyboardRoom(
       if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
     };
     const releaseOverflow = () => {
-      if (!overflowHeld || selLocked || caretDragging) return; // the other owner still holds
+      if (!overflowHeld || selLocked || pinFocused) return; // the other owner still holds
       overflowHeld = false;
       el.style.overflowY = savedOverflowY;
     };
@@ -165,69 +161,43 @@ export function useKeyboardRoom(
       holdOverflow();
     };
 
-    // A COLLAPSED-caret drag (repositioning the cursor by dragging it, or the
-    // spacebar-trackpad walk) is the range lock's twin: WebKit reveal-scrolls the
-    // whole book to chase the caret, and here the finger stays DOWN, so the
-    // pinned freeze's snap-back — which stands down while touchDown is true —
-    // never fires and the book flings around (owner video, 2026-07-23). The words
-    // the caret could reach are all inside the contained box, so the same cure
-    // applies: hold the book still (overflow:hidden + snap regardless of
-    // touchDown) and let the textarea reveal its own caret. Unlike a range there
-    // is no Cut/Copy/Paste callout to preserve, so this hold auto-lifts on a
-    // quiet spell (the finger has lifted) instead of standing until a collapse.
-    //
-    // Detected purely from selectionchange cadence, so it holds whether or not
-    // iOS delivers touch events under the caret: a caret DRAG fires a burst of
-    // collapsed selectionchanges, a tap-to-place fires exactly one. Requiring a
-    // second hit within CARET_BURST_MS tells the drag (lock it) from the tap
-    // (leave the book free to scroll) — and typing, which also moves the caret,
-    // is excluded by its input event landing a beat before.
-    const CARET_BURST_MS = 350;
-    const CARET_QUIET_MS = 450;
-    let caretHits = 0;
-    let caretBurstAt = 0;
-    let caretQuietT: ReturnType<typeof setTimeout> | undefined;
-    const endCaretDrag = () => {
-      clearTimeout(caretQuietT);
-      caretHits = 0;
-      if (!caretDragging) return;
-      caretDragging = false;
-      releaseOverflow();
-      rearm(); // re-centre the pinned card once the drag settles
+    // The pinned composer's contract: while it is focused the book NEVER scrolls
+    // — its own box scrolls the words, and correct() keeps the card centred in the
+    // visible band. Dragging the caret to the box's top/bottom edge makes WebKit
+    // reveal-scroll the nearest scrollable ANCESTOR (the book) to chase the caret,
+    // flinging the whole schedule around (owner videos). A reactive snap-back
+    // always flashes one frame, and it can't tell a caret-reveal from a real
+    // scroll once the finger is down. So instead of chasing the reveal, remove the
+    // book as a scroll target for the whole focus: overflow:hidden. WebKit then
+    // has nothing to escalate to and scrolls the textarea itself; correct() still
+    // positions the card via programmatic scrollTop (which works under
+    // overflow:hidden), and frozenSt snap-back stays as the fallback. This needs
+    // no detection of the drag — the book is simply held still while you write.
+    const holdPinFocus = () => {
+      if (pinFocused) return;
+      pinFocused = true;
+      holdOverflow();
     };
-    const bumpCaretDrag = () => {
-      clearTimeout(caretQuietT);
-      if (!caretDragging) {
-        caretDragging = true;
-        correct(); // bring a clipped pinned card fully into view, then…
-        holdOverflow(); // …hold the book so the caret scrolls the textarea, not it
-      }
-      caretQuietT = setTimeout(endCaretDrag, CARET_QUIET_MS);
+    const releasePinFocus = () => {
+      if (!pinFocused) return;
+      pinFocused = false;
+      releaseOverflow();
     };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
       const f = field as HTMLTextAreaElement;
       if (typeof f.selectionStart !== "number") return;
-      if (f.selectionStart !== f.selectionEnd) {
-        endCaretDrag(); // it became a range — the range lock owns it now
-        lockForSelection();
-        return;
-      }
-      unlockSelection(); // a range just collapsed → release its hold
-      const now = performance.now();
-      if (now - lastInputAt < 150) return; // typing drives the caret, not a drag
-      if (now - caretBurstAt > CARET_BURST_MS) caretHits = 0;
-      caretBurstAt = now;
-      caretHits++;
-      if (caretHits >= 2) bumpCaretDrag(); // a burst, not a lone tap → a drag
+      if (f.selectionStart !== f.selectionEnd) lockForSelection();
+      else unlockSelection();
     };
 
     const onElScroll = () => {
       const st = el.scrollTop;
-      if ((selLocked || caretDragging) && frozenSt != null) {
-        // during a handle OR caret drag the page holds still, full stop — the
-        // finger on the handle is not a page scroll, so touchDown doesn't exempt
-        // it (WebKit's caret-reveal scroll is snapped straight back)
+      if ((selLocked || pinFocused) && frozenSt != null) {
+        // held for a range selection or a focused pinned composer: the book holds
+        // still, full stop — touchDown doesn't exempt it, so any programmatic
+        // reveal WebKit sneaks through under overflow:hidden is snapped straight
+        // back to the centred target
         if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt;
         lastElMoveAt = performance.now();
         return;
@@ -372,8 +342,6 @@ export function useKeyboardRoom(
     // passes re-measure after the reflow, so the caret still ends up placed.
     const ro = new ResizeObserver(() => run());
     const onInput = () => {
-      lastInputAt = performance.now(); // marks the caret move as typing, not a drag
-      endCaretDrag(); // a keystroke ends any caret drag outright
       rearm(); // typing is a legitimate mover; freeze again once it settles
       run();
     };
@@ -388,6 +356,8 @@ export function useKeyboardRoom(
       if (managed(t)) {
         field = t;
         ro.observe(t!);
+        // a pinned composer holds the book unscrollable for its whole focus
+        if (t!.hasAttribute("data-room-pin")) holdPinFocus();
         // extra late passes to outlast the keyboard's rise (~250ms) and iOS's
         // settle-scroll after it
         run([140, 300, 450]);
@@ -396,7 +366,7 @@ export function useKeyboardRoom(
     };
     const onFocusOut = () => {
       if (field) ro.unobserve(field);
-      endCaretDrag();
+      releasePinFocus();
       unlockSelection();
       field = null;
       thaw();
@@ -426,13 +396,13 @@ export function useKeyboardRoom(
     if (pre && el.contains(pre) && managed(pre)) {
       field = pre;
       ro.observe(pre);
+      if (pre.hasAttribute("data-room-pin")) holdPinFocus();
       run([140, 300, 450]);
       rearm();
     }
     return () => {
-      clearTimeout(caretQuietT);
       selLocked = false;
-      caretDragging = false;
+      pinFocused = false;
       releaseOverflow(); // restore overflow whichever owner held it
       document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);

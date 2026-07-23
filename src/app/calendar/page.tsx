@@ -5878,7 +5878,7 @@ const ScheduleCards = memo(function ScheduleCards({
               <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
               <p
                 className={cn(
-                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[1rem] leading-[1.42]",
+                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[1rem] leading-[23px]",
                   s.kind === "quote" && "hang-quotes italic",
                 )}
               >
@@ -5984,6 +5984,19 @@ function FlowBackfillCapture({
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const sealBtnRef = useRef<HTMLButtonElement>(null);
+  // Seal press bookkeeping — mirrors the today-zone seal (see its refs), so a
+  // keep files ONLY when a real pointer both PRESSED and RELEASED on the seal.
+  // Without this the bare onClick fired on iOS's ~300ms synthetic click, which
+  // retargets onto the seal after a tap elsewhere collapses the keyboard and
+  // slides the composer under the lifted finger — filing an entry the writer
+  // only meant to dismiss the keyboard for (owner video, 2026-07-23).
+  const sealDown = useRef(false); // a pointer is pressing the seal
+  const overSeal = useRef(false); // …and is within the button's box
+  const pointerHandled = useRef(false); // a real pointer just handled a keep
+  const inSeal = (e: ReactPointerEvent) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  };
   // the live seal-into-view settle watcher (press only once the seal is at rest)
   const settleCancel = useRef<null | (() => void)>(null);
   // a long entry's glide-to-top (timer that starts it + the running scroll)
@@ -6320,7 +6333,15 @@ function FlowBackfillCapture({
               // outer height and same 11px text inset, so the composer→card
               // hand-off neither jumps 2px taller nor nudges the words sideways.
               // autosizeArea adds the border back into the measured height.
-              "book-card-prose voice-prose relative block max-h-[158px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[1rem] leading-[1.42] outline-none placeholder:italic",
+              // An INTEGER 23px line box (not the fractional 1.42×16=22.72px):
+              // WebKit snaps line boxes to device pixels, and a fractional line
+              // let scrollHeight drift from the true content height as blank
+              // lines piled up — once max-h clamped and the box scrolled its own
+              // words, the caret seated a line off (owner video). 23px matches
+              // the today zone's ruling and makes max-h an exact six-line box:
+              // 6×23 + 20 (p-2.5) + 2 (border) = 160px, equal to the preview's
+              // line-clamp-6 — so the composer never outgrows the card it becomes.
+              "book-card-prose voice-prose relative block max-h-[160px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[1rem] leading-[23px] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -6337,13 +6358,37 @@ function FlowBackfillCapture({
             ref={sealBtnRef}
             type="button"
             aria-label={copy.keep.label}
-            onClick={keep}
+            // Keep is driven by the hit-tested pointerup below, not the click —
+            // the click swallows the real pointer's trailing synthetic click,
+            // and files only on a genuine KEYBOARD activation (detail === 0). A
+            // pointer-derived click (detail ≥ 1), including one iOS retargets
+            // onto the seal after a tap elsewhere, never files.
+            onClick={(e) => {
+              if (pointerHandled.current) { pointerHandled.current = false; return; }
+              if (e.detail === 0) keep();
+            }}
             onPointerDown={(e) => {
               e.preventDefault(); // keep the textarea's focus
+              sealDown.current = true;
+              overSeal.current = true;
               setPressedDown(true);
             }}
-            onPointerUp={() => setPressedDown(false)}
-            onPointerLeave={() => setPressedDown(false)}
+            onPointerMove={(e) => {
+              if (!sealDown.current) return;
+              const inside = inSeal(e);
+              if (inside !== overSeal.current) { overSeal.current = inside; setPressedDown(inside); }
+            }}
+            onPointerUp={(e) => {
+              if (!sealDown.current) { setPressedDown(false); return; }
+              sealDown.current = false;
+              pointerHandled.current = true;
+              const inside = inSeal(e);
+              overSeal.current = false;
+              setPressedDown(false);
+              if (inside) keep(); // released on the seal → file; released off → cancel
+            }}
+            onPointerLeave={() => { overSeal.current = false; setPressedDown(false); }}
+            onPointerCancel={() => { sealDown.current = false; overSeal.current = false; setPressedDown(false); }}
             className="relative grid place-items-center rounded-full"
             style={{ width: 56, height: 56 }}
           >
