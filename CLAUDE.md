@@ -9,6 +9,12 @@ voice/typed capture, calendar review.
 design constitution. `DESIGN.md` has the full rationale and tokens.
 `BACKLOG.md` holds owner-accepted future work with design notes —
 check it before proposing scope; items there are decided.
+**`SECURITY-STATE.md` is the single source of truth for what the app
+actually does with user data** — read it before editing any privacy /
+terms / Settings / `/verify` copy (the copy must match its architecture,
+not memory), and update it *in the same commit* whenever a privacy- or
+security-relevant behavior changes (its Change log is how we avoid
+describing outdated architecture as current).
 
 ## Commands
 

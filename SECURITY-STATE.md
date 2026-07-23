@@ -1,0 +1,181 @@
+# Privacy & security — the true state
+
+**This file is the single source of truth for what Snippets actually
+does with your data.** Every user-facing claim (the privacy page, terms,
+Settings copy, `/verify`) and every internal doc (CLAUDE.md, DESIGN.md,
+the snippets-craft skill) must agree with the "Current state" section
+below. When a privacy- or security-relevant behavior changes, update
+this file **in the same commit** — the Change log at the bottom is how we
+avoid describing yesterday's architecture as if it were today's.
+
+How to use it:
+- **Before editing any privacy/terms/Settings/verify copy:** read the
+  matching row in Current state; the copy must match the *architecture*
+  column, not memory.
+- **After changing any enforcement code** (sync gate, push route, crypto,
+  CSP, providers): update the row *and* add a Change log entry, then
+  re-run the harnesses named in "How each claim is proven."
+- If this file and a page disagree, this file is presumed right and the
+  page is the bug (unless the code has drifted from both — then fix the
+  code first).
+
+---
+
+## Current state (as of 2026-07-23)
+
+### Can we read your entries?
+- **No.** Signed out: entries live only in this browser's IndexedDB and
+  never reach the server. Signed in: end-to-end encryption is **required**
+  — entries are sealed on-device (AES-256-GCM under a per-user book key)
+  before anything is sent, and the server refuses anything readable.
+- **Enforcement:** `src/lib/sync.ts` (no plaintext push path — `pushAll`/
+  `pullAll`/`toWireChange` require the key), `src/app/api/sync/push/route.ts`
+  (accepts payload formats 2|3 only; format 1 → `409 encryption_required`),
+  `src/lib/sync-wire.ts` (format 3 = AAD-bound envelope).
+- **Asserts it:** privacy `#can-you-read`, `#if-you-sign-in`,
+  `#end-to-end-encryption`; terms `#encryption`; Settings Encryption
+  section; `/verify` tests 2 & 3.
+
+### The sign-in → encryption window
+- **There is none.** A signed-in-but-unenrolled account sits in the
+  `needsSetup` sync state: no push, no pull, counts only. The first push
+  cannot happen before a key exists. Enrollment (set a passphrase +
+  save a recovery code) is the `/welcome` step; capture is never blocked.
+- **Enforcement:** `runCycle` in `src/lib/sync.ts` (the `needsSetup`
+  branch), `src/components/encryption/enroll-flow.tsx`,
+  `src/app/welcome/page.tsx`, the calendar's needs-setup letter.
+
+### Can encryption be turned off?
+- **No — deliberately.** `disableEncryption` was deleted; `/api/keys` is
+  write-once (no DELETE, no replace). Only deleting the whole account
+  removes the wrapped keys (server-side cascade).
+- **Enforcement:** `src/app/api/keys/route.ts`, `src/lib/e2e.ts`.
+
+### What can the server do to a sealed entry?
+- **Nothing without failing loudly.** The row's `id`, `updatedAt`,
+  `deletedAt`, and `payloadFormat` are bound into the cipher as AES-GCM
+  AAD, so a moved, rolled-back, resurrected, or format-downgraded
+  envelope fails to decrypt (surfaces as the `locked` state, never a
+  silent swap). The server still sees that entries exist, their rough
+  size, and when each changed.
+- **Enforcement:** `aadForRow` in `src/lib/crypto.ts` (canonical string
+  pinned by a test), `fromWireRow`/`toWireChange` in `src/lib/sync-wire.ts`.
+
+### Voice
+- Speaking an entry streams audio to a transcription provider; words
+  come back; **we store none of it**. Provider order (first available
+  wins) and each provider's data posture live in ONE table:
+  `src/lib/speech-providers.ts`. Default chain: **Soniox** (in-memory,
+  no storage, no training) → **Speechmatics** (stores neither audio nor
+  transcript) → **Deepgram** (every request sends `mip_opt_out=true`).
+  **ElevenLabs is out of the default chain** (its zero-retention is
+  enterprise-only). Last-resort fallback is the browser's own Web Speech
+  API — that audio is sent by the *browser* to Google/Apple, invisible to
+  our CSP and network tab, and the privacy page says so.
+- **Which providers are named on the privacy page** = `activeSpeechProviders()`
+  (only those whose API key is set on this deployment).
+- **Asserts it:** privacy `#voice`, `/verify` test 2; the retention lines
+  are STE-linted (in `copy-clarity.test.ts` PAGES).
+
+### Google Drive backup
+- Plaintext **by design** — it's the key-loss safety net, delivered by
+  the writer's own device to their own Drive (`drive.file` scope, visible
+  folder). The server holds no Drive tokens and never carries the files.
+- **Do not encrypt these files.** Enforcement: `src/lib/backup-client.ts`,
+  `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`.
+
+### What leaves the app, ever (the CSP allowlist)
+- Every production page ships a strict `Content-Security-Policy` whose
+  `connect-src` is the complete, browser-enforced list of destinations:
+  `'self'`, `https://www.googleapis.com` (Drive upload), and exactly the
+  configured speech WebSocket origins. Plus `frame-ancestors/object-src/
+  base-uri 'none'`, `form-action 'self'`, DNS-prefetch off, same-origin
+  referrer, microphone-to-self Permissions-Policy.
+- **Source:** `next.config.ts` (speech origins derived from
+  `speech-providers.ts`). Escape hatch: `CSP_REPORT_ONLY=1`.
+- **A new external origin is a privacy event:** update the provider table
+  (or config), `/verify`, and the privacy page in the same commit.
+
+### Data we collect
+- Sign-in needs your email (and, with Google, your name + profile
+  picture). No passwords. No ads, no selling, no analytics on entry
+  content. Only measurement: anonymous page-view counting (Vercel,
+  same-origin `/_vercel/insights`). Only emails: a sign-in code, or a
+  backup-stopped warning.
+
+### Leaving
+- Erase-all soft-deletes everywhere (propagates as tombstones; content
+  kept ≤30 days for cross-device undo, then scrubbed to an id + timestamp).
+  Account deletion removes the account, synced entries + tombstones,
+  wrapped keys, and backup record from the server immediately; revokes
+  the Drive grant. Device copies and delivered Drive files remain yours.
+
+### How each claim is proven (run these after touching the area)
+- **No plaintext window, end to end:** `tests/e2e/forced_e2e.py` (real
+  build + real WebCrypto vs stub server; sentinel scanned on every wire
+  body). 22 checks.
+- **Server refusal matrix:** `src/app/api/sync/push/route.test.ts`.
+- **AAD binding + legacy-format reads:** `src/lib/crypto.test.ts`,
+  `src/lib/sync-wire.test.ts`.
+- **Speech adapters speak the documented protocols:**
+  `tests/e2e/speech_adapters.py` (14 checks).
+- **Copy stays in the STE register:** `pnpm check:copy`.
+- **CSP has zero violations:** the sweep in the commit that added it (re-run
+  a page/theme/capture pass after any `connect-src` change).
+
+---
+
+## Known gaps / pending (do not describe as done)
+
+- **The short, unqualified privacy page is NOT live yet.** The current
+  privacy page is the honest *interim* two-state version. The headline
+  "We cannot read your entries. Not won't, can't." + 4-row data-flow
+  table is **gated** on the pre-2026-07-23 accounts re-encrypting — see
+  BACKLOG #14. Do not swap it in until the gate check passes.
+- **Database-backup retention figure** on the privacy page (currently
+  "within 24 hours") is a placeholder pending confirmation of the Neon
+  point-in-time-restore window for this project.
+- **Soniox / Speechmatics are wired but dormant** until their API keys
+  are set in the environment. Until then the active chain is whatever
+  keys exist (likely Deepgram, mip-opted-out). The privacy page names
+  only active providers, so it stays truthful automatically.
+- **On-device transcription** (BACKLOG #16), **ciphertext self-viewer**
+  (BACKLOG #15), **open-sourcing** (BACKLOG #17, brief in `OPEN-SOURCE.md`)
+  are deferred by decision.
+
+---
+
+## Change log
+
+Newest first. One entry per privacy/security-relevant change; cite the
+commit and note which user-facing surfaces it moved.
+
+### 2026-07-23 — the privacy & security push
+- **Deepgram opted out of model-improvement** (`mip_opt_out=true` on every
+  streaming request) so retained-and-trained audio stops. Made the
+  existing "audio is not kept" true. — `b114aca`
+- **Encryption became required at sign-in.** Wire format 3 (AAD-bound);
+  client plaintext path deleted (key now required); server rejects
+  format 1 (409); `needsSetup` sync state; enrollment moved into
+  `/welcome` (shared `EnrollFlow`); `disableEncryption` and the
+  `/api/keys` DELETE removed; legacy books converge to format 3 via a
+  re-seal sweep + pull re-dirty rule. Absorbed BACKLOG #8 (AAD). Interim
+  privacy/terms edits shipped in the same commit (three-state "can you
+  read?" → No). — `8722cc2`
+- **No-window guarantee made observable:** `tests/e2e/forced_e2e.py` +
+  `push/route.test.ts`; fixed a welcome-flow bug that discarded the
+  once-only recovery code. — `e711abf`
+- **Voice provider chain swapped to no-storage-by-default:** Soniox
+  primary, Speechmatics backup, ElevenLabs out of default; new adapters +
+  token routes; `speech-providers.ts` truth table; privacy Voice section
+  renders from it + Web-Speech-fallback disclosure. — `93802cf`
+- **Strict CSP + `/verify`:** `connect-src` as the browser-enforced
+  allowlist; the three-test "verify, don't trust" page. — `15a1955`
+- **Constitution/backlog/docs:** CLAUDE.md E2E + CSP rules, snippets-craft
+  law 8, DESIGN.md "Privacy is architecture", BACKLOG #14–17,
+  `OPEN-SOURCE.md`. — `2b3f811`
+
+### (before this push)
+Optional per-user E2E (format 2), accounts + sync, client-delivered Drive
+backup, account deletion — see git history; superseded where the rows
+above say so (E2E is no longer optional; format 2 is now legacy-read-only).
