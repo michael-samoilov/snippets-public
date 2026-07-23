@@ -19,6 +19,31 @@ How to use it:
   page is the bug (unless the code has drifted from both — then fix the
   code first).
 
+### What's mechanized vs. what this file must carry by hand
+
+This doc is prose, so drift is prevented in three tiers — strongest first:
+
+1. **Derive, don't duplicate (can't drift — it's one value).** Facts that
+   appear on several surfaces are a single imported value, not copies:
+   the speech provider table (`src/lib/speech-providers.ts`) is read by
+   the privacy page, Settings, *and* the CSP; the CSP itself
+   (`src/lib/security-headers.ts`) is built from it and applied by
+   `next.config.ts`. These surfaces cannot disagree.
+2. **Mechanized invariants (fail the build like the copy linter).**
+   `src/lib/security-invariants.test.ts` is the egress/absence linter:
+   every external origin in `src/` must be classified (a new `fetch`/
+   `WebSocket` host fails the build until declared *and* added to the CSP),
+   the CSP `connect-src` must equal the code's real browser egress, and
+   the deleted plaintext paths (`disableEncryption`, keys `DELETE`, the
+   no-key wire path) must stay deleted. Adding a data destination is
+   therefore impossible without a conscious edit that also forces the
+   privacy/`/verify` review.
+3. **Human-only (this file's real job).** No linter can verify that the
+   English sentence "we cannot read your entries" *matches* the crypto,
+   or that a provider's external retention policy still holds. Those get
+   a dated review against the rows below — the doc exists to make that
+   review fast, not to replace it.
+
 ---
 
 ## Current state (as of 2026-07-23)
@@ -120,8 +145,11 @@ How to use it:
 - **Speech adapters speak the documented protocols:**
   `tests/e2e/speech_adapters.py` (14 checks).
 - **Copy stays in the STE register:** `pnpm check:copy`.
-- **CSP has zero violations:** the sweep in the commit that added it (re-run
-  a page/theme/capture pass after any `connect-src` change).
+- **No undeclared data destination; CSP == code egress; deleted plaintext
+  paths stay deleted:** `src/lib/security-invariants.test.ts` (rides
+  `pnpm test`).
+- **CSP has zero runtime violations:** the sweep in the commit that added
+  it (re-run a page/theme/capture pass after any `connect-src` change).
 
 ---
 
@@ -174,6 +202,12 @@ commit and note which user-facing surfaces it moved.
 - **Constitution/backlog/docs:** CLAUDE.md E2E + CSP rules, snippets-craft
   law 8, DESIGN.md "Privacy is architecture", BACKLOG #14–17,
   `OPEN-SOURCE.md`. — `2b3f811`
+- **This file** created as the source of truth; CLAUDE.md points at it. —
+  `471a496`
+- **Drift made mechanical:** CSP moved to a tested value
+  (`security-headers.ts`); `security-invariants.test.ts` added — the
+  egress registry + CSP cross-check + absence guards that fail the build
+  on a new data destination or a reintroduced plaintext path.
 
 ### (before this push)
 Optional per-user E2E (format 2), accounts + sync, client-delivered Drive
