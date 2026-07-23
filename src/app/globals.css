@@ -54,15 +54,9 @@ html {
      (.sheet-grain) darkens it by ~15 units. A sticky policy heading paints
      OVER that grain, so a --paper fill reads as a stark light band. This is
      the grain's on-screen tone, measured off the rendered sheet, so the
-     pinned heading's fill matches the sheet it sits on. (Reduced-data drops
-     the grain → the fallback below restores flat --paper.) */
-  --policy-fill: #e7dfcd;
-  /* the grain is a vertical gradient — strongest (darkest) at the sheet top,
-     fading to flat --paper down the page. -hi is the top/strong tone, -lo
-     the bottom/faded tone; a scroll-driven animation blends between them by
-     the heading's viewport position (see .policy-head). */
-  --policy-fill-hi: #e3dbc9;
-  --policy-fill-lo: #f3ede0;
+     pinned heading's solid fill matches the sheet it sits on, erring a hair
+     light so it never reads darker than the paper (see .policy-head). */
+  --policy-fill: #f4eddf;
   --ink: #241e15;
   --ink-soft: #6f6553;
   --ink-faint: #988c77;
@@ -195,7 +189,7 @@ html {
   --desk-deep: #090706;
 
   --paper: #1d1812;
-  /* dark grain LIGHTENS the sheet a touch (~5 units) — matched tone here */
+  /* dark grain LIGHTENS the sheet a touch — match that on-screen tone */
   --policy-fill: #221d15;
   --policy-fill-hi: #251f17; /* top/strong grain — lighter in dark mode */
   --policy-fill-lo: #1d1812; /* bottom/faded — back to flat --paper */
@@ -799,43 +793,13 @@ textarea:focus-visible,
 .policy-head,
 .policy-sub {
   position: sticky;
-  /* The fill matches the sheet's ON-SCREEN tone, which is flat --paper
-     DARKENED by the grain overlay — so it reads as no fill while staying
-     opaque enough to hide the text scrolling under it. The grain is a
-     vertical gradient, so a single tone can't match everywhere; the
-     scroll-driven animation blends the fill from -hi (viewport top, strong
-     grain) to -lo (viewport bottom, faded) by the heading's position, so it
-     tracks the sheet at any scroll depth — pure CSS, no scroll listener.
-     --policy-fill is the static fallback where scroll-timelines aren't
-     supported (older iOS Safari). */
+  /* A plain solid fill in the sheet's own on-screen tone, so it reads as the
+     background colour while staying opaque enough to hide the text scrolling
+     under it. The grain is a faint vertical gradient (darker at the very top,
+     fading down), so no single tone can match every pixel — this one is set
+     to the tone the sheet actually shows, erring a hair LIGHT so it never
+     reads darker than the paper. */
   background-color: var(--policy-fill);
-}
-/* The tracking animation is gated behind @supports: a browser with
-   @keyframes but WITHOUT animation-timeline would treat `animation … both`
-   as a 0s time animation and snap to the end frame (the dark tone) — so it
-   must never see the animation. Guarded, such browsers keep the static
-   fallback above; supporting browsers get the position-tracked fill. */
-@supports (animation-timeline: view()) {
-  .policy-head,
-  .policy-sub {
-    animation: policy-fill-track linear both;
-    animation-timeline: view();
-  }
-}
-@keyframes policy-fill-track {
-  from {
-    background-color: var(--policy-fill-lo);
-  } /* entering at the viewport BOTTOM — faded grain */
-  to {
-    background-color: var(--policy-fill-hi);
-  } /* leaving at the viewport TOP — strong grain */
-}
-/* no grain (reduced-data) → the sheet is flat --paper, so match that */
-@media (prefers-reduced-data: reduce) {
-  .policy-head,
-  .policy-sub {
-    background: var(--paper);
-  }
 }
 .policy-head {
   top: 0;
