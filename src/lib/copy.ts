@@ -30,7 +30,7 @@ export const copy = {
     description:
       "A pocket notebook. Catch the stories, jokes, and stray thoughts of your day before they evaporate.",
     /** alt text for the link-preview image (src/app/opengraph-image.alt.txt is generated from this — keep them matched) */
-    ogAlt: "The Snippets wordmark over the words 'Appreciate the everyday — every day is all there is,' beside a fanned stack of the app's pages — a year, a month, kept days, and today — sealed with blue wax. A pocket notebook.",
+    ogAlt: "The Snippets wordmark over the words 'Appreciate the everyday, every day is all there is,' beside a fanned stack of the app's pages (a year, a month, kept days, and today) sealed with blue wax. A pocket notebook.",
   },
 
   /** primary navigation — the desktop links and the mobile dock */

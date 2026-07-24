@@ -239,12 +239,8 @@ describe("copy clarity — STE-informed checks on the technical register", () =>
 // register included — plus the policy pages' Markdown. Code comments are not
 // user-facing and are not scanned (the check reads copy strings, never source).
 describe("no em-dashes in user-facing copy", () => {
-  const strings: string[] = [];
-  collectStrings(copy, strings);
-  // exempt: the OG alt text quotes the words on the designed share image, so its
-  // em-dash moves only when that image is rebaked, not when copy is edited.
-  const OG_ALT_MARK = "fanned stack of the app";
-  const copyStrings = strings.filter((s) => !s.includes(OG_ALT_MARK));
+  const copyStrings: string[] = [];
+  collectStrings(copy, copyStrings);
   const pageStrings = PAGES.filter((r) => r.endsWith(".mdx")).flatMap((rel) => {
     const abs = fileURLToPath(new URL(rel, import.meta.url));
     return existsSync(abs) ? mdxProse(readFileSync(abs, "utf8")) : [];
