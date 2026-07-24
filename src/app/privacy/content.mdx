@@ -20,7 +20,7 @@ Before an entry leaves your device, your browser encrypts it: the words become a
 
 If you sign in, you set a passphrase and are given a recovery code. Each one encrypts its own copy of the non-extractable key, on your device, and only those two encrypted copies reach our server, so that any of your devices can rebuild the key once you enter your passphrase or recovery code. The passphrase and recovery code never leave your browser. This is the design Signal, Proton Mail, and Bitwarden use. Encryption cannot be turned off.
 
-**One honest limit every encrypted web app lives with.** The app is a website: your browser downloads its code from us on each visit, so you are trusting that code. But don't take our word for it, [verify for yourself that the app works as we explained it →](/verify)
+**One honest limit every encrypted web app lives with.** The app is a website: your browser downloads its code from us on each visit, so you are trusting that code. But don't take our word for it, [verify for yourself that the app works as explained →](/verify)
 
 <Deepdive>
 Every entry is encrypted with `AES-256-GCM` (an authenticated cipher, so a tampered entry fails to open rather than decrypting to something wrong) under a fresh random value each time, so two identical entries still encrypt to different characters. The entry's identifier and timestamps are bound into that check, so a moved, rolled-back, or resurrected entry fails to open too. All of your entries share one random 256-bit key, made on your device.
