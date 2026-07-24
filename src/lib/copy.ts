@@ -54,7 +54,7 @@ export const copy = {
     keptToday: "Kept today",
     /** shown only before anything has ever been kept */
     empty:
-      "Your days are fuller than you think. Catch one true moment before it evaporates — a line someone said, a small scene, a joke that landed. Two sentences is plenty.",
+      "Your days are fuller than you think. Catch one true moment before it evaporates: a line someone said, a small scene, a joke that landed. Two sentences is plenty.",
   },
 
   /**
@@ -69,7 +69,7 @@ export const copy = {
       "Snippets is an app to capture your daily moments.",
       "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
       "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
-      "About this app: Everything is stored on this device by default. If you make an account, you can access your entries across devices. You can then connect your Google Drive to sync your entries off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption — then no one but you, including us, can read what you keep.",
+      "About this app: Everything is stored on this device by default. If you make an account, you can access your entries across devices. You can then connect your Google Drive to sync your entries off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption. Then no one but you, including us, can read what you keep.",
       "How you remember your days is how you remember your life.",
     ] as const,
   },
@@ -94,7 +94,7 @@ export const copy = {
       "When did you laugh today?",
       "What was today's moment?",
       "What changed today, even slightly?",
-      "Who was unexpectedly kind today — or unexpectedly strange?",
+      "Who was unexpectedly kind today, or unexpectedly strange?",
       "What will you have forgotten by next week, unless you keep it?",
       "Where were you today that you'd like to stand again?",
       "What went wrong today that might make a good story?",
@@ -106,12 +106,12 @@ export const copy = {
     /** the controls-row hint while transcribing */
     aMoment: "a moment…",
     /** the controls-row hint while listening */
-    listeningHint: "Listening — tap the seal to stop",
+    listeningHint: "Listening. Tap the seal to stop",
     /** the resting controls-row hint, voice available */
     hint: "speak it or write it",
     /** the resting hint where this browser can't do voice */
     noVoiceHint:
-      "this browser doesn’t offer voice capture — Chrome, Safari, or Edge do; writing works everywhere",
+      "this browser doesn’t offer voice capture. Chrome, Safari, or Edge do; writing works everywhere",
     /** the wax seal's accessible name, by state */
     seal: {
       speak: "Speak an entry",
@@ -138,7 +138,7 @@ export const copy = {
       "no-mic": {
         title: "No microphone found.",
         description:
-          "Plug one in or check your input settings — writing works meanwhile.",
+          "Plug one in or check your input settings; writing works meanwhile.",
       },
       network: {
         title: "The speech service couldn’t be reached.",
@@ -150,18 +150,18 @@ export const copy = {
       service: {
         title: "This browser won’t start dictation.",
         descriptionInstalledIOS:
-          "iOS blocks voice inside installed web apps. Open Snippets in Safari itself for voice — writing works everywhere.",
+          "iOS blocks voice inside installed web apps. Open Snippets in Safari itself for voice; writing works everywhere.",
         descriptionIOSBrowser:
           "iOS only does voice through Safari’s built-in dictation, and it isn’t responding right now. Writing works everywhere.",
         descriptionOtherwise:
-          "This browser wouldn’t start speech recognition. Writing works everywhere — Safari, Chrome, or Edge on desktop handle voice best.",
+          "This browser wouldn’t start speech recognition. Writing works everywhere: Safari, Chrome, or Edge on desktop handle voice best.",
       },
       // a network transcriber refused (bad key, quota, server unconfigured) —
       // our side, never the browser's
       serviceRemote: {
         title: "Voice is offline right now.",
         description:
-          "The transcription service isn’t responding — that’s on our side, not yours. Write it and it saves just the same.",
+          "The transcription service isn’t responding; that’s on our side, not yours. Write it and it saves just the same.",
       },
       transcribe: {
         title: "The words couldn’t be set.",
@@ -175,7 +175,7 @@ export const copy = {
       },
       unknown: {
         title: "Voice capture hit a snag.",
-        description: "Try the seal again, or write it — nothing was lost.",
+        description: "Try the seal again, or write it; nothing was lost.",
       },
     },
   },
@@ -206,9 +206,9 @@ export const copy = {
       /** count: the server's entry count, when known and none of it is already visible here */
       body: (count: number | null) => [
         count && count > 1
-          ? `Welcome back. The ${count.toLocaleString()} entries you’ve kept are end-to-end encrypted, and this device doesn’t hold the key yet — so they aren’t showing here.`
-          : "Welcome back. Your entries are end-to-end encrypted, and this device doesn’t hold the key yet — so they aren’t showing here.",
-        "Enter your passphrase — or your recovery code — and everything fills back in. Anything new you write stays safe on this device in the meantime.",
+          ? `Welcome back. The ${count.toLocaleString()} entries you’ve kept are end-to-end encrypted, and this device doesn’t hold the key yet, so they aren’t showing here.`
+          : "Welcome back. Your entries are end-to-end encrypted, and this device doesn’t hold the key yet, so they aren’t showing here.",
+        "Enter your passphrase, or your recovery code, and everything fills back in. Anything new you write stays safe on this device in the meantime.",
       ],
       action: "Unlock in Settings",
     },
@@ -221,7 +221,7 @@ export const copy = {
      */
     needsSetup: {
       body: [
-        "You’re signed in — one step left. Set an encryption passphrase, and your entries will sync to the server encrypted, readable only on your devices. Not even we can read them.",
+        "You’re signed in. One step left. Set an encryption passphrase, and your entries will sync to the server encrypted, readable only on your devices. Not even we can read them.",
         "Until then, everything you write stays safe on this device.",
       ],
       action: "Set your passphrase",
@@ -342,7 +342,7 @@ export const copy = {
   signin: {
     title: "Sign in",
     lead:
-      "Your entries stay on this device either way — signing in keeps a copy on the server and lets another device carry them too.",
+      "Your entries stay on this device either way; signing in keeps a copy on the server and lets another device carry them too.",
     emailLabel: "Email",
     emailPlaceholder: "you@example.com",
     sendCode: "Send a code",
@@ -380,8 +380,8 @@ export const copy = {
    */
   welcome: {
     title: "Set your passphrase",
-    body: "Signing in keeps a copy of your entries on the server, so any device you sign in on can carry them. That copy is always encrypted, with a key only your devices hold — and your passphrase is what guards the key. It never leaves your device, so no one else can read what you write. Not even us.",
-    later: "Later — until then, new entries stay on this device",
+    body: "Signing in keeps a copy of your entries on the server, so any device you sign in on can carry them. That copy is always encrypted, with a key only your devices hold, and your passphrase is what guards the key. It never leaves your device, so no one else can read what you write. Not even us.",
+    later: "Later. Until then, new entries stay on this device",
   },
 
   /** the Settings page */
@@ -400,9 +400,9 @@ export const copy = {
     agreement: {
       lead: "How Snippets handles your words, and the terms you use it under. Each opens in full.",
       privacy: "Privacy policy",
-      privacySub: "What happens to your data — and what we can and can’t read.",
+      privacySub: "What happens to your data, and what we can and can’t read.",
       terms: "Terms of service",
-      termsSub: "The agreement — what you may expect of us, and we of you.",
+      termsSub: "The agreement: what you may expect of us, and we of you.",
     },
     /**
      * The status indicators that head each protection's own section
@@ -413,11 +413,11 @@ export const copy = {
     protection: {
       encrypted: "Encrypted",
       /** concrete, not a metaphor: the point is that no one else can read them */
-      encryptedSub: "Even we can’t see your entries — only your devices hold the key.",
+      encryptedSub: "Even we can’t see your entries; only your devices hold the key.",
       locked: "Locked",
-      lockedSub: "This device holds no key yet — unlock below to read.",
+      lockedSub: "This device holds no key yet; unlock below to read.",
       notEncrypted: "Not encrypted yet",
-      notEncryptedSub: "Sync waits for a passphrase — set one below.",
+      notEncryptedSub: "Sync waits for a passphrase; set one below.",
       synced: "Synced",
       /** time, then the device/server integrity counts — one line, no repeat below */
       syncedSub: (when: string, counts: string | null) =>
@@ -426,18 +426,18 @@ export const copy = {
       syncingSub: "Carrying your latest entries…",
       syncWaitingSub: "Waiting for the first sync…",
       syncSnag: "Sync snag",
-      syncSnagSub: "Retrying — your entries are safe on this device.",
+      syncSnagSub: "Retrying. Your entries are safe on this device.",
       syncPaused: "Sync paused",
       /** the counts make the pause concrete — what's here vs what waits sealed */
       syncPausedSub: (device: string | null, server: string | null) =>
         device !== null && server !== null
-          ? `Unlock encryption to sync — ${device} on this device, ${server} waiting on the server.`
+          ? `Unlock encryption to sync: ${device} on this device, ${server} waiting on the server.`
           : "Unlock encryption to sync this device.",
       /** signed in but never enrolled — the passphrase is the missing piece */
       syncNeedsSetupSub:
-        "Set an encryption passphrase to start syncing — your entries stay on this device until then.",
+        "Set an encryption passphrase to start syncing; your entries stay on this device until then.",
       signedOut: "Signed out",
-      signedOutSub: "Your session ended — sign in again to keep syncing.",
+      signedOutSub: "Your session ended; sign in again to keep syncing.",
       offline: "Offline",
       offlineSub: "Changes will sync when you’re back.",
       backedUp: "Backed up",
@@ -451,7 +451,7 @@ export const copy = {
     account: {
       heading: "Account",
       signedOutLead:
-        "Sign in and your entries keep a copy on the server — carried to any device you sign in on.",
+        "Sign in and your entries keep a copy on the server, carried to any device you sign in on.",
       signIn: "Sign in",
       signedInAs: (email: string) => `Signed in as ${email}.`,
       signOut: "Sign out",
@@ -463,7 +463,7 @@ export const copy = {
         trigger: "Delete account…",
         title: "Delete your account?",
         body:
-          "This removes your account and everything it keeps on the server — your synced entries, your sign-in, the Google Drive connection — immediately and permanently. The entries on this device stay, and backups already delivered to your Drive remain yours. Hold the button down to be sure.",
+          "This removes your account and everything it keeps on the server (your synced entries, your sign-in, the Google Drive connection) immediately and permanently. The entries on this device stay, and backups already delivered to your Drive remain yours. Hold the button down to be sure.",
         hold: "Hold to delete",
         done: "Your account is gone. This device keeps its copy.",
         failed: "The account couldn’t be deleted. Try again in a moment.",
@@ -475,13 +475,13 @@ export const copy = {
       neverSynced: "Waiting for the first sync…",
       pending: (n: number) =>
         `${n} ${n === 1 ? "entry" : "entries"} waiting to sync.`,
-      offline: "Offline — changes will sync when you’re back.",
-      error: "Sync hit a snag — retrying.",
-      skewed: "This device’s clock runs oddly — sync still works, but times may look off.",
+      offline: "Offline. Changes will sync when you’re back.",
+      error: "Sync hit a snag; retrying.",
+      skewed: "This device’s clock runs oddly; sync still works, but times may look off.",
       /** how sync behaves — concrete on the cadence; keep the "15 minutes"
           in step with IDLE_POLL_MS in sync.ts if that interval ever changes */
       cadence:
-        "Your entries sync the moment you open Snippets and just after you write. While it stays open, it also checks your other devices for changes about every 15 minutes — so a second device you’ve left open catches up within 15 minutes, not instantly.",
+        "Your entries sync the moment you open Snippets and just after you write. While it stays open, it also checks your other devices for changes about every 15 minutes, so a second device you’ve left open catches up within 15 minutes, not instantly.",
       /** the tiny mono integrity line, e.g. "1,204 on device · 1,204 on server" */
       counts: (device: string, server: string) =>
         `${device} on device · ${server} on server`,
@@ -493,7 +493,7 @@ export const copy = {
       /** what pressing it will actually do — the same LWW rule as every
           sync, walked over the whole book; honest about deletions */
       reconcileHint:
-        "This re-checks every entry against the server and keeps whichever copy is newer — the same rule every sync follows, applied to everything at once. Nothing is removed unless you deleted it somewhere yourself.",
+        "This re-checks every entry against the server and keeps whichever copy is newer: the same rule every sync follows, applied to everything at once. Nothing is removed unless you deleted it somewhere yourself.",
     },
     encryption: {
       heading: "Encryption",
@@ -513,46 +513,46 @@ export const copy = {
       recoveryLabel: "Your recovery code",
       enrollTitle: "Set your passphrase",
       enrollBody:
-        "Your entries — including everything you’ve already written — are encrypted with a key only your devices hold before anything reaches the server. Your passphrase guards that key. If you forget it, the recovery code — shown once, next — is the only other way in.",
+        "Your entries, including everything you’ve already written, are encrypted with a key only your devices hold before anything reaches the server. Your passphrase guards that key. If you forget it, the recovery code, shown once, next, is the only other way in.",
       enrollConfirm: "Encrypt my entries",
       enrolling: "Encrypting…",
       tooShort: "A passphrase needs at least ten characters.",
       tooWeak:
-        "That one is still easy to guess — a longer phrase, or a few unexpected words together, is far harder to crack.",
+        "That one is still easy to guess: a longer phrase, or a few unexpected words together, is far harder to crack.",
       // the quiet live read beneath the field, by strength
       strengthWeak: "Still easy to guess.",
       strengthOk: "Strong enough.",
       strengthStrong: "Very strong.",
       mismatch: "Those two didn’t match.",
       wrongSecret:
-        "That didn’t open it. Codes and phrases must match exactly — spaces and capitals included.",
+        "That didn’t open it. Codes and phrases must match exactly: spaces and capitals included.",
       enrollFailed: "Your entries couldn’t be encrypted just now. Try again in a moment.",
       recoveryTitle: "Your recovery code",
       recoveryBody:
-        "Shown exactly once. If you forget your passphrase, this code is the only other key — save it somewhere safe.",
+        "Shown exactly once. If you forget your passphrase, this code is the only other key; save it somewhere safe.",
       downloadKit: "Download recovery file",
       recoveryFileNote:
-        "Downloading saves a plain-text file holding your account email and this recovery code — keep it somewhere private.",
+        "Downloading saves a plain-text file holding your account email and this recovery code; keep it somewhere private.",
       /** the safety-net nudge under the code — Drive backup, surfaced at the
           exact moment key loss becomes imaginable; the link renders after it */
       recoveryDrive:
-        "One more net: connect the Google Drive backup, and readable copies of your entries rest in your own Drive — so even losing the passphrase and this code never costs you the words.",
+        "One more net: connect the Google Drive backup, and readable copies of your entries rest in your own Drive, so even losing the passphrase and this code never costs you the words.",
       recoveryDriveLink: "Connect it in Settings",
       recoveryDone: "I’ve saved it",
     },
     backup: {
       heading: "Backup",
       lead:
-        "A readable copy of your entries — Markdown and a restorable archive — that lands in a Snippets folder in your own Google Drive a little after you write. Yours even if this app disappears.",
+        "A readable copy of your entries (Markdown and a restorable archive) that lands in a Snippets folder in your own Google Drive a little after you write. Yours even if this app disappears.",
       connect: "Connect Google Drive",
       connecting: "Connecting…",
       /** reassurance: the folder is a one-way mirror, safe to touch */
       mirrors:
-        "That folder only mirrors your entries — delete or change anything in it and the next delivery sets it right again.",
+        "That folder only mirrors your entries: delete or change anything in it and the next delivery sets it right again.",
       /** shown when the account is connected but THIS device holds no Drive
           grant yet — any number of devices can hold one and all deliver */
       deliversElsewhere:
-        "Right now it’s your other devices doing the delivering — this one hasn’t been added. Add it and it delivers too; every device you add keeps the copy fresh.",
+        "Right now it’s your other devices doing the delivering; this one hasn’t been added. Add it and it delivers too; every device you add keeps the copy fresh.",
       /** the one-tap per-device grant; reuses the same Google consent */
       connectHere: "Back up from this device too",
       /** e.g. "Backups haven’t gone through since June 30." */
@@ -566,7 +566,7 @@ export const copy = {
       disconnect: "Disconnect",
       disconnecting: "Disconnecting…",
       scopeDeclined:
-        "Google didn’t grant the Drive permission — try again and leave the box ticked.",
+        "Google didn’t grant the Drive permission; try again and leave the box ticked.",
       connectFailed: "Drive couldn’t be connected. Try again in a moment.",
       disconnectFailed: "Couldn’t disconnect just now. Try again in a moment.",
     },
@@ -589,17 +589,17 @@ export const copy = {
       eraseDesc:
         "Erase every entry on this device, permanently. Export a copy first if you might want one.",
       eraseDescSynced:
-        "Erase every entry — here, on the server, and on every device signed in to this account — permanently. Your Google Drive backup mirrors this: the next delivery empties it too. Export a copy first if you might want one.",
+        "Erase every entry (here, on the server, and on every device signed in to this account) permanently. Your Google Drive backup mirrors this: the next delivery empties it too. Export a copy first if you might want one.",
       eraseHold: "Hold to erase",
       deleteTitle: "Delete account",
       deleteDesc:
-        "Remove your account and everything it keeps on the server — your sign-in, synced entries, and the Google Drive connection. This device keeps its copy.",
+        "Remove your account and everything it keeps on the server: your sign-in, synced entries, and the Google Drive connection. This device keeps its copy.",
       deleteHold: "Hold to delete",
     },
     data: {
       heading: "Your data",
       lead:
-        "Everything lives in this browser — kept on this device, yours alone.",
+        "Everything lives in this browser, kept on this device, yours alone.",
       /** "{n} entries so far." — inserted mid-paragraph */
       countSoFar: (n: number) =>
         `${n} ${n === 1 ? "entry" : "entries"} so far.`,
@@ -612,9 +612,9 @@ export const copy = {
         "The browser has agreed to keep this data even if the device runs low on space.",
       /** persistence denied — name the concrete circumstance, and the way out */
       storageEvictableSignedOut:
-        "If this device runs low on space, the browser is allowed to clear this site’s data — and your entries with it. Signing in keeps a copy on the server.",
+        "If this device runs low on space, the browser is allowed to clear this site’s data, and your entries with it. Signing in keeps a copy on the server.",
       storageEvictableSignedIn:
-        "If this device runs low on space, the browser is allowed to clear this site’s data — your entries stay safe on the server.",
+        "If this device runs low on space, the browser is allowed to clear this site’s data; your entries stay safe on the server.",
       /** shown under a best-effort line — why it matters, what helps */
       exportJSON: "Export JSON",
       exportMarkdown: "Export Markdown",
@@ -633,7 +633,7 @@ export const copy = {
       body:
         "This erases every entry on this device, permanently. If you want a copy first, export before you do this. Hold the button down to be sure.",
       bodySynced:
-        "This erases every entry — here, on the server, and on every device signed in to this account, permanently. Your Google Drive backup mirrors this: the next delivery empties it too. If you want a copy first, export before you do this. Hold the button down to be sure.",
+        "This erases every entry (here, on the server, and on every device signed in to this account) permanently. Your Google Drive backup mirrors this: the next delivery empties it too. If you want a copy first, export before you do this. Hold the button down to be sure.",
       cancel: "Keep everything",
       hold: "Hold to erase",
       holding: "Hold…",
@@ -654,7 +654,7 @@ export const copy = {
     keepFailed: "That didn’t take. Try again.",
     /** the loud, specific case: the device is out of room */
     storageFull:
-      "This device’s storage is full — that entry was not saved. Your words are still in the composer; clear some space and keep it again.",
+      "This device’s storage is full; that entry was not saved. Your words are still in the composer; clear some space and keep it again.",
   },
 } as const;
 

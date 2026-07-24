@@ -230,3 +230,33 @@ describe("copy clarity — STE-informed checks on the technical register", () =>
     expect(true).toBe(true);
   });
 });
+
+// ── the em-dash ban (the "AI prose" tell) ────────────────────────
+// Owner's call: no em-dash (—) anywhere a user can read it. A machine em-dash
+// reads as generated prose and quietly costs trust, so we recast every one with
+// a colon, comma, period, or parentheses. This is a pure-character rule, so
+// unlike the STE checks above it runs over ALL user-facing copy — the literary
+// register included — plus the policy pages' Markdown. Code comments are not
+// user-facing and are not scanned (the check reads copy strings, never source).
+describe("no em-dashes in user-facing copy", () => {
+  const strings: string[] = [];
+  collectStrings(copy, strings);
+  // exempt: the OG alt text quotes the words on the designed share image, so its
+  // em-dash moves only when that image is rebaked, not when copy is edited.
+  const OG_ALT_MARK = "fanned stack of the app";
+  const copyStrings = strings.filter((s) => !s.includes(OG_ALT_MARK));
+  const pageStrings = PAGES.filter((r) => r.endsWith(".mdx")).flatMap((rel) => {
+    const abs = fileURLToPath(new URL(rel, import.meta.url));
+    return existsSync(abs) ? mdxProse(readFileSync(abs, "utf8")) : [];
+  });
+
+  it("uses no em-dash (—); recast with a colon, comma, period, or parentheses", () => {
+    const offenders = [...copyStrings, ...pageStrings].filter((s) => s.includes("—"));
+    if (offenders.length)
+      throw new Error(
+        `em-dash (—) found in ${offenders.length} user-facing string(s); recast each:\n\n` +
+          offenders.map((s) => `    "${s}"`).join("\n\n"),
+      );
+    expect(offenders).toEqual([]);
+  });
+});
