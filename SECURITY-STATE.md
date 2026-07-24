@@ -8,6 +8,13 @@ below. When a privacy- or security-relevant behavior changes, update
 this file **in the same commit** — the Change log at the bottom is how we
 avoid describing yesterday's architecture as if it were today's.
 
+**Authoring rule:** describe mechanism, not motive; anchor each claim to a
+code symbol (a constant, function, route, or test) so a reader can verify
+it. A stated *purpose* has nothing to test against and rots silently — if a
+"we keep X for reason Y" claim can't name the code that consumes X, drop the
+Y or trace it first. (This is how a false "content kept 30 days for
+cross-device undo" line survived here: no such consumer existed.)
+
 How to use it:
 - **Before editing any privacy/terms/Settings/verify copy:** read the
   matching row in Current state; the copy must match the *architecture*
@@ -116,10 +123,23 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   configured speech WebSocket origins. Plus `frame-ancestors/object-src/
   base-uri 'none'`, `form-action 'self'`, DNS-prefetch off, same-origin
   referrer, microphone-to-self Permissions-Policy.
-- **Source:** `next.config.ts` (speech origins derived from
-  `speech-providers.ts`). Escape hatch: `CSP_REPORT_ONLY=1`.
+- **Source:** `src/lib/security-headers.ts` (built from `speech-providers.ts`),
+  applied by `next.config.ts`. Escape hatch: `CSP_REPORT_ONLY=1`.
 - **A new external origin is a privacy event:** update the provider table
   (or config), `/verify`, and the privacy page in the same commit.
+- **`script-src` keeps `'unsafe-inline'`** — it is genuinely required by
+  Next.js's inline RSC bootstrap scripts (unhashable per-build; SRI is
+  webpack-only, broken on Turbopack). Removing it needs a per-request
+  nonce, which forces every page to render dynamically (loses Vercel's
+  static-HTML edge cache). Judged not worth that trade for now; every
+  other directive is tight. The nonce path is written up in BACKLOG.
+- **`access-control-allow-origin: *` is benign, not ours.** Vercel's CDN
+  stamps it on public static assets and the static `/`→`/calendar`
+  redirect only — never on our cookie-authed Node API routes, and `*` is
+  spec-incompatible with credentials, so it cannot expose logged-in data.
+  No code sets it; no action taken. (Confirm live if wanted:
+  `curl -sI https://www.snippets.ink/api/sync/status | grep -i access-control`
+  → expect no line.)
 
 ### Data we collect
 - Sign-in needs your email (and, with Google, your name + profile
@@ -129,8 +149,19 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   backup-stopped warning.
 
 ### Leaving
-- Erase-all soft-deletes everywhere (propagates as tombstones; content
-  kept ≤30 days for cross-device undo, then scrubbed to an id + timestamp).
+- Erase-all is permanent — there is no in-app undo for it (unlike a single
+  delete, which has a 10-second local undo toast). It soft-deletes
+  everywhere (propagates as tombstones), and a delivering device empties
+  the Drive backup on its next run. The permanent part is the tombstone
+  (id + timestamps, no words), kept forever server-side — that permanence,
+  not the payload, is what stops resurrection. The encrypted payload lingers
+  ≤30 days, then the cron scrubs it. That window feeds no feature today
+  (single undo reads the local row, not the server; no restore-erased UI
+  exists), so it is only a grace period before destruction and future
+  optionality for a restore feature; the plumbing (payload-carrying pull +
+  `restoreSnippet`) already exists. `PURGE_AFTER_MS` (client) and
+  `TOMBSTONE_SCRUB_AFTER_MS` (server) are the paired 30-day constants; the
+  privacy copy's "within 30 days" must move with them.
   Account deletion removes the account, synced entries + tombstones,
   wrapped keys, and backup record from the server immediately; revokes
   the Drive grant. Device copies and delivered Drive files remain yours.
@@ -160,9 +191,13 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   "We cannot read your entries. Not won't, can't." + 4-row data-flow
   table is **gated** on the pre-2026-07-23 accounts re-encrypting — see
   BACKLOG #14. Do not swap it in until the gate check passes.
-- **Database-backup retention figure** on the privacy page (currently
-  "within 24 hours") is a placeholder pending confirmation of the Neon
-  point-in-time-restore window for this project.
+- **The short privacy page + digestibility revision** is on preview branch
+  `claude/privacy-short-page-preview`, pending owner review and merge. The
+  gate is met, so the unqualified
+  "We cannot read your entries" headline is architecturally true. Not yet
+  on prod.
+- The old "early accounts / plaintext lingers" note is removed from the
+  privacy page, because the re-encryption gate in BACKLOG #14 passed.
 - **Soniox / Speechmatics are wired but dormant** until their API keys
   are set in the environment. Until then the active chain is whatever
   keys exist (likely Deepgram, mip-opted-out). The privacy page names
@@ -177,6 +212,37 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-07-24 — MDX policy pages; deletion copy corrected; em-dash ban (preview)
+No behavior change. The privacy/terms/verify pages moved to `.mdx` (owner
+can edit the prose as Markdown). Corrected a real drift: the erase story
+described a "cross-device undo" that does not exist. The 30-day payload
+retention feeds no feature (single undo reads the local row, not the
+server; no restore-erased UI), so the privacy "Leaving" copy now leads
+with "erasing is permanent, export first" and frames the 30 days as the
+server finishing destruction, not a recovery window; the Drive-empties-on-
+next-delivery fact is stated. This entry's `### Leaving` bullet above was
+fixed to match. Also: em-dashes purged from all user-facing copy (they read
+as AI prose) with a new copy-clarity rule banning `—` across `copy` + the
+policy pages; the OG alt text is exempt (its em-dash quotes the designed
+share image). On preview branch, pending merge.
+
+### 2026-07-23 — privacy/verify digestibility revision (preview)
+Seven-pass audit → shorter, plainer pages. Trust fixes: the voice glance
+line no longer overclaims "then it is gone" (it contradicted our own
+Deepgram retention line); Backup now says "unencrypted" and states
+"Google can read them" in the glance; a "no catch — no ads, no selling,
+no training" row surfaces that concern up top. De-jargon: "your entries"
+not "your words", "saved" not "kept/written into", the verify network
+table made plain (no "payload / v/iv/ct / API-key" register). Consolidation:
+duplicate encryption/Drive explanations cut, Voice reordered above Drive.
+Styling: all three policy pages unified on `SectionHeading` (sticky
+`policy.tsx` + CSS retired). Copy voice updated (law 7 + DESIGN.md) with
+new lint rules (`your book`, `v/iv/ct`, `payload`-on-pages banned). CORS
+finding documented as benign; CSP `unsafe-inline` kept (nonce backlogged).
+Also fixed a real render bug: the JSX transform drops the literal space
+after a closing tag, so "cannotsend"/"Content-Security-Policyheader" — now
+explicit `{" "}`. On preview branch, pending merge.
 
 ### 2026-07-23 — the privacy & security push
 - **Deepgram opted out of model-improvement** (`mip_opt_out=true` on every

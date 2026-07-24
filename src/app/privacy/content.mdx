@@ -1,0 +1,57 @@
+import { Flows, Flow, Providers, Deepdive } from "@/components/policy-mdx";
+
+export const updated = "July 24, 2026";
+
+# We cannot read your entries.
+
+<Flows>
+  <Flow label="Your entries">Saved locally on this device. If you're not signed in, they never reach us.</Flow>
+  <Flow label="Sync">If you're signed in, all entries are encrypted on your device before they're sent to us. We keep the encrypted copies, never the key that opens them.</Flow>
+  <Flow label="Speech-to-text">Streams to a transcription service to become text. We never receive or store the audio; the service transcribes it under its own policy (named below).</Flow>
+  <Flow label="Backup">Off until you turn it on. Then unencrypted copies go to a folder in your own Google Drive, your safety net if you lose your key. Google can read them, like any file in your Drive.</Flow>
+  <Flow label="The catch">There isn't one. No ads, and we never sell your entries or train AI on them.</Flow>
+</Flows>
+
+Don't take our word for it. Snippets runs in your browser, so turn on airplane mode and keep writing; everything works. If you're signed in, you can check that the only network requests we receive are already encrypted. [See how to check it yourself →](/verify)
+
+## How the encryption works
+
+Before an entry leaves your device, your browser encrypts it: the words become a random-looking string of characters (what our server receives) that can be turned back into text only with one specific key: a long random number made on your device and never sent to us. Your browser holds it as a "non-extractable key," whose raw value no code can read, this app's included.
+
+If you sign in, you set a passphrase and are given a recovery code. Each one encrypts its own copy of the non-extractable key, on your device, and only those two encrypted copies reach our server, so that any of your devices can rebuild the key once you enter your passphrase or recovery code. The passphrase and recovery code never leave your browser. This is the design Signal, Proton Mail, and Bitwarden use. Encryption cannot be turned off.
+
+**One honest limit every encrypted web app lives with.** The app is a website: your browser downloads its code from us on each visit, so you are trusting that code. But don't take our word for it, [verify for yourself that the app works as we explained it →](/verify)
+
+<Deepdive>
+Every entry is encrypted with `AES-256-GCM` (an authenticated cipher, so a tampered entry fails to open rather than decrypting to something wrong) under a fresh random value each time, so two identical entries still encrypt to different characters. The entry's identifier and timestamps are bound into that check, so a moved, rolled-back, or resurrected entry fails to open too. All of your entries share one random 256-bit key, made on your device.
+
+That key is encrypted by your passphrase and by your recovery code, so it can travel between your devices without ever being exposed: once under a key stretched from your passphrase with `PBKDF2-HMAC-SHA-256, 600,000 iterations` and a random salt, and once under a key stretched from a ~120-bit recovery code. The server stores only those two encrypted copies, written once and never silently replaced; it can open neither, and they can be removed only by deleting your account.
+
+On your device the key is held as a `non-extractable CryptoKey`: the browser decrypts with it but will not export its bytes, even to the page's own scripts. What rests on the server is the encrypted text of each entry plus the fields sync needs in the clear: an identifier, timestamps, and a change counter, but no entry text. So the server can tell that an entry exists, roughly how long it is, and when it last changed, but never what it says.
+</Deepdive>
+
+## Voice
+
+If you speak an entry with the app's transcription button, the app streams your audio to a transcription service and the words come back as you speak. We never receive or store the audio; it goes straight from your device to the service. Typing never touches the network.
+
+<Providers />
+
+If the transcription service cannot be reached, the app falls back to your browser's own dictation. That path is the browser's, not ours: on most devices the browser sends the audio to its maker's speech servers (Google's or Apple's), under their policies, and that traffic does not show in this app's network activity.
+
+## Google Drive backup
+
+If you connect Google Drive, unencrypted copies land in a folder in your own Drive named "Snippets", so that if you lose your passphrase and recovery code you can still import your entries, and if this app ever disappears you still hold an up-to-date copy. These are plain, readable files by design; that is what lets them rescue you. They live in your Google account, where Google can read them like any other file in your Drive ([Google's privacy policy](https://policies.google.com/privacy)).
+
+The permission this app uses (`drive.file`) lets it see only files it created; it cannot read, list, or touch anything else in your Drive. Your device makes these files and uploads them straight to Google, so our server never receives them, and it keeps none of your Drive credentials.
+
+## What we collect
+
+Signing in needs your email address (and, if you use Google, the name and profile picture on your Google account). That is all. We keep no passwords, and signing in is never required to use the app. The only emails we send are the ones you cause: a sign-in code, or a warning that your backups have stopped going through.
+
+## Leaving
+
+**Erasing your entries** ([Settings](/settings), "Let everything go") is permanent: there is no undo once you confirm it. It marks every entry deleted, and that deletion syncs to the server and to every device you are signed in on, so the entry disappears everywhere (your Drive backup is emptied on its next delivery too). We mark rather than wipe on the spot so the deletion reaches your other devices; a silent local wipe would not travel, and the entry would come back from another device. The encrypted words are then destroyed on the server within 30 days, and an empty marker (an id and timestamps, no words) is kept for good so a device that was offline during the erase still deletes its copy when it reconnects. If you might want anything back, export it first.
+
+**Deleting your account** (Settings → Account) removes the account itself (your sign-in, the Google connection, every synced entry and its deletion-marker, and the backup record) from the server immediately and for good; we also ask Google to revoke the Drive connection. Copies on your devices, and backup files already in your Drive, remain yours.
+
+Questions can go to [snippets.support@gmail.com](mailto:snippets.support@gmail.com). The agreement side (what you may expect of us, and we of you) lives in the [terms of service](/terms).

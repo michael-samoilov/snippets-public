@@ -432,3 +432,45 @@ owner says go: run gitleaks/trufflehog over full history first; if
 anything surfaces, publish a fresh-history mirror and rotate the
 secret regardless; add LICENSE + a short outsider README. Publishing
 upgrades every /verify claim from "we say" to "you can read."
+
+## 18. CSP: drop `unsafe-inline` from script-src via a nonce
+
+securityheaders.com flags `'unsafe-inline'` in `script-src` (yellow;
+overall grade A). It's genuinely required today: the only inline scripts
+in the served HTML are Next's per-build RSC bootstrap (`self.__next_f.push`),
+which are unhashable, and Next's SRI is webpack-only (broken on
+Turbopack, our bundler). The ONLY clean removal is a per-request nonce.
+
+Investigated approach (2026-07-23) if the owner wants the hardening:
+- Generate a nonce in `src/proxy.ts` (Next 16's middleware); set it on
+  BOTH the request and response `Content-Security-Policy` header so Next's
+  renderer stamps its own scripts; broaden the matcher to page routes
+  (exclude `/api`, `/_next/static`, `/_next/image`, prefetches); fold in
+  the existing prod-only `/lab` 404 + debug-param logic already there.
+- `src/lib/security-headers.ts`: add `buildCsp(nonce)`; move CSP to the
+  proxy, keep the 4 static headers (nosniff/referrer/permissions/dns) in
+  `next.config.ts` to avoid a duplicate CSP header. `script-src 'self'
+  'nonce-…' blob:` (drop `'unsafe-inline'`; keep `'self'`/`blob:`). Keep
+  `'unsafe-inline'` on `style-src` (nonces don't cover inline `style=`;
+  lower risk; the scanner grades only script-src).
+- `src/app/layout.tsx`: make it async, `const nonce = (await headers())
+  .get('x-nonce')`, pass `nonce` to both inline `<script>` tags
+  (APP_HEIGHT_SCRIPT, FIRST_RUN_SCRIPT — they carry it fine).
+- `src/components/providers.tsx`: pass `nonce` to `<ThemeProvider>`
+  (next-themes 0.4.6 supports a `nonce` prop).
+- `security-invariants.test.ts`: assert `script-src` has no
+  `'unsafe-inline'` and contains `'nonce-'` (shape, not value — it's
+  per-request); re-run the zero-violation sweep against a live server.
+- Update `/verify` Test 3 to drop the "the header allows inline scripts"
+  caveat.
+
+THE COST (why it's deferred, not done): reading the nonce forces every
+page to render DYNAMICALLY — Next can't statically prerender a page that
+reads per-request headers. That loses Vercel's static-HTML edge caching
+(higher first-load TTFB, more serverless invocations). For this
+local-first PWA the practical impact is small (it runs client-side and
+the service worker caches the document + its matching CSP header
+together, so offline stays consistent), but it's a real architectural
+trade for a scanner green. Owner's call; default is to keep
+`'unsafe-inline'` — every other CSP directive is already tight, and it
+only bites alongside an injection sink.

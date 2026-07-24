@@ -112,7 +112,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    words the user already owns: **encrypt your entries**, not *seal your
    book*; **your entries**, not *your book* (allow "book"/"notebook" only
    in warm, descriptive prose where it's deliberate, and never the
-   non-idiomatic "commonplace book"). Metaphor earns its place only when
+   non-idiomatic "commonplace book"). **Entries are entries** — never
+   *your words*, *your book*, or *what you've written*; an entry is
+   **saved** (not *kept*, *set*, or *written into the device*); a voice
+   recording is a **recording** (not *a take*). "Book"/"notebook" survive
+   only as a code identifier (the `book-card` class, the crypto *book
+   key*), never in user-facing copy. This is *one word per meaning*
+   applied to the app's own nouns — the desk/paper metaphor is the visual
+   skin, and *words/book/keeps/take* are exactly the skin-words that turn
+   ambiguous the moment copy explains a mechanism. Depart for readability
+   where a literal word would be clunky, but the default is the concrete
+   noun. Metaphor earns its place only when
    it names an actual on-screen object — the **wax seal** you tap to
    record/keep is real, so "tap the seal" stays — or genuinely aids
    understanding; otherwise the plainer word wins. When in doubt, prefer
