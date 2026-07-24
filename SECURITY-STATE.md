@@ -8,6 +8,13 @@ below. When a privacy- or security-relevant behavior changes, update
 this file **in the same commit** — the Change log at the bottom is how we
 avoid describing yesterday's architecture as if it were today's.
 
+**Authoring rule:** describe mechanism, not motive; anchor each claim to a
+code symbol (a constant, function, route, or test) so a reader can verify
+it. A stated *purpose* has nothing to test against and rots silently — if a
+"we keep X for reason Y" claim can't name the code that consumes X, drop the
+Y or trace it first. (This is how a false "content kept 30 days for
+cross-device undo" line survived here: no such consumer existed.)
+
 How to use it:
 - **Before editing any privacy/terms/Settings/verify copy:** read the
   matching row in Current state; the copy must match the *architecture*
