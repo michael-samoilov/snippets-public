@@ -29,19 +29,24 @@ export function KbdScrollDebug() {
   useEffect(() => {
     if (!on) return;
     const vv = window.visualViewport;
-    const counts = { book: 0, main: 0, win: 0, vv: 0 };
+    const counts = { book: 0, main: 0, win: 0, vv: 0, ta: 0 };
     const oy = (el: HTMLElement | null) => (el ? getComputedStyle(el).overflowY : "-");
     const find = () => ({
       book: document.querySelector<HTMLElement>("[data-book-scroller]"),
       main: document.querySelector<HTMLElement>("main"),
+      ta: document.querySelector<HTMLTextAreaElement>("textarea[data-room-pin]"),
     });
 
     const render = () => {
-      const { book, main } = find();
+      const { book, main, ta } = find();
       setTxt(
         [
           `book ${book ? Math.round(book.scrollTop) : "-"}  x${counts.book}  oy:${oy(book)}`,
           `main ${main ? Math.round(main.scrollTop) : "-"}  x${counts.main}  oy:${oy(main)}`,
+          // ta = the composer TEXTAREA's own scroll. If dragging the caret up
+          // scrolls the card's words, THIS climbs; if it stays flat, iOS isn't
+          // scrolling the field at all — the key signal.
+          `ta   ${ta ? Math.round(ta.scrollTop) : "-"}  x${counts.ta}  of ${ta ? ta.scrollHeight - ta.clientHeight : "-"}`,
           `win  ${Math.round(window.scrollY)}  x${counts.win}`,
           `vv   top:${vv ? vv.offsetTop.toFixed(1) : "-"}  h:${vv ? Math.round(vv.height) : "-"}  x${counts.vv}`,
           `pin  ${book?.getAttribute("data-pin-held") ?? "off"}`,
@@ -53,11 +58,13 @@ export function KbdScrollDebug() {
     const onMain = () => { counts.main++; render(); };
     const onWin = () => { counts.win++; render(); };
     const onVv = () => { counts.vv++; render(); };
+    const onTa = () => { counts.ta++; render(); };
 
-    // the book scroller mounts/unmounts with the calendar view; (re)wire on an
-    // interval so the listeners always sit on the live element
+    // the book scroller / composer mount/unmount with the view; (re)wire on an
+    // interval so the listeners always sit on the live elements
     let book: HTMLElement | null = null;
     let main: HTMLElement | null = null;
+    let ta: HTMLTextAreaElement | null = null;
     const wire = () => {
       const f = find();
       if (f.book !== book) {
@@ -69,6 +76,11 @@ export function KbdScrollDebug() {
         main?.removeEventListener("scroll", onMain);
         main = f.main;
         main?.addEventListener("scroll", onMain, { passive: true });
+      }
+      if (f.ta !== ta) {
+        ta?.removeEventListener("scroll", onTa);
+        ta = f.ta;
+        ta?.addEventListener("scroll", onTa, { passive: true });
       }
       render();
     };
@@ -82,6 +94,7 @@ export function KbdScrollDebug() {
       clearInterval(iv);
       book?.removeEventListener("scroll", onBook);
       main?.removeEventListener("scroll", onMain);
+      ta?.removeEventListener("scroll", onTa);
       window.removeEventListener("scroll", onWin);
       vv?.removeEventListener("scroll", onVv);
       vv?.removeEventListener("resize", render);
