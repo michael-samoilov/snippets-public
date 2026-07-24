@@ -56,7 +56,7 @@ export function Providers() {
             >
               {p.label}
             </a>
-            {" — "}
+            {": "}
             {p.retentionLine}
           </li>
         ))}
@@ -114,7 +114,7 @@ export function ProviderRow() {
   if (providers.length === 0) return null;
   return (
     <Req name={providers.map((p) => p.wsOrigin.replace("wss://", "")).join(", ")}>
-      your audio, streaming to {providers.map((p) => p.label).join(" or ")} —
+      your audio, streaming to {providers.map((p) => p.label).join(" or ")},
       only while the wax seal is lit, never after.
     </Req>
   );

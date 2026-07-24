@@ -246,11 +246,31 @@ describe("no em-dashes in user-facing copy", () => {
     return existsSync(abs) ? mdxProse(readFileSync(abs, "utf8")) : [];
   });
 
+  // Components that render user-facing copy directly (JSX text / string
+  // literals), not via `copy` or the .mdx — the policy pages' structured
+  // pieces. Strip comments first (JSDoc there legitimately uses em-dashes),
+  // then any remaining — is in text the reader sees. Full-line `//` only, so
+  // an inline `//` in a URL (e.g. "wss://") is left intact.
+  const COMPONENT_COPY = ["../components/policy-mdx.tsx"];
+  const componentHits = COMPONENT_COPY.flatMap((rel) => {
+    const abs = fileURLToPath(new URL(rel, import.meta.url));
+    if (!existsSync(abs)) return [];
+    const src = readFileSync(abs, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "") // block + JSX {/* */} comments
+      .split("\n")
+      .filter((l) => !/^\s*\/\//.test(l)) // full-line // comments
+      .join("\n");
+    return src.includes("—") ? [`${rel} (em-dash in JSX text or a string)`] : [];
+  });
+
   it("uses no em-dash (—); recast with a colon, comma, period, or parentheses", () => {
-    const offenders = [...copyStrings, ...pageStrings].filter((s) => s.includes("—"));
+    const offenders = [
+      ...[...copyStrings, ...pageStrings].filter((s) => s.includes("—")),
+      ...componentHits,
+    ];
     if (offenders.length)
       throw new Error(
-        `em-dash (—) found in ${offenders.length} user-facing string(s); recast each:\n\n` +
+        `em-dash (—) found in ${offenders.length} user-facing spot(s); recast each:\n\n` +
           offenders.map((s) => `    "${s}"`).join("\n\n"),
       );
     expect(offenders).toEqual([]);
