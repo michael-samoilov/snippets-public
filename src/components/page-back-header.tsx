@@ -73,11 +73,17 @@ export function PageBackHeader({
       {/* the page's own scroller — content clips at the hairline and never
           overlaps the header above it (the -mx/px pair keeps focus rings and
           selection shadows at the content edge inside the clip) */}
+      {/* pt-6 lives on an INNER wrapper, not the scroller itself: scroller
+          padding is fixed and non-scrolling, so a sticky heading pinned at
+          top:0 sits BELOW it, leaving a transparent strip where scrolling
+          content shows through above the heading (the policy pages' sticky
+          section heads leap-frogged their own text). As scrolling content,
+          the gap scrolls away and the heads pin flush at the true top. */}
       <div
         ref={scrollRef}
-        className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pt-6 [scrollbar-width:none]"
+        className="-mx-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 [scrollbar-width:none]"
       >
-        {children}
+        <div className="pt-6">{children}</div>
         {/* fold room as a real spacer, NOT scroller padding: it keeps the
             last control off the fold so the foot terminus only ever overlaps
             blank paper — and padding would break the terminus itself, since

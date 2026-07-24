@@ -17,6 +17,7 @@ import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
   PAYLOAD_FORMAT_PLAIN,
   PAYLOAD_FORMAT_SEALED,
+  PAYLOAD_FORMAT_SEALED_AAD,
   type PushResult,
   type SnippetPayload,
   type WireRow,
@@ -26,15 +27,28 @@ export const runtime = "nodejs";
 
 const MAX_PAYLOAD_BYTES = 64_000;
 
+// Only sealed formats may be pushed: format 2 (legacy AES-GCM envelope)
+// and format 3 (envelope with the row's cleartext fields AAD-bound).
+// Format 1 (plaintext) is refused outright — see the 409 below — so the
+// "we cannot read your entries" claim rests on the server's own refusal,
+// not on client good behaviour. The payload must also LOOK like an
+// envelope: a sealed format wrapping plaintext fields is rejected here,
+// so mislabeling can't smuggle readable content in.
+const sealedPayloadSchema = z
+  .object({
+    v: z.literal(1),
+    iv: z.string().min(1),
+    ct: z.string().min(1),
+  })
+  .strict();
+
 const changeSchema = z.object({
   id: z.string().min(10).max(40),
-  // format 1 = plaintext JSON; format 2 = a sealed AES-GCM envelope the
-  // server stores and merges without ever being able to open
   payloadFormat: z.union([
-    z.literal(PAYLOAD_FORMAT_PLAIN),
     z.literal(PAYLOAD_FORMAT_SEALED),
+    z.literal(PAYLOAD_FORMAT_SEALED_AAD),
   ]),
-  payload: z.record(z.string(), z.unknown()),
+  payload: sealedPayloadSchema,
   updatedAt: z.number().int().positive(),
   deletedAt: z.number().int().positive().nullable().optional(),
 });
@@ -73,7 +87,23 @@ export async function POST(request: Request) {
   if (!session)
     return Response.json({ error: "signed out" }, { status: 401 });
 
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const body = await request.json().catch(() => null);
+
+  // A plaintext (format 1) push gets its own status, distinct from a
+  // malformed one: a stale client that predates required encryption
+  // must be told "enroll first" — which it maps to the needs-setup
+  // pause — not left retrying a generic 400.
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    Array.isArray((body as { changes?: unknown }).changes) &&
+    (body as { changes: { payloadFormat?: unknown }[] }).changes.some(
+      (c) => c?.payloadFormat === PAYLOAD_FORMAT_PLAIN,
+    )
+  )
+    return Response.json({ error: "encryption_required" }, { status: 409 });
+
+  const parsed = bodySchema.safeParse(body);
   if (!parsed.success)
     return Response.json({ error: "malformed push" }, { status: 400 });
   for (const change of parsed.data.changes) {

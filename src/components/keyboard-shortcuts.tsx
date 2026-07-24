@@ -7,7 +7,7 @@ import { copy } from "@/lib/copy";
  *  top highlight + a hair of shadow), serif like every other control. */
 function Key({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded-[5px] border border-rule bg-paper px-1.5 py-[3px] font-serif text-[0.72rem] leading-none text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_1px_rgb(var(--shadow-hue)/0.08)]">
+    <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded-[5px] border border-rule bg-paper px-1.5 py-[3px] font-serif text-[0.8rem] leading-none text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_1px_rgb(var(--shadow-hue)/0.08)]">
       {children}
     </kbd>
   );
@@ -18,7 +18,7 @@ function Key({ children }: { children: React.ReactNode }) {
 function Row({ keys, label }: { keys: React.ReactNode[]; label: string }) {
   return (
     <div className="flex items-center justify-between gap-4 py-[7px]">
-      <span className="voice-prose text-[0.9rem] text-ink">{label}</span>
+      <span className="voice-prose text-[1rem] text-ink">{label}</span>
       <span className="flex shrink-0 items-center gap-1">{keys}</span>
     </div>
   );
@@ -62,12 +62,12 @@ export function KeyboardShortcuts({
             transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="voice-label mb-1 text-[0.7rem] text-ink-faint">
+            <h2 className="voice-label mb-1 text-[0.78rem] text-ink-faint">
               {c.title}
             </h2>
 
             <section className="border-t border-rule-faint pt-2">
-              <h3 className="voice-label mb-1 text-[0.62rem] text-ink-faint">{c.groups.move}</h3>
+              <h3 className="voice-label mb-1 text-[0.69rem] text-ink-faint">{c.groups.move}</h3>
               <Row keys={[<Key key="e">Esc</Key>]} label={c.back} />
               <Row keys={[<Key key="s">/</Key>]} label={c.search} />
               <Row keys={[<Key key="t">t</Key>]} label={c.today} />
@@ -77,7 +77,7 @@ export function KeyboardShortcuts({
             </section>
 
             <section className="mt-2 border-t border-rule-faint pt-2">
-              <h3 className="voice-label mb-1 text-[0.62rem] text-ink-faint">{c.groups.write}</h3>
+              <h3 className="voice-label mb-1 text-[0.69rem] text-ink-faint">{c.groups.write}</h3>
               <Row keys={[<Key key="c">c</Key>]} label={c.capture} />
               <Row keys={[<Key key="e">e</Key>]} label={c.edit} />
               <Row keys={[<Key key="ent">↵</Key>]} label={c.file} />
@@ -85,7 +85,7 @@ export function KeyboardShortcuts({
             </section>
 
             <section className="mt-2 border-t border-rule-faint pt-2">
-              <h3 className="voice-label mb-1 text-[0.62rem] text-ink-faint">{c.groups.grid}</h3>
+              <h3 className="voice-label mb-1 text-[0.69rem] text-ink-faint">{c.groups.grid}</h3>
               <Row keys={[<Key key="l">←</Key>, <Key key="r">→</Key>]} label={c.dayStep} />
               <Row keys={[<Key key="u">↑</Key>, <Key key="d">↓</Key>]} label={c.weekStep} />
               <Row keys={[<Key key="pu">⇞</Key>, <Key key="pd">⇟</Key>]} label={c.monthStep} />
@@ -94,7 +94,7 @@ export function KeyboardShortcuts({
             </section>
 
             <section className="mt-2 border-t border-rule-faint pt-2">
-              <h3 className="voice-label mb-1 text-[0.62rem] text-ink-faint">{c.groups.global}</h3>
+              <h3 className="voice-label mb-1 text-[0.69rem] text-ink-faint">{c.groups.global}</h3>
               <Row keys={[<Key key="cmd">⌘</Key>, <Key key="k">K</Key>]} label={c.command} />
               <Row keys={[<Key key="q">?</Key>]} label={c.thisSheet} />
             </section>

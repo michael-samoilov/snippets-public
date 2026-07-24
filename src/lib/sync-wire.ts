@@ -7,16 +7,24 @@
  */
 import type { Snippet } from "@/lib/types";
 import {
+  aadForRow,
   decryptJSON,
   encryptJSON,
   isEncryptedPayload,
   type EncryptedPayload,
 } from "@/lib/crypto";
 
-/** format 1: the payload is the snippet's content fields, plaintext JSON */
+/** format 1: the payload is the snippet's content fields, plaintext JSON.
+    Legacy — the client no longer writes it and the server refuses it on
+    push; it survives here only so old server rows still open on pull. */
 export const PAYLOAD_FORMAT_PLAIN = 1;
-/** format 2: the payload is an AES-GCM envelope only the writer's devices can open */
+/** format 2: an AES-GCM envelope only the writer's devices can open.
+    Legacy — readable, never written; re-sealed as format 3 on next push. */
 export const PAYLOAD_FORMAT_SEALED = 2;
+/** format 3: format 2 plus the row's cleartext fields (`id`, `updatedAt`,
+    `deletedAt`, `payloadFormat`) bound into the cipher as AES-GCM AAD, so
+    a moved, rolled-back, or resurrected envelope fails to open. */
+export const PAYLOAD_FORMAT_SEALED_AAD = 3;
 
 export type SnippetPayload = Omit<
   Snippet,
@@ -100,23 +108,29 @@ export class KeyMismatchError extends Error {
 }
 
 /**
- * Encode a snippet for the wire. With a book key, the content fields
- * seal into an AES-GCM envelope (format 2); without, plaintext
- * (format 1). Identity and the sync clocks stay outside either way —
- * they're what the server merges on.
+ * Encode a snippet for the wire: the content fields seal into an
+ * AES-GCM envelope with the row's identity and clocks bound in as AAD
+ * (format 3). Identity and the sync clocks stay outside — they're what
+ * the server merges on — but the AAD binding means they can't be
+ * *changed* without the envelope refusing to open. There is no
+ * plaintext branch: the key is required, so a plaintext push is a
+ * compile error, not a runtime path.
  */
 export async function toWireChange(
   s: Snippet,
-  key?: CryptoKey,
+  key: CryptoKey,
 ): Promise<WireChange> {
   const { id, updatedAt, deletedAt, _dirty, ...payload } = s;
   void _dirty;
+  const clocks = { id, updatedAt, deletedAt: deletedAt ?? null };
   return {
-    id,
-    payloadFormat: key ? PAYLOAD_FORMAT_SEALED : PAYLOAD_FORMAT_PLAIN,
-    payload: key ? await encryptJSON(key, payload) : payload,
-    updatedAt,
-    deletedAt: deletedAt ?? null,
+    ...clocks,
+    payloadFormat: PAYLOAD_FORMAT_SEALED_AAD,
+    payload: await encryptJSON(
+      key,
+      payload,
+      aadForRow({ ...clocks, payloadFormat: PAYLOAD_FORMAT_SEALED_AAD }),
+    ),
   };
 }
 
@@ -146,17 +160,35 @@ export async function fromWireRow(
   if (!row.payload) return ghostTombstone(row);
 
   let payload: SnippetPayload;
-  if (row.payloadFormat === PAYLOAD_FORMAT_SEALED || isEncryptedPayload(row.payload)) {
+  if (
+    row.payloadFormat === PAYLOAD_FORMAT_SEALED ||
+    row.payloadFormat === PAYLOAD_FORMAT_SEALED_AAD ||
+    isEncryptedPayload(row.payload)
+  ) {
     if (!key) throw new LockedError();
     try {
       payload = await decryptJSON<SnippetPayload>(
         key,
         row.payload as EncryptedPayload,
+        // format 3 recomputes the AAD from the wire row's own cleartext
+        // fields — if the server moved, rolled back, or resurrected the
+        // envelope, the recomputed AAD differs and decryption fails.
+        // Legacy format-2 seals carry no AAD.
+        row.payloadFormat === PAYLOAD_FORMAT_SEALED_AAD
+          ? aadForRow({
+              id: row.id,
+              updatedAt: row.updatedAt,
+              deletedAt: row.deletedAt,
+              payloadFormat: row.payloadFormat,
+            })
+          : undefined,
       );
     } catch {
       // a key we hold that doesn't open the row = the account was
-      // re-sealed under a new key elsewhere; fail as "unlock again",
-      // not as a garbled row or an endless retry
+      // re-sealed under a new key elsewhere, OR (format 3) the row's
+      // cleartext fields no longer match what was sealed — a tampered
+      // envelope. Either way: fail as "unlock again", loud, never a
+      // garbled row or an endless retry.
       throw new KeyMismatchError();
     }
   } else {

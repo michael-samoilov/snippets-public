@@ -309,70 +309,12 @@ this item is everything else. Rule of thumb from the constitution:
 gaps stay blank, never scolding — an empty state earns copy only when
 silence would read as breakage.
 
-## 8. E2E: bind the envelope's cleartext fields into the cipher (AAD)
-
-> Adversarial security review, 2026-07-08. (The critical sibling
-> finding — the plaintext-downgrade bug, where the server's enrollment
-> answer, not the local key, chose whether to encrypt — was fixed the
-> same day: `runCycle` now makes the on-device key authoritative.)
-
-AES-256-GCM authenticates each entry's *ciphertext*, but the row's
-identity, `updatedAt`, `deletedAt`, and `payloadFormat` ride *outside*
-the sealed envelope, unsigned (`src/lib/sync-wire.ts`). A tampered body
-fails to open — but a hostile (or buggy) server can still swap one
-sealed entry's ciphertext onto another row, roll a row back to an
-earlier sealed version, or flip `deletedAt` to hide or resurrect an
-entry, all without reading a word. Close it by binding those cleartext
-fields as AES-GCM **additional authenticated data (AAD)** so decryption
-fails if the envelope has been moved or its metadata edited.
-
-Design notes:
-- AAD = a canonical serialization of `{id, updatedAt, deletedAt,
-  payloadFormat}` (exactly the fields sync needs in the clear).
-  `encryptJSON`/`decryptJSON` in `crypto.ts` take it as a parameter;
-  decrypt recomputes it from the wire row and a mismatch throws — surface
-  it as the same "tampered entry" failure that a bad tag already gives.
-- This is a `payloadFormat` bump. Existing format-2 seals carry no AAD,
-  so either add **format 3** for AAD-bound seals and keep format 2
-  decryptable through a migration, or re-seal the whole book on next
-  unlock (`reencryptSweep` already exists for exactly this). **Check
-  whether any live encrypted books exist before choosing** — a re-seal
-  sweep is simplest if the install base is still zero/small.
-- Extend `crypto.test.ts`: a row decrypts under the right AAD and fails
-  under a swapped `id`, a bumped `updatedAt`, or a flipped `deletedAt`.
-- The privacy deep-dive says "a tampered entry fails to open"; once this
-  ships that becomes true of the *envelope* too — tighten the copy to
-  say so (today it slightly overclaims).
-
-## 9. E2E: refuse weak passphrases at enrollment (+ two crypto tidies)
-
-> Adversarial security review, 2026-07-08.
-
-Enrollment gates only on length (`pass.length < 10`,
-`src/app/settings/page.tsx`), so `password12` seals a book. PBKDF2 at
-600k iterations slows a guesser but can't rescue a guessable passphrase
-— it is the weakest link in the whole scheme, and the copy implies
-stronger protection than a weak phrase delivers. Add real strength
-enforcement at the "Seal the book?" dialog: a zxcvbn-style estimator +
-a common-password blocklist, with a **quiet, in-voice** strength read
-(not a coloured nagging meter — laws 6/7) and a floor below which "Seal
-it" won't fire.
-
-Design notes:
-- Dependency call: `@zxcvbn-ts/core` with lazy-loaded dictionaries, or a
-  lighter estimator — load it **only** in the enrollment path, never
-  anywhere near capture (law 8) and never in the main bundle.
-- The read is one line in the house voice ("that phrase is easy to
-  guess — try a longer, stranger one"), not a rainbow bar. The floor is
-  a strength score, not a character count; keep the ten-character
-  minimum as a floor beneath it.
-- Two small hardening tidies to fold in while in `crypto.ts`:
-  (a) `generateRecoveryCode` uses `bytes[i] % 30` — modulo bias over the
-  30-char alphabet; switch to rejection sampling so every symbol is
-  uniform. (b) A comment claims "128 bits"; reconcile it with the true
-  figure (~120). Neither is exploitable, but both should read honestly.
-
 ## 11. Status indicators: green icons for active security + sync features
+
+> Partial overlap since the privacy push (2026-07-23): Settings' protection
+> rows already carry live worded states — Encrypted / Locked / Sync paused
+> (needs-setup) — in wax/ember tones. This item is the at-a-glance GLYPH
+> layer above them.
 
 Visual signals for user confidence — a quick scan confirms the features
 the user has turned on are working:
@@ -425,3 +367,118 @@ frame must be the settled seal (never an empty desk). Risks: GIF's
 WaxStamp press frame-by-frame with Playwright, assemble with sharp/
 gifsicle. Re-verify per-platform behavior against live unfurls at ship
 time — the platform matrix above is from research, not measurement.
+
+## 14. The short privacy page — GATED on the legacy books re-encrypting
+
+The privacy push (2026-07-23) made the architecture true: sign-in
+implies end-to-end encryption (wire format 3, AAD-bound), the server
+refuses plaintext pushes, the plaintext window is gone (proven by
+tests/e2e/forced_e2e.py), and /verify exists. The final step — the
+short, unqualified page modeled on "We cannot read your entries. Not
+won't, can't." with a 4-row data-flow table (Your words / Sync / Your
+voice / Drive backup) and the "Don't take our word for it → /verify"
+close — is written into the plan but MUST NOT ship until:
+1. the pre-push users have opened the app and set a passphrase
+   (their old format-1 rows re-encrypt in place automatically), and
+2. `select payload_format, count(*) from snippets group by 1` on prod
+   Neon shows no format-1 rows, and the database-backup retention
+   window (~24 h on the free tier — confirm) has passed since.
+Until then their old rows are still readable server-side and the
+unqualified headline would overclaim. The interim page (shipped) is
+already two-state and honest. When this lands: privacy likely drops
+PolicySection (terms keeps it), the contents nav shrinks, and the
+deep-dive/honest-limits/Drive/voice/leaving content survives below the
+fold in compact form. Bump LAST_UPDATED; run pnpm check:copy.
+
+## 15. Ciphertext self-viewer — "see what our server sees"
+
+The one verify-tier item no journal app ships (prior art: Notesnook's
+Vericrypt). A Settings row (or /verify section) for signed-in writers:
+fetch one of YOUR rows as the server holds it and show it — the
+v/iv/ct envelope beside the local plaintext — with a one-line "this is
+everything we have of this entry." The crypto and wire types already
+exist (crypto.ts, sync-wire.ts); the honest scope note from the MEGA
+lesson: claim "stored ciphertext", never "immune to a malicious
+server" (that's /verify test 3's honesty paragraph). Design: quiet,
+data-voice, no theatrics; the entry picker can be "your latest entry".
+
+## 16. On-device transcription — "your voice never leaves this phone"
+
+Deferred by decision (2026-07-23): quarter-scale work, shippable only
+as an opt-in. Research digest: WebGPU ships by default in iOS 26
+Safari; Whisper-small/turbo runs in-browser via transformers.js (~150–
+400 MB one-time model download, chunked ~1–2 s behind speech, not live
+streaming); nothing yet does streaming + multilingual + code-switching
++ small-enough-for-an-iPhone-web-process; and this app already lives
+near the iOS jetsam cliff (FLAT-BOOK LAW), so the model must live in a
+worker and needs a real on-device memory A/B before it goes anywhere
+near the book. Triggers that flip this to "build now": (a) Moonshine
+v2 multilingual variants land (publicly planned — streaming, ~50–100
+MB); (b) a <500M distilled streaming multilingual open model in ONNX
+(watch the Voxtral lineage, Apache-2.0); (c) WebKit wires the Web
+Speech API to iOS 26's on-device SpeechAnalyzer (would make the FREE
+built-in path on-device — watch WebKit release notes); (d) iOS 26
+saturates the user base. Until then the Soniox/Speechmatics chain
+(no-storage defaults) carries the claim "we never store your voice."
+
+## 17. Open-source the client
+
+Owner is "not in principle opposed"; implications written up in
+OPEN-SOURCE.md (license choice, history secret-scan at publish time,
+what it does and doesn't obligate, and that an OSI license + public
+repo unlocks eligibility for a free OTF Red Team Lab security audit —
+the only realistic third-party-audit path at indie budget). When the
+owner says go: run gitleaks/trufflehog over full history first; if
+anything surfaces, publish a fresh-history mirror and rotate the
+secret regardless; add LICENSE + a short outsider README. Publishing
+upgrades every /verify claim from "we say" to "you can read."
+
+## 18. CSP: drop `unsafe-inline` from script-src via a nonce
+
+> Main motivation retired 2026-07-24: `/verify` Test 3 no longer links to
+> securityheaders.com (`98c1487`). It now centers the direct read of the
+> `connect-src` header (curl it yourself) instead of a third-party grade,
+> so a trust-checking visitor is no longer routed to a page that flags
+> `unsafe-inline`. The A+ badge is now wanted only for an external reason
+> (a partner, a store listing), not the app's own verify flow. Revisit
+> only if such a reason appears; otherwise keeping static rendering wins.
+
+securityheaders.com flags `'unsafe-inline'` in `script-src` (yellow;
+overall grade A). It's genuinely required today: the only inline scripts
+in the served HTML are Next's per-build RSC bootstrap (`self.__next_f.push`),
+which are unhashable, and Next's SRI is webpack-only (broken on
+Turbopack, our bundler). The ONLY clean removal is a per-request nonce.
+
+Investigated approach (2026-07-23) if the owner wants the hardening:
+- Generate a nonce in `src/proxy.ts` (Next 16's middleware); set it on
+  BOTH the request and response `Content-Security-Policy` header so Next's
+  renderer stamps its own scripts; broaden the matcher to page routes
+  (exclude `/api`, `/_next/static`, `/_next/image`, prefetches); fold in
+  the existing prod-only `/lab` 404 + debug-param logic already there.
+- `src/lib/security-headers.ts`: add `buildCsp(nonce)`; move CSP to the
+  proxy, keep the 4 static headers (nosniff/referrer/permissions/dns) in
+  `next.config.ts` to avoid a duplicate CSP header. `script-src 'self'
+  'nonce-…' blob:` (drop `'unsafe-inline'`; keep `'self'`/`blob:`). Keep
+  `'unsafe-inline'` on `style-src` (nonces don't cover inline `style=`;
+  lower risk; the scanner grades only script-src).
+- `src/app/layout.tsx`: make it async, `const nonce = (await headers())
+  .get('x-nonce')`, pass `nonce` to both inline `<script>` tags
+  (APP_HEIGHT_SCRIPT, FIRST_RUN_SCRIPT — they carry it fine).
+- `src/components/providers.tsx`: pass `nonce` to `<ThemeProvider>`
+  (next-themes 0.4.6 supports a `nonce` prop).
+- `security-invariants.test.ts`: assert `script-src` has no
+  `'unsafe-inline'` and contains `'nonce-'` (shape, not value — it's
+  per-request); re-run the zero-violation sweep against a live server.
+- Update `/verify` Test 3 to drop the "the header allows inline scripts"
+  caveat.
+
+THE COST (why it's deferred, not done): reading the nonce forces every
+page to render DYNAMICALLY — Next can't statically prerender a page that
+reads per-request headers. That loses Vercel's static-HTML edge caching
+(higher first-load TTFB, more serverless invocations). For this
+local-first PWA the practical impact is small (it runs client-side and
+the service worker caches the document + its matching CSP header
+together, so offline stays consistent), but it's a real architectural
+trade for a scanner green. Owner's call; default is to keep
+`'unsafe-inline'` — every other CSP directive is already tight, and it
+only bites alongside an injection sink.

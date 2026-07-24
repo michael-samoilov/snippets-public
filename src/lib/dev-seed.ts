@@ -29,9 +29,14 @@
      3. Never clobbers a real book: it only seeds an empty book or REPLACES
         its own prior seed (tracked by SEED_MARK); an unseeded book is left
         untouched without `&force`.
-     4. Mints local-only rows (`_dirty: 0`, so a later sign-in never pushes
-        them) and is dynamically imported (the corpus never rides the normal
-        bundle).
+     4. Mints local-only rows (`_dirty: 0`) and is dynamically imported (the
+        corpus never rides the normal bundle). CAVEAT since encryption became
+        part of sign-in: enrollment's re-seal sweep marks EVERY row dirty, so
+        seeding and then signing in + enrolling on a preview WILL push the
+        seeded rows (encrypted) into that account's book. Fine for throwaway
+        test accounts; don't enroll a real account over a seeded book. (Test
+        harnesses can pre-set localStorage devSeed:v1 = "cleared" to keep the
+        auto-seed away entirely.)
    Deterministic (a seeded PRNG), so the same URL builds the identical book
    every time. */
 

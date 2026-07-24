@@ -273,12 +273,12 @@ const LEDGER_SHAPE: number[][] = [
 
 // one blank entry tile: the book-card recipe (bg-paper, hairline, inset top
 // highlight) with faint bars where the prose would sit. Each bar rides a line
-// box of the real prose rhythm (0.9rem × 1.42 ≈ 20px), so a six-line tile
+// box of the real prose rhythm (1rem × 1.42 ≈ 23px), so a six-line tile
 // stands exactly as tall as a full six-line card; the last line is short, as a
 // paragraph's is. The bars shimmer while the book settles in.
 function LedgerCard({ lines }: { lines: number }) {
   return (
-    <div className="book-card rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[0.9rem] leading-[1.42]">
+    <div className="book-card rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[1rem] leading-[1.42]">
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className="flex h-[1.42em] items-center">
           <span
@@ -301,7 +301,7 @@ function LedgerRows() {
         <div
           key={i}
           aria-hidden="true"
-          className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint pb-2.5 pt-2.5"
+          className="-mx-[5px] grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint px-[5px] pb-2.5 pt-2.5"
         >
           {/* the margin date: a small weekday bar over a taller day-number bar */}
           <div className="flex flex-col items-center gap-1.5 pt-[3.5px]">
@@ -373,7 +373,7 @@ function CalendarSkeleton({ view = "auto" }: { view?: SkeletonView }) {
           layout arrives. */}
       <div
         className={cn(
-          "mt-5 grid border-b border-rule-faint",
+          "-mx-[5px] mt-5 grid border-b border-rule-faint px-[5px]",
           view === "month" ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
@@ -399,7 +399,9 @@ function CalendarSkeleton({ view = "auto" }: { view?: SkeletonView }) {
           pulled up, or they'd land a pixel high. */}
       <div
         className={cn(
-          "relative min-h-0 flex-1 overflow-hidden",
+          // -mx-2/px-2: the same 8px bleed lane the real stage borrows, so
+          // the ledger rows' RULE_BLEED overhang isn't clipped here either
+          "relative -mx-2 min-h-0 flex-1 overflow-hidden px-2",
           (view === "schedule" || view === "month") && "-mt-px",
         )}
       >
@@ -453,7 +455,7 @@ function SkeletonDebug() {
     <>
       <CalendarSkeleton view={view} />
       <div className="float fixed bottom-3 left-3 z-50 rounded-full px-2.5 py-1">
-        <span className="voice-label text-[0.72rem] text-ink-soft">
+        <span className="voice-label text-[0.8rem] text-ink-soft">
           {view} skeleton — held
         </span>
       </div>
@@ -1825,6 +1827,28 @@ function Calendar() {
         if (entryFoot) {
           entryFoot.style.willChange = "opacity";
           willChanged.push(entryFoot);
+        }
+        // …but a press-glow left mid-fade under the card DEFEATS that: its
+        // layer carries mix-blend-mode (an isolated blend group) and
+        // will-change straight through the scale, forcing the exact per-frame
+        // re-raster the promotion above exists to avoid — the card's edges
+        // shimmer on iOS (its own FLAT-BOOK LAW). PressGlow sheds it 400ms
+        // after release, but scroll-then-close (now that a long entry scrolls)
+        // arms it and closes well inside that window. The card is leaving; its
+        // press light is moot — shed the blend NOW so the card scales as one
+        // cached layer. (arm() re-sets it on the next press.)
+        const pressGlow = entryCard.querySelector<HTMLElement>("[data-press-glow]");
+        if (pressGlow) {
+          pressGlow.style.mixBlendMode = "";
+          const glowInner = pressGlow.firstElementChild as HTMLElement | null;
+          if (glowInner) {
+            glowInner.style.willChange = "";
+            // hard-cut, not the 380ms fade: unblended (mix-blend just cleared)
+            // the light would otherwise read as a plain bright pool fading over
+            // the shrinking card — vanish it with the press it belonged to
+            glowInner.style.transition = "none";
+            glowInner.style.opacity = "0";
+          }
         }
         // a hand-rolled rAF drives the whole shared-element move off one
         // eased value (Motion's numeric animate was being cancelled after
@@ -3870,7 +3894,7 @@ function Calendar() {
                 type="button"
                 onClick={closeSearch}
                 tabIndex={searching ? 0 : -1}
-                className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.72rem] text-ink-faint hover:bg-accent hover:text-ink"
+                className="voice-label pressable shrink-0 rounded-full px-2.5 py-1 text-[0.8rem] text-ink-faint hover:bg-accent hover:text-ink"
               >
                 Clear
               </button>
@@ -3899,7 +3923,10 @@ function Calendar() {
           className={cn(
             // z-10: while riding a dive's edge (translateY below) it overlaps
             // the stage box and must paint above the composited layers
-            "pointer-events-none absolute inset-x-0 top-0 z-10 h-px transition-opacity",
+            // -inset-x-[5px]: every altitude's rule overhangs the content
+            // edge by RULE_BLEED (see ZoneFootRule) so a blooming card
+            // (max ~4.2px/side, press-glow eff) never outgrows its hairline
+            "pointer-events-none absolute -inset-x-[5px] top-0 z-10 h-px transition-opacity",
             // search hides every altitude layer (and their lines), so the
             // seat serves its results list at any altitude
             (searchActive || view === "year" || view === "entry") &&
@@ -3981,13 +4008,13 @@ function Calendar() {
             // layer, so it fades/scales as part of the calendar's image on
             // every move (the header's seat line takes over only once no
             // month image is on stage; see the header rule above)
-            className="grid shrink-0 grid-cols-7 border-b border-rule-faint pt-1.5"
+            className="-mx-[5px] grid shrink-0 grid-cols-7 border-b border-rule-faint px-[5px] pt-1.5"
           >
             {weekdays(weekStart).map((d, i) => (
               <span
                 key={`${d}${i}`}
                 role="columnheader"
-                className="voice-label pb-2 text-center text-[0.78rem] text-ink-faint"
+                className="voice-label pb-2 text-center text-[0.87rem] text-ink-faint"
               >
                 {d}
               </span>
@@ -4071,12 +4098,13 @@ function Calendar() {
               sub-pixel border had slipped under the clip edge (the blank-line
               frames the owner recorded). Opaque terminus colour: it rests
               exactly where that day's rule-faint border-t sits, and two 8%
-              layers would composite darker. inset-x-2 matches the layer's
-              px-2 content width (the seat line's span). */}
+              layers would composite darker. inset-x-[3px]: the layer's px-2
+              content edge minus the shared RULE_BLEED overhang, so this line
+              spans exactly what the seat line and the day rules do. */}
           <div
             ref={bookLineRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-2 top-0 z-10 h-px"
+            className="pointer-events-none absolute inset-x-[3px] top-0 z-10 h-px"
             style={{ backgroundColor: "var(--terminus-line)" }}
           />
           {(view === "schedule" || warm >= 1) && (
@@ -4144,7 +4172,7 @@ function Calendar() {
                     {newMonth && (
                       <p
                         className={cn(
-                          "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
+                          "voice-label px-1 pb-1.5 pt-5 text-[0.91rem]",
                           isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
                         )}
                       >
@@ -4154,12 +4182,12 @@ function Calendar() {
                     <section
                       data-found={g.day}
                       aria-label={friendlyDay(g.day)}
-                      className="grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint"
+                      className="-mx-[5px] grid grid-cols-[2.1rem_1fr] gap-x-2 border-t border-rule-faint px-[5px]"
                     >
                       <div className="self-start pb-3 pt-2 text-center">
                         <span
                           className={cn(
-                            "voice-label block text-[0.62rem] leading-tight",
+                            "voice-label block text-[0.69rem] leading-tight",
                             isToday ? "text-wax" : "text-ink-faint",
                           )}
                         >
@@ -4292,8 +4320,39 @@ const BookRow = memo(function BookRow({
     () => probeStore.get() === day,
     () => false,
   );
+  // Bug fix (backfill seal animation skipped): the "yesterday, if empty"
+  // nudge composer is only meant to show while yesterday is genuinely blank
+  // — but `keep()` WRITES to Dexie at submit, before any of the press→card→
+  // wipe choreography plays (a write deferred into an animation timer would
+  // be lost if the reader left mid-sequence). The live query then updates
+  // `snippets` to length 1 almost immediately — often within a couple of
+  // frames — flipping this `isYesterday && snippets.length === 0` clause
+  // false and UNMOUNTING the whole composer (seal, timers, in-flight state)
+  // well before its ~1700ms press animation even starts. The entry still
+  // saves; it just lands as a plain, unanimated list-insert instead of the
+  // designed reveal — reads as "the seal animation didn't play". A long
+  // paste doesn't cause this any more than a short one does, but it makes
+  // the vanish far more visually obvious (a big just-typed block snaps away
+  // instantly rather than a one-liner). Fix: once this day's composer starts
+  // a keep, hold the door open (independent of the live snippet count) until
+  // that keep's own choreography actually finishes.
+  const [keepInFlight, setKeepInFlight] = useState(false);
+  // stable identity (setKeepInFlight itself is React-guaranteed stable) —
+  // FlowBackfillCapture's own effect keys off these in its dependency
+  // array, and a fresh closure every render would re-fire it on every
+  // unrelated re-render, not just on a genuine seq.phase transition
+  const onComposerKeepStart = useCallback(() => setKeepInFlight(true), []);
+  const onComposerKeepSettled = useCallback(() => setKeepInFlight(false), []);
   const showComposer =
-    isToday || probed || (isYesterday && snippets.length === 0);
+    isToday || probed || (isYesterday && (snippets.length === 0 || keepInFlight));
+  // Does this composer stay after its keep, or is it the "yesterday, if empty"
+  // invite that vanishes the moment the day holds something? Only a staying
+  // composer (today, or a page the reader opened) should wipe its empty self
+  // back in after a keep — the vanishing invite would reveal that empty line
+  // just to unmount it a beat later (the keepInFlight window). After a keep,
+  // the isYesterday-empty clause is always false (the day now has the entry),
+  // so persistence reduces to exactly this.
+  const composerPersistsAfterKeep = isToday || probed;
   const d = dateFromDayKey(day);
   const pageRow = (
     <section
@@ -4301,7 +4360,10 @@ const BookRow = memo(function BookRow({
       data-day={day}
       aria-label={friendlyDay(day)}
       className={cn(
-        "grid grid-cols-[2.1rem_1fr] gap-x-2",
+        // -mx/px: the rule overhangs the content edge by RULE_BLEED per side
+        // (padding hands the content its old width back), so a blooming card
+        // still ends inside its hairline — every altitude's rules share this
+        "-mx-[5px] grid grid-cols-[2.1rem_1fr] gap-x-2 px-[5px]",
         // every day rules off from the one above. Today's empty section
         // collapses to nothing but KEEPS the rule (once the book holds
         // anything) — so a hairline still marks where the prior days end
@@ -4322,15 +4384,16 @@ const BookRow = memo(function BookRow({
       )}>
         {!hideToday && (() => {
           const dateInner = (
-            // py-[3.5px] sizes the block to exactly a single-line
-            // card's height (42.5px: its 35.4px of text + 7.1px), so
-            // the date reads centre-aligned beside a one-line entry —
-            // and a single-line day has zero sticky travel, killing
-            // the tiny header-crawl while scrolling past it
-            <div className="py-[3.5px]">
+            // py-[3.96px] sizes the block to exactly a single-line card's
+            // height (measured 44.72px: its 36.8px of text + 7.92px), so the
+            // date reads centre-aligned beside a one-line entry — and a
+            // single-line day has zero sticky travel, killing the tiny
+            // header-crawl while scrolling past it. Retuned from py-[3.5px]
+            // (the old 0.9rem tuning) when the card + label text grew to 1rem.
+            <div className="py-[3.96px]">
               <span
                 className={cn(
-                  "voice-label block text-[0.62rem] leading-tight",
+                  "voice-label block text-[0.69rem] leading-tight",
                   isToday ? "text-wax" : "text-ink-faint",
                 )}
               >
@@ -4368,7 +4431,14 @@ const BookRow = memo(function BookRow({
       <div className={cn("min-w-0", !hideToday && (isToday ? "pt-2.5" : "pb-2.5 pt-2.5"))}>
         <ScheduleCards snippets={snippets} day={day} onOpen={onOpen} />
         {showComposer && (
-          <BackfillCapture key={day} day={day} snippets={snippets} />
+          <BackfillCapture
+            key={day}
+            day={day}
+            snippets={snippets}
+            persistsAfterKeep={composerPersistsAfterKeep}
+            onKeepStart={onComposerKeepStart}
+            onKeepSettled={onComposerKeepSettled}
+          />
         )}
       </div>
     </section>
@@ -4378,7 +4448,7 @@ const BookRow = memo(function BookRow({
       {newMonth && !hideToday && (
         <p
           className={cn(
-            "voice-label px-1 pb-1.5 pt-5 text-[0.82rem]",
+            "voice-label px-1 pb-1.5 pt-5 text-[0.91rem]",
             isSameMonth(d, today) ? "text-wax" : "text-ink-soft",
           )}
         >
@@ -5808,7 +5878,7 @@ const ScheduleCards = memo(function ScheduleCards({
               <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
               <p
                 className={cn(
-                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+                  "book-card-prose voice-prose relative line-clamp-6 whitespace-pre-wrap text-[1rem] leading-[23px]",
                   s.kind === "quote" && "hang-quotes italic",
                 )}
               >
@@ -5870,7 +5940,17 @@ function WipeWord({ open, children }: { open: boolean; children: React.ReactNode
 // seal. Today's capture lives in the big fill zone, so today's inline composer
 // steps aside — but other days keep theirs (yesterday's "add something from
 // yesterday" invite, or any page you opened to backfill).
-function BackfillCapture(props: { day: string; snippets: Snippet[] }) {
+function BackfillCapture(props: {
+  day: string;
+  snippets: Snippet[];
+  // false for the "yesterday, if empty" invite that unmounts once the day
+  // holds an entry — it must NOT wipe its empty self back in after a keep
+  persistsAfterKeep?: boolean;
+  // told to the parent so it can hold a "yesterday, if empty" composer open
+  // through its own keep — see showComposer's comment in BookRow
+  onKeepStart?: () => void;
+  onKeepSettled?: () => void;
+}) {
   if (props.day === dayKey()) return null;
   return <FlowBackfillCapture {...props} />;
 }
@@ -5883,14 +5963,40 @@ function BackfillCapture(props: { day: string; snippets: Snippet[] }) {
 function FlowBackfillCapture({
   day,
   snippets,
+  persistsAfterKeep = true,
+  onKeepStart,
+  onKeepSettled,
 }: {
   day: string;
   snippets: Snippet[];
+  persistsAfterKeep?: boolean;
+  onKeepStart?: () => void;
+  onKeepSettled?: () => void;
 }) {
   const reduce = useReducedMotion() ?? false;
+  // true once THIS keep's card has been born (the carding beat). A composer
+  // that won't persist (the empty yesterday invite) goes dark from carding
+  // onward — no composing wipe-back-in, no resting idle line, just the card
+  // and then unmount. Reset when a fresh keep begins. (Gating on carding, not
+  // merely "a keep started", keeps the composer visible through the
+  // settle-into-view wait and the press, which are still pre-card.)
+  const postCardRef = useRef(false);
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const sealBtnRef = useRef<HTMLButtonElement>(null);
+  // Seal press bookkeeping — mirrors the today-zone seal (see its refs), so a
+  // keep files ONLY when a real pointer both PRESSED and RELEASED on the seal.
+  // Without this the bare onClick fired on iOS's ~300ms synthetic click, which
+  // retargets onto the seal after a tap elsewhere collapses the keyboard and
+  // slides the composer under the lifted finger — filing an entry the writer
+  // only meant to dismiss the keyboard for (owner video, 2026-07-23).
+  const sealDown = useRef(false); // a pointer is pressing the seal
+  const overSeal = useRef(false); // …and is within the button's box
+  const pointerHandled = useRef(false); // a real pointer just handled a keep
+  const inSeal = (e: ReactPointerEvent) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  };
   // the live seal-into-view settle watcher (press only once the seal is at rest)
   const settleCancel = useRef<null | (() => void)>(null);
   // a long entry's glide-to-top (timer that starts it + the running scroll)
@@ -5906,6 +6012,26 @@ function FlowBackfillCapture({
   // data-facing steps (abortedRef) and puts the words back.
   const heldKeepRef = useRef<string | null>(null);
   const keepAbortedRef = useRef(false);
+  // Bug fix (backfill double-submit): `seq.phase` only leaves "idle" inside
+  // `seq.start()`, which fires from `settleSealIntoView`'s async callback —
+  // never synchronously inside `keep()`. A long, multi-line paste inflates
+  // the textarea and disturbs the keyboard/scroll settle for much longer
+  // than a short entry does, widening the gap between "tap registered" and
+  // "seq.phase actually flips". A second tap landing in that gap (an
+  // impatient re-tap when nothing visibly happens yet — or, on a fast
+  // double-tap, even with short text) sailed past the `seq.phase !== "idle"`
+  // guard, started a SECOND overlapping keep() sharing the same
+  // settleCancel/heldKeepRef refs, and the second call's setup unconditionally
+  // cancelled the first's pending settle-watch and reassigned heldKeepRef —
+  // releasing the first call's held (and already-written) row as a silent,
+  // unanimated list-insert while its own seal choreography never played.
+  // Net effect: the seal animation appears to skip, and the entry that
+  // surfaces can be an earlier, unrelated stuck attempt rather than the one
+  // just typed. This ref closes the gap: set synchronously the instant a tap
+  // is accepted, before any async work, and released only once something
+  // else (seq.phase, a write failure, or the reduced-motion instant path)
+  // is actually in a position to guard re-entry correctly.
+  const submittingRef = useRef(false);
   useEffect(
     () => () => {
       settleCancel.current?.();
@@ -5915,6 +6041,24 @@ function FlowBackfillCapture({
     [],
   );
   const seq = useKeepSequence(KEEP_BEATS, reduce);
+  // Bug fix (backfill seal animation skipped): told to the parent so the
+  // "yesterday, if empty" nudge composer can hold itself open through a keep
+  // in flight — see showComposer's comment in BookRow. `seq.phase` returning
+  // to "idle" is this composer's own signal that its choreography (success
+  // OR an aborted write) has fully played out; the ref guards against firing
+  // on first mount (phase starts "idle" before any keep has ever run).
+  const keepInFlightRef = useRef(false);
+  useEffect(() => {
+    if (seq.phase === "idle" && keepInFlightRef.current) {
+      keepInFlightRef.current = false;
+      onKeepSettled?.();
+    }
+  }, [seq.phase, onKeepSettled]);
+  // latch "the card is born" at the carding beat — the line past which a
+  // non-persisting composer stays dark (see composerOpen below)
+  useEffect(() => {
+    if (seq.phase === "carding") postCardRef.current = true;
+  }, [seq.phase]);
   const draftStore = useKeptDraft();
   // Does a VISIBLE entry sit above this composer? (Governs the mt-1 gap that
   // separates the composer from the cards above it.) Count only shown rows:
@@ -5959,7 +6103,17 @@ function FlowBackfillCapture({
 
   const keep = () => {
     const trimmed = text.trim();
-    if (!trimmed || seq.phase !== "idle") return;
+    if (!trimmed || submittingRef.current || seq.phase !== "idle") return;
+    // Set synchronously, before any async work, so a second tap landing
+    // before `seq.phase` catches up (see submittingRef's comment above)
+    // is blocked outright rather than racing this call.
+    submittingRef.current = true;
+    // Told to the parent NOW, before the write below — its live-query update
+    // can land within a couple of frames, well before the choreography even
+    // starts (see keepInFlightRef's comment above).
+    keepInFlightRef.current = true;
+    postCardRef.current = false; // a fresh keep — the card isn't born yet
+    onKeepStart?.();
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
     const capturedAt = isToday ? Date.now() : at.getTime();
@@ -5984,6 +6138,11 @@ function FlowBackfillCapture({
         if (heldKeepRef.current === id) heldKeepRef.current = null;
         draftStore?.release(id);
         draftStore?.clear(day);
+        submittingRef.current = false; // the words are back — a retry must be allowed
+        // the write never landed, so the day is still genuinely empty —
+        // showComposer's own snippets.length===0 clause already covers it
+        keepInFlightRef.current = false;
+        onKeepSettled?.();
         setPressedDown(false);
         setText(trimmed);
         if (areaRef.current) {
@@ -6016,6 +6175,11 @@ function FlowBackfillCapture({
       file();
       setText("");
       if (areaRef.current) { areaRef.current.value = ""; autosizeArea(areaRef.current); }
+      submittingRef.current = false; // this path never reaches seq.start(); nothing else will release it
+      // reduced motion means an instant transition IS the intended result —
+      // no choreography to protect, so release straight away
+      keepInFlightRef.current = false;
+      onKeepSettled?.();
       return;
     }
     // Sequence: (1) hold the seal PRESSED while it scrolls fully into view and the
@@ -6060,6 +6224,9 @@ function FlowBackfillCapture({
         // beat; the unmounting field needs no imperative resize.
         setText("");
       });
+      // seq.phase is about to flip to "pressing" (React flushes before the next
+      // event) and correctly guards re-entry itself from here on — hand off.
+      submittingRef.current = false;
     };
     const btn = sealBtnRef.current;
     if (btn) settleCancel.current = settleSealIntoView(btn, play);
@@ -6071,8 +6238,15 @@ function FlowBackfillCapture({
   // the composer card stays through the PRESS with its words (so the card never
   // blinks out mid-seal-animation); it hands off to the settled card at CARDING,
   // where this goes false and the just-filed card takes its slot.
+  // A composer that won't persist (the empty yesterday invite) stays dark from
+  // the carding beat onward: no composing wipe-back-in, no resting idle line —
+  // the card is born and the composer simply unmounts, never flashing "Add
+  // something from yesterday" only to vanish. Everything up to the card (the
+  // resting invite, the settle-into-view wait, the press) still shows.
+  const composerReturnsEmpty = persistsAfterKeep || !postCardRef.current;
   const composerOpen =
-    seq.phase === "idle" || seq.phase === "composing" || seq.phase === "pressing";
+    seq.phase === "pressing" ||
+    ((seq.phase === "idle" || seq.phase === "composing") && composerReturnsEmpty);
   // the seal shows at rest (typed) and through the press; it's gone once the
   // empty composer wipes back in. Reduced motion files instantly, no theatre.
   const showSeal = hasText || (pressing && !reduce);
@@ -6130,6 +6304,10 @@ function FlowBackfillCapture({
             rows={1}
             placeholder={placeholder}
             aria-label={copy.backfill.ariaAddTo(friendlyDay(day))}
+            // this contained composer scrolls its own words; the book must NOT
+            // follow the caret. data-room-pin tells useKeyboardRoom to anchor the
+            // card centred in the visible band and hold it there — see correct().
+            data-room-pin=""
             onChange={(e) => {
               setText(e.target.value);
               autosizeArea(e.target);
@@ -6155,7 +6333,15 @@ function FlowBackfillCapture({
               // outer height and same 11px text inset, so the composer→card
               // hand-off neither jumps 2px taller nor nudges the words sideways.
               // autosizeArea adds the border back into the measured height.
-              "book-card-prose voice-prose relative block max-h-[143px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[0.9rem] leading-[1.42] outline-none placeholder:italic",
+              // An INTEGER 23px line box (not the fractional 1.42×16=22.72px):
+              // WebKit snaps line boxes to device pixels, and a fractional line
+              // let scrollHeight drift from the true content height as blank
+              // lines piled up — once max-h clamped and the box scrolled its own
+              // words, the caret seated a line off (owner video). 23px matches
+              // the today zone's ruling and makes max-h an exact six-line box:
+              // 6×23 + 20 (p-2.5) + 2 (border) = 160px, equal to the preview's
+              // line-clamp-6 — so the composer never outgrows the card it becomes.
+              "book-card-prose voice-prose relative block max-h-[160px] w-full resize-none overflow-y-auto overscroll-contain border border-transparent bg-transparent p-2.5 text-[1rem] leading-[23px] outline-none placeholder:italic",
               isToday ? "placeholder:text-wax/75" : "placeholder:text-ink-faint",
             )}
           />
@@ -6172,13 +6358,37 @@ function FlowBackfillCapture({
             ref={sealBtnRef}
             type="button"
             aria-label={copy.keep.label}
-            onClick={keep}
+            // Keep is driven by the hit-tested pointerup below, not the click —
+            // the click swallows the real pointer's trailing synthetic click,
+            // and files only on a genuine KEYBOARD activation (detail === 0). A
+            // pointer-derived click (detail ≥ 1), including one iOS retargets
+            // onto the seal after a tap elsewhere, never files.
+            onClick={(e) => {
+              if (pointerHandled.current) { pointerHandled.current = false; return; }
+              if (e.detail === 0) keep();
+            }}
             onPointerDown={(e) => {
               e.preventDefault(); // keep the textarea's focus
+              sealDown.current = true;
+              overSeal.current = true;
               setPressedDown(true);
             }}
-            onPointerUp={() => setPressedDown(false)}
-            onPointerLeave={() => setPressedDown(false)}
+            onPointerMove={(e) => {
+              if (!sealDown.current) return;
+              const inside = inSeal(e);
+              if (inside !== overSeal.current) { overSeal.current = inside; setPressedDown(inside); }
+            }}
+            onPointerUp={(e) => {
+              if (!sealDown.current) { setPressedDown(false); return; }
+              sealDown.current = false;
+              pointerHandled.current = true;
+              const inside = inSeal(e);
+              overSeal.current = false;
+              setPressedDown(false);
+              if (inside) keep(); // released on the seal → file; released off → cancel
+            }}
+            onPointerLeave={() => { overSeal.current = false; setPressedDown(false); }}
+            onPointerCancel={() => { sealDown.current = false; overSeal.current = false; setPressedDown(false); }}
             className="relative grid place-items-center rounded-full"
             style={{ width: 56, height: 56 }}
           >
@@ -6219,6 +6429,12 @@ function FlowBackfillCapture({
       bottom), so it never extends past the border;
     • scrolled fully to the bottom → hidden (the zone's rounded bottom shows). */
 const ZONE_CORNER = 16; // matches the zone box's rounded-2xl radius
+// every altitude's hairline overhangs the content edge by this much per side
+// (the `-mx-[5px] px-[5px]` / `-inset-x-[5px]` / `inset-x-[3px]` classes on the
+// rail, seat line, book line, and day rules are this same value), so a card in
+// bloom — press-glow grows it up to ~4.2px past each edge — still ends inside
+// its rule instead of poking past it (owner screenshot, 2026-07-22)
+const RULE_BLEED = 5;
 // the rounded rect's horizontal inset `t`px from a corner's edge (0 at the very
 // edge → the straight top/bottom segment is inset by R; R away → full width)
 const cornerInset = (t: number) =>
@@ -6264,9 +6480,11 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
           // (which read darker than the rest of the outline).
           show = false;
         } else if (r.top > vpBottom) {
-          // the zone is still entirely below the fold → grey terminus over the days
+          // the zone is still entirely below the fold → grey terminus over the
+          // days, overhanging like every other rule so the spans all match
           show = true;
           blue = false;
+          inset = -RULE_BLEED;
         } else {
           // the zone's body crosses the clip line → blue edge at the clip,
           // tracking whichever rounded corner the clip point is passing through
@@ -6553,6 +6771,13 @@ function TodayZoneFill({
   // NOT gated on the book being empty: keeping an entry while locked must
   // not dismiss the letter — it stands until the device actually unlocks
   const lockedLetter = hiddenBehindLock || LOCK_DEBUG !== null;
+  // The needs-setup letter — signed in, but no encryption passphrase yet,
+  // so the engine holds the book (sync.needsSetup) and nothing moves. It
+  // carries the same door as the welcome step for whoever stepped past it
+  // (or signed in before encryption became part of sign-in). Same retire
+  // rule as the locked letter: gone the moment the writer starts.
+  const needsSetupLetter =
+    sessionStatus === "signed-in" && sync.needsSetup && !lockedLetter;
   const lockedCount =
     LOCK_DEBUG !== null
       ? LOCK_DEBUG || null
@@ -7519,7 +7744,7 @@ function TodayZoneFill({
               offsets here and on the button equalize the gaps the EYE sees
               (~110px above the date, ~110px below the wax). */}
           <div className="mt-[83px] leading-none">
-            <p className="voice-label text-[0.72rem] text-ink-faint">{format(d, "EEEE")}</p>
+            <p className="voice-label text-[0.8rem] text-ink-faint">{format(d, "EEEE")}</p>
             <h2 className="voice-display mt-1 text-[2rem] leading-none text-ink">{format(d, "MMMM d")}</h2>
           </div>
           {/* the letters on the sheet: prose, retiring itself the instant the
@@ -7556,6 +7781,35 @@ function TodayZoneFill({
                     }
                   >
                     {copy.todayZone.locked.action}
+                  </PaperButton>
+                </div>
+              </motion.div>
+            ) : needsSetupLetter && text.trim().length === 0 ? (
+              <motion.div
+                key="needs-setup-letter"
+                // like the locked letter, the state is only known once the
+                // first sync cycle answers — always fade in, never pop
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                transition={{ duration: 0.24, ease: "easeOut" }}
+                className="w-full space-y-3 text-left"
+              >
+                {copy.todayZone.needsSetup.body.map((para, i) => (
+                  <p
+                    key={i}
+                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                  >
+                    {renderInline(para, `needs-setup-${i}`)}
+                  </p>
+                ))}
+                <div className="flex justify-center pt-1">
+                  <PaperButton
+                    onClick={() =>
+                      router.push("/settings?tab=account&seal=1")
+                    }
+                  >
+                    {copy.todayZone.needsSetup.action}
                   </PaperButton>
                 </div>
               </motion.div>
@@ -7628,34 +7882,35 @@ function TodayZoneFill({
                   ? copy.capture.listeningPlaceholder
                   : transcribing
                     ? copy.capture.settingWords
-                    : firstEver && !lockedLetter
+                    : firstEver && !lockedLetter && !needsSetupLetter
                       // a locked device's book is empty too, but its writer is
                       // no newcomer — the first-ever invitation would jar
-                      // against the letter's "welcome back"
+                      // against the letter's "welcome back" (and against the
+                      // needs-setup letter's one-step-left framing alike)
                       ? copy.todayZone.placeholderFirstEver
                       : hasEntry
                         ? copy.todayZone.placeholderHasEntry
                         : copy.todayZone.placeholder
               }
               aria-label={copy.todayZone.ariaWriteFor(format(d, "MMMM d"))}
-              // 0.9rem: the SAME type as the schedule card's preview, at the
+              // 1rem: the SAME type as the schedule card's preview, at the
               // same width — so the wrapping here is character-for-character
               // the wrapping there, and N rules filled = N preview lines.
-              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[0.9rem] outline-none placeholder:italic placeholder:text-ink-faint"
+              className="voice-prose relative block w-full resize-none overflow-hidden bg-transparent p-0 text-left text-[1rem] outline-none placeholder:italic placeholder:text-ink-faint"
               // The ruled paper lives ON the textarea (background-attachment:
               // local, so the rules always track the words exactly). The rule
               // sits just below the baseline — standard characters rest ON the
               // line, only descenders dip across — and the period is a whole
-              // PIXEL (20px ≈ the card preview's 0.9rem × 1.42 = 20.45px
+              // PIXEL (23px ≈ the card preview's 1rem × 1.42 = 22.72px
               // rhythm) matched exactly by the line-height: a fractional
               // line-height lets WebKit snap line boxes to device pixels while
               // the gradient stays fractional, so text drifts off its rules
               // over dozens of lines.
               style={{
-                lineHeight: "20px",
-                minHeight: "60px",
+                lineHeight: "23px",
+                minHeight: "69px",
                 backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0, transparent 19px, var(--rule-faint) 19px, var(--rule-faint) 20px)",
+                  "repeating-linear-gradient(to bottom, transparent 0, transparent 22px, var(--rule-faint) 22px, var(--rule-faint) 23px)",
                 backgroundPositionY: "-4px",
                 backgroundAttachment: "local",
               }}

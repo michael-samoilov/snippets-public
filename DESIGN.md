@@ -404,7 +404,15 @@ a thing literally does, in words the user already owns: *encrypt your
 entries*, not *seal your book*; *your entries*, not *your book*. "Book"
 (or "notebook") is allowed only in warm, descriptive prose where it
 reads deliberately, and the non-idiomatic "commonplace book" is retired
-everywhere. Metaphor earns its place only when it names an actual
+everywhere. **Entries are entries** — never *your words*, *your book*, or
+*what you've written*; an entry is **saved** (not *kept* or *written into
+the device*); a voice recording is a **recording** (not *a take*).
+*words / book / keeps / take* are the skin-words that read fine in warm
+prose but turn ambiguous the instant copy explains a mechanism, so the
+technical register uses the concrete noun; "book"/"notebook" live on only
+as code identifiers (`book-card`, the crypto *book key*), never in copy.
+The linter hard-bans *your book* and warns on *your words* / *it keeps*.
+Metaphor earns its place only when it names an actual
 on-screen object — the **wax seal** you tap to record/keep is a real
 thing, so "tap the seal" stays — or when it genuinely aids
 understanding; otherwise the plainer, more idiomatic word wins. A reader
@@ -489,12 +497,30 @@ to its allowlist when you write one.
 - The shader layer is progressive enhancement: gated on mount + Save-Data,
   static (`speed 0`), masked, plain paper always beneath.
 
+## Privacy is architecture, not copy
+
+The privacy pages may only print sentences the system makes true — the
+push of 2026-07 worked backwards from the sentences we wanted: sign-in
+implies end-to-end encryption (no plaintext window: the engine holds an
+unenrolled book, the server refuses readable entries, and the guarantee
+is *observed* by `tests/e2e/forced_e2e.py`, not argued); voice streams
+only to providers whose self-serve default is no-storage/no-training
+(`src/lib/speech-providers.ts` is the single table the privacy page,
+Settings, and the CSP all read); and the strict CSP's `connect-src` is
+the browser-enforced list of everywhere words can go, with `/verify`
+teaching a worried reader to check it themselves (airplane-mode test,
+network-tab walkthrough, the one-line curl). Corollaries: encryption
+has no off switch; a new external origin is a privacy event (table +
+`/verify` + privacy page move in the same commit); and the Drive backup
+stays plaintext on purpose — it is the key-loss safety net, in storage
+the writer owns.
+
 ## Deferred (intentionally)
 
 Weekly digest · push nudges · more backup channels (email digest,
-Dropbox — the `backup_status.provider` column is the seam) · optional
-per-user end-to-end encryption (the sync payload is already a
-versioned envelope; a client-encrypted format is a `payloadFormat`
-bump, at the cost of server-rendered Markdown backups) · vaul drawer
-editor on touch · opt-in UI sound (paper-thud at 440→220Hz, gain ≤0.08,
-default off) · view transitions (no list→detail route pair yet).
+Dropbox — the `backup_status.provider` column is the seam) · vaul
+drawer editor on touch · opt-in UI sound (paper-thud at 440→220Hz,
+gain ≤0.08, default off) · view transitions (no list→detail route pair
+yet). (Per-user end-to-end encryption graduated from this list — it is
+now required at sign-in; Drive backups are client-rendered, so the
+server-rendered-Markdown cost named here never materialized.)

@@ -262,16 +262,19 @@ export async function deleteMeta(key: string): Promise<void> {
 }
 
 /**
- * The re-encryption sweep, run once when end-to-end encryption is
- * turned on: every row goes dirty AND gets a fresh clock, so the next
- * push re-writes the whole book to the server in the encrypted format
- * (an unchanged clock would no-op against the server's idempotence).
+ * The re-encryption sweep, run once at enrollment (and once per device
+ * to reach the AAD-bound format): every row goes dirty AND gets a fresh
+ * clock, so the next push re-writes the whole book to the server in the
+ * current sealed format (an unchanged clock would no-op against the
+ * server's idempotence). Records itself in meta so the engine's
+ * once-per-device format sweep never runs redundantly after it.
  */
 export async function reencryptSweep(): Promise<void> {
   await db.snippets.toCollection().modify((s) => {
     s._dirty = 1;
     s.updatedAt = bumpClock(s.updatedAt);
   });
+  await setMeta("e2e:aadSweepDone", 1);
   notifyWrite();
 }
 

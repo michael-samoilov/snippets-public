@@ -704,7 +704,7 @@ textarea:focus-visible,
     font-variant-caps: all-small-caps;
     font-variant-numeric: oldstyle-nums;
     font-weight: 540;
-    font-size: 0.86rem;
+    font-size: 0.96rem;
     letter-spacing: 0.13em;
     color: var(--ink-soft);
   }
@@ -715,7 +715,7 @@ textarea:focus-visible,
     font-variant-caps: all-small-caps;
     font-variant-numeric: oldstyle-nums;
     font-weight: 540;
-    font-size: 0.8rem;
+    font-size: 0.89rem;
     letter-spacing: 0.13em;
     color: var(--ink-soft);
   }
@@ -723,7 +723,7 @@ textarea:focus-visible,
   /* data: mono strictly for true data — times, counts. lowercase, tiny */
   .voice-data {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: 0.78rem;
     font-weight: 450;
     letter-spacing: 0.02em;
     font-variant-numeric: tabular-nums lining-nums;
@@ -745,7 +745,7 @@ textarea:focus-visible,
   .voice-prose-sm {
     font-family: var(--font-serif);
     font-weight: 420;
-    font-size: 0.9rem;
+    font-size: 1rem;
     line-height: 1.55;
     letter-spacing: 0.001em;
     text-shadow: 0 0 0.45px currentColor;
@@ -790,6 +790,28 @@ textarea:focus-visible,
 .voice-prose blockquote,
 .hang-quotes {
   hanging-punctuation: first;
+}
+
+/* ── policy pages (privacy / terms / verify), authored in MDX ──
+   The Markdown compiles to a flat stream of elements, so the section
+   rhythm lives here instead of per-section wrappers: paragraphs sit
+   close, a heading opens a wider gap above it (a section break), and the
+   glance band / lists carry their own inner spacing. Keep these values
+   in step with the reader's eye, not any one page. */
+.policy-prose > * + * {
+  margin-top: 0.85rem;
+}
+.policy-prose > h1 {
+  margin-top: 0;
+}
+.policy-prose > h2 {
+  margin-top: 2.25rem; /* the section break */
+}
+.policy-prose > h1 + * {
+  margin-top: 1.75rem; /* hero → the glance band */
+}
+.policy-prose > details {
+  margin-top: 0.75rem;
 }
 
 /* ── pressable physics (Emil: the interface must listen) ───── */

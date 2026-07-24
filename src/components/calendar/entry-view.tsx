@@ -43,8 +43,13 @@ function EntryViewBase({
       style={{ transformOrigin: "0 0" }}
     >
       {/* light pools under a press on the words (the rewrite affordance made
-          visible); the bloom rides the wrapper above */}
-      <PressGlow grow="parent" />
+          visible); the bloom rides the wrapper above. This card WRAPS ITS OWN
+          SCROLLER (a long entry scrolls inside), so the press bloom must wait
+          out the scroll-vs-press decision — a scale written to this ancestor
+          at touchdown cancels the scroll iOS was about to start (the finger
+          blooms the card instead of moving it). Held ~110ms: a drag scrolls,
+          a hold blooms; the light itself is instant either way. */}
+      <PressGlow grow="parent" growConfirmMs={110} />
       {snippet ? (
         <EntryBody key={snippet.id} snippet={snippet} onLetGo={onLetGo} />
       ) : (
@@ -349,7 +354,7 @@ function EntryBody({
             // contained cap (see useContainedField): the box follows its
             // own caret; overscroll-contain keeps that from chaining out.
             "voice-prose block resize-none overflow-y-auto overscroll-contain whitespace-pre-wrap bg-transparent outline-none [overflow-wrap:anywhere]",
-            compact ? "text-[0.9rem] leading-[1.42]" : "leading-[1.5]",
+            compact ? "text-[1rem] leading-[1.42]" : "leading-[1.5]",
             // hidden: inset-x-4 (not left-4 + w-full) so its box can't
             // poke past the right padding and force a sideways scroll
             editing
@@ -558,12 +563,12 @@ export function MarkedPreview({
       ref={wrapRef}
       data-mark-clip
       className="relative overflow-hidden"
-      style={{ maxHeight: `calc(0.9rem * 1.42 * ${PREVIEW_LINES})` }}
+      style={{ maxHeight: `calc(1rem * 1.42 * ${PREVIEW_LINES})` }}
     >
       <p
         ref={pRef}
         className={cn(
-          "voice-prose whitespace-pre-wrap text-[0.9rem] leading-[1.42]",
+          "voice-prose whitespace-pre-wrap text-[1rem] leading-[1.42]",
           // once windowed, clamp to the 6-line view so the last visible line
           // gets a trailing "…" (the measuring pass renders the full text, so
           // it must stay unclamped for the line maths to be right)

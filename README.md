@@ -1,6 +1,6 @@
 # Snippets
 
-*A pocket commonplace book.* Catch the stories, jokes, quotes, and stray
+*A pocket notebook for the day's stories.* Catch the stories, jokes, quotes, and stray
 thoughts of your day before they evaporate — by voice, in one breath.
 
 Built in the spirit of **Homework for Life** (Matthew Dicks,
@@ -10,21 +10,28 @@ life is full of stories.
 
 ## What it does
 
-- **Speak it or write it.** Tap the wax seal and talk. With an
-  ElevenLabs key configured, Scribe v2 Realtime sets your words on the
-  page as you speak — live, in any browser that has a microphone, in
-  90+ languages. With a Whisper-dialect key instead, recordings are
-  transcribed about half a second after you stop. Without either, the
-  browser's own speech engine streams words live (Chrome, Safari,
-  Edge). Or just type. Nothing is asked of you at the moment of
+- **Speak it or write it.** Tap the wax seal and talk. With a streaming
+  key configured, your words appear on the page as you speak, live, in
+  any browser with a microphone. The default order is privacy-first:
+  Soniox, then Speechmatics, then Deepgram (the first one whose key is
+  set wins; the rest are automatic backups), with ElevenLabs Scribe
+  supported outside that order. With a Whisper-dialect key instead,
+  recordings transcribe about half a second after you stop. With no
+  key, the browser's own speech engine streams words live (Chrome,
+  Safari, Edge). Or just type. Nothing is asked of you at the moment of
   capture.
 - **Leaf back through.** A searchable collection grouped by day, a
   calendar ledger with ink-dot density, and *On this day* resurfacing
   what you kept a month and a year ago.
 - **Yours alone.** Everything lives in IndexedDB on your device.
   Installable PWA, works offline, exports to JSON and Markdown anytime.
-  Typing never touches the network; cross-device sync and Google Drive
-  backup are opt-in, and only spoken audio ever leaves for transcription.
+  Typing never touches the network. Sign-in is optional and adds
+  cross-device sync: entries are encrypted end-to-end on your device
+  before they leave, so the server holds only ciphertext it cannot read
+  (encryption is required at sign-in; there is no plaintext-sync path).
+  Google Drive backup is opt-in and deliberately readable, your safety
+  net if you ever lose your key. Only spoken audio leaves for
+  transcription, and only encrypted entries leave for sync.
 
 ## Running it
 
@@ -38,28 +45,41 @@ pnpm dev            # http://localhost:3000
 Both are optional; the app is fully functional with neither.
 
 ```sh
-# Live voice transcription — words stream onto the page as you speak, in
-# any browser with a microphone. Two streaming providers are supported;
-# the key never reaches the browser (the server mints a short-lived
-# token per take). Configure either or both — the first one that has a
-# key wins as the default, the other is an automatic backup.
+# Live voice transcription: words stream onto the page as you speak, in
+# any browser with a microphone. Four streaming providers are supported;
+# the key never reaches the browser (the server mints a short-lived token
+# per recording). Set any subset. The default order is privacy-first:
+# soniox, speechmatics, deepgram (the first one with a key wins; the rest
+# are automatic backups). ElevenLabs Scribe is supported outside that order.
 
-# Deepgram Nova-3 (the default) — lowest latency, ~2x faster than Scribe
-# to the first word and mid-sentence; language=multi accepts any language
-# and switches mid-sentence. Token via /api/deepgram-token.
+# Soniox (default first choice): realtime, multilingual with mid-sentence
+# code-switching; memory-only and no-training at the self-serve tier.
+# Token via /api/soniox-token.
+SONIOX_API_KEY=…
+# SONIOX_MODEL=stt-rt-v5
+
+# Speechmatics: realtime, stores nothing by architecture, EU endpoint; one
+# language per session (no code-switching). Token via /api/speechmatics-token.
+SPEECHMATICS_API_KEY=…
+# SPEECHMATICS_LANGUAGE=en
+
+# Deepgram Nova-3: lowest latency; language=multi accepts any language and
+# switches mid-sentence. Every request sends mip_opt_out=true (no training).
+# Token via /api/deepgram-token.
 DEEPGRAM_API_KEY=…
 # DEEPGRAM_MODEL=nova-3
 # DEEPGRAM_LANGUAGE=multi
 
-# ElevenLabs Scribe v2 Realtime — broadest language coverage (90+),
-# highest accuracy on tough accents. Token via /api/scribe-token.
+# ElevenLabs Scribe v2 Realtime: broadest language coverage (90+). Out of
+# the default order (zero-retention is enterprise-only there); wired for
+# explicit use. Token via /api/scribe-token.
 ELEVENLABS_API_KEY=…
 # SCRIBE_MODEL=scribe_v2_realtime
 # ELEVENLABS_BASE_URL=https://api.elevenlabs.io
 
 # Provider preference (default + backup order). First available wins;
-# reorder and redeploy to switch — no code change.
-# NEXT_PUBLIC_SPEECH_PROVIDERS=deepgram,scribe
+# reorder and redeploy to switch, no code change.
+# NEXT_PUBLIC_SPEECH_PROVIDERS=soniox,speechmatics,deepgram
 
 # Batch fallback (used when no streaming key is set): a proxy that
 # speaks the OpenAI Whisper dialect — recordings upload when you stop.
@@ -73,17 +93,20 @@ ELEVENLABS_API_KEY=…
 #   Groq    TRANSCRIBE_BASE_URL=https://api.groq.com/openai/v1
 #           TRANSCRIBE_MODEL=whisper-large-v3-turbo
 #
-# With neither key, voice falls back to the browser's own speech engine
-# (Chrome, Safari, Edge) — typing works everywhere regardless.
+# With no key, voice falls back to the browser's own speech engine
+# (Chrome, Safari, Edge); typing works everywhere regardless.
 ```
 
 ### Accounts, sync, and Drive backup (optional, like everything)
 
-The app is whole with none of this. With it, signing in keeps a copy
-of the book on the server (cross-device sync), and a once-daily job
-delivers readable Markdown plus a restorable JSON archive into a
-visible "Snippets" folder in the user's own Google Drive — theirs even
-if this app disappears. See `.env.example` for the variables; the
+The app is whole with none of this. With it, signing in keeps an
+encrypted copy of your entries on the server (cross-device sync):
+entries are sealed end-to-end on the device before they are sent, so
+the server never holds readable text, and encryption is required at
+sign-in. Each signed-in device also delivers readable Markdown plus a
+restorable JSON archive straight into a visible "Snippets" folder in
+the user's own Google Drive (the server keeps no Drive tokens), theirs
+even if this app disappears. See `.env.example` for the variables; the
 moving parts:
 
 ```sh

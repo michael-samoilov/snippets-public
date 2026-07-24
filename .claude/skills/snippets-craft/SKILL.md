@@ -112,7 +112,17 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    words the user already owns: **encrypt your entries**, not *seal your
    book*; **your entries**, not *your book* (allow "book"/"notebook" only
    in warm, descriptive prose where it's deliberate, and never the
-   non-idiomatic "commonplace book"). Metaphor earns its place only when
+   non-idiomatic "commonplace book"). **Entries are entries** — never
+   *your words*, *your book*, or *what you've written*; an entry is
+   **saved** (not *kept*, *set*, or *written into the device*); a voice
+   recording is a **recording** (not *a take*). "Book"/"notebook" survive
+   only as a code identifier (the `book-card` class, the crypto *book
+   key*), never in user-facing copy. This is *one word per meaning*
+   applied to the app's own nouns — the desk/paper metaphor is the visual
+   skin, and *words/book/keeps/take* are exactly the skin-words that turn
+   ambiguous the moment copy explains a mechanism. Depart for readability
+   where a literal word would be clunky, but the default is the concrete
+   noun. Metaphor earns its place only when
    it names an actual on-screen object — the **wax seal** you tap to
    record/keep is real, so "tap the seal" stays — or genuinely aids
    understanding; otherwise the plainer word wins. When in doubt, prefer
@@ -138,7 +148,11 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    quiet additive layer (its states are terse Settings lines — "Synced
    3:12 pm.", counts in the data voice — never banners or spinners in
    the capture path), and no keep ever fails silently — a failed write
-   un-stamps, restores the words, and says why.
+   un-stamps, restores the words, and says why. Signing in implies
+   end-to-end encryption: enrollment (the passphrase step) is part of
+   sign-in, sync WAITS for it — loudly, in letters and Settings lines —
+   and capture never does. There is no way to turn encryption off, and
+   no UI may offer one.
 9. **Quality floor:** wax focus ring on controls (caret + darkened rule
    on text fields), hit targets ≥44px touch, URL reflects view state,
    `touch-action: manipulation`, both themes + reduced-motion checked,

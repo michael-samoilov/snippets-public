@@ -138,5 +138,16 @@ export function autosizeArea(el: HTMLTextAreaElement) {
   const cs = getComputedStyle(el);
   const border =
     parseFloat(cs.borderTopWidth || "0") + parseFloat(cs.borderBottomWidth || "0");
-  el.style.height = `${el.scrollHeight + border}px`;
+  // CAP at the field's own max-height. Writing an inline height TALLER than the
+  // CSS max-height (e.g. 321px on a max-h-[160px] box) leaves the box rendered at
+  // 160 but the inline height claiming 321 — and iOS reads that inline height for
+  // its caret-reveal math, decides the content already fits, and never scrolls
+  // the textarea to follow the caret (it reveal-scrolls an ancestor instead). That
+  // was the real, lock-independent cause of "dragging the caret up won't scroll
+  // the card's text" (owner videos, survived every scroll-lock attempt). Clamping
+  // the inline height to the max makes inline == rendered, so the box is an honest
+  // scroll container. No visual change — the box was already clamped to max.
+  const max = parseFloat(cs.maxHeight || "");
+  const h = el.scrollHeight + border;
+  el.style.height = `${Number.isFinite(max) && h > max ? max : h}px`;
 }

@@ -76,7 +76,40 @@ export function useKeyboardRoom(
     let touchDown = false;
     let lastElMoveAt = 0; // the scroller's last movement (any cause)
     let armT: ReturnType<typeof setTimeout> | undefined;
-    const thaw = () => { frozenSt = null; };
+    // How the pinned composer holds the book, chosen by ?hold= so we can find the
+    // real blocker on device empirically (iOS's caret-drag reveal can't be
+    // reproduced headless):
+    //   snap (default) — overflow:hidden + clip ancestors + a rAF that resets the
+    //     book to frozenSt before each paint. Holds the book, but iOS still tries
+    //     to reveal-scroll it during a caret drag and the reset fights that.
+    //   off — no hold at all: the composer behaves like a plain field, so we see
+    //     what iOS does natively (does the TEXTAREA reveal its own caret with no
+    //     app scroll, or does the book scroll?). This is the diagnostic case.
+    const holdMode =
+      typeof location !== "undefined" && /(?:\?|&)hold=off\b/.test(location.search)
+        ? "off"
+        : "snap";
+    // A focused pinned composer holds the book at frozenSt every frame (before
+    // paint), not just reactively on scroll events, because a scroll-event snap
+    // fires only AFTER iOS painted the moved frame and loses the tug-of-war.
+    const holdBook = () => {
+      if (frozenSt == null) return;
+      if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
+    };
+    let pinRaf = 0;
+    const pinTick = () => {
+      pinRaf = 0;
+      if (!pinFocused) return;
+      holdBook();
+      pinRaf = requestAnimationFrame(pinTick);
+    };
+    const startPinLoop = () => { if (!pinRaf) pinRaf = requestAnimationFrame(pinTick); };
+    const stopPinLoop = () => { if (pinRaf) { cancelAnimationFrame(pinRaf); pinRaf = 0; } };
+    // A focused pinned composer holds its centred target for the WHOLE focus, so
+    // thaw must not null it (overflow:hidden alone can't stop a programmatic
+    // caret-reveal — only snapping back to a still-set frozenSt does). correct()
+    // keeps that target fresh as the box grows / the keyboard rises.
+    const thaw = () => { if (!pinFocused) frozenSt = null; };
     const rearm = () => {
       thaw();
       clearTimeout(armT);
@@ -90,12 +123,22 @@ export function useKeyboardRoom(
           armT = setTimeout(arm, 400);
           return;
         }
-        if (field && document.activeElement === field && !touchDown) frozenSt = el.scrollTop;
+        if (field && document.activeElement === field && !touchDown) {
+          // a pinned composer freezes to its COMPUTED centred target (correct()
+          // writes it), never to wherever the book happens to sit; every other
+          // field holds the position it settled at
+          if (field.hasAttribute("data-room-pin")) correct();
+          else frozenSt = el.scrollTop;
+        }
       };
       armT = setTimeout(arm, 900);
     };
-    const onTouchStart = () => { touchDown = true; thaw(); clearTimeout(armT); };
-    const onTouchEnd = () => { touchDown = false; rearm(); };
+    // While a pinned composer is focused the book is held unscrollable outright
+    // (pinFocused, below), so a touch can neither thaw its freeze nor re-arm it —
+    // the hold, not the arm lifecycle, keeps it put. Every other touch thaws and
+    // re-arms as before.
+    const onTouchStart = () => { touchDown = true; if (!pinFocused) thaw(); clearTimeout(armT); };
+    const onTouchEnd = () => { touchDown = false; if (!pinFocused) rearm(); };
 
     // A SELECTION-HANDLE drag is the freeze's hardest case: iOS delivers no
     // touch events under a native handle, and WebKit's auto-scroll chases the
@@ -114,20 +157,95 @@ export function useKeyboardRoom(
     // While the selection stands, the lock simply holds — every word the
     // writer could want is inside the contained box, and any tap outside
     // collapses the selection and frees the scroller.
+    // Both the range-selection hold and the pinned-composer hold (below) make the
+    // outer book unscrollable the same way — overflow:hidden, with frozenSt as
+    // the snap fallback for engines that still scroll a hidden box. Refcounted
+    // over the two owners so releasing one never lifts the other's lock.
     let selLocked = false;
+    let pinFocused = false;
     let savedOverflowY = "";
+    let overflowHeld = false;
+    const holdOverflow = () => {
+      if (!overflowHeld) {
+        overflowHeld = true;
+        savedOverflowY = el.style.overflowY;
+        el.style.overflowY = "hidden"; // scrollbar already hidden → nothing shifts
+      }
+      if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
+    };
+    const releaseOverflow = () => {
+      if (!overflowHeld || selLocked || pinFocused) return; // the other owner still holds
+      overflowHeld = false;
+      el.style.overflowY = savedOverflowY;
+    };
     const unlockSelection = () => {
       if (!selLocked) return;
       selLocked = false;
-      el.style.overflowY = savedOverflowY;
+      releaseOverflow();
       rearm();
     };
     const lockForSelection = () => {
       if (selLocked) return; // already held — no writes, the callout lives
       selLocked = true;
-      savedOverflowY = el.style.overflowY;
-      el.style.overflowY = "hidden";
-      if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
+      holdOverflow();
+    };
+
+    // The pinned composer's contract: while it is focused the book NEVER scrolls
+    // — its own box scrolls the words, and correct() keeps the card in the visible
+    // band. Dragging the caret to the box's top/bottom edge makes WebKit
+    // reveal-scroll the nearest SCROLLABLE ANCESTOR to chase the caret, flinging
+    // the page around (owner videos). Making just this scroller overflow:hidden
+    // is not enough: WebKit walks PAST a hidden scroller to the next scrollable
+    // one — the schedule sits in TWO nested scrollers (the book + the sheet's
+    // <main>), so locking only the book handed the reveal to <main> and the whole
+    // page scrolled instead (owner video, 2026-07-23, third pass). So lock the
+    // WHOLE ancestor chain: with every scrollable ancestor overflow:hidden, WebKit
+    // has nothing left to escalate to (the app root is position:fixed) and reveals
+    // the caret inside the textarea alone. correct() still positions the card via
+    // programmatic scrollTop (which works under overflow:hidden); frozenSt
+    // snap-back stays as a fallback. No drag detection — the book is simply held.
+    const lockedAncestors: { node: HTMLElement; prev: string }[] = [];
+    const lockAncestors = () => {
+      let node = el.parentElement;
+      while (node && node !== document.documentElement) {
+        const oy = getComputedStyle(node).overflowY;
+        // lock even a not-yet-scrollable ancestor: the keyboard shrinks the
+        // viewport a beat later and it becomes scrollable then
+        if (oy === "auto" || oy === "scroll") {
+          lockedAncestors.push({ node, prev: node.style.overflow });
+          // overflow:CLIP, not hidden: a `hidden` element is still a scroll
+          // container that iOS's caret-reveal (scrollRectToVisible) can move —
+          // `clip` is NOT a scroll container at all, so the reveal skips it. The
+          // outer scrollers never need programmatic scrolling (only the inner
+          // book does, via correct(), so it stays `hidden`), so clipping them is
+          // safe and should leave iOS nothing to reveal-scroll (owner-device
+          // diagnosis, 2026-07-23). Set BOTH axes via the shorthand: a mixed
+          // `overflow-x:hidden; overflow-y:clip` normalizes back to hidden.
+          node.style.overflow = "clip";
+        }
+        node = node.parentElement;
+      }
+    };
+    const unlockAncestors = () => {
+      for (const a of lockedAncestors) a.node.style.overflow = a.prev;
+      lockedAncestors.length = 0;
+    };
+    const holdPinFocus = () => {
+      if (pinFocused) return;
+      if (holdMode === "off") { el.setAttribute("data-pin-held", "off"); return; } // diagnostic: no hold
+      pinFocused = true;
+      holdOverflow();
+      lockAncestors();
+      startPinLoop();
+      el.setAttribute("data-pin-held", String(lockedAncestors.length)); // diagnostic signal
+    };
+    const releasePinFocus = () => {
+      if (!pinFocused) return;
+      pinFocused = false;
+      stopPinLoop();
+      unlockAncestors();
+      releaseOverflow();
+      el.removeAttribute("data-pin-held");
     };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
@@ -139,21 +257,52 @@ export function useKeyboardRoom(
 
     const onElScroll = () => {
       const st = el.scrollTop;
+      if (pinFocused && frozenSt != null) {
+        // a focused pinned composer: the book holds still, full stop — the reveal
+        // is transferred into the textarea (holdBook) rather than fought, so the
+        // caret still scrolls into view inside the card
+        holdBook();
+        lastElMoveAt = performance.now();
+        return;
+      }
       if (selLocked && frozenSt != null) {
-        // during a handle drag the page holds still, full stop — the finger
-        // on the handle is not a page scroll, so touchDown doesn't exempt it
+        // a range-selection handle drag: the book holds still, full stop —
+        // touchDown doesn't exempt it (any programmatic reveal is snapped back)
         if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt;
         lastElMoveAt = performance.now();
         return;
       }
       lastElMoveAt = performance.now();
+      // A pinned composer must hold even mid-fling. Its freeze gets thawed by a
+      // stray touch (onTouchStart), and while the book is still coasting arm()
+      // refuses to re-commit — it waits for a stillness a momentum fling never
+      // reaches — so frozenSt stays null, the clamp below is skipped, and the
+      // composer coasts off-screen (the "slides out of view while typing" case,
+      // confirmed on-device: a long run of scroll events with froz=null). Re-
+      // assert its centred target right here, on every scroll, independent of the
+      // arm lifecycle, so a coasting fling is stopped on its first frame. A real
+      // finger scroll (touchDown) still passes through untouched.
+      if (
+        frozenSt == null &&
+        !touchDown &&
+        field &&
+        field.hasAttribute("data-room-pin") &&
+        document.activeElement === field
+      ) {
+        correct(); // recompute the centred target, snap to it, re-freeze
+        return;
+      }
       if (frozenSt == null || touchDown) return;
       if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
     };
 
     const correct = () => {
       if (selLocked) return; // a handle drag owns the view outright
-      if (frozenSt != null) return; // a walk owns the view; the box reveals its own caret
+      const isPinned = !!field && field.hasAttribute("data-room-pin");
+      // a walk owns the view; the box reveals its own caret — EXCEPT a pinned
+      // composer, whose book must never follow the caret at all: for it, correct()
+      // re-asserts the centred anchor on every pass instead of standing down.
+      if (frozenSt != null && !isPinned) return;
       if (!field) {
         clearPad();
         return;
@@ -181,6 +330,27 @@ export function useKeyboardRoom(
       el.style.paddingBottom = `${kb + FLOAT}px`;
       el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
       const r = field.getBoundingClientRect();
+      // A contained composer (data-room-pin) reveals its own caret inside its box,
+      // so the book need not follow the caret at all: anchor the card in the
+      // visible band and FREEZE to that computed target. Because the target is
+      // recomputed (not captured), onElScroll snaps any stray reveal straight back
+      // to it — the hold self-heals no matter when the walk begins.
+      if (isPinned) {
+        // FOOT-ANCHORED, always: the card is capped at the six-line box (max-h),
+        // so its foot sits just above the keyboard band and the whole card stays
+        // on screen. The height no longer changes at the six→seven-line boundary
+        // (past six the box scrolls its own words), so keeping ONE formula means
+        // the card does not JUMP when it becomes scrollable — the earlier code
+        // switched to a centred target exactly there, and the card leapt up (owner
+        // video, 2026-07-23). Clamp the head below the scroller's own visible top
+        // (below the calendar header) so a small screen never tucks it up there.
+        const ceil = el.getBoundingClientRect().top + 8;
+        const desiredTop = Math.max(ceil, bandTop - r.height);
+        const delta = r.top - desiredTop;
+        if (Math.abs(delta) > 0.5) el.scrollTop += delta;
+        frozenSt = el.scrollTop; // hold the anchored target; drift snaps back
+        return;
+      }
       const over = r.bottom - bandTop;
       if (over > 0.5) {
         el.scrollTop += over;
@@ -249,6 +419,8 @@ export function useKeyboardRoom(
       if (managed(t)) {
         field = t;
         ro.observe(t!);
+        // a pinned composer holds the book unscrollable for its whole focus
+        if (t!.hasAttribute("data-room-pin")) holdPinFocus();
         // extra late passes to outlast the keyboard's rise (~250ms) and iOS's
         // settle-scroll after it
         run([140, 300, 450]);
@@ -257,6 +429,7 @@ export function useKeyboardRoom(
     };
     const onFocusOut = () => {
       if (field) ro.unobserve(field);
+      releasePinFocus();
       unlockSelection();
       field = null;
       thaw();
@@ -286,11 +459,16 @@ export function useKeyboardRoom(
     if (pre && el.contains(pre) && managed(pre)) {
       field = pre;
       ro.observe(pre);
+      if (pre.hasAttribute("data-room-pin")) holdPinFocus();
       run([140, 300, 450]);
       rearm();
     }
     return () => {
-      unlockSelection();
+      selLocked = false;
+      pinFocused = false;
+      stopPinLoop();
+      unlockAncestors(); // restore any locked outer scrollers
+      releaseOverflow(); // restore overflow whichever owner held it
       document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);
