@@ -435,6 +435,14 @@ upgrades every /verify claim from "we say" to "you can read."
 
 ## 18. CSP: drop `unsafe-inline` from script-src via a nonce
 
+> Main motivation retired 2026-07-24: `/verify` Test 3 no longer links to
+> securityheaders.com (`98c1487`). It now centers the direct read of the
+> `connect-src` header (curl it yourself) instead of a third-party grade,
+> so a trust-checking visitor is no longer routed to a page that flags
+> `unsafe-inline`. The A+ badge is now wanted only for an external reason
+> (a partner, a store listing), not the app's own verify flow. Revisit
+> only if such a reason appears; otherwise keeping static rendering wins.
+
 securityheaders.com flags `'unsafe-inline'` in `script-src` (yellow;
 overall grade A). It's genuinely required today: the only inline scripts
 in the served HTML are Next's per-build RSC bootstrap (`self.__next_f.push`),
