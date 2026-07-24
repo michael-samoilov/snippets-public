@@ -4,12 +4,12 @@ The [privacy policy](/privacy) makes claims. This page is how you check them you
 
 ## Test 1 — Airplane mode
 
-The claim: signed out, your entries never leave this device — writing needs no network at all.
+The claim: while you're signed out, your entries never leave this device — writing needs no network at all.
 
 <Steps>
-  <Step n={1}>Open Snippets once, so it can install itself.</Step>
+  <Step n={1}>Open Snippets once, so it can install itself <<unclear what it means for a browser page to "install itself">>.</Step>
   <Step n={2}>Turn on airplane mode.</Step>
-  <Step n={3}>Write an entry and press the wax seal. It saves. Look through your entries. Everything works. (Voice is the exception — transcription runs over the network, so the microphone needs a connection.)</Step>
+  <Step n={3}>Write an entry and press the wax seal. It saves. Look through your entries. Everything works. (Voice is the exception — transcription runs over the network, so the microphone needs a connection. <<question: would the browser's native voice work over the network as well? because if not, someobody might try this exercise, and see that voice works after all, which is dissonant with what we explain will happen, which can erode trust. let's iron this out>>)</Step>
   <Step n={4}>Close the app, reopen it, still offline: your entry is there.</Step>
 </Steps>
 
@@ -31,7 +31,7 @@ The claim: every request this app makes is one you can predict — and none of t
   <Req name="/api/auth/…">signing in and the session check. Only if you use an account.</Req>
   <Req name="/api/sync/push, /api/sync/pull">your entries to and from the server, encrypted. **Open a push request and read what it sends: a block of random-looking characters, not words.** That block is exactly what our server stores.</Req>
   <Req name="/api/keys">the two encrypted copies of your key (made when you set your passphrase). The passphrase itself never appears — search the request for it.</Req>
-  <Req name="/api/…-token">a temporary pass for the transcription service, fetched just before the microphone opens — the permanent key never leaves our server.</Req>
+  <Req name="/api/…-token">a temporary pass for the transcription service, fetched just before the microphone opens — the permanent key never leaves our server <<just checking -- are we sure that any instance of '...-token' will always be for a transcription service, and for nothing else?>>.</Req>
   <ProviderRow />
   <Req name="www.googleapis.com">backup files traveling from this device to your own Google Drive. Only if you connected the backup.</Req>
 </Requests>
@@ -50,6 +50,6 @@ curl -sI https://www.snippets.ink | grep -i content-security
 
 Or paste `snippets.ink` into [securityheaders.com](https://securityheaders.com). The addresses you find in `connect-src` are the ones from Test 2 — the whole list, enforced.
 
-**What this test can and cannot prove.** It proves where data can go. It cannot prove the code itself is honest — a web app's code arrives fresh from the server on each visit, so you are trusting that delivery. Tests 1 and 2 narrow the question to what the code you were served actually does; the deeper protection is that any altered code would run in your own browser, open to inspection — not a silent query on a server you can't see.
+**What this test can and cannot prove.** It proves where data can go. It cannot prove the code itself is honest — a web app's code arrives fresh from the server on each visit, so you are trusting that delivery <<the whole point of the verify page is so that we could relax warnings like 'one honest catch - you depend on our code working the way we said it does' -- which means that this sentence feels very undermining. do we even need it, or could we change anything to obsolesce this sentence? i suppose same goes for the sentence after this ie, the whole paragraph>>. Tests 1 and 2 narrow the question to what the code you were served actually does; the deeper protection is that any altered code would run in your own browser, open to inspection — not a silent query on a server you can't see.
 
 Want to go deeper? The privacy policy's [“How the encryption works”](/privacy#how-the-encryption-works) section names the exact algorithms and what rests on the server.
