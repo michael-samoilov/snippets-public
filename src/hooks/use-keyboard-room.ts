@@ -76,35 +76,25 @@ export function useKeyboardRoom(
     let touchDown = false;
     let lastElMoveAt = 0; // the scroller's last movement (any cause)
     let armT: ReturnType<typeof setTimeout> | undefined;
-    // A focused pinned composer holds the book at frozenSt EVERY FRAME, not just
-    // reactively on scroll events. On-device the book scroller — not the outer
-    // <main>, which the clip stops — is what iOS reveal-scrolls to chase the
-    // caret (owner diagnostic: book fired 65 scroll events during one drag). A
-    // `scroll`-event snap-back fires only AFTER iOS has painted the moved frame,
-    // so it loses the tug-of-war and the page visibly jumps; a rAF loop resets
-    // scrollTop BEFORE each paint, so the reveal never shows. The textarea keeps
-    // scrolling its own words (its scrollTop is independent), so the caret still
-    // reveals — inside the card, which is the whole point. overflow:clip can't do
-    // this job here: it zeroes the book's scroll offset (tested), losing the
-    // composer's position. The loop runs only while a pinned composer is focused.
-    // Hold the pinned book at frozenSt, and TRANSFER whatever iOS reveal-scrolled
-    // it by into the TEXTAREA's own scroll — scroll its words by the same delta —
-    // so the caret is revealed INSIDE the card, iOS is satisfied, and it stops
-    // scrolling the book. A plain reset (no transfer) starves the textarea's reveal
-    // (the caret won't scroll into view on the first drag) and leaves the book
-    // firing scroll events that strand a card's press-bloom. The textarea clamps at
-    // its own ends, so a caret already at the field's top/bottom just leaves the
-    // book held, nothing more to reveal. Runs from BOTH the rAF (before paint) and
-    // the scroll event (whichever sees the reveal first does the transfer once).
+    // How the pinned composer holds the book, chosen by ?hold= so we can find the
+    // real blocker on device empirically (iOS's caret-drag reveal can't be
+    // reproduced headless):
+    //   snap (default) — overflow:hidden + clip ancestors + a rAF that resets the
+    //     book to frozenSt before each paint. Holds the book, but iOS still tries
+    //     to reveal-scroll it during a caret drag and the reset fights that.
+    //   off — no hold at all: the composer behaves like a plain field, so we see
+    //     what iOS does natively (does the TEXTAREA reveal its own caret with no
+    //     app scroll, or does the book scroll?). This is the diagnostic case.
+    const holdMode =
+      typeof location !== "undefined" && /(?:\?|&)hold=off\b/.test(location.search)
+        ? "off"
+        : "snap";
+    // A focused pinned composer holds the book at frozenSt every frame (before
+    // paint), not just reactively on scroll events, because a scroll-event snap
+    // fires only AFTER iOS painted the moved frame and loses the tug-of-war.
     const holdBook = () => {
       if (frozenSt == null) return;
-      const d = el.scrollTop - frozenSt;
-      if (Math.abs(d) <= 0.5) return;
-      const f = field;
-      if (f && f.hasAttribute("data-room-pin") && "scrollTop" in f) {
-        (f as HTMLTextAreaElement).scrollTop += d;
-      }
-      el.scrollTop = frozenSt;
+      if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
     };
     let pinRaf = 0;
     const pinTick = () => {
@@ -242,6 +232,7 @@ export function useKeyboardRoom(
     };
     const holdPinFocus = () => {
       if (pinFocused) return;
+      if (holdMode === "off") { el.setAttribute("data-pin-held", "off"); return; } // diagnostic: no hold
       pinFocused = true;
       holdOverflow();
       lockAncestors();
@@ -256,57 +247,12 @@ export function useKeyboardRoom(
       releaseOverflow();
       el.removeAttribute("data-pin-held");
     };
-    // Scroll the pinned composer's textarea so the caret stays visible — OURSELVES,
-    // not via iOS. In the locked-scroller setup (the book held, its ancestors
-    // clipped) iOS stops performing its own caret reveal entirely: dragging the
-    // caret up walks it off the top of the visible text and the textarea never
-    // follows (owner: "the first drag-up doesn't scroll", kbdebug flat — nothing
-    // moved). So measure the caret's Y in a hidden mirror of the field and scroll
-    // the field to bring it into view. Keeping the caret visible here also means
-    // iOS never needs to reveal-scroll the book, so it stays quiet. A reused
-    // mirror div carries the field's wrap-affecting metrics (width, font, padding).
-    let mirror: HTMLDivElement | null = null;
-    const revealCaret = () => {
-      const f = field as HTMLTextAreaElement | null;
-      if (!f || !f.hasAttribute("data-room-pin") || typeof f.selectionEnd !== "number") return;
-      const cs = getComputedStyle(f);
-      if (!mirror) {
-        mirror = document.createElement("div");
-        mirror.setAttribute("aria-hidden", "true");
-        Object.assign(mirror.style, {
-          position: "absolute", top: "0", left: "-9999px", visibility: "hidden",
-          pointerEvents: "none", whiteSpace: "pre-wrap", overflowWrap: "break-word",
-          wordWrap: "break-word", boxSizing: "border-box",
-        } as Partial<CSSStyleDeclaration>);
-        document.body.appendChild(mirror);
-      }
-      const m = mirror;
-      // match the field's content width (border-box width = clientWidth, since
-      // clientWidth already excludes the border) and every metric that wraps text
-      m.style.width = `${f.clientWidth}px`;
-      m.style.font = cs.font;
-      m.style.lineHeight = cs.lineHeight;
-      m.style.letterSpacing = cs.letterSpacing;
-      m.style.padding = cs.padding;
-      m.textContent = f.value.slice(0, f.selectionEnd);
-      const marker = document.createElement("span");
-      marker.textContent = "​";
-      m.appendChild(marker);
-      const y = marker.offsetTop; // caret top in the field's scroll coordinates
-      m.removeChild(marker);
-      const lh = parseFloat(cs.lineHeight) || 23;
-      const padT = parseFloat(cs.paddingTop) || 0;
-      const top = f.scrollTop;
-      if (y < top + padT) f.scrollTop = Math.max(0, y - padT); // caret above view → up
-      else if (y + lh > top + f.clientHeight - padT) f.scrollTop = y + lh - f.clientHeight + padT; // below → down
-    };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
       const f = field as HTMLTextAreaElement;
       if (typeof f.selectionStart !== "number") return;
       if (f.selectionStart !== f.selectionEnd) lockForSelection();
       else unlockSelection();
-      if (field.hasAttribute("data-room-pin")) revealCaret();
     };
 
     const onElScroll = () => {
@@ -521,7 +467,6 @@ export function useKeyboardRoom(
       selLocked = false;
       pinFocused = false;
       stopPinLoop();
-      mirror?.remove();
       unlockAncestors(); // restore any locked outer scrollers
       releaseOverflow(); // restore overflow whichever owner held it
       document.removeEventListener("selectionchange", onDocSelChange);
