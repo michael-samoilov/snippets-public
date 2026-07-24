@@ -76,6 +76,26 @@ export function useKeyboardRoom(
     let touchDown = false;
     let lastElMoveAt = 0; // the scroller's last movement (any cause)
     let armT: ReturnType<typeof setTimeout> | undefined;
+    // A focused pinned composer holds the book at frozenSt EVERY FRAME, not just
+    // reactively on scroll events. On-device the book scroller — not the outer
+    // <main>, which the clip stops — is what iOS reveal-scrolls to chase the
+    // caret (owner diagnostic: book fired 65 scroll events during one drag). A
+    // `scroll`-event snap-back fires only AFTER iOS has painted the moved frame,
+    // so it loses the tug-of-war and the page visibly jumps; a rAF loop resets
+    // scrollTop BEFORE each paint, so the reveal never shows. The textarea keeps
+    // scrolling its own words (its scrollTop is independent), so the caret still
+    // reveals — inside the card, which is the whole point. overflow:clip can't do
+    // this job here: it zeroes the book's scroll offset (tested), losing the
+    // composer's position. The loop runs only while a pinned composer is focused.
+    let pinRaf = 0;
+    const pinTick = () => {
+      pinRaf = 0;
+      if (!pinFocused) return;
+      if (frozenSt != null && Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
+      pinRaf = requestAnimationFrame(pinTick);
+    };
+    const startPinLoop = () => { if (!pinRaf) pinRaf = requestAnimationFrame(pinTick); };
+    const stopPinLoop = () => { if (pinRaf) { cancelAnimationFrame(pinRaf); pinRaf = 0; } };
     // A focused pinned composer holds its centred target for the WHOLE focus, so
     // thaw must not null it (overflow:hidden alone can't stop a programmatic
     // caret-reveal — only snapping back to a still-set frozenSt does). correct()
@@ -206,11 +226,13 @@ export function useKeyboardRoom(
       pinFocused = true;
       holdOverflow();
       lockAncestors();
+      startPinLoop();
       el.setAttribute("data-pin-held", String(lockedAncestors.length)); // diagnostic signal
     };
     const releasePinFocus = () => {
       if (!pinFocused) return;
       pinFocused = false;
+      stopPinLoop();
       unlockAncestors();
       releaseOverflow();
       el.removeAttribute("data-pin-held");
@@ -428,6 +450,7 @@ export function useKeyboardRoom(
     return () => {
       selLocked = false;
       pinFocused = false;
+      stopPinLoop();
       unlockAncestors(); // restore any locked outer scrollers
       releaseOverflow(); // restore overflow whichever owner held it
       document.removeEventListener("selectionchange", onDocSelChange);
