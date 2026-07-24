@@ -495,9 +495,32 @@ export function PressGlow({ grow = false, growWhileFocused = true, growConfirmMs
     // left. A capture-phase document listener releases it on any tap outside the
     // host. (Capture so it runs even if the target stops propagation.)
     const onDocDown = (e: PointerEvent) => {
-      if (!focused) return;
-      if (e.target instanceof Node && host.contains(e.target)) return;
+      if (e.target instanceof Node && host.contains(e.target)) return; // a press ON this surface
+      // A press landed ELSEWHERE — the hand is not on this surface, so none of its
+      // bloom may stand: not a focus-held bloom, and not a lingering press/scroll-
+      // ride one whose release is still deferring (releaseScale waits out scroll
+      // activity, and a focused composer's book-hold keeps that activity alive, so
+      // a card scrolled just before focusing could otherwise stay bloomed). Rest it
+      // now (owner: "a card's bloom should not be active if i am not touching it").
+      if (!focused && !down && !riding && !bloomEl.style.transform) return; // nothing lit
       focused = false;
+      down = false;
+      clearTimeout(bloomHold);
+      bloomHold = 0;
+      if (riding) {
+        riding = false;
+        touchLive = false;
+        quenched = false;
+        clearTimeout(settle);
+        clearTimeout(stillDeath);
+        window.removeEventListener("scroll", onScrollRide, true);
+        host.removeEventListener("touchmove", onRideMove);
+        host.removeEventListener("touchend", onRideEnd);
+        host.removeEventListener("touchcancel", onRideEnd);
+      }
+      clearTimeout(scaleClear);
+      clearTimeout(dwell);
+      level();
       scale();
     };
     // a press the browser never resolves (the app backgrounded mid-press)

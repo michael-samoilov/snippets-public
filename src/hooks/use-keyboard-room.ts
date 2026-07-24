@@ -87,11 +87,30 @@ export function useKeyboardRoom(
     // reveals — inside the card, which is the whole point. overflow:clip can't do
     // this job here: it zeroes the book's scroll offset (tested), losing the
     // composer's position. The loop runs only while a pinned composer is focused.
+    // Hold the pinned book at frozenSt, and TRANSFER whatever iOS reveal-scrolled
+    // it by into the TEXTAREA's own scroll — scroll its words by the same delta —
+    // so the caret is revealed INSIDE the card, iOS is satisfied, and it stops
+    // scrolling the book. A plain reset (no transfer) starves the textarea's reveal
+    // (the caret won't scroll into view on the first drag) and leaves the book
+    // firing scroll events that strand a card's press-bloom. The textarea clamps at
+    // its own ends, so a caret already at the field's top/bottom just leaves the
+    // book held, nothing more to reveal. Runs from BOTH the rAF (before paint) and
+    // the scroll event (whichever sees the reveal first does the transfer once).
+    const holdBook = () => {
+      if (frozenSt == null) return;
+      const d = el.scrollTop - frozenSt;
+      if (Math.abs(d) <= 0.5) return;
+      const f = field;
+      if (f && f.hasAttribute("data-room-pin") && "scrollTop" in f) {
+        (f as HTMLTextAreaElement).scrollTop += d;
+      }
+      el.scrollTop = frozenSt;
+    };
     let pinRaf = 0;
     const pinTick = () => {
       pinRaf = 0;
       if (!pinFocused) return;
-      if (frozenSt != null && Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
+      holdBook();
       pinRaf = requestAnimationFrame(pinTick);
     };
     const startPinLoop = () => { if (!pinRaf) pinRaf = requestAnimationFrame(pinTick); };
@@ -247,11 +266,17 @@ export function useKeyboardRoom(
 
     const onElScroll = () => {
       const st = el.scrollTop;
-      if ((selLocked || pinFocused) && frozenSt != null) {
-        // held for a range selection or a focused pinned composer: the book holds
-        // still, full stop — touchDown doesn't exempt it, so any programmatic
-        // reveal WebKit sneaks through under overflow:hidden is snapped straight
-        // back to the centred target
+      if (pinFocused && frozenSt != null) {
+        // a focused pinned composer: the book holds still, full stop — the reveal
+        // is transferred into the textarea (holdBook) rather than fought, so the
+        // caret still scrolls into view inside the card
+        holdBook();
+        lastElMoveAt = performance.now();
+        return;
+      }
+      if (selLocked && frozenSt != null) {
+        // a range-selection handle drag: the book holds still, full stop —
+        // touchDown doesn't exempt it (any programmatic reveal is snapped back)
         if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt;
         lastElMoveAt = performance.now();
         return;
