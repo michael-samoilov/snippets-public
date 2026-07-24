@@ -42,13 +42,13 @@ One honest gap: if the app ever falls back to your browser's built-in dictation,
 
 The claim: this app **cannot** send data anywhere you haven't seen above, not by policy, but because your browser refuses to let it.
 
-Every page we serve carries a `Content-Security-Policy` header. Its `connect-src` line names every web address this app is allowed to contact; the browser blocks anything else before it leaves. Check the header from any terminal:
+Every page we serve carries a `Content-Security-Policy` header. Its `connect-src` line is the list from Test 2, and your browser blocks any address not on it before the request can leave. Read it yourself from any terminal:
 
 ```
 curl -sI https://www.snippets.ink | grep -i content-security
 ```
 
-Or paste `snippets.ink` into [securityheaders.com](https://securityheaders.com). The addresses you find in `connect-src` are the ones from Test 2: the whole list, enforced.
+That list is the whole of where this app can send anything. It is your browser enforcing it, not us asking you to believe it.
 
 **What the three tests give you.** Together they let you confirm, with your own eyes, that the app works offline, that everything it sends is encrypted, and that your browser itself blocks any address off the list, whatever the code intends. You are not trusting our word for it, and because a website loads its code fresh each visit, it is a check you can run again anytime.
 
