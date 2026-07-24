@@ -183,14 +183,22 @@ export function useKeyboardRoom(
         // lock even a not-yet-scrollable ancestor: the keyboard shrinks the
         // viewport a beat later and it becomes scrollable then
         if (oy === "auto" || oy === "scroll") {
-          lockedAncestors.push({ node, prev: node.style.overflowY });
-          node.style.overflowY = "hidden";
+          lockedAncestors.push({ node, prev: node.style.overflow });
+          // overflow:CLIP, not hidden: a `hidden` element is still a scroll
+          // container that iOS's caret-reveal (scrollRectToVisible) can move —
+          // `clip` is NOT a scroll container at all, so the reveal skips it. The
+          // outer scrollers never need programmatic scrolling (only the inner
+          // book does, via correct(), so it stays `hidden`), so clipping them is
+          // safe and should leave iOS nothing to reveal-scroll (owner-device
+          // diagnosis, 2026-07-23). Set BOTH axes via the shorthand: a mixed
+          // `overflow-x:hidden; overflow-y:clip` normalizes back to hidden.
+          node.style.overflow = "clip";
         }
         node = node.parentElement;
       }
     };
     const unlockAncestors = () => {
-      for (const a of lockedAncestors) a.node.style.overflowY = a.prev;
+      for (const a of lockedAncestors) a.node.style.overflow = a.prev;
       lockedAncestors.length = 0;
     };
     const holdPinFocus = () => {
@@ -198,12 +206,14 @@ export function useKeyboardRoom(
       pinFocused = true;
       holdOverflow();
       lockAncestors();
+      el.setAttribute("data-pin-held", String(lockedAncestors.length)); // diagnostic signal
     };
     const releasePinFocus = () => {
       if (!pinFocused) return;
       pinFocused = false;
       unlockAncestors();
       releaseOverflow();
+      el.removeAttribute("data-pin-held");
     };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
