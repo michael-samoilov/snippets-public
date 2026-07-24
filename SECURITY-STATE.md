@@ -142,8 +142,19 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   backup-stopped warning.
 
 ### Leaving
-- Erase-all soft-deletes everywhere (propagates as tombstones; content
-  kept ≤30 days for cross-device undo, then scrubbed to an id + timestamp).
+- Erase-all is permanent — there is no in-app undo for it (unlike a single
+  delete, which has a 10-second local undo toast). It soft-deletes
+  everywhere (propagates as tombstones), and a delivering device empties
+  the Drive backup on its next run. The permanent part is the tombstone
+  (id + timestamps, no words), kept forever server-side — that permanence,
+  not the payload, is what stops resurrection. The encrypted payload lingers
+  ≤30 days, then the cron scrubs it. That window feeds no feature today
+  (single undo reads the local row, not the server; no restore-erased UI
+  exists), so it is only a grace period before destruction and future
+  optionality for a restore feature; the plumbing (payload-carrying pull +
+  `restoreSnippet`) already exists. `PURGE_AFTER_MS` (client) and
+  `TOMBSTONE_SCRUB_AFTER_MS` (server) are the paired 30-day constants; the
+  privacy copy's "within 30 days" must move with them.
   Account deletion removes the account, synced entries + tombstones,
   wrapped keys, and backup record from the server immediately; revokes
   the Drive grant. Device copies and delivered Drive files remain yours.
@@ -194,6 +205,20 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-07-24 — MDX policy pages; deletion copy corrected; em-dash ban (preview)
+No behavior change. The privacy/terms/verify pages moved to `.mdx` (owner
+can edit the prose as Markdown). Corrected a real drift: the erase story
+described a "cross-device undo" that does not exist. The 30-day payload
+retention feeds no feature (single undo reads the local row, not the
+server; no restore-erased UI), so the privacy "Leaving" copy now leads
+with "erasing is permanent, export first" and frames the 30 days as the
+server finishing destruction, not a recovery window; the Drive-empties-on-
+next-delivery fact is stated. This entry's `### Leaving` bullet above was
+fixed to match. Also: em-dashes purged from all user-facing copy (they read
+as AI prose) with a new copy-clarity rule banning `—` across `copy` + the
+policy pages; the OG alt text is exempt (its em-dash quotes the designed
+share image). On preview branch, pending merge.
 
 ### 2026-07-23 — privacy/verify digestibility revision (preview)
 Seven-pass audit → shorter, plainer pages. Trust fixes: the voice glance
