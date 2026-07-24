@@ -162,25 +162,47 @@ export function useKeyboardRoom(
     };
 
     // The pinned composer's contract: while it is focused the book NEVER scrolls
-    // — its own box scrolls the words, and correct() keeps the card centred in the
-    // visible band. Dragging the caret to the box's top/bottom edge makes WebKit
-    // reveal-scroll the nearest scrollable ANCESTOR (the book) to chase the caret,
-    // flinging the whole schedule around (owner videos). A reactive snap-back
-    // always flashes one frame, and it can't tell a caret-reveal from a real
-    // scroll once the finger is down. So instead of chasing the reveal, remove the
-    // book as a scroll target for the whole focus: overflow:hidden. WebKit then
-    // has nothing to escalate to and scrolls the textarea itself; correct() still
-    // positions the card via programmatic scrollTop (which works under
-    // overflow:hidden), and frozenSt snap-back stays as the fallback. This needs
-    // no detection of the drag — the book is simply held still while you write.
+    // — its own box scrolls the words, and correct() keeps the card in the visible
+    // band. Dragging the caret to the box's top/bottom edge makes WebKit
+    // reveal-scroll the nearest SCROLLABLE ANCESTOR to chase the caret, flinging
+    // the page around (owner videos). Making just this scroller overflow:hidden
+    // is not enough: WebKit walks PAST a hidden scroller to the next scrollable
+    // one — the schedule sits in TWO nested scrollers (the book + the sheet's
+    // <main>), so locking only the book handed the reveal to <main> and the whole
+    // page scrolled instead (owner video, 2026-07-23, third pass). So lock the
+    // WHOLE ancestor chain: with every scrollable ancestor overflow:hidden, WebKit
+    // has nothing left to escalate to (the app root is position:fixed) and reveals
+    // the caret inside the textarea alone. correct() still positions the card via
+    // programmatic scrollTop (which works under overflow:hidden); frozenSt
+    // snap-back stays as a fallback. No drag detection — the book is simply held.
+    const lockedAncestors: { node: HTMLElement; prev: string }[] = [];
+    const lockAncestors = () => {
+      let node = el.parentElement;
+      while (node && node !== document.documentElement) {
+        const oy = getComputedStyle(node).overflowY;
+        // lock even a not-yet-scrollable ancestor: the keyboard shrinks the
+        // viewport a beat later and it becomes scrollable then
+        if (oy === "auto" || oy === "scroll") {
+          lockedAncestors.push({ node, prev: node.style.overflowY });
+          node.style.overflowY = "hidden";
+        }
+        node = node.parentElement;
+      }
+    };
+    const unlockAncestors = () => {
+      for (const a of lockedAncestors) a.node.style.overflowY = a.prev;
+      lockedAncestors.length = 0;
+    };
     const holdPinFocus = () => {
       if (pinFocused) return;
       pinFocused = true;
       holdOverflow();
+      lockAncestors();
     };
     const releasePinFocus = () => {
       if (!pinFocused) return;
       pinFocused = false;
+      unlockAncestors();
       releaseOverflow();
     };
     const onDocSelChange = () => {
@@ -260,32 +282,25 @@ export function useKeyboardRoom(
       el.style.paddingBottom = `${kb + FLOAT}px`;
       el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
       const r = field.getBoundingClientRect();
-      // A contained composer (data-room-pin) gets caret-walked with the spacebar
-      // trackpad. iOS reveal-scrolls the WHOLE book when the caret nears the
-      // field's foot — flinging the card up behind the notch, where the generic
-      // arm-delayed freeze then captured that bad position and held it. The box
-      // scrolls its own words, so the book need not move at all: anchor the card
-      // in the visible band and FREEZE to that computed target. A tall (already
-      // scrolling) entry centres between the top chrome and the keyboard band; a
-      // short one keeps its foot above the band, as every field does. Because the
-      // target is recomputed (not captured), onElScroll snaps any iOS reveal
-      // straight back to it — the hold self-heals no matter when the walk begins.
+      // A contained composer (data-room-pin) reveals its own caret inside its box,
+      // so the book need not follow the caret at all: anchor the card in the
+      // visible band and FREEZE to that computed target. Because the target is
+      // recomputed (not captured), onElScroll snaps any stray reveal straight back
+      // to it — the hold self-heals no matter when the walk begins.
       if (isPinned) {
-        // the ceiling is the SCROLLER'S OWN visible top (below the calendar
-        // header), not a fixed layoutTop+72: the book scroller sits well below
-        // the viewport top, so centring against layoutTop parked the card's head
-        // ABOVE the header and clipped its first lines (observed on-device typing
-        // a long entry — the top rows vanished under "July 2026"). Centre — and
-        // clamp — within [ceil, bandTop] so the whole card stays on screen.
+        // FOOT-ANCHORED, always: the card is capped at the six-line box (max-h),
+        // so its foot sits just above the keyboard band and the whole card stays
+        // on screen. The height no longer changes at the six→seven-line boundary
+        // (past six the box scrolls its own words), so keeping ONE formula means
+        // the card does not JUMP when it becomes scrollable — the earlier code
+        // switched to a centred target exactly there, and the card leapt up (owner
+        // video, 2026-07-23). Clamp the head below the scroller's own visible top
+        // (below the calendar header) so a small screen never tucks it up there.
         const ceil = el.getBoundingClientRect().top + 8;
-        const room = bandTop - ceil;
-        const overflowing = field.scrollHeight > field.clientHeight + 1;
-        const desiredTop = overflowing
-          ? ceil + Math.max(0, (room - r.height) / 2)
-          : bandTop - r.height;
+        const desiredTop = Math.max(ceil, bandTop - r.height);
         const delta = r.top - desiredTop;
         if (Math.abs(delta) > 0.5) el.scrollTop += delta;
-        frozenSt = el.scrollTop; // hold the centred target; drift snaps back
+        frozenSt = el.scrollTop; // hold the anchored target; drift snaps back
         return;
       }
       const over = r.bottom - bandTop;
@@ -403,6 +418,7 @@ export function useKeyboardRoom(
     return () => {
       selLocked = false;
       pinFocused = false;
+      unlockAncestors(); // restore any locked outer scrollers
       releaseOverflow(); // restore overflow whichever owner held it
       document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);
