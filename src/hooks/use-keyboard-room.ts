@@ -92,9 +92,25 @@ export function useKeyboardRoom(
     // A focused pinned composer holds the book at frozenSt every frame (before
     // paint), not just reactively on scroll events, because a scroll-event snap
     // fires only AFTER iOS painted the moved frame and loses the tug-of-war.
+    //
+    // But holding alone STARVES the caret: on-device the overlay proved that a
+    // caret-handle drag makes iOS reveal-scroll the BOOK (its scroll count climbs
+    // into the dozens) while the textarea's OWN scroll never moves — so a plain
+    // reset throws that reveal away and the card's words never follow the caret
+    // ("drag the caret up, the text doesn't scroll up"). iOS already computed the
+    // exact delta needed to bring the caret into view; it just applied it to the
+    // wrong box. So TRANSFER that delta into the textarea before resetting the
+    // book — a 1:1 pixel redirect of iOS's own reveal (no caret-geometry math),
+    // so the same caret ends up visible inside the card instead of moving the app.
     const holdBook = () => {
       if (frozenSt == null) return;
-      if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
+      const d = el.scrollTop - frozenSt;
+      if (Math.abs(d) <= 0.5) return;
+      const f = field;
+      if (f && f.hasAttribute("data-room-pin") && "scrollTop" in f) {
+        (f as HTMLTextAreaElement).scrollTop += d;
+      }
+      el.scrollTop = frozenSt;
     };
     let pinRaf = 0;
     const pinTick = () => {
