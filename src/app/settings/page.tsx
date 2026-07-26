@@ -1244,7 +1244,10 @@ function AccountSection() {
           </p>
           <SyncLines />
           <div className="mt-4 flex items-center gap-4">
-            <PaperButton onClick={() => void signOut()}>
+            <PaperButton
+              onClick={() => void signOut()}
+              className="shrink-0 whitespace-nowrap"
+            >
               {copy.settings.account.signOut}
             </PaperButton>
             <p className="voice-prose-sm">
