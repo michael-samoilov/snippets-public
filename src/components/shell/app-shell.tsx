@@ -3,7 +3,6 @@ import { Sheet } from "@/components/shell/sheet";
 import { SheetScroll } from "@/components/shell/sheet-scroll";
 import { CommandMenu } from "@/components/command-menu";
 import { Wordmark } from "@/components/shell/wordmark";
-import { KbdScrollDebug } from "@/components/dev/kbd-scroll-debug";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -58,7 +57,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <CommandMenu />
       </div>
-      <KbdScrollDebug />
     </div>
   );
 }
