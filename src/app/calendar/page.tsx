@@ -278,7 +278,7 @@ const LEDGER_SHAPE: number[][] = [
 // paragraph's is. The bars shimmer while the book settles in.
 function LedgerCard({ lines }: { lines: number }) {
   return (
-    <div className="book-card tile-paper rounded-[6px] border border-rule-faint p-2.5 text-[1rem] leading-[1.42]">
+    <div className="book-card rounded-[6px] border border-rule-faint bg-paper p-2.5 text-[1rem] leading-[1.42]">
       {Array.from({ length: lines }).map((_, i) => (
         <div key={i} className="flex h-[1.42em] items-center">
           <span
@@ -3760,7 +3760,7 @@ function Calendar() {
               // from. Centered on the title text (the full-height
               // negative margins keep its box out of the row's layout,
               // so the frame below never moves)
-              "pressable -my-[15px] grid h-[30px] w-[30px] shrink-0 place-items-center self-center rounded-full border border-rule-faint tile-paper tile-paper-lift text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:text-ink",
+              "pressable -my-[15px] grid h-[30px] w-[30px] shrink-0 place-items-center self-center rounded-full border border-rule-faint bg-paper text-ink-soft shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised hover:text-ink",
               (searching || pillClosing) && "invisible",
             )}
           >
@@ -3838,7 +3838,7 @@ function Calendar() {
           }
           aria-hidden={!searching}
         >
-          <div className="relative flex h-full items-center overflow-hidden rounded-full border border-rule-faint tile-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
+          <div className="relative flex h-full items-center overflow-hidden rounded-full border border-rule-faint bg-paper pl-4 pr-1.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] transition-colors duration-150 focus-within:border-rule">
             {/* the glass, centered, for the trip back */}
             <span
               aria-hidden="true"
@@ -4212,8 +4212,8 @@ function Calendar() {
                               // isolate: bake the marked ink's blend so the
                               // filtered book scrolls without re-blending
                               className={cn(
-                                "pressable-lit isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] tile-paper tile-paper-lift p-2.5 text-left",
-                                "[box-shadow:var(--card-seat)]",
+                                "pressable-lit isolate block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                                "[box-shadow:var(--card-seat)] hover:bg-paper-raised",
                               )}
                             >
                               <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
@@ -5871,7 +5871,8 @@ const ScheduleCards = memo(function ScheduleCards({
               // return only once the render is windowed. pressable-lit: colors
               // transition, no :active dip — the press answers with the glow.
               className={cn(
-                "book-card pressable-lit tile-paper tile-paper-lift block w-full rounded-[6px] border [border-color:var(--card-seat-border)] p-2.5 text-left",
+                "book-card pressable-lit block w-full rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper p-2.5 text-left",
+                "hover:bg-paper-raised",
               )}
             >
               <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
@@ -6282,7 +6283,7 @@ function FlowBackfillCapture({
               too, with no doubling back. The empty ghost fades on the right via
               the mask; the filled face fades in as words arrive. */}
           <span aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className="book-card tile-paper tile-paper-lift absolute inset-0 rounded-[6px] border [border-color:var(--card-seat-border)] transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule" />
+            <span className="book-card absolute inset-0 rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper transition-colors duration-150 [-webkit-mask-image:linear-gradient(to_right,black_35%,transparent_92%)] [mask-image:linear-gradient(to_right,black_35%,transparent_92%)] group-focus-within:border-rule group-hover:bg-paper-raised" />
           </span>
           <span
             aria-hidden="true"
@@ -6290,8 +6291,8 @@ function FlowBackfillCapture({
               // the filled face wears the EXACT card recipe the settled preview
               // card does — same border token (card-seat-border), same fill — so
               // the composer→card hand-off has no border-colour step, no seam
-              "book-card tile-paper tile-paper-lift pointer-events-none absolute inset-0 rounded-[6px] border [border-color:var(--card-seat-border)] transition-[opacity,background-color] duration-150",
-              "group-focus-within:border-rule",
+              "book-card pointer-events-none absolute inset-0 rounded-[6px] border [border-color:var(--card-seat-border)] bg-paper transition-[opacity,background-color] duration-150",
+              "group-focus-within:border-rule group-hover:bg-paper-raised",
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />

@@ -540,46 +540,6 @@ textarea:focus-visible,
   box-shadow: var(--float-shadow);
 }
 
-/* ══ THE TILE MATERIAL — hand-written on purpose; do NOT swap back to the
-      `bg-paper` utility ═══════════════════════════════════════════════════
-   The sanctioned tile material (the book's entry cards, the year minis, the
-   composer, the header's search pill) fills with the paper colour. That fill
-   MUST be declared here, unlayered, and not with Tailwind's `bg-paper`.
-
-   WHY (observed on a real iPhone, 2026-07-24): offline — airplane mode with
-   Wi-Fi and data off, the app served by the service worker — every element
-   whose fill came from the `bg-paper` UTILITY rendered with no fill at all,
-   in both themes, and it never came back on scroll or tap (so it is the rule
-   failing to apply, not a stale paint). Everything whose fill came from a
-   hand-written rule (`.sheet`, `.float` above) kept it. The difference is
-   layering: `@import "tailwindcss"` puts every utility in `@layer utilities`,
-   while these rules are unlayered. Chromium applies both identically, which
-   is why no headless harness here reproduces it; the WebKitGTK harness could
-   not be brought up in this sandbox to pin the exact WebKit cause, so the
-   mechanism is unconfirmed — the CORRELATION (layered fill fails, unlayered
-   fill survives) is what was measured on the device, and this rule is what
-   follows from it.
-
-   FLAT-BOOK LAW (above): this is a flat fill and nothing else — no blend, no
-   isolation, no blurred shadow — so it stays O(1) per card and is safe to
-   carry on every card in the book. Keep it that way.
-
-   `-lift` is the hover raise. It lives here too because an unlayered rule
-   outranks EVERY layered utility, so a `hover:bg-paper-raised` left on the
-   element would silently lose to `.tile-paper` and the hover would die. */
-.tile-paper {
-  background-color: var(--paper);
-}
-.tile-paper-raised {
-  background-color: var(--paper-raised);
-}
-@media (hover: hover) and (pointer: fine) {
-  .tile-paper-lift:hover,
-  .group:hover .tile-paper-lift {
-    background-color: var(--paper-raised);
-  }
-}
-
 /* During a "dive" camera move the book's sticky margin dates fall back to
    normal flow — the whole page then scales as one rigid block (dates locked
    to their cards) instead of the dates pinning to the top while the cards
