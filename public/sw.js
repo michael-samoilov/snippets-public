@@ -21,15 +21,33 @@
       iOS, where the full-navigation fallback doesn't reliably fire). So we cache
       each route's RSC payload by pathname and serve it offline — client-side nav
       then resolves from cache, no browser-specific fallback required. */
+// v17: cache the sheet's paper-grain textures (see PRECACHE_ASSETS) — they were
+// never cached, so an offline relaunch lost the sheet's grain
 // v16: security headers (CSP) + /verify — cached documents carry cached
 // headers, so force the re-fetch; /verify joins the precache because the
 // airplane-mode test it describes must itself work offline
-const VERSION = "snippets-v16";
+const VERSION = "snippets-v17";
 // The app's real entry (start_url). Its own document is a clean 200 — used as the
 // offline fallback for any route we haven't cached yet, and pre-cached on install
 // alongside the other first-party pages so a first offline visit still has a doc.
 const SHELL_URL = "/calendar";
 const PRECACHE_ROUTES = ["/calendar", "/settings", "/privacy", "/verify", "/signin", "/welcome"];
+/* Assets referenced from CSS, not from the HTML — so the harvest below (which
+   scrapes each precached document) can never find them, and they need naming
+   here.
+
+   The sheet's paper grain is the one that matters (globals.css `.sheet-grain`).
+   MEASURED, 2026-07-26: uncached, an offline relaunch fails that image request,
+   the grain does not paint, and the sheet flattens from its grained tone
+   (~rgb(239,232,214)) to bare --paper (rgb(247,241,227)). The book's cards are
+   also --paper, so with the grain gone they become the SAME colour as the sheet
+   behind them and read as having lost their fill — which is exactly how this
+   was reported from a phone. The cards were never at fault; the sheet was.
+   Reproduced in Chromium by blocking /textures/ alone, so it is a plain
+   missing-resource bug, not WebKit-specific.
+
+   (sheet-light-og.webp is bake-time only — /lab/og — and stays uncached.) */
+const PRECACHE_ASSETS = ["/textures/sheet-light.webp", "/textures/sheet-dark.webp"];
 
 // Cache a navigation/RSC response only when it's a plain 200 that did NOT go
 // through a redirect — a redirected response poisons WebKit (invariant 2).
@@ -92,7 +110,7 @@ self.addEventListener("install", (event) => {
       try {
         const cache = await caches.open(VERSION);
         await Promise.all(
-          [...assets].map(async (href) => {
+          [...assets, ...PRECACHE_ASSETS].map(async (href) => {
             try {
               const res = await fetch(href);
               if (res.ok) await cache.put(href, res.clone());
@@ -197,6 +215,9 @@ self.addEventListener("fetch", (event) => {
   const immutable =
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
+    // the baked paper textures: content-stable, and the sheet loses its grain
+    // without them (see PRECACHE_ASSETS)
+    url.pathname.startsWith("/textures/") ||
     url.pathname.endsWith(".woff2");
   if (immutable) {
     event.respondWith(
