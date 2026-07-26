@@ -6296,8 +6296,16 @@ function FlowBackfillCapture({
               text.length > 0 ? "opacity-100" : "opacity-0",
             )}
           />
-          {/* light under the finger, above the card's paint, under its words */}
-          <PressGlow grow="parent" className="rounded-[6px]" />
+          {/* light under the finger, above the card's paint, under its words.
+              growWhileFocused=false so no scale() transform sits on this wrapper
+              (an ANCESTOR of the textarea) while you write — a transformed
+              ancestor shifts a textarea's scroll coordinate space, so keeping it
+              transform-free lets iOS scroll the field normally. (It was once hoped
+              to be the cause of "drag the caret up won't scroll the card's text";
+              it is not — that is a WebKit inner-scroller limitation, #138201 —
+              but a transform-free field is still the right default.) The press
+              bloom still plays on the tap; only the focus-held scale is dropped. */}
+          <PressGlow grow="parent" growWhileFocused={false} className="rounded-[6px]" />
           <textarea
             ref={areaRef}
             value={text}

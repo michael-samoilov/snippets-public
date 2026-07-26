@@ -76,35 +76,25 @@ export function useKeyboardRoom(
     let touchDown = false;
     let lastElMoveAt = 0; // the scroller's last movement (any cause)
     let armT: ReturnType<typeof setTimeout> | undefined;
-    // How the pinned composer holds the book, chosen by ?hold= so we can find the
-    // real blocker on device empirically (iOS's caret-drag reveal can't be
-    // reproduced headless):
-    //   snap (default) — overflow:hidden + clip ancestors + a rAF that resets the
-    //     book to frozenSt before each paint. Holds the book, but iOS still tries
-    //     to reveal-scroll it during a caret drag and the reset fights that.
-    //   off — no hold at all: the composer behaves like a plain field, so we see
-    //     what iOS does natively (does the TEXTAREA reveal its own caret with no
-    //     app scroll, or does the book scroll?). This is the diagnostic case.
-    const holdMode =
-      typeof location !== "undefined" && /(?:\?|&)hold=off\b/.test(location.search)
-        ? "off"
-        : "snap";
-    // A focused pinned composer holds the book at frozenSt every frame (before
-    // paint), not just reactively on scroll events, because a scroll-event snap
-    // fires only AFTER iOS painted the moved frame and loses the tug-of-war.
+    // A focused pinned composer holds the book unscrollable (see pinFocused,
+    // below) so the app never repositions while you write — its own box scrolls
+    // the words, correct() keeps the card above the keyboard. The book is
+    // overflow:hidden; this is the snap-back fallback for the one path that can
+    // still move a hidden box — iOS's programmatic caret-reveal.
+    //
+    // What this deliberately does NOT do is chase the caret. Dragging the caret
+    // to the TOP of a scrolled inner box to pull the hidden lines above into view
+    // is a standing iOS/WebKit limitation (WebKit #138201): the caret can't land
+    // on off-screen text, so WebKit's reveal never fires and iOS emits no scroll
+    // to redirect (owner overlay, confirmed: "during the drag up nothing moves").
+    // Chasing it — a rAF that reset the book every frame, and redirecting iOS's
+    // reveal into the field — was tried across many passes and is all removed as
+    // dead: there is nothing to fight. The hidden lines are reached by
+    // finger-scrolling the card, which works natively.
     const holdBook = () => {
       if (frozenSt == null) return;
       if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
     };
-    let pinRaf = 0;
-    const pinTick = () => {
-      pinRaf = 0;
-      if (!pinFocused) return;
-      holdBook();
-      pinRaf = requestAnimationFrame(pinTick);
-    };
-    const startPinLoop = () => { if (!pinRaf) pinRaf = requestAnimationFrame(pinTick); };
-    const stopPinLoop = () => { if (pinRaf) { cancelAnimationFrame(pinRaf); pinRaf = 0; } };
     // A focused pinned composer holds its centred target for the WHOLE focus, so
     // thaw must not null it (overflow:hidden alone can't stop a programmatic
     // caret-reveal — only snapping back to a still-set frozenSt does). correct()
@@ -190,62 +180,29 @@ export function useKeyboardRoom(
       holdOverflow();
     };
 
-    // The pinned composer's contract: while it is focused the book NEVER scrolls
-    // — its own box scrolls the words, and correct() keeps the card in the visible
-    // band. Dragging the caret to the box's top/bottom edge makes WebKit
-    // reveal-scroll the nearest SCROLLABLE ANCESTOR to chase the caret, flinging
-    // the page around (owner videos). Making just this scroller overflow:hidden
-    // is not enough: WebKit walks PAST a hidden scroller to the next scrollable
-    // one — the schedule sits in TWO nested scrollers (the book + the sheet's
-    // <main>), so locking only the book handed the reveal to <main> and the whole
-    // page scrolled instead (owner video, 2026-07-23, third pass). So lock the
-    // WHOLE ancestor chain: with every scrollable ancestor overflow:hidden, WebKit
-    // has nothing left to escalate to (the app root is position:fixed) and reveals
-    // the caret inside the textarea alone. correct() still positions the card via
-    // programmatic scrollTop (which works under overflow:hidden); frozenSt
-    // snap-back stays as a fallback. No drag detection — the book is simply held.
-    const lockedAncestors: { node: HTMLElement; prev: string }[] = [];
-    const lockAncestors = () => {
-      let node = el.parentElement;
-      while (node && node !== document.documentElement) {
-        const oy = getComputedStyle(node).overflowY;
-        // lock even a not-yet-scrollable ancestor: the keyboard shrinks the
-        // viewport a beat later and it becomes scrollable then
-        if (oy === "auto" || oy === "scroll") {
-          lockedAncestors.push({ node, prev: node.style.overflow });
-          // overflow:CLIP, not hidden: a `hidden` element is still a scroll
-          // container that iOS's caret-reveal (scrollRectToVisible) can move —
-          // `clip` is NOT a scroll container at all, so the reveal skips it. The
-          // outer scrollers never need programmatic scrolling (only the inner
-          // book does, via correct(), so it stays `hidden`), so clipping them is
-          // safe and should leave iOS nothing to reveal-scroll (owner-device
-          // diagnosis, 2026-07-23). Set BOTH axes via the shorthand: a mixed
-          // `overflow-x:hidden; overflow-y:clip` normalizes back to hidden.
-          node.style.overflow = "clip";
-        }
-        node = node.parentElement;
-      }
-    };
-    const unlockAncestors = () => {
-      for (const a of lockedAncestors) a.node.style.overflow = a.prev;
-      lockedAncestors.length = 0;
-    };
+    // The pinned composer's contract: while it is focused the book NEVER scrolls,
+    // so the app never repositions under your finger — its own box scrolls the
+    // words, and correct() keeps the card in the visible band above the keyboard.
+    // The book is simply held overflow:hidden (holdOverflow) with the frozenSt
+    // snap-back underneath — the same mechanism the range-selection hold uses.
+    // correct() still positions the card via programmatic scrollTop, which works
+    // under overflow:hidden.
+    //
+    // Earlier passes also set overflow:clip on the whole ANCESTOR chain and ran a
+    // per-frame rAF reset, trying to force a caret drag to reveal the box's hidden
+    // lines. That fight is over (see holdBook): revealing off-screen inner-scroller
+    // text by caret drag is a WebKit limitation, not something a scroll config can
+    // win — and the ancestor clip corrupted the content-visibility warm band. Both
+    // are removed; the plain book hold is what stops the reposition.
     const holdPinFocus = () => {
       if (pinFocused) return;
-      if (holdMode === "off") { el.setAttribute("data-pin-held", "off"); return; } // diagnostic: no hold
       pinFocused = true;
       holdOverflow();
-      lockAncestors();
-      startPinLoop();
-      el.setAttribute("data-pin-held", String(lockedAncestors.length)); // diagnostic signal
     };
     const releasePinFocus = () => {
       if (!pinFocused) return;
       pinFocused = false;
-      stopPinLoop();
-      unlockAncestors();
       releaseOverflow();
-      el.removeAttribute("data-pin-held");
     };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
@@ -258,9 +215,8 @@ export function useKeyboardRoom(
     const onElScroll = () => {
       const st = el.scrollTop;
       if (pinFocused && frozenSt != null) {
-        // a focused pinned composer: the book holds still, full stop — the reveal
-        // is transferred into the textarea (holdBook) rather than fought, so the
-        // caret still scrolls into view inside the card
+        // a focused pinned composer: the book holds still, full stop — any
+        // programmatic reveal iOS sneaks past overflow:hidden is snapped back
         holdBook();
         lastElMoveAt = performance.now();
         return;
@@ -466,8 +422,6 @@ export function useKeyboardRoom(
     return () => {
       selLocked = false;
       pinFocused = false;
-      stopPinLoop();
-      unlockAncestors(); // restore any locked outer scrollers
       releaseOverflow(); // restore overflow whichever owner held it
       document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);
