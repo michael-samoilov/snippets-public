@@ -428,29 +428,25 @@ textarea {
   touch-action: auto;
 }
 
-/* …and `auto` on the FIELD ALONE is not enough — this is the other half of
-   that same fix. The touch behaviours a gesture may use are the INTERSECTION
-   of touch-action down the whole ancestor chain, so a field's `auto` can never
-   give back what a layer's `pan-y` already took: over a field inside a layer
-   the effective value is still pan-y — pan vertically, nothing else.
+/* …and `auto` on the FIELD ALONE cannot do what the rule above claims. The
+   touch behaviours a gesture may use are the INTERSECTION of touch-action down
+   the whole ancestor chain, so a field's `auto` never gives back what a layer's
+   `pan-y` already took: over a field inside a layer the effective value stayed
+   pan-y, and "restore full native text interaction on the fields themselves"
+   was a no-op against the very layers it names. This rule is that intent in a
+   form that works — while a field inside a layer holds focus, the layer stops
+   restricting touch at all. Nothing is lost: pan-y exists to keep a horizontal
+   swipe-back out of the browser's hands, and nobody swipes back mid-sentence;
+   on blur the layer takes it straight back, so reading keeps its gesture
+   (asserted both ways by scripts/measure-touch-relief.py).
 
-   iOS reads that as "this region scrolls vertically" and hands a DOWNWARD drag
-   to the pan recogniser, even when the finger is on a selection handle. The
-   handle then just doesn't follow the finger down, while SIDEWAYS drags — which
-   pan-y forbids, so the selection keeps them — track perfectly. That is exactly
-   the reported bug's signature (screen recording, 2026-07-24): four seconds of
-   dragging with the selection pinned to the first line of the entry, sliding
-   freely along it, until the finger finally travelled far enough for the
-   selection gesture to win. Frame analysis: the highlight's deepest point sat
-   at one pixel row the whole time, then jumped a whole paragraph.
-
-   So while a field inside a layer holds focus, the layer stops restricting
-   touch at all. Nothing is lost: pan-y is there to keep a horizontal swipe-back
-   out of the browser's hands, and nobody swipes back mid-sentence. Verified in
-   real WebCore (scripts/measure-webkit-drag-select.py) that the DOM and hit
-   testing are innocent — a synthetic drag extends the selection downward
-   through the app's own editor — so the refusal is iOS gesture arbitration,
-   which only the device can confirm (/lab/handle-drag A/Bs it). */
+   Note what this is NOT: it is not a proven fix for the downward
+   selection-handle drag that prompted it (2026-07-24). That hunt is written up
+   in BACKLOG.md — the short version is that the DOM, hit testing and the
+   editor's whole shape were all cleared, and the bug then stopped reproducing
+   on the device. This rule is kept on the older, independent justification
+   above: the multi-tap selection escalation and the loupe that the comment
+   already wanted restored. */
 [data-layer]:has(textarea:focus, input:focus) {
   touch-action: auto;
 }

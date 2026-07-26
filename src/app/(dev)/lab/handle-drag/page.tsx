@@ -10,28 +10,32 @@ import { useEffect, useRef, useState } from "react";
  * the line it is on while the finger moves — then suddenly starts working.
  * Sideways drags along the line work throughout.
  *
- * ROUND ONE (additive: a bare field, then one app property added per pane —
- * touch-action: pan-y, the press bloom's scale, the shipped touch-action relief)
- * FAILED TO REPRODUCE: every pane let the handle through, so none of those
- * properties is sufficient on its own. Only the pane carrying the editor's FULL
- * shape went untested — the keyboard covered it and the page would not scroll.
+ * BOTH ROUNDS CAME BACK CLEAN, and then the bug stopped reproducing on the
+ * device at all. Round one added one app property at a time to a bare field
+ * (pan-y, the press bloom's scale, the shipped touch-action relief); round two
+ * — what this page is now — starts from the editor's FULL shape and behaviour
+ * and removes exactly one thing per pane:
  *
- * So round two inverts the method. The base pane is the editor's real shape and
- * its real behaviour; every other pane REMOVES exactly one thing. Whichever
- * removal lets the handle through names the cause. Two things round one never
- * had, both of which only exist once the field is the app's:
+ *   A the whole editor · B minus the 1.2s useContainedField re-fit ·
+ *   C minus the field's own scrolling · D minus pan-y · E minus the press
+ *   bloom · F minus overscroll-contain
  *
- *   - the field SCROLLS ITS OWN WORDS (capped by useContainedField). A field
- *     that can scroll vertically is a pan candidate directly under the finger,
- *     which is exactly the competitor a selection drag has to beat. Round one's
- *     panes were autosized to fit, so nothing under the finger could scroll.
- *   - that cap is REWRITTEN ON A 1.2s INTERVAL (useContainedField's re-fit). A
- *     periodic layout write on the element being dragged is the kind of thing
- *     iOS abandons a handle drag over — and the recording shows the drag dying
- *     and the callout returning again and again, not once.
+ * Every pane of both rounds let the handle through, so neither any single CSS
+ * property nor the editor's shape is the cause. The write-up, with everything
+ * ruled out, is BACKLOG.md #19.
  *
- * One pane at a time, held near the top of the screen, so the keyboard can
- * never hide the field and every variant is actually reachable.
+ * WHEN IT RECURS, READ THIS FIRST: round two was run in a SAFARI TAB, and the
+ * recording was made in the standalone PWA — where iOS handles the keyboard,
+ * viewport and gestures differently. So the environment that actually fails has
+ * never been tested. Open this page from the HOME-SCREEN ICON before anything
+ * else; pane A alone may well answer it.
+ *
+ * If A passes there too, the remaining hypothesis is COST rather than shape (a
+ * five-element page cannot reproduce a main-thread stall over a book of
+ * hundreds of live cards) — weight this page, or A/B inside the real app.
+ *
+ * One pane at a time, chips and field first, so the keyboard can never hide the
+ * field: that is what made round one's deepest pane unreachable.
  */
 
 const WORDS = `Went to a third pottery class today.
@@ -228,6 +232,11 @@ export default function HandleDragLab() {
       <p className="voice-prose-sm text-ink-faint">
         Select a word in line one, then drag the bottom handle down two lines.
         Try each pane a few times, and again after a reload.
+      </p>
+      <p className="voice-prose-sm text-ink-faint">
+        Open this from the home-screen icon, not a Safari tab — the installed
+        app is where the drag has failed, and it is the one place these panes
+        have never been tried.
       </p>
     </main>
   );

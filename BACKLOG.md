@@ -482,3 +482,59 @@ together, so offline stays consistent), but it's a real architectural
 trade for a scanner green. Owner's call; default is to keep
 `'unsafe-inline'` — every other CSP directive is already tight, and it
 only bites alongside an injection sink.
+
+## 19. The transient downward selection-handle drag — OPEN, unexplained
+
+> "There's a bug where i am trying to drag the selection handle downward
+> and the app doesn't let me… I've also had similar webapp text box
+> issues on other websites. Native text boxes have no such issues."
+
+Screen recording, 2026-07-24, rewriting an entry: with a selection
+standing, the bottom handle would not follow the finger DOWN for four
+solid seconds, then suddenly worked and kept working. Frame analysis of
+the recording is the one hard measurement we have: the highlight's
+deepest pixel row never moved for those four seconds while its WIDTH
+oscillated several times, then it jumped a whole paragraph at once. So
+the gesture was live and tracking sideways throughout — only its
+vertical component was being eaten.
+
+**Then it stopped reproducing** (owner, same week: "it's working in both
+places, seems like a very transient issue"). Do not open this by writing
+a fix; open it by catching it in the act.
+
+RULED OUT — don't re-walk these:
+- *The DOM and hit testing.* On real WebCore a synthetic drag extends the
+  selection downward through the app's own editor, with elementFromPoint
+  finding the textarea, selectable, at every step
+  (`scripts/measure-webkit-drag-select.py`).
+- *The press bloom.* It holds the card at scale(1.0195) for the whole
+  edit, but tracking the card's width frame by frame across the recording
+  shows it constant at 999px through the failure AND the recovery — it
+  never changed when the behaviour did.
+- *Any single CSS property, and the editor's whole shape.* `/lab/handle-drag`
+  round one added one app property at a time to a bare field (pan-y, the
+  bloom's scale, the touch-action relief); round two started from the
+  editor's full shape and behaviour — capped self-scrolling field, the
+  1.2s `useContainedField` re-fit, nested scrollers, pan-y, the bloom,
+  overscroll-contain — and removed one thing per pane. Every pane of both
+  rounds let the handle through.
+
+NEVER TESTED, and the obvious next move: **round two ran in a Safari tab,
+never in the installed app.** The recording was made in the standalone
+PWA, where iOS handles the keyboard, viewport and gestures differently.
+When it recurs, run `/lab/handle-drag` from the home-screen icon first.
+
+The other untested axis is COST rather than shape: the real book is a
+document with hundreds of live cards, and `body:has(textarea:focus,
+input:focus) *:not(textarea):not(input)` (a few lines above the
+touch-action relief in `globals.css`) makes every style recalc while
+writing evaluate a universal selector across all of them. iOS abandons a
+handle drag when the main thread stalls, and WebKit selector scans over
+the book are a pathology this repo has measured before
+(`scripts/measure-webkit-spans.py`). A lab page of five elements can
+never reproduce that; a weighted one, or an in-app A/B, could.
+
+Note `[data-layer]:has(textarea:focus, input:focus) { touch-action: auto }`
+shipped during this hunt and STAYS, but on its own older justification
+(the field-level `touch-action: auto` beside it was a no-op against the
+layers' pan-y) — not as a fix for this. It is not evidence either way.
