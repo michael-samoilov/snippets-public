@@ -286,9 +286,9 @@ function YearFeedBase({
                       onClick={() => onPickMonth(start)}
                       whileTap={isFutureMonth ? undefined : { scale: 0.96 }}
                       className={cn(
-                        "pressable flex flex-col gap-1.5 rounded-[6px] border border-rule-faint bg-paper p-2.5 text-left",
+                        "pressable tile-paper tile-paper-lift flex flex-col gap-1.5 rounded-[6px] border border-rule-faint p-2.5 text-left",
                         !isFutureMonth &&
-                          "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)] hover:bg-paper-raised",
+                          "shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]",
                         isFutureMonth && "opacity-40",
                       )}
                       aria-label={format(start, "MMMM yyyy")}
