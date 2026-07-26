@@ -207,7 +207,7 @@ function MiniSkel({
   const days = new Date(year, month + 1, 0).getDate();
   const trailing = 42 - lead - days;
   return (
-    <div className="flex flex-col gap-1.5 rounded-[6px] border border-rule-faint bg-paper p-2.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
+    <div className="flex flex-col gap-1.5 rounded-[6px] border border-rule-faint tile-paper p-2.5 shadow-[inset_0_1px_0_var(--press-highlight),0_1px_2px_rgb(var(--shadow-hue)/0.06)]">
       <span className="skeleton-shimmer h-2.5 w-7 rounded-[2px]" style={FAINT} />
       <span className="grid grid-cols-7 gap-[3px]">
         {Array.from({ length: lead }).map((_, i) => (
@@ -253,7 +253,7 @@ const ENTRY_LINES = [1, 1, 1, 0.82, 0, 1, 1, 1, 1, 0.55, 0, 1, 1, 0.68];
 export function EntrySkeleton() {
   return (
     <div className="h-full pt-2" aria-hidden="true">
-      <div className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint bg-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]">
+      <div className="relative flex max-h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-rule-faint tile-paper shadow-[0_1px_3px_rgb(var(--shadow-hue)/0.08)]">
         {/* the card's lit top edge, as on the real card */}
         <div className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] shadow-[inset_0_1px_0_var(--press-highlight)]" />
         {/* the words */}
