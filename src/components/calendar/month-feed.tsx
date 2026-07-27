@@ -591,12 +591,29 @@ const MonthBlock = memo(function MonthBlock({
                   {format(date, "d")}
                 </span>
                 {/* the dot strip is always reserved so numbers sit at the
-                    same height whether or not a day has entries yet */}
-                <span className="relative flex h-[3.5px] gap-[3px]" aria-hidden="true">
+                    same height whether or not a day has entries yet.
+
+                    WHOLE-PIXEL LAW: the dot and the PITCH (dot + gap) must
+                    both be whole CSS pixels, so they stay whole DEVICE pixels
+                    at 1x/2x/3x and every dot in a strip shares one subpixel
+                    phase. This was `size-[3.5px] gap-[3px]` — a 6.5px pitch,
+                    i.e. 19.5 device px on a 3x screen — so every OTHER dot
+                    landed on a half device pixel and rasterized as an 11px
+                    blob with filled corners, between neighbours that landed
+                    clean at 10px. That is the "dots alternate between circles
+                    and squircles" report, and it is geometry, not radius:
+                    3.4e38px (what `rounded-full` emits), 50% and 9999px all
+                    rasterize identically in both Blink and WebKit.
+                    scripts/measure-calendar-dots.py holds the line. */}
+                <span
+                  data-dots=""
+                  className="relative flex h-[3px] gap-[3px]"
+                  aria-hidden="true"
+                >
                   {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
                     <span
                       key={i}
-                      className="size-[3.5px] rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
+                      className="size-[3px] shrink-0 rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
                     />
                   ))}
                 </span>
