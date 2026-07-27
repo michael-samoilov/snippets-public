@@ -95,34 +95,11 @@ export const metadata: Metadata = {
 // very first script tick even while the CSS viewport is stale — verified on the
 // reporter's device — so writing it as a pixel value pre-paint makes the first
 // painted frame the right size. Event-driven only (no polling): re-applies on
-// resize/orientation/pageshow, visualViewport resize and visualViewport scroll
-// (the URL-bar keyboard leaving, the chrome settling, a pan). Freezes while the
-// in-app keyboard is really up so it can't collapse the shell (useKeyboardRoom
-// lifts the field instead — see the freeze test below), and skips mid-pinch so
-// zooming never reflows the desk.
-// …and pin --app-top the same way. The shell used to sit at top:0, i.e. glued
-// to the LAYOUT viewport's top — which assumes the layout viewport and the
-// visible window start at the same place. Chrome iOS (26 / Liquid Glass, two
-// toolbars) breaks that assumption on a fresh tab: it parks the layout viewport
-// PANNED against the visible window, so the app's head is scrolled off above
-// and a strip of bare canvas shows below its foot (measured on the reporter's
-// device: lamplight ran to y=1986 of a 2556px frame while the web area ran to
-// 2292 — a 102pt strip of un-lit desk). Nothing was scrolled; the document
-// can't scroll (html/body are 100% and the shell is fixed). So anchor the shell
-// to the VISUAL viewport instead: vv.pageTop minus the document scroll is its
-// offset in layout coordinates — the same read useKeyboardRoom, useContainedField
-// and the today zone's kbGeom already make. Clamped at 0 (never shift the app
-// down) and deadbanded at 2px so ordinary scroll noise can't jitter the desk.
-// Zero on every engine that doesn't pan, so this is inert off iOS.
-// The freeze tests for a REAL in-app keyboard — a page field focused AND the
-// window actually shrunk past 60px of its running max — not merely for a focused
-// field. A focused field alone is not a keyboard: /signin autofocuses its email
-// input, so the old `activeElement is INPUT` test was true from the first tick
-// and every later re-pin on that page was a silent no-op (harness-confirmed —
-// the pan correction below never applied there). The running max is the same
-// read useKeyboardRoom's baseVh makes, and 60px the same threshold; it resets on
-// orientationchange so landscape isn't mistaken for a keyboard.
-const APP_HEIGHT_SCRIPT = `(function(){var d=document.documentElement,vv=window.visualViewport,lh=-1,lt=-1,base=0;function apply(){if(vv&&vv.scale>1.01)return;var h=Math.round((vv&&vv.height)||window.innerHeight);if(!h)return;if(h>base)base=h;var a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA")&&h<base-60)return;if(Math.abs(h-lh)>=1){lh=h;d.style.setProperty("--app-h",h+"px")}var s=(document.scrollingElement&&document.scrollingElement.scrollTop)||0;var t=vv?Math.max(0,Math.round(vv.pageTop-s)):0;if(Math.abs(t-lt)>=2){lt=t;d.style.setProperty("--app-top",t+"px")}}function reset(){base=0;apply()}apply();addEventListener("resize",apply);addEventListener("orientationchange",reset);addEventListener("pageshow",reset);addEventListener("scroll",apply,{passive:true});if(vv){vv.addEventListener("resize",apply);vv.addEventListener("scroll",apply)}})()`;
+// resize/orientation/pageshow and visualViewport resize (the URL-bar keyboard
+// leaving, the chrome settling). Skips while a page field is focused so the
+// in-app keyboard can't collapse the shell (useKeyboardRoom lifts the field
+// instead), and skips mid-pinch so zooming never reflows the desk.
+const APP_HEIGHT_SCRIPT = `(function(){var d=document.documentElement,vv=window.visualViewport,last=-1;function apply(){var a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))return;if(vv&&vv.scale>1.01)return;var h=Math.round((vv&&vv.height)||window.innerHeight);if(!h||Math.abs(h-last)<1)return;last=h;d.style.setProperty("--app-h",h+"px")}apply();addEventListener("resize",apply);addEventListener("orientationchange",apply);addEventListener("pageshow",apply);if(vv)vv.addEventListener("resize",apply)})()`;
 
 // Before the first paint, flag an empty book so the calendar's static skeleton
 // can open onto the welcome intro instead of the today zone (it carries both;

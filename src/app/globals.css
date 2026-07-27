@@ -37,12 +37,6 @@ html {
      viewport that inset:0 would, i.e. exactly the old behavior. */
   --app-h: 100%;
 
-  /* the shell's top edge — the VISIBLE window's top in layout coordinates. The
-     same inline script pins this; 0 is the honest default (every engine that
-     keeps the layout viewport and the visible window in step reads 0, so this
-     is inert off iOS). Chrome iOS parks them out of step on a fresh tab. */
-  --app-top: 0px;
-
   /* the date header is the largest size that still keeps the longest
      full date ("Wednesday, September 22, 2020") on one line — it scales
      with the viewport on phones and caps on wider screens */
@@ -360,14 +354,7 @@ body {
 body::before {
   content: "";
   position: fixed;
-  /* glued to the VISIBLE window, same as the shell — inset:0 glues it to the
-     layout viewport, and where Chrome iOS parks those two out of step the pool
-     of light slid off the top while the uncovered strip below stayed unlit
-     (a flat, lighter slab against the lamplit desk above it) */
-  top: var(--app-top);
-  left: 0;
-  right: 0;
-  height: var(--app-h);
+  inset: 0;
   z-index: -1;
   pointer-events: none;
   background-image: radial-gradient(
