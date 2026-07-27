@@ -5074,11 +5074,13 @@ function ScheduleFeedBase({
       //
       // The previous stance pinned today's section rule to the scroller's TOP,
       // on the reasoning that the min-h-full zone below it fills exactly the
-      // viewport. It doesn't quite: the section's own 1px rule plus the zone's
-      // 3px chin (mb-[3px]) put four more pixels between them than the viewport
-      // holds, so the landing stopped four pixels short of the foot and the
-      // zone's bottom border hung just under the fold — the blue clip hairline
-      // lit instead of the border being the book's visible bottom edge.
+      // viewport. It didn't: the section's own rule plus the chin then under the
+      // zone put four more pixels between them than the viewport holds, so the
+      // landing stopped four pixels short of the foot and the zone's bottom
+      // border hung just under the fold — the blue clip hairline lit instead of
+      // the border being the book's visible bottom edge. (The zone now sizes
+      // itself to fit that viewport exactly, so rule-at-top and foot AGREE —
+      // but this measure is the one that states the intent.)
       const footDelta = () => {
         const s = scrollerRef.current;
         if (!s) return null;
@@ -7674,14 +7676,29 @@ function TodayZoneFill({
         // this element is today — a drag that reaches here has revealed the
         // whole entry and must not haul the feed on into earlier days
         data-today-zone=""
-        // the zone sits in the book's standard frame: its top gap matches the
-        // side gutter (px-5) and the chin below it, so the content reads with one
-        // even ~20px margin on every side. first-ever keeps just a hair (nothing
-        // above it to breathe from).
+        // The zone sits in the book's standard frame: at the natural foot its
+        // outline reads with the same ~20px margin as the sheet's side gutter
+        // (px-5) on every side. Top: the day rule above it counts toward that
+        // gap, which is why an empty today pads 19 and not 20 — the pair lands
+        // the border 20px under the rule. Bottom: no chin — the box's foot rests
+        // flush with the scroller's bottom edge, and the stage's own room below
+        // it (mb-2.5 + the sheet's pb-2) IS the bottom gutter. first-ever keeps
+        // just a hair on top (nothing above it to breathe from).
+        //
+        // And the zone stands exactly one viewport tall MINUS whatever shares
+        // the viewport with it — the 1px day rule when today is collapsed. It
+        // used to be a flat min-h-full with a 3px chin under it, which made the
+        // composition four pixels TALLER than the viewport: at the foot those
+        // four came off the TOP, sliding the day rule up under the scroll
+        // terminus and clipping the zone's margin to 16px. (A today WITH entries
+        // has no rule beside it — its section is above the fold — so it takes
+        // the plain full viewport.)
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[20px]" : "pt-[19px] mb-[3px]",
+          firstEver ? "pt-1" : hasEntry ? "pt-[20px]" : "pt-[19px]",
           className,
+          // after `className`: the zone's own height is not the caller's to set
+          firstEver || hasEntry ? "min-h-full" : "min-h-[calc(100%-1px)]",
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
         // that would sweep over the entries above it)
