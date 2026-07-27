@@ -26,9 +26,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // on cold loads (the page simply grows as the keyboard leaves); the in-app
     // keyboard is guarded out by the script, so the shell never collapses while
     // writing — useKeyboardRoom lifts the focused field instead, as before.
+    // TOP-ANCHORED means the VISIBLE window's top, not the layout viewport's:
+    // --app-top is the visual viewport's offset in layout coordinates (0 unless
+    // the browser parks the two out of step — Chrome iOS does it on a fresh tab,
+    // see the root layout's script). top:0 put the desk's head off-screen and
+    // left a strip of bare canvas below its foot whenever that happened.
     <div
       data-app-shell
-      className="fixed inset-x-0 top-0 flex h-[var(--app-h)] justify-center overflow-hidden"
+      className="fixed inset-x-0 top-[var(--app-top)] flex h-[var(--app-h)] justify-center overflow-hidden"
     >
       <div className="flex h-full w-full max-w-[46rem] flex-col overflow-hidden px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-8 sm:pb-8">
         {/* desk chrome — the book is the only page now, so there's no nav: just
