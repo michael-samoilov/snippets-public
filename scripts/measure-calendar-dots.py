@@ -52,6 +52,7 @@ WIDTHS = (390, 393, 402, 428)
 
 SPREAD_MAX = 0.06  # per-day disagreement in corner ink
 FILL_MAX = 0.86  # a dot fatter than this is reading as a squircle
+WANDER_MAX = 0.5  # device px a printed count may move against its dots
 
 # counts to seed, one day each, starting at the 1st of the visible month
 COUNTS = (1, 2, 3, 4, 5, 6, 8, 12)
@@ -101,10 +102,25 @@ SEED = """(counts) => new Promise((resolve, reject) => {
 COLLECT = """() => [...document.querySelectorAll('[data-day-key]')].flatMap(cell => {
   const strip = cell.querySelector('[data-dots]');
   if (!strip) return [];
-  return [...strip.children].map((d, i) => {
+  return [...strip.querySelectorAll(':scope > :not([data-count])')].map((d, i) => {
     const r = d.getBoundingClientRect();
     return { day: cell.dataset.dayKey, i, x: r.left, y: r.top, w: r.width, h: r.height };
   });
+})"""
+
+# the printed count, with the dots it sits beside — for the alignment check
+COLLECT_COUNTS = """() => [...document.querySelectorAll('[data-day-key]')].flatMap(cell => {
+  const num = cell.querySelector('[data-count]');
+  if (!num) return [];
+  const ds = [...cell.querySelectorAll('[data-dots] > :not([data-count])')]
+    .map(d => d.getBoundingClientRect());
+  if (!ds.length) return [];
+  const r = num.getBoundingClientRect();
+  return [{ day: cell.dataset.dayKey, text: num.textContent,
+            dots: { x: Math.min(...ds.map(b => b.left)), y: Math.min(...ds.map(b => b.top)),
+                    w: Math.max(...ds.map(b => b.right)) - Math.min(...ds.map(b => b.left)),
+                    h: Math.max(...ds.map(b => b.bottom)) - Math.min(...ds.map(b => b.top)) },
+            num: { x: r.left, y: r.top, w: r.width, h: r.height } }];
 })"""
 
 
@@ -147,8 +163,35 @@ def ink_of(im, box, dpr):
     }
 
 
+def band_centre(im, box, dpr, grow=2):
+    """Vertical centre of a region's ink BOUNDING BOX, in device pixels.
+
+    The bounding box, not the centroid: every lining figure spans exactly
+    baseline-to-cap-height, so the box is the same for +2 and +8, while the
+    centroid is not (an 8 carries more ink low than a 5 does). Measuring the
+    centroid would report glyph shape as if it were misalignment."""
+    x0 = max(0, int(box["x"] * dpr) - grow)
+    y0 = max(0, int(box["y"] * dpr) - grow * 2)
+    x1 = min(im.size[0], int((box["x"] + box["w"]) * dpr) + grow + 1)
+    y1 = min(im.size[1], int((box["y"] + box["h"]) * dpr) + grow * 2 + 1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    px = im.load()
+    rows_px = [[px[xx, yy] for xx in range(x0, x1)] for yy in range(y0, y1)]
+    paper = max(max(r) for r in rows_px)
+    thresh = paper * 0.12
+    inked = [y0 + i for i, r in enumerate(rows_px)
+             if max(max(0, paper - v) for v in r) > thresh]
+    return (inked[0] + inked[-1]) / 2 if inked else None
+
+
 def main():
     failures = []
+    # day -> the marks it must draw, from the shared rule in shared.ts
+    want_marks = {}
+    for c in COUNTS:
+        want_marks[c] = (c if c <= 4 else 3, None if c <= 4 else f"+{c - 3}")
+    offsets = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
         for dpr in DPRS:
@@ -163,15 +206,20 @@ def main():
                 pg.reload()
                 climb_to_month(pg)
                 seen = pg.evaluate(
-                    """() => [...document.querySelectorAll('[data-day-key]')]
-                         .map(c => [c.dataset.dayKey, c.querySelector('[data-dots]')?.children.length ?? 0])
-                         .filter(r => r[1] > 0).sort()"""
+                    """() => [...document.querySelectorAll('[data-day-key]')].map(c => [
+                         c.dataset.dayKey,
+                         c.querySelectorAll('[data-dots] > :not([data-count])').length,
+                         c.querySelector('[data-count]')?.textContent ?? null,
+                       ]).filter(r => r[1] > 0).sort()"""
                 )
-                want = [c if c < 4 else 4 for c in COUNTS]
-                got = [n for _, n in seen]
+                got = [(n, t) for _, n, t in seen]
+                want = [want_marks[c] for c in COUNTS]
                 if got != want:
-                    print(f"  ! dpr{dpr} w{width}: seeded days read {got}, expected {want}")
+                    failures.append(
+                        f"  dpr{dpr} w{width}: marks read {got}, expected {want}"
+                    )
                 boxes = pg.evaluate(COLLECT)
+                counted = pg.evaluate(COLLECT_COUNTS)
                 pg.screenshot(path=SHOT)
                 ctx.close()
 
@@ -197,6 +245,17 @@ def main():
                             f"  dpr{dpr} w{width} {day}: spread={spread:.3f} "
                             f"fill={fill:.3f} widths={[d['w_dev'] for d in dots]}"
                         )
+                # where the printed count sits against the dots it annotates
+                for c in counted:
+                    cd = band_centre(im, c["dots"], dpr)
+                    cn = band_centre(im, c["num"], dpr)
+                    if cd is not None and cn is not None:
+                        # keyed by dpr too: `voice-data-sm` is deliberately a
+                        # different size at 1x, and a device pixel there is a
+                        # different physical thing — comparing across ratios
+                        # would report the intended step as if it were drift
+                        offsets.append(((dpr, c["text"]), cn - cd))
+
                 print(
                     f"dpr{dpr} w{width}: {n_dots:>3} dots over {len(days):>2} days | "
                     f"worst spread {worst_spread:.3f} | fattest fill {worst_fill:.3f} "
@@ -204,13 +263,45 @@ def main():
                 )
         browser.close()
 
+    # A number that sits above the dots on one day and below them on the next
+    # is the same fractional-geometry fault as the squircles, one level up.
+    # Compare each printed value only against ITSELF, at one device pixel
+    # ratio, across days and viewport widths — so neither a differently shaped
+    # glyph nor the intended 1x size step is mistaken for a moved mark.
+    wander = 0.0
+    if offsets:
+        by_key = {}
+        for key, off in offsets:
+            by_key.setdefault(key, []).append(off)
+        wander = max(max(v) - min(v) for v in by_key.values())
+        worst = max(by_key, key=lambda k: max(by_key[k]) - min(by_key[k]))
+        # the constant is what a half-pixel nudge trims; the WANDER is the
+        # fault. A steady offset reads as placement, a moving one as a bug.
+        by_dpr = {}
+        for (dpr_, _), off in offsets:
+            by_dpr.setdefault(dpr_, []).append(off)
+        const = "  ".join(
+            f"dpr{d}:{sum(v)/len(v):+.2f}" for d, v in sorted(by_dpr.items())
+        )
+        print(
+            f"\nprinted counts: {len(offsets)} samples over {len(by_key)} "
+            f"(ratio, value) pairs | worst wander {wander:.2f} device px "
+            f"(dpr{worst[0]} “{worst[1]}”)\n"
+            f"  constant offset from the dots' line — {const}"
+        )
+        if wander > WANDER_MAX:
+            failures.append(
+                f"  the printed count wanders {wander:.2f} device px against the dots"
+            )
+
     if failures:
-        print(f"\nFAIL — {len(failures)} day(s) render inconsistent or square dots:")
+        print(f"\nFAIL — {len(failures)} problem(s):")
         for f in failures[:20]:
             print(f)
         return 1
-    print(f"\nPASS — every dot agrees with its neighbours (spread <= {SPREAD_MAX}) "
-          f"and reads round (fill <= {FILL_MAX}).")
+    print(f"\nPASS — every dot agrees with its neighbours (spread <= {SPREAD_MAX}), "
+          f"reads round (fill <= {FILL_MAX}), and every printed count holds one "
+          f"line against them (wander {wander:.2f} <= {WANDER_MAX}).")
     return 0
 
 

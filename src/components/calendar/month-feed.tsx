@@ -34,6 +34,9 @@ import {
   monthsBetween,
   ym,
   ringSpringFor,
+  dotsFor,
+  DOT_CAP,
+  DOTS_WITH_COUNT,
 } from "./shared";
 import type { MonthGeom, MonthFeedHandle } from "./shared";
 
@@ -607,15 +610,28 @@ const MonthBlock = memo(function MonthBlock({
                     scripts/measure-calendar-dots.py holds the line. */}
                 <span
                   data-dots=""
-                  className="relative flex h-[3px] gap-[3px]"
+                  className="relative flex h-[9px] items-center gap-[3px]"
                   aria-hidden="true"
                 >
-                  {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
+                  {Array.from({ length: dotsFor(count) }).map((_, i) => (
                     <span
                       key={i}
                       className="size-[3px] shrink-0 rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
                     />
                   ))}
+                  {count > DOT_CAP && (
+                    // leading-[9px] is not decoration: it makes the figure's
+                    // line box exactly the strip's height, so centring it is
+                    // whole-pixel arithmetic. See the WHOLE-PIXEL LAW above —
+                    // an 8px strip put the 3px dot at 2.5px and the figure's
+                    // box at 0.4px, two fractions that rounded INDEPENDENTLY
+                    // as the strip's origin moved, so the number sat above the
+                    // dots on one day and below them on the next (measured: 3
+                    // device px of wander; 0 after this).
+                    <span data-count="" className="voice-data-sm shrink-0 translate-y-[0.5px] leading-[9px]">
+                      +{count - DOTS_WITH_COUNT}
+                    </span>
+                  )}
                 </span>
               </motion.span>
             </motion.button>
