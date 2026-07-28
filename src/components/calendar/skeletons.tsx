@@ -168,8 +168,10 @@ function MonthSkelBlock({ lead, days }: { lead: number; days: number }) {
               className="skeleton-shimmer-datewave h-2.5 w-3 rounded-[2px]"
               style={{ ...FAINT, ...dateWaveDelay((lead + i) % 7) }}
             />
-            {/* the dot strip is always reserved, as in the real cell */}
-            <span className="h-[3.5px]" />
+            {/* the dot strip is always reserved, as in the real cell — keep
+                this height in step with MonthBlock's, or the swap from
+                skeleton to real jumps every date in the grid */}
+            <span className="h-[9px]" />
           </span>
         ))}
       </div>
