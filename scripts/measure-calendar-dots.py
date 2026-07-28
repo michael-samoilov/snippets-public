@@ -53,6 +53,7 @@ WIDTHS = (390, 393, 402, 428)
 SPREAD_MAX = 0.06  # per-day disagreement in corner ink
 FILL_MAX = 0.86  # a dot fatter than this is reading as a squircle
 WANDER_MAX = 0.5  # device px a printed count may move against its dots
+CROSSBAR_MAX = 1.0  # device px the "+" stroke may sit off the dots' line
 
 # counts to seed, one day each, starting at the 1st of the visible month
 COUNTS = (1, 2, 3, 4, 5, 6, 8, 12)
@@ -108,7 +109,10 @@ COLLECT = """() => [...document.querySelectorAll('[data-day-key]')].flatMap(cell
   });
 })"""
 
-# the printed count, with the dots it sits beside — for the alignment check
+# the printed count, with the dots it sits beside — for the alignment checks.
+# `plus` is the FIRST character's advance only: the face is tabular, so every
+# character is the same width, and the plus alone is what must sit on the
+# dots' line (see crossbar_offset below).
 COLLECT_COUNTS = """() => [...document.querySelectorAll('[data-day-key]')].flatMap(cell => {
   const num = cell.querySelector('[data-count]');
   if (!num) return [];
@@ -120,6 +124,7 @@ COLLECT_COUNTS = """() => [...document.querySelectorAll('[data-day-key]')].flatM
             dots: { x: Math.min(...ds.map(b => b.left)), y: Math.min(...ds.map(b => b.top)),
                     w: Math.max(...ds.map(b => b.right)) - Math.min(...ds.map(b => b.left)),
                     h: Math.max(...ds.map(b => b.bottom)) - Math.min(...ds.map(b => b.top)) },
+            plus: { x: r.left, y: r.top, w: r.width / num.textContent.length, h: r.height },
             num: { x: r.left, y: r.top, w: r.width, h: r.height } }];
 })"""
 
@@ -185,8 +190,35 @@ def band_centre(im, box, dpr, grow=2):
     return (inked[0] + inked[-1]) / 2 if inked else None
 
 
+def centroid_row(im, box, dpr, pad_y=3):
+    """Ink-weighted centre row of a region, in device pixels.
+
+    Used on marks that are vertically SYMMETRIC, where the centroid is the
+    thing the eye lines up: a dot's centre, and — restricted to the plus's own
+    advance width — the "+" crossbar. This is the check the bounding box
+    cannot do. A "+" sits on the math axis, roughly a tenth of an em below the
+    middle of a digit's cap-to-baseline band, so a string whose BOX is
+    perfectly centred still hangs its crossbar under the dots."""
+    x0 = max(0, int(box["x"] * dpr))
+    x1 = min(im.size[0], int((box["x"] + box["w"]) * dpr) + 1)
+    y0 = max(0, int(box["y"] * dpr) - pad_y * dpr)
+    y1 = min(im.size[1], int((box["y"] + box["h"]) * dpr) + pad_y * dpr + 1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    px = im.load()
+    rows_px = [[px[xx, yy] for xx in range(x0, x1)] for yy in range(y0, y1)]
+    paper = max(max(r) for r in rows_px)
+    tot, acc = 0.0, 0.0
+    for i, r in enumerate(rows_px):
+        w = sum(max(0, paper - v) for v in r)
+        tot += w
+        acc += w * (y0 + i)
+    return acc / tot if tot else None
+
+
 def main():
     failures = []
+    crossbars = []
     # day -> the marks it must draw, from the shared rule in shared.ts
     want_marks = {}
     for c in COUNTS:
@@ -245,7 +277,10 @@ def main():
                             f"  dpr{dpr} w{width} {day}: spread={spread:.3f} "
                             f"fill={fill:.3f} widths={[d['w_dev'] for d in dots]}"
                         )
-                # where the printed count sits against the dots it annotates
+                # where the printed count sits against the dots it annotates.
+                # TWO checks, because they catch different faults: the box
+                # says whether the mark MOVES from day to day, the crossbar
+                # whether it sits ON THE DOTS' LINE at all.
                 for c in counted:
                     cd = band_centre(im, c["dots"], dpr)
                     cn = band_centre(im, c["num"], dpr)
@@ -255,6 +290,10 @@ def main():
                         # different physical thing — comparing across ratios
                         # would report the intended step as if it were drift
                         offsets.append(((dpr, c["text"]), cn - cd))
+                    pd = centroid_row(im, c["dots"], dpr)
+                    pp = centroid_row(im, c["plus"], dpr)
+                    if pd is not None and pp is not None:
+                        crossbars.append((dpr, pp - pd))
 
                 print(
                     f"dpr{dpr} w{width}: {n_dots:>3} dots over {len(days):>2} days | "
@@ -294,14 +333,31 @@ def main():
                 f"  the printed count wanders {wander:.2f} device px against the dots"
             )
 
+    if crossbars:
+        by_dpr = {}
+        for dpr_, off in crossbars:
+            by_dpr.setdefault(dpr_, []).append(off)
+        line = "  ".join(
+            f"dpr{d}:{sum(v)/len(v):+.2f}" for d, v in sorted(by_dpr.items())
+        )
+        print(f"  “+” crossbar against the dots' centreline — {line}")
+        for d, v in sorted(by_dpr.items()):
+            mean = sum(v) / len(v)
+            if abs(mean) > CROSSBAR_MAX:
+                failures.append(
+                    f"  dpr{d}: the “+” crossbar sits {mean:+.2f} device px off the "
+                    f"dots' line ({'below' if mean > 0 else 'above'} them)"
+                )
+
     if failures:
         print(f"\nFAIL — {len(failures)} problem(s):")
         for f in failures[:20]:
             print(f)
         return 1
-    print(f"\nPASS — every dot agrees with its neighbours (spread <= {SPREAD_MAX}), "
-          f"reads round (fill <= {FILL_MAX}), and every printed count holds one "
-          f"line against them (wander {wander:.2f} <= {WANDER_MAX}).")
+    print(f"\nPASS — every dot agrees with its neighbours (spread <= {SPREAD_MAX}) "
+          f"and reads round (fill <= {FILL_MAX}); every printed count holds one "
+          f"line (wander {wander:.2f} <= {WANDER_MAX}) with its “+” on the dots' "
+          f"centreline (<= {CROSSBAR_MAX} device px).")
     return 0
 
 

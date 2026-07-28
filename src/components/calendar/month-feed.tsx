@@ -628,7 +628,16 @@ const MonthBlock = memo(function MonthBlock({
                     // as the strip's origin moved, so the number sat above the
                     // dots on one day and below them on the next (measured: 3
                     // device px of wander; 0 after this).
-                    <span data-count="" className="voice-data-sm shrink-0 translate-y-[0.5px] leading-[9px]">
+                    // ...and -translate-y-[0.5px] puts the "+" CROSSBAR on the
+                    // dots' centreline. The crossbar, not the text box: a "+"
+                    // sits on the math axis, about a tenth of an em below the
+                    // middle of the digit's cap-to-baseline band, so centring
+                    // the box lands the stroke ~3 device px UNDER the dots at
+                    // 3x — visibly low, even though the box is square.
+                    <span
+                      data-count=""
+                      className="voice-data-sm shrink-0 -translate-y-[0.5px] leading-[9px]"
+                    >
                       +{count - DOTS_WITH_COUNT}
                     </span>
                   )}
