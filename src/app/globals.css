@@ -675,6 +675,17 @@ textarea:focus-visible,
 [data-book-scroller][data-lazy] [data-day][data-warm] {
   content-visibility: visible;
 }
+/* …and the day being WRITTEN IN stays rendered however far it is scrolled away.
+   A `content-visibility: hidden` subtree is not focusable, so the engine blurs
+   whatever is focused inside it the instant the band moves on: measured in the
+   real book, the composer's row loses [data-warm] and document.activeElement
+   drops to <body> in the same frame — on iOS the keyboard goes down with it, and
+   the half-written entry loses its caret. One attribute, set by useKeyboardRoom
+   for exactly as long as the field holds focus; no :has(), which would put a
+   selector scan on every one of the book's day sections. */
+[data-book-scroller][data-lazy] [data-day][data-writing] {
+  content-visibility: visible;
+}
 
 
 /* ── typographic voices ────────────────────────────────────────

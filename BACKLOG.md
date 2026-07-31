@@ -538,3 +538,15 @@ Note `[data-layer]:has(textarea:focus, input:focus) { touch-action: auto }`
 shipped during this hunt and STAYS, but on its own older justification
 (the field-level `touch-action: auto` beside it was a no-op against the
 layers' pan-y) — not as a fix for this. It is not evidence either way.
+
+A LEAD, from a different bug that WAS solved (2026-07-31, the caret that
+drifted out of its card — see `scripts/measure-composer-room.py` and the
+scroll contract in `use-keyboard-room.ts`): when the app holds the book
+unscrollable, iOS spends the drag somewhere else — panning its visual
+viewport — and text interaction desynchronises from what is painted.
+That is the same family of symptom as a handle drag whose vertical
+component goes nowhere, and a standing selection is the one case that
+still holds the book unscrollable (`selLocked`, overflow:hidden for as
+long as the selection stands — which is exactly the state the recording
+was made in). Worth an A/B the next time it reproduces: does the drag
+work if the selection hold is lifted?

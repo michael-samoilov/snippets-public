@@ -70,19 +70,16 @@ export function useKeyboardRoom(
     // mover thaws and re-arms a beat later (past iOS's own late caret-reveal
     // scrolls). Walk detection by caret movement is NOT enough here: an
     // EMPTY composer emits no selectionchange at all while the cursor roams.
+    // (A spacebar-trackpad walk delivers no touch to the page — the finger is
+    // on the native keyboard — so touchDown stays false and this freeze is
+    // what stands against it.)
     // Coarse pointers only — a desktop scrollbar drag must never be fought.
     const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
     let frozenSt: number | null = null;
     let touchDown = false;
     let lastElMoveAt = 0; // the scroller's last movement (any cause)
     let armT: ReturnType<typeof setTimeout> | undefined;
-    // A focused pinned composer holds the book unscrollable (see pinFocused,
-    // below) so the app never repositions while you write — its own box scrolls
-    // the words, correct() keeps the card above the keyboard. The book is
-    // overflow:hidden; this is the snap-back fallback for the one path that can
-    // still move a hidden box — iOS's programmatic caret-reveal.
-    //
-    // What this deliberately does NOT do is chase the caret. Dragging the caret
+    // What the freeze deliberately does NOT do is chase the caret. Dragging it
     // to the TOP of a scrolled inner box to pull the hidden lines above into view
     // is a standing iOS/WebKit limitation (WebKit #138201): the caret can't land
     // on off-screen text, so WebKit's reveal never fires and iOS emits no scroll
@@ -91,15 +88,7 @@ export function useKeyboardRoom(
     // reveal into the field — was tried across many passes and is all removed as
     // dead: there is nothing to fight. The hidden lines are reached by
     // finger-scrolling the card, which works natively.
-    const holdBook = () => {
-      if (frozenSt == null) return;
-      if (Math.abs(el.scrollTop - frozenSt) > 0.5) el.scrollTop = frozenSt;
-    };
-    // A focused pinned composer holds its centred target for the WHOLE focus, so
-    // thaw must not null it (overflow:hidden alone can't stop a programmatic
-    // caret-reveal — only snapping back to a still-set frozenSt does). correct()
-    // keeps that target fresh as the box grows / the keyboard rises.
-    const thaw = () => { if (!pinFocused) frozenSt = null; };
+    const thaw = () => { frozenSt = null; };
     const rearm = () => {
       thaw();
       clearTimeout(armT);
@@ -113,22 +102,17 @@ export function useKeyboardRoom(
           armT = setTimeout(arm, 400);
           return;
         }
+        // hold wherever the reader left the book — including with the field
+        // scrolled away. Re-anchoring here instead (which a pinned composer
+        // used to do) is what made a deliberate scroll spring back.
         if (field && document.activeElement === field && !touchDown) {
-          // a pinned composer freezes to its COMPUTED centred target (correct()
-          // writes it), never to wherever the book happens to sit; every other
-          // field holds the position it settled at
-          if (field.hasAttribute("data-room-pin")) correct();
-          else frozenSt = el.scrollTop;
+          frozenSt = el.scrollTop;
         }
       };
       armT = setTimeout(arm, 900);
     };
-    // While a pinned composer is focused the book is held unscrollable outright
-    // (pinFocused, below), so a touch can neither thaw its freeze nor re-arm it —
-    // the hold, not the arm lifecycle, keeps it put. Every other touch thaws and
-    // re-arms as before.
-    const onTouchStart = () => { touchDown = true; if (!pinFocused) thaw(); clearTimeout(armT); };
-    const onTouchEnd = () => { touchDown = false; if (!pinFocused) rearm(); };
+    const onTouchStart = () => { touchDown = true; thaw(); clearTimeout(armT); };
+    const onTouchEnd = () => { touchDown = false; rearm(); };
 
     // A SELECTION-HANDLE drag is the freeze's hardest case: iOS delivers no
     // touch events under a native handle, and WebKit's auto-scroll chases the
@@ -147,12 +131,11 @@ export function useKeyboardRoom(
     // While the selection stands, the lock simply holds — every word the
     // writer could want is inside the contained box, and any tap outside
     // collapses the selection and frees the scroller.
-    // Both the range-selection hold and the pinned-composer hold (below) make the
-    // outer book unscrollable the same way — overflow:hidden, with frozenSt as
-    // the snap fallback for engines that still scroll a hidden box. Refcounted
-    // over the two owners so releasing one never lifts the other's lock.
+    // The range-selection hold is now the ONLY thing that makes the outer book
+    // unscrollable, and only for as long as a selection stands. A second owner
+    // — a pinned composer, held for its whole focus — was removed: see the
+    // scroll contract above onElScroll.
     let selLocked = false;
-    let pinFocused = false;
     let savedOverflowY = "";
     let overflowHeld = false;
     const holdOverflow = () => {
@@ -164,7 +147,7 @@ export function useKeyboardRoom(
       if (frozenSt == null) frozenSt = el.scrollTop; // the snap fallback's target
     };
     const releaseOverflow = () => {
-      if (!overflowHeld || selLocked || pinFocused) return; // the other owner still holds
+      if (!overflowHeld || selLocked) return;
       overflowHeld = false;
       el.style.overflowY = savedOverflowY;
     };
@@ -180,30 +163,6 @@ export function useKeyboardRoom(
       holdOverflow();
     };
 
-    // The pinned composer's contract: while it is focused the book NEVER scrolls,
-    // so the app never repositions under your finger — its own box scrolls the
-    // words, and correct() keeps the card in the visible band above the keyboard.
-    // The book is simply held overflow:hidden (holdOverflow) with the frozenSt
-    // snap-back underneath — the same mechanism the range-selection hold uses.
-    // correct() still positions the card via programmatic scrollTop, which works
-    // under overflow:hidden.
-    //
-    // Earlier passes also set overflow:clip on the whole ANCESTOR chain and ran a
-    // per-frame rAF reset, trying to force a caret drag to reveal the box's hidden
-    // lines. That fight is over (see holdBook): revealing off-screen inner-scroller
-    // text by caret drag is a WebKit limitation, not something a scroll config can
-    // win — and the ancestor clip corrupted the content-visibility warm band. Both
-    // are removed; the plain book hold is what stops the reposition.
-    const holdPinFocus = () => {
-      if (pinFocused) return;
-      pinFocused = true;
-      holdOverflow();
-    };
-    const releasePinFocus = () => {
-      if (!pinFocused) return;
-      pinFocused = false;
-      releaseOverflow();
-    };
     const onDocSelChange = () => {
       if (!coarse || !field || document.activeElement !== field) return;
       const f = field as HTMLTextAreaElement;
@@ -212,15 +171,24 @@ export function useKeyboardRoom(
       else unlockSelection();
     };
 
+    // THE SCROLL CONTRACT while a field is being written in: the reader may
+    // scroll the book freely, and may scroll the field itself right off the
+    // screen. correct() brings it back the moment they WRITE again (input, a
+    // reflow, the keyboard changing height) — and at no other moment.
+    //
+    // It used to be the opposite: a pinned composer held the book overflow:hidden
+    // for its whole focus and correct() re-anchored the card on every stray
+    // scroll, including every visualViewport scroll. That is what put the caret
+    // outside its own card (owner recording, 2026-07-31, measured frame by frame:
+    // the card held still to the pixel while the caret climbed ~100px up the page
+    // and came to rest between two OTHER cards). The mechanism: with the book
+    // unscrollable, iOS spends the drag panning the visual viewport instead;
+    // correct() answered each pan by scrolling the book the opposite way, so the
+    // card stayed put on screen while its real scroll offset moved — and iOS
+    // draws the caret from the real offset. Cancelling the reader's scroll is
+    // what desynchronised the two. So the app no longer cancels it.
     const onElScroll = () => {
       const st = el.scrollTop;
-      if (pinFocused && frozenSt != null) {
-        // a focused pinned composer: the book holds still, full stop — any
-        // programmatic reveal iOS sneaks past overflow:hidden is snapped back
-        holdBook();
-        lastElMoveAt = performance.now();
-        return;
-      }
       if (selLocked && frozenSt != null) {
         // a range-selection handle drag: the book holds still, full stop —
         // touchDown doesn't exempt it (any programmatic reveal is snapped back)
@@ -229,25 +197,6 @@ export function useKeyboardRoom(
         return;
       }
       lastElMoveAt = performance.now();
-      // A pinned composer must hold even mid-fling. Its freeze gets thawed by a
-      // stray touch (onTouchStart), and while the book is still coasting arm()
-      // refuses to re-commit — it waits for a stillness a momentum fling never
-      // reaches — so frozenSt stays null, the clamp below is skipped, and the
-      // composer coasts off-screen (the "slides out of view while typing" case,
-      // confirmed on-device: a long run of scroll events with froz=null). Re-
-      // assert its centred target right here, on every scroll, independent of the
-      // arm lifecycle, so a coasting fling is stopped on its first frame. A real
-      // finger scroll (touchDown) still passes through untouched.
-      if (
-        frozenSt == null &&
-        !touchDown &&
-        field &&
-        field.hasAttribute("data-room-pin") &&
-        document.activeElement === field
-      ) {
-        correct(); // recompute the centred target, snap to it, re-freeze
-        return;
-      }
       if (frozenSt == null || touchDown) return;
       if (Math.abs(st - frozenSt) > 0.5) el.scrollTop = frozenSt; // absolute: idempotent
     };
@@ -256,8 +205,10 @@ export function useKeyboardRoom(
       if (selLocked) return; // a handle drag owns the view outright
       const isPinned = !!field && field.hasAttribute("data-room-pin");
       // a walk owns the view; the box reveals its own caret — EXCEPT a pinned
-      // composer, whose book must never follow the caret at all: for it, correct()
-      // re-asserts the centred anchor on every pass instead of standing down.
+      // composer, which must be able to come BACK from wherever the reader
+      // scrolled it, and a freeze is exactly the state it will be in when they
+      // start typing again. So it runs through the freeze rather than standing
+      // down (and re-targets it below instead of fighting onElScroll).
       if (frozenSt != null && !isPinned) return;
       if (!field) {
         clearPad();
@@ -287,24 +238,30 @@ export function useKeyboardRoom(
       el.style.scrollPaddingBottom = `${kb + FLOAT}px`;
       const r = field.getBoundingClientRect();
       // A contained composer (data-room-pin) reveals its own caret inside its box,
-      // so the book need not follow the caret at all: anchor the card in the
-      // visible band and FREEZE to that computed target. Because the target is
-      // recomputed (not captured), onElScroll snaps any stray reveal straight back
-      // to it — the hold self-heals no matter when the walk begins.
+      // so the book need not follow the caret at all: it only has to make sure
+      // the card is READABLE — fully between the scroller's visible top and the
+      // keyboard band — at the moments the reader is actually writing.
       if (isPinned) {
-        // FOOT-ANCHORED, always: the card is capped at the six-line box (max-h),
-        // so its foot sits just above the keyboard band and the whole card stays
-        // on screen. The height no longer changes at the six→seven-line boundary
+        // FOOT-ANCHORED: the card is capped at the six-line box (max-h), so its
+        // foot sits just above the keyboard band and the whole card stays on
+        // screen. The height no longer changes at the six→seven-line boundary
         // (past six the box scrolls its own words), so keeping ONE formula means
         // the card does not JUMP when it becomes scrollable — the earlier code
         // switched to a centred target exactly there, and the card leapt up (owner
         // video, 2026-07-23). Clamp the head below the scroller's own visible top
         // (below the calendar header) so a small screen never tucks it up there.
         const ceil = el.getBoundingClientRect().top + 8;
+        // …but a card already whole and clear of the keyboard is LEFT ALONE. The
+        // reader is allowed to scroll it anywhere in that band and keep typing
+        // there; pulling it back to the exact anchor on every keystroke would
+        // undo a scroll they meant.
+        if (r.top >= ceil - 0.5 && r.bottom <= bandTop + 0.5) return;
         const desiredTop = Math.max(ceil, bandTop - r.height);
         const delta = r.top - desiredTop;
         if (Math.abs(delta) > 0.5) el.scrollTop += delta;
-        frozenSt = el.scrollTop; // hold the anchored target; drift snaps back
+        // re-target an EXISTING freeze (never create one): the reader's own
+        // resting position is arm()'s to capture, not ours.
+        if (frozenSt != null) frozenSt = el.scrollTop;
         return;
       }
       const over = r.bottom - bandTop;
@@ -370,13 +327,28 @@ export function useKeyboardRoom(
       !!t &&
       (t.tagName === "TEXTAREA" || t.tagName === "INPUT") &&
       !t.hasAttribute("data-room-center");
+    // The book lazy-renders: a day section outside the warm band is
+    // `content-visibility: hidden`, and a hidden subtree is NOT focusable — so
+    // scrolling the field's own day out of the band makes the engine blur it
+    // (measured: activeElement drops to <body> in the same frame the row loses
+    // [data-warm]; on iOS the keyboard falls with it). Since the reader may now
+    // scroll the field clean off the screen and go on typing, its day is kept
+    // rendered for exactly as long as it holds focus.
+    let writingRow: HTMLElement | null = null;
+    const holdRow = (t: HTMLElement) => {
+      writingRow = t.closest("[data-day]");
+      writingRow?.setAttribute("data-writing", "");
+    };
+    const releaseRow = () => {
+      writingRow?.removeAttribute("data-writing");
+      writingRow = null;
+    };
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target as HTMLElement | null;
       if (managed(t)) {
         field = t;
         ro.observe(t!);
-        // a pinned composer holds the book unscrollable for its whole focus
-        if (t!.hasAttribute("data-room-pin")) holdPinFocus();
+        holdRow(t!);
         // extra late passes to outlast the keyboard's rise (~250ms) and iOS's
         // settle-scroll after it
         run([140, 300, 450]);
@@ -385,7 +357,7 @@ export function useKeyboardRoom(
     };
     const onFocusOut = () => {
       if (field) ro.unobserve(field);
-      releasePinFocus();
+      releaseRow();
       unlockSelection();
       field = null;
       thaw();
@@ -394,7 +366,14 @@ export function useKeyboardRoom(
       clearPad();
     };
     const onVvResize = () => { rearm(); run([140, 300]); }; // the keyboard opens/closes
-    const onVvScroll = () => run();
+    // A visual-viewport SCROLL is iOS panning its window over the page — not the
+    // reader writing. For a contained composer, answering it by scrolling the
+    // book the other way is exactly the caret-drift engine described above, so
+    // it is left alone; a plain field still gets pulled back above the band.
+    const onVvScroll = () => {
+      if (field?.hasAttribute("data-room-pin")) return;
+      run();
+    };
     const onWheel = () => rearm();
     el.addEventListener("focusin", onFocusIn);
     el.addEventListener("focusout", onFocusOut);
@@ -415,14 +394,14 @@ export function useKeyboardRoom(
     if (pre && el.contains(pre) && managed(pre)) {
       field = pre;
       ro.observe(pre);
-      if (pre.hasAttribute("data-room-pin")) holdPinFocus();
+      holdRow(pre);
       run([140, 300, 450]);
       rearm();
     }
     return () => {
       selLocked = false;
-      pinFocused = false;
-      releaseOverflow(); // restore overflow whichever owner held it
+      releaseOverflow();
+      releaseRow();
       document.removeEventListener("selectionchange", onDocSelChange);
       el.removeEventListener("focusin", onFocusIn);
       el.removeEventListener("focusout", onFocusOut);

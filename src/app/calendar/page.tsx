@@ -6313,8 +6313,10 @@ function FlowBackfillCapture({
             placeholder={placeholder}
             aria-label={copy.backfill.ariaAddTo(friendlyDay(day))}
             // this contained composer scrolls its own words; the book must NOT
-            // follow the caret. data-room-pin tells useKeyboardRoom to anchor the
-            // card centred in the visible band and hold it there — see correct().
+            // follow the caret. data-room-pin tells useKeyboardRoom to keep the
+            // card clear of the keyboard whenever you WRITE — and to leave the
+            // book alone otherwise, so it can be scrolled freely, even until the
+            // card is off screen (see the scroll contract in use-keyboard-room).
             data-room-pin=""
             onChange={(e) => {
               setText(e.target.value);
