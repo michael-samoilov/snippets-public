@@ -34,6 +34,9 @@ import {
   monthsBetween,
   ym,
   ringSpringFor,
+  dotsFor,
+  DOT_CAP,
+  DOTS_WITH_COUNT,
 } from "./shared";
 import type { MonthGeom, MonthFeedHandle } from "./shared";
 
@@ -591,14 +594,53 @@ const MonthBlock = memo(function MonthBlock({
                   {format(date, "d")}
                 </span>
                 {/* the dot strip is always reserved so numbers sit at the
-                    same height whether or not a day has entries yet */}
-                <span className="relative flex h-[3.5px] gap-[3px]" aria-hidden="true">
-                  {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
+                    same height whether or not a day has entries yet.
+
+                    WHOLE-PIXEL LAW: the dot and the PITCH (dot + gap) must
+                    both be whole CSS pixels, so they stay whole DEVICE pixels
+                    at 1x/2x/3x and every dot in a strip shares one subpixel
+                    phase. This was `size-[3.5px] gap-[3px]` — a 6.5px pitch,
+                    i.e. 19.5 device px on a 3x screen — so every OTHER dot
+                    landed on a half device pixel and rasterized as an 11px
+                    blob with filled corners, between neighbours that landed
+                    clean at 10px. That is the "dots alternate between circles
+                    and squircles" report, and it is geometry, not radius:
+                    3.4e38px (what `rounded-full` emits), 50% and 9999px all
+                    rasterize identically in both Blink and WebKit.
+                    scripts/measure-calendar-dots.py holds the line. */}
+                <span
+                  data-dots=""
+                  className="relative flex h-[9px] items-center gap-[3px]"
+                  aria-hidden="true"
+                >
+                  {Array.from({ length: dotsFor(count) }).map((_, i) => (
                     <span
                       key={i}
-                      className="size-[3.5px] rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
+                      className="size-[3px] shrink-0 rounded-full bg-ink-soft shadow-[0_0.5px_0.5px_rgb(var(--shadow-hue)/0.4)]"
                     />
                   ))}
+                  {count > DOT_CAP && (
+                    // leading-[9px] is not decoration: it makes the figure's
+                    // line box exactly the strip's height, so centring it is
+                    // whole-pixel arithmetic. See the WHOLE-PIXEL LAW above —
+                    // an 8px strip put the 3px dot at 2.5px and the figure's
+                    // box at 0.4px, two fractions that rounded INDEPENDENTLY
+                    // as the strip's origin moved, so the number sat above the
+                    // dots on one day and below them on the next (measured: 3
+                    // device px of wander; 0 after this).
+                    // ...and -translate-y-[0.5px] puts the "+" CROSSBAR on the
+                    // dots' centreline. The crossbar, not the text box: a "+"
+                    // sits on the math axis, about a tenth of an em below the
+                    // middle of the digit's cap-to-baseline band, so centring
+                    // the box lands the stroke ~3 device px UNDER the dots at
+                    // 3x — visibly low, even though the box is square.
+                    <span
+                      data-count=""
+                      className="voice-data-sm shrink-0 -translate-y-[0.5px] leading-[9px]"
+                    >
+                      +{count - DOTS_WITH_COUNT}
+                    </span>
+                  )}
                 </span>
               </motion.span>
             </motion.button>

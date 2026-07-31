@@ -46,6 +46,23 @@ export const YEAR_GAP = 24; // between year blocks
 export const MINI_GAP = 8; // gap-2 between minis
 export const MINI_DOT = 3;
 
+/* ── how a day's entries are marked in the month grid ──────────────
+   Up to four entries are drawn as four dots — four is where the eye
+   still reads a count at a glance without counting. Past that the
+   marks stop being countable, so the grid prints the number instead.
+
+   It falls back to THREE dots when it does, not four: with four the
+   smallest number it could ever print is "+1", and "+1" takes more
+   room than the fifth dot it stands for. Dropping one dot means the
+   smallest number printed is always "+2", which earns its space. */
+export const DOT_CAP = 4; // most dots drawn on their own
+export const DOTS_WITH_COUNT = 3; // dots kept once the number appears
+
+/** how many dots a day with `count` entries draws */
+export function dotsFor(count: number): number {
+  return count <= DOT_CAP ? count : DOTS_WITH_COUNT;
+}
+
 export function monthRows(m: Date, weekStart: 0 | 1): number {
   return Math.ceil((leadOffset(m, weekStart) + endOfMonth(m).getDate()) / 7);
 }

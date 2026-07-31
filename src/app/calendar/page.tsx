@@ -5066,26 +5066,33 @@ function ScheduleFeedBase({
       // above, the zoom is animating, and on iOS the toolbars reflow the viewport
       // a beat later — so a foot computed from them lands off by a constant (it's
       // why this misfired only on the first Today press after a dive, never after
-      // a refresh or back-from-entry, where the layout is already at rest). Pin the
-      // today section's rule to the scroller's TOP instead: a relative measure
-      // between two elements, immune to those transients. The zone (flex-1, in a
-      // min-h-full wrapper) fills exactly the viewport below the rule, so
-      // rule-at-top IS the resting foot. A today WITH entries seats no empty zone,
-      // so it lands at the literal foot.
+      // a refresh or back-from-entry, where the layout is already at rest).
+      // Measure the ZONE'S OWN FOOT against the scroller's instead: a relative
+      // measure between two elements, immune to those transients, and — since the
+      // zone is always the last thing in the book — the natural foot BY
+      // DEFINITION (the same target the seal settle scrolls to; see toFoot).
+      //
+      // The previous stance pinned today's section rule to the scroller's TOP,
+      // on the reasoning that the min-h-full zone below it fills exactly the
+      // viewport. It didn't: the section's own rule plus the chin then under the
+      // zone put four more pixels between them than the viewport holds, so the
+      // landing stopped four pixels short of the foot and the zone's bottom
+      // border hung just under the fold — the blue clip hairline lit instead of
+      // the border being the book's visible bottom edge. (The zone now sizes
+      // itself to fit that viewport exactly, so rule-at-top and foot AGREE —
+      // but this measure is the one that states the intent.)
       const footDelta = () => {
         const s = scrollerRef.current;
         if (!s) return null;
-        const sec = rowRefs.current.get(todayKey);
-        // a re-render (live data arriving, rows remounting) unmaps the
-        // section ref for a beat. The literal-foot fallback sits 6px off the
-        // rule-pin stance, so a pass landing in that window wrote the OTHER
-        // stance and the page flip-flopped as it set — skip instead; the
-        // next pass reads the settled truth. Literal foot is only ever the
-        // right answer for a today that truly has entries.
-        if (!sec) return null;
-        if (!sec.querySelector("[data-entry]"))
-          return sec.getBoundingClientRect().top - s.getBoundingClientRect().top;
-        return s.scrollHeight - s.clientHeight - s.scrollTop;
+        const zones = s.querySelectorAll<HTMLElement>("[data-today-zone]");
+        const zone = zones[zones.length - 1]; // mid-keep there are two generations
+        // no zone in the tree (the tail isn't windowed in) — the literal foot is
+        // all there is to aim at
+        if (!zone) return s.scrollHeight - s.clientHeight - s.scrollTop;
+        // the chin below the zone is margin, so it's outside the client rect but
+        // inside the scrollable content
+        const chin = parseFloat(getComputedStyle(zone).marginBottom) || 0;
+        return zone.getBoundingClientRect().bottom + chin - s.getBoundingClientRect().bottom;
       };
       // ABSOLUTE writes only, never scrollBy: iOS's async scrolling applies a
       // relative scrollBy a second time after the JS-visible update, so every
@@ -6481,13 +6488,17 @@ function ZoneFootRule({ scrollerRef }: { scrollerRef: React.RefObject<HTMLDivEle
       let inset = 0;
       if (box && !busy) {
         const r = box.getBoundingClientRect();
-        if (r.bottom <= vpBottom) {
+        if (r.bottom <= vpBottom + 1) {
           // the zone's OWN bottom border has reached the fold and is the visible
           // edge now. Because the zone is the last thing in the book, this is
           // true only scrolled flush to the very bottom — so the rule hands off
           // exactly there, never a few pixels early (which left the foot bare
           // until the border scrolled in), and never doubled onto the border
           // (which read darker than the rest of the outline).
+          // The +1 is the SAME slack the landing tolerates (see pinFoot): a foot
+          // that settles a fraction of a pixel deep is at the foot, and lighting
+          // the blue clip edge over a subpixel read is what made the book look
+          // like it had stopped short of the bottom.
           show = false;
         } else if (r.top > vpBottom) {
           // the zone is still entirely below the fold → grey terminus over the
@@ -7012,11 +7023,38 @@ function TodayZoneFill({
   const centerField = () => {
     const s1 = topSlackRef.current, s2 = restSpacerRef.current, area = areaRef.current;
     if (!s1 || !s2 || !area) return;
-    if (area.scrollHeight > 61) return; // 3 rest lines = 60px; already writing
+    // "still at rest" = the field shows nothing past its three empty rules.
+    // Read from the field's OWN line grid, never a baked pixel count: this test
+    // used to be `scrollHeight > 61` ("3 rest lines = 60px"), and when the app's
+    // type scale grew (rules 20px → 23px, the field's rest height 60 → 69) every
+    // pass bailed on the first line — the centring silently stopped happening
+    // and the zone opened with the ruled paper shoved down against the seal.
+    const cs = getComputedStyle(area);
+    const line = parseFloat(cs.lineHeight) || 0;
+    const restH = parseFloat(cs.minHeight) || 3 * line;
+    if (line > 0 && area.scrollHeight > restH + line / 2) return; // already writing
     const spare = s1.offsetHeight + (parseFloat(s2.style.height) || 0);
     s2.style.height = `${Math.max(0, spare / 2)}px`;
   };
   useLayoutEffect(centerField, [gen, day]);
+  // …and again whenever the zone's geometry settles. The zone MOUNTS BEFORE the
+  // book's data lands, at a height the settled layout doesn't share (measured on
+  // a cold load: 1211px tall with zero slack during hydration, 663px with 178px
+  // of slack a second later) — so a one-shot pass at mount split a spare of
+  // zero and left the field parked against the seal for the whole session. The
+  // pass is idempotent (it conserves slack + spacer), so re-running it from a
+  // ResizeObserver settles in one extra frame rather than oscillating; watching
+  // the slack alone is enough, since every change to the zone's height lands
+  // there (it's the flexible one).
+  const centerRef = useRef(centerField);
+  useEffect(() => { centerRef.current = centerField; });
+  useEffect(() => {
+    const s1 = topSlackRef.current;
+    if (!s1) return;
+    const ro = new ResizeObserver(() => centerRef.current());
+    ro.observe(s1);
+    return () => ro.disconnect();
+  }, [gen, day]);
   const clearAnchorTimers = () => { anchorTimers.current.forEach(clearTimeout); anchorTimers.current = []; };
   // FOCUS: re-pin across the keyboard's rise (~300ms), in case the browser's
   // own focus-scroll nudges the book off its foot.
@@ -7640,14 +7678,29 @@ function TodayZoneFill({
         // this element is today — a drag that reaches here has revealed the
         // whole entry and must not haul the feed on into earlier days
         data-today-zone=""
-        // the zone sits in the book's standard frame: its top gap matches the
-        // side gutter (px-5) and the chin below it, so the content reads with one
-        // even ~20px margin on every side. first-ever keeps just a hair (nothing
-        // above it to breathe from).
+        // The zone sits in the book's standard frame: at the natural foot its
+        // outline reads with the same ~20px margin as the sheet's side gutter
+        // (px-5) on every side. Top: the day rule above it counts toward that
+        // gap, which is why an empty today pads 19 and not 20 — the pair lands
+        // the border 20px under the rule. Bottom: no chin — the box's foot rests
+        // flush with the scroller's bottom edge, and the stage's own room below
+        // it (mb-2.5 + the sheet's pb-2) IS the bottom gutter. first-ever keeps
+        // just a hair on top (nothing above it to breathe from).
+        //
+        // And the zone stands exactly one viewport tall MINUS whatever shares
+        // the viewport with it — the 1px day rule when today is collapsed. It
+        // used to be a flat min-h-full with a 3px chin under it, which made the
+        // composition four pixels TALLER than the viewport: at the foot those
+        // four came off the TOP, sliding the day rule up under the scroll
+        // terminus and clipping the zone's margin to 16px. (A today WITH entries
+        // has no rule beside it — its section is above the fold — so it takes
+        // the plain full viewport.)
         className={cn(
           "relative flex w-full flex-col",
-          firstEver ? "pt-1 mb-[3px]" : hasEntry ? "pt-[20px]" : "pt-[19px] mb-[3px]",
+          firstEver ? "pt-1" : hasEntry ? "pt-[20px]" : "pt-[19px]",
           className,
+          // after `className`: the zone's own height is not the caller's to set
+          firstEver || hasEntry ? "min-h-full" : "min-h-[calc(100%-1px)]",
         )}
         // the fresh zone fades in with a small float down (no full slide-from-top
         // that would sweep over the entries above it)

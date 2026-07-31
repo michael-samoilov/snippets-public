@@ -737,6 +737,30 @@ textarea:focus-visible,
     color: var(--ink-faint);
   }
 
+  /* the data voice's one smaller step — a count set BESIDE a mark rather
+     than on its own line, where 0.78rem would rival the thing it annotates
+     (today: the calendar's "+n more entries" against a 3px dot).
+
+     The size is stepped by device pixel ratio because its legibility floor
+     is measured in DEVICE pixels, not CSS ones. At 2x and up a 7.2px figure
+     has 15+ device pixels of em to draw in and stays crisp; at 1x it has
+     seven, and the mono 5 and 8 close into blobs — a count you cannot read
+     is worse than no count. 0.55rem is where the figure survives at 1x.
+     scripts/measure-calendar-dots.py holds both ends. */
+  .voice-data-sm {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 450;
+    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--ink-faint);
+  }
+  @media (min-resolution: 2dppx) {
+    .voice-data-sm {
+      font-size: 0.45rem;
+    }
+  }
+
   /* prose: snippet bodies */
   .voice-prose {
     font-family: var(--font-serif);

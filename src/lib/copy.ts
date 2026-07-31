@@ -455,7 +455,7 @@ export const copy = {
       signIn: "Sign in",
       signedInAs: (email: string) => `Signed in as ${email}.`,
       signOut: "Sign out",
-      signOutHint: "Your entries stay on this device.",
+      signOutHint: "Entries stay on this device.",
       /** the tiny mono device-count line shown when signed out, e.g. "1,204 entries on this device" */
       deviceCount: (n: string, one: boolean) =>
         `${n} ${one ? "entry" : "entries"} on this device`,
