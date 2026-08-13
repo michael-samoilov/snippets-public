@@ -21,6 +21,13 @@ import { requestSync } from "@/lib/sync";
 import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
 import { copy } from "@/lib/copy";
 
+/**
+ * How long the recovery code's buttons stay inert after they appear.
+ * Long enough to outlast a tap already in flight toward the submit
+ * button they replace; short enough that a deliberate tap never waits.
+ */
+const RECOVERY_ARM_MS = 400;
+
 export function EyeToggle({
   shown,
   onToggle,
@@ -113,6 +120,27 @@ export function EnrollFlow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [actionsArmed, setActionsArmed] = useState(false);
+
+  // A stale tap must not dismiss the recovery code. The code is shown
+  // exactly once and cannot be reconstructed, so "I've saved it" is the
+  // most expensive control in the app to hit by accident — and it takes
+  // the screen the submit button just occupied, with no transition
+  // between them. A tap already travelling toward "Encrypt my entries"
+  // (or an impatient second tap while the enroll call is in flight)
+  // therefore lands on whatever now sits there. `inert` withholds the
+  // whole action row for a beat: pointer and focus blocked, and the row
+  // absent from the accessibility tree until it has visibly settled.
+  // This is a mis-tap guard, not motion, so it deliberately does NOT
+  // collapse under prefers-reduced-motion. The code, its prose, and the
+  // select-all stay live from the first frame — only the two buttons wait.
+  // (no reset to false here: `actionsArmed` starts false and `recoveryCode`
+  // only ever goes null → code, once, so the timer is the only transition)
+  useEffect(() => {
+    if (recoveryCode === null) return;
+    const t = setTimeout(() => setActionsArmed(true), RECOVERY_ARM_MS);
+    return () => clearTimeout(t);
+  }, [recoveryCode]);
 
   // nudge a focused field above the keyboard — 'center' keeps it
   // comfortably in view without pushing a visible field out of the way
@@ -208,7 +236,10 @@ export function EnrollFlow({
             {copy.settings.encryption.recoveryDriveLink}
           </Link>
         </p>
-        <div className="flex flex-wrap items-center gap-3 pt-1">
+        <div
+          className="flex flex-wrap items-center gap-3 pt-1"
+          inert={!actionsArmed}
+        >
           <PaperButton onClick={downloadKit}>
             {copy.settings.encryption.downloadKit}
           </PaperButton>

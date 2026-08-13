@@ -34,6 +34,13 @@ const TECH_COPY_PATHS = [
   "todayZone.locked",
   "todayZone.needsSetup",
   "welcome",
+  // the first-run intro's ONE technical paragraph. `intro.body` and
+  // `intro.close` are literary (Dicks, Gwern, the closing line) and stay
+  // exempt; `intro.about` explains storage/accounts/encryption/backup, so it
+  // carries the same bar as the Settings lines. It drifted once — it claimed
+  // encryption was optional after encryption became required at sign-in —
+  // which is exactly what this entry exists to prevent.
+  "intro.about",
 ] as const;
 
 const PAGES = [

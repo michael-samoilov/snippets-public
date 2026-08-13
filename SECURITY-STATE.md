@@ -66,7 +66,8 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   `src/lib/sync-wire.ts` (format 3 = AAD-bound envelope).
 - **Asserts it:** privacy `#can-you-read`, `#if-you-sign-in`,
   `#end-to-end-encryption`; terms `#encryption`; Settings Encryption
-  section; `/verify` tests 2 & 3.
+  section; the first-run intro (`copy.intro.about`, the today zone's
+  first-ever prose); `/verify` tests 2 & 3.
 
 ### The sign-in → encryption window
 - **There is none.** A signed-in-but-unenrolled account sits in the
@@ -212,6 +213,23 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-08-13 — first-run intro corrected; it still described optional encryption
+No behavior change. The first-ever intro in the today zone (the first
+description of our security model a new reader ever gets) still said
+"if you like, you can turn on end-to-end encryption" and called the Drive
+backup a "sync". Encryption became required at sign-in on 2026-07-23, and
+there is no UI to turn it off, so that paragraph had been wrong for three
+weeks. It was invisible to the copy-clarity linter because the whole
+`copy.intro` group was treated as literary. Fixed by splitting the group:
+`intro.body` + `intro.close` stay literary and exempt, while the rewritten
+`intro.about` joins `TECH_COPY_PATHS` and now says the server copy is
+always encrypted with a key only the writer's devices hold, and that Drive
+receives a readable copy (matching the privacy page's "plain, readable
+files by design"). Also on this surface: the recovery-code controls in
+`EnrollFlow` are now inert for a beat after they appear, so a stale tap
+carried over from "Encrypt my entries" cannot dismiss a once-only recovery
+code.
 
 ### 2026-07-24 — MDX policy pages; deletion copy corrected; em-dash ban (preview)
 No behavior change. The privacy/terms/verify pages moved to `.mdx` (owner

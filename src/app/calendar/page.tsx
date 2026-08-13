@@ -7884,14 +7884,19 @@ function TodayZoneFill({
                 exit={{ opacity: 0, transition: { duration: 0.18 } }}
                 className="w-full space-y-3 text-left"
               >
-                {copy.intro.body.map((para, i) => (
-                  <p
-                    key={i}
-                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
-                  >
-                    {renderInline(para, `intro-${i}`)}
-                  </p>
-                ))}
+                {/* literary paragraphs, then the technical "about" one, then
+                    the closing line — see the copy.intro doc comment for why
+                    `about` is split out (it rides the copy-clarity linter). */}
+                {[...copy.intro.body, copy.intro.about, copy.intro.close].map(
+                  (para, i) => (
+                    <p
+                      key={i}
+                      className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                    >
+                      {renderInline(para, `intro-${i}`)}
+                    </p>
+                  ),
+                )}
               </motion.div>
             ) : null}
           </AnimatePresence>

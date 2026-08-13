@@ -199,6 +199,11 @@ def main():
         check("escape link hidden while the code is on screen",
               page.get_by_text("Later — until then").count() == 0)
         page.screenshot(path=f"{SHOTS}/a3-welcome-recovery-code.png")
+        # the action row is inert for RECOVERY_ARM_MS after the code appears, so
+        # a stale tap can't burn a once-only code (see tests/e2e/recovery_guard.py).
+        # The screenshot above already outlasts it, but wait explicitly rather
+        # than depend on how long a screenshot happens to take.
+        page.wait_for_selector("div[inert]", state="detached", timeout=5000)
         page.get_by_role("button", name="I’ve saved it").click(force=True)
         page.wait_for_url("**/calendar**")
 

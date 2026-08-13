@@ -63,15 +63,27 @@ export const copy = {
    * starts (it's prose on the sheet, never a card or a dialog). Two
    * jobs: what this is for, and why it's safe to invest in. Workshop
    * the paragraphs here; they render as-is.
+   *
+   * Split three ways on purpose. `body` and `close` are the LITERARY
+   * register (Dicks, Gwern, the closing line) and stay exempt from the
+   * copy linter. `about` explains a mechanism — storage, accounts,
+   * encryption, backup — so it is the TECHNICAL register, rides
+   * `TECH_COPY_PATHS` in copy-clarity.test.ts, and must match
+   * SECURITY-STATE.md rather than memory. It once said encryption was
+   * optional ("if you like, you can turn on end-to-end encryption"),
+   * which stopped being true when encryption became required at
+   * sign-in; the linter now holds this paragraph so it can't drift back.
+   * Render order is body → about → close.
    */
   intro: {
     body: [
       "Snippets is an app to capture your daily moments.",
       "Inspired by Matthew Dicks’s book [_Storyworthy_](https://matthewdicks.com/Books/storyworthy/) and his “Homework for Life”: take five minutes each day to capture its most storyworthy moment. Over time, the days no longer blur, you’ll find joy amidst terrible luck, and you’ll have a massive bank of stories to share in your writing or conversations.",
       "Also inspired by Gwern Branwen: “[_Never let a joke go to waste._](https://gwern.net/interview-inkhaven#opening-speech) _People are constantly saying interesting things and good starting points for a blog post. The problem is that they laugh and immediately forget everything._”",
-      "About this app: Everything is stored on this device by default. If you make an account, you can access your entries across devices. You can then connect your Google Drive to sync your entries off the app automatically, so your words are yours even if this app ever disappears. And if you like, you can turn on end-to-end encryption. Then no one but you, including us, can read what you keep.",
-      "How you remember your days is how you remember your life.",
     ] as const,
+    about:
+      "About this app: your entries are stored on this device. If you make an account, a copy also rests on the server, so your other devices can carry them. That copy is always encrypted, with a key only your devices hold, so no one else can read your entries. Not even us. You can also connect Google Drive, and this device delivers a readable copy there each day, so your entries stay yours even if this app disappears.",
+    close: "How you remember your days is how you remember your life.",
   },
 
   /** capture — the day's composer and the voice seal */

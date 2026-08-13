@@ -507,6 +507,16 @@ textarea:focus-visible,
    so at this opacity it reads identically over the real paper; strongest up top
    where the lamplight pools, fading out down the page. Dropped under
    prefers-reduced-data. */
+/* DEAD END, measured 2026-08-13 — do NOT add a <link rel="preload"> for these
+   textures. The webp is a CSS background-image, so it lands after first paint
+   (~600ms after FCP on a throttled cold load), and the "hold the screen until
+   the assets are ready" instinct says to preload it. Measured instead: blocking
+   the texture entirely and diffing the settled first-run screen moves a mean of
+   6.6/255 per channel in Paper (max 29) and 2.2/255 in Lamplight (max 9). It is
+   invisible at reading distance — there is no pop to prevent, only 45KB of
+   fetch priority to steal from the fonts, which DO re-set visibly. (Those are
+   already `rel="preload"`ed by next/font; their remaining latency is bandwidth,
+   not discovery, so there is nothing to win there either.) */
 .sheet-grain {
   position: absolute;
   inset-inline: 0;
