@@ -109,9 +109,21 @@ opt them into `ink-soft`/`ink-faint` (that muting is what made settings
 read as "faint main text"). The ramp separates *roles*: `ink` = reading
 text and display/action titles; `ink-soft` = the quiet small-caps label
 voice; `ink-faint` = mono data, inactive/secondary labels, placeholders,
-and icons — never a body paragraph; `ember` = errors. One tuned exception: the calendar
-composer's textarea keeps a literal 0.9rem + line-height pairing so its
-wrapping matches the book card preview character-for-character.
+and icons — never a body paragraph; `ember` = errors. Two tuned exceptions:
+the calendar composer's textarea keeps a literal 0.9rem + line-height pairing
+so its wrapping matches the book card preview character-for-character; and the
+first-run intro (the today zone's first-ever prose) keeps 0.92rem + `ink-soft`.
+The intro is five paragraphs and it is the reader's FIRST impression — at the
+named step in the primary ink it reads loud and drops more of itself below the
+fold, and the hush is the point. Owner-approved 2026-08-16 after a side-by-side
+in both themes; its sibling letters (locked, needs-setup) DID move to
+`voice-prose-sm` in the primary ink, so don't "fix" the intro to match them.
+
+Where a display heading carries a screen on its own, the named step is
+`voice-display-hero` (2rem, 2.4rem from `sm`) — today `/welcome`'s title.
+Ordinary page titles get their size from `--date-head` through
+`PageBackHeader`; `voice-display` itself sets no size, so one of those two is
+always the answer.
 
 ## Motion
 

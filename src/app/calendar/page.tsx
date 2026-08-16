@@ -7832,7 +7832,7 @@ function TodayZoneFill({
                 {copy.todayZone.locked.body(lockedCount).map((para, i) => (
                   <p
                     key={i}
-                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                    className="voice-prose-sm"
                   >
                     {renderInline(para, `locked-${i}`)}
                   </p>
@@ -7861,7 +7861,7 @@ function TodayZoneFill({
                 {copy.todayZone.needsSetup.body.map((para, i) => (
                   <p
                     key={i}
-                    className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"
+                    className="voice-prose-sm"
                   >
                     {renderInline(para, `needs-setup-${i}`)}
                   </p>
@@ -7889,6 +7889,15 @@ function TodayZoneFill({
                     `about` is split out (it rides the copy-clarity linter). */}
                 {[...copy.intro.body, copy.intro.about, copy.intro.close].map(
                   (para, i) => (
+                    // LAW 2 EXCEPTION, owner-approved 2026-08-16: the sibling
+                    // letters above moved to `voice-prose-sm` in the primary
+                    // ink, but the first-run intro deliberately keeps 0.92rem
+                    // and `ink-soft`. It is five paragraphs long and is the
+                    // reader's FIRST impression, where the named step reads
+                    // loud and pushes more of the page below the fold; the
+                    // hush is the point. Compared side by side in both themes
+                    // before this was settled — don't "fix" it to match the
+                    // letters. See DESIGN.md → Type.
                     <p
                       key={i}
                       className="voice-prose text-[0.92rem] leading-[1.5] text-ink-soft"

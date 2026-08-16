@@ -635,7 +635,8 @@ textarea:focus-visible,
 }
 [data-zooming] .book-card-prose,
 [data-zooming] .voice-prose,
-[data-zooming] .voice-display {
+[data-zooming] .voice-display,
+[data-zooming] .voice-display-hero {
   mix-blend-mode: normal;
 }
 
@@ -713,6 +714,30 @@ textarea:focus-visible,
     text-shadow:
       0 1px 0 var(--press-highlight),
       0 0 0.6px currentColor;
+  }
+
+  /* the display voice's one LARGE step — a standalone step-screen title that
+     carries the page on its own (today: /welcome's "Set your passphrase").
+     `.voice-display` deliberately sets no size, so every caller supplies one;
+     the app's ordinary page titles get theirs from `--date-head` via
+     PageBackHeader, and this is the named step for the hero case, so a screen
+     that needs it stops reaching for `text-[2rem]` (law 2: a new size becomes
+     a named step here first). */
+  .voice-display-hero {
+    font-family: var(--font-serif);
+    font-variation-settings: "SOFT" 0, "WONK" 0;
+    font-weight: 560;
+    letter-spacing: -0.01em;
+    font-size: 2rem;
+    line-height: 1.05;
+    text-shadow:
+      0 1px 0 var(--press-highlight),
+      0 0 0.6px currentColor;
+  }
+  @media (min-width: 640px) {
+    .voice-display-hero {
+      font-size: 2.4rem;
+    }
   }
 
   /* labels: quiet small caps in the serif — never the terminal voice */
@@ -799,12 +824,14 @@ textarea:focus-visible,
    the ink. Lamplight ink is luminous; it stays unblended. */
 .voice-prose,
 .voice-prose-sm,
-.voice-display {
+.voice-display,
+.voice-display-hero {
   mix-blend-mode: multiply;
 }
 .dark .voice-prose,
 .dark .voice-prose-sm,
-.dark .voice-display {
+.dark .voice-display,
+.dark .voice-display-hero {
   mix-blend-mode: normal;
 }
 /* The one card material's prose (book tiles AND the composer) is FLAT — it never

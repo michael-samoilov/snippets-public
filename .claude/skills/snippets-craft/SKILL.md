@@ -32,6 +32,9 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    `text-ui` (0.95rem, the ONE size for serif control text: buttons,
    inputs, action titles) — **never `text-[…]` a voice**; if a new size
    is truly needed it becomes a named step in `globals.css` first.
+   (`voice-display` sets no size at all: a screen-carrying title takes
+   the named `voice-display-hero` step, ordinary page titles take
+   `--date-head` via `PageBackHeader`.)
    Section headers render through `<SectionHeading>`
    (`src/components/section-heading.tsx`), not hand-rolled
    `voice-label border-b` strings. (One tuned exception: the calendar
@@ -47,7 +50,13 @@ above is the depth cue. Full rationale in `DESIGN.md`. The laws:
    `ember` is errors. (This settled over three passes: the settings
    page first drifted to ~12 sizes, then to two prose shades
    (soft/faint), before landing here — one reading shade, the primary
-   ink, matching the privacy page.)
+   ink, matching the privacy page.) **Two owner-approved exceptions**,
+   both tested side by side before they were granted: the calendar
+   composer's textarea (0.9rem, above), and the first-run intro
+   (`copy.intro` in the today zone) which keeps 0.92rem + `ink-soft`
+   because five paragraphs of first impression need the hush — its
+   sibling letters (locked, needs-setup) DID take `voice-prose-sm` in
+   the primary ink, so matching them is not a fix.
 3. **Everything pressable feels physical.** Use `.pressable` (it owns
    the `transition` property — never pair with `transition-*`
    utilities), or the raised-button recipe (inset top highlight + drop
