@@ -62,12 +62,8 @@ export default function WelcomePage() {
   return (
     <div className="page-settle">
       <div className="max-w-[32rem]">
-        <h1 className="voice-display text-[2rem] leading-[1.05] sm:text-[2.4rem]">
-          {copy.welcome.title}
-        </h1>
-        <p className="voice-prose mt-5 text-[1rem] text-ink-soft">
-          {copy.welcome.body}
-        </p>
+        <h1 className="voice-display-hero">{copy.welcome.title}</h1>
+        <p className="voice-prose-sm mt-5">{copy.welcome.body}</p>
         <div className="mt-8">
           <EnrollFlow
             email={user.email ?? ""}

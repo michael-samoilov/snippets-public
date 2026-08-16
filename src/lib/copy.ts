@@ -44,19 +44,6 @@ export const copy = {
     dock: { today: "today", calendar: "calendar" },
   },
 
-  /** the Today page */
-  today: {
-    /** "{n} kept" */
-    kept: "kept",
-    /** "· {n} days running" */
-    daysRunning: "days running",
-    /** the kept-today section ("Kept today · {n}") and its landmark label */
-    keptToday: "Kept today",
-    /** shown only before anything has ever been kept */
-    empty:
-      "Your days are fuller than you think. Catch one true moment before it evaporates: a line someone said, a small scene, a joke that landed. Two sentences is plenty.",
-  },
-
   /**
    * The first-ever introduction — shown on the today zone only before
    * anything has been kept, and it retires itself the moment the writer
