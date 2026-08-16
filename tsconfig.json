@@ -30,5 +30,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Vendored oxlint plugin: Node-run tooling, not app source. It uses
+    // `.ts` import specifiers (Node strips types), which this config
+    // rejects — and typechecking someone else's lint rules buys nothing.
+    "tools/oxlint/anti-slop"
+  ]
 }
