@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:slop": "oxlint",
     "splash": "node scripts/generate-splash.mjs",
     "icons": "node scripts/bake-icons.mjs",
     "og": "node scripts/bake-og.mjs",
@@ -56,6 +57,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.78.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -63,6 +65,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "oxlint": "1.78.0",
     "playwright": "^1.61.1",
     "sharp": "^0.35.0",
     "tailwindcss": "^4",

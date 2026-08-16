@@ -23,6 +23,7 @@ pnpm dev          # dev server (Turbopack)
 pnpm build        # production build + typecheck (the de facto test gate)
 pnpm start        # serve the build
 pnpm lint         # eslint
+pnpm lint:slop    # oxlint + the vendored anti-slop rules (advisory)
 pnpm test         # vitest — merge/e2e/backup units + the copy-clarity linter
 pnpm check:copy   # just the STE-informed copy linter (copy-clarity.test.ts)
 pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
@@ -39,6 +40,20 @@ and rides `pnpm test` — banned/inconsistent terms and vague cadence fail
 the build; over-long sentences print as advisory. Add a new technical
 surface to the allowlist when you write one. Full standard: `DESIGN.md` →
 Copy voice; the rule lives in the `snippets-craft` skill (law 7).
+
+**Type evidence is linted, advisorily.** `pnpm lint:slop` runs oxlint
+over the vendored anti-slop rules (`tools/oxlint/anti-slop`, MIT — ours
+to edit, same vendoring rule as `src/vendor/paper-shaders`). They reject
+low-evidence TypeScript: `unknown` parameters, chained `as` casts,
+`object` as a type, runtime `typeof` where a boundary parse belongs, an
+assertion with no `SAFETY:` comment. It is NOT the build gate — `pnpm
+lint` (eslint) and `pnpm build` are. Five rules the codebase already
+satisfies are set to `error`; the other ten are `warn` with their
+2026-08 counts recorded in `oxlint.config.ts` (263 findings, mostly
+missing `SAFETY:` comments and boundary `typeof`s). Don't bulk-"fix"
+them — the honest move is to clear a rule's backlog while working in
+that area, then promote that rule to `error`. Never silence a finding
+with a cast or a weakened severity to make the report quiet.
 
 ## Architecture
 

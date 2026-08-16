@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vendored third-party sources (Paper Shaders) — not ours to lint.
     "src/vendor/**",
+    // Vendored oxlint rules (anti-slop) — same rule; oxlint ignores them too.
+    "tools/oxlint/anti-slop/**",
   ]),
 ]);
 
