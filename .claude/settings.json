@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'House prose standard for this repo (applies to all replies, thinking, commits, PR text, docs, and comments this session):' && cat \"$CLAUDE_PROJECT_DIR/.claude/skills/google-style/SKILL.md\""
+          }
+        ]
+      }
+    ]
+  }
+}

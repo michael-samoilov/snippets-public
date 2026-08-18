@@ -55,6 +55,17 @@ them — the honest move is to clear a rule's backlog while working in
 that area, then promote that rule to `error`. Never silence a finding
 with a cast or a weakened severity to make the report quiet.
 
+**Claude's own prose follows the Google developers style guide.** All
+replies, visible thinking, commit messages, PR and review text, repo
+docs, and code comments follow the `google-style` skill
+(`.claude/skills/google-style/`), the house distillation of
+developers.google.com/style. A SessionStart hook in
+`.claude/settings.json` injects it into every session; if it is missing
+from context, load it before writing prose. Scope note: app UI copy is
+exempt. The product's words stay governed by `snippets-craft`,
+`DESIGN.md`, and the copy linter described in this section, and those
+win wherever the two standards disagree.
+
 ## Architecture
 
 - **Next.js 16 (App Router, Turbopack) + Tailwind v4** (tokens via
