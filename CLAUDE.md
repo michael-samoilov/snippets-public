@@ -319,7 +319,19 @@ harnesses for correctness, and nothing replaces the on-device pass.
 
 **Production branch: `claude/nice-dijkstra-q7d285`** — this repo has no
 `main`/`master`; that branch is the GitHub default and what prod deploys
-from. Merge finished feature branches there (no need to ask).
+from. Merge finished feature branches there without asking. The
+owner's permission to merge is standing: a session instruction to
+develop on a feature branch says where the work happens, not that
+finished work waits here.
+
+**One thing waits for the owner: an unverified user-facing change.**
+UI, styling, copy, or motion that no harness run and no on-device pass
+has observed working stays on its branch until it is verified or the
+owner says to ship it — an untested visual change that reaches readers
+looks broken to them, and that is the whole reason for the gate. See
+"Prove the fix" for what counts as observed. Everything else merges as
+soon as it is finished: tooling, skills, docs, tests, server-side code,
+and any user-facing change you have watched work.
 
 Every production page ships a strict Content-Security-Policy from
 `next.config.ts` — its `connect-src` is the browser-enforced list of
