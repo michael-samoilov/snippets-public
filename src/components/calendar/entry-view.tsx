@@ -470,7 +470,7 @@ export function MarkedPreview({
     lead: boolean;
     marks: Array<[number, number]>;
   }>(null);
-  const key = `${text} ${query}`;
+  const key = `${text.length}:${text}${query}`;
 
   // measure the real wrap from the full-text render, then window it
   useLayoutEffect(() => {
