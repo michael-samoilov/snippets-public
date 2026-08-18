@@ -224,6 +224,29 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
 
+### 2026-08-18 — the format-3 re-seal rule now rides every server-row adoption
+Legacy rows (plaintext format 1, AAD-less format 2) converge to format 3
+through one rule: a pulled server row still in an older format stores
+dirty with a fresh clock, so its own next push re-seals it. That rule
+lived only on the pull applier's clean branch. Two other paths adopt
+server rows and skipped it: the pull applier's contested branch (a dirty
+local row that loses the merge) and the push path's superseded adoption.
+A row adopted there rested clean, and if no later pull re-delivered it,
+its plaintext copy stayed on the server. Analysis while staging the
+harness narrowed the live window: the cursor protocol re-delivers any
+row a device has not pulled yet, and the clean branch then rescues it —
+so stranding needed an import (Restore from JSON stamps `_dirty` while
+keeping old clocks) landing between one cycle's push and pull phases.
+Narrow, but the rule now rides the row, not the branch:
+`needsReseal(row)` lives in `src/lib/sync-wire.ts` beside the format
+constants, both `sync.ts` adoption paths map through it, and the pull
+loop is one decision + one apply so no future branch can miss it.
+Pinned by the `needsReseal` cases in `src/lib/sync-wire.test.ts`; the
+stub server in `tests/e2e/forced_e2e.py` now merges by LWW like the
+real one and a contested-legacy leg proves end-to-end convergence
+(25 checks). This closes the convergence prerequisite BACKLOG item 14
+names. Found by the 2026-08 codebase audit.
+
 ### 2026-08-18 — a post-commit failure inside enroll() could destroy the recovery code
 `/api/keys` is write-once with no DELETE, so its PUT is the point of no
 return — yet three steps still ran after it inside `enroll`
