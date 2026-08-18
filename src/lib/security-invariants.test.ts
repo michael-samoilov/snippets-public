@@ -221,4 +221,30 @@ describe("absence guards — the deleted plaintext paths stay deleted", () => {
     // refusal wasn't quietly softened to a plain accept
     expect(push.includes("encryption_required")).toBe(true);
   });
+
+  it("every Deepgram listen socket opts out of model training", () => {
+    // `mip_opt_out=true` is what makes the privacy page's "the audio is not
+    // kept" true for Deepgram. It lived in the hook alone while the selftest
+    // route and the CLI script opened the same socket without it — so a
+    // diagnostic sent real speech into training and certified a wire the app
+    // never opens. The rule is per-CALLER, not per-file-we-remember: anything
+    // that builds a /v1/listen URL carries the flag. The scripts/ sweep is
+    // explicit because sourceFiles() walks src/ and matches .ts/.tsx only.
+    const callers = [
+      ...sourceFiles(SRC),
+      join(SRC, "..", "scripts", "deepgram-live-test.mjs"),
+    ].filter((f) => readFileSync(f, "utf8").includes("/v1/listen"));
+
+    expect(callers.length, "no /v1/listen caller found — did the URL move?")
+      .toBeGreaterThan(0);
+
+    const leaking = callers.filter(
+      (f) => !readFileSync(f, "utf8").includes("mip_opt_out"),
+    );
+    expect(
+      leaking.map((f) => f.slice(SRC.length)),
+      "a Deepgram socket is opened without mip_opt_out — that audio may be " +
+        "retained and used for training, which the privacy page forbids.",
+    ).toEqual([]);
+  });
 });

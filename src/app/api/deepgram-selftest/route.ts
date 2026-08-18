@@ -88,6 +88,11 @@ export async function GET(request: NextRequest) {
     channels: "1",
     interim_results: "true",
     smart_format: "true",
+    // the browser sends this on every take (use-speech.ts) and the privacy
+    // page's "the audio is not kept" rests on it. A diagnostic that omits it
+    // would both feed real speech to model training AND certify a wire the
+    // app never opens — this route's whole value is being the same socket.
+    mip_opt_out: "true",
   });
   t = performance.now();
   const ws = new WebSocket(`${WS}/v1/listen?${params}`, ["bearer", token]);
