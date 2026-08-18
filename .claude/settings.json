@@ -10,6 +10,10 @@
           {
             "type": "command",
             "command": "echo 'Reply-shape standard for this repo (always on; shapes every interactive reply this session):' && cat \"$CLAUDE_PROJECT_DIR/.claude/skills/action-first-replies/SKILL.md\""
+          },
+          {
+            "type": "command",
+            "command": "echo 'Turn-report standard for this repo (the closing reply of every work turn answers the owner standing five questions):' && cat \"$CLAUDE_PROJECT_DIR/.claude/skills/turn-report/SKILL.md\""
           }
         ]
       }
