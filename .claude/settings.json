@@ -6,6 +6,10 @@
           {
             "type": "command",
             "command": "echo 'House prose standard for this repo (applies to all replies, thinking, commits, PR text, docs, and comments this session):' && cat \"$CLAUDE_PROJECT_DIR/.claude/skills/google-style/SKILL.md\""
+          },
+          {
+            "type": "command",
+            "command": "echo 'Reply-shape standard for this repo (always on; shapes every interactive reply this session):' && cat \"$CLAUDE_PROJECT_DIR/.claude/skills/action-first-replies/SKILL.md\""
           }
         ]
       }

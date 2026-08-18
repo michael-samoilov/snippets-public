@@ -66,6 +66,17 @@ exempt. The product's words stay governed by `snippets-craft`,
 `DESIGN.md`, and the copy linter described in this section, and those
 win wherever the two standards disagree.
 
+**Replies lead with the action and number their steps.** Interactive output (chat
+replies, visible thinking, questions to the owner, PR threads) also
+follows the vendored `action-first-replies` skill
+(`.claude/skills/action-first-replies/`, MIT, from a skill by Ayoub Ghriss (github.com/ayghri)):
+lead with the next action, number multi-step work, restate state each
+turn, concrete time estimates, no preamble or closers. The same
+SessionStart hook injects it. It composes with `google-style`
+(`google-style` governs the sentences; `action-first-replies` governs the
+reply's shape); repo docs and commit messages stay `google-style`-only.
+Saying "stop action-first mode" pauses it for a session.
+
 ## Architecture
 
 - **Next.js 16 (App Router, Turbopack) + Tailwind v4** (tokens via
