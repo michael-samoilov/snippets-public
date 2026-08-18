@@ -77,6 +77,16 @@ SessionStart hook injects it. It composes with `google-style`
 reply's shape); repo docs and commit messages stay `google-style`-only.
 Saying "stop action-first mode" pauses it for a session.
 
+**Every work turn closes with the owner's report.** The reply that
+closes a turn of work answers five standing questions before they are
+asked: what changed and whether it is merged to the production branch,
+how each change was measured (tests or a harness, never inference),
+the trade-offs, a side-by-side view (screenshots or a before/after
+table), and numbered manual-test steps when the owner's device is
+needed. The `turn-report` skill (`.claude/skills/turn-report/`) is the
+template; the same SessionStart hook injects it. Keep the report under
+about 150 words plus attachments; detail belongs in commits and files.
+
 ## Architecture
 
 - **Next.js 16 (App Router, Turbopack) + Tailwind v4** (tokens via
