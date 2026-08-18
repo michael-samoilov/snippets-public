@@ -67,7 +67,8 @@ export default function WelcomePage() {
         <div className="mt-8">
           <EnrollFlow
             email={user.email ?? ""}
-            onEnrolled={() => {
+            onSealed={() => {
+              // committed: nothing may navigate away from the code on screen
               startedRef.current = true;
               setStarted(true);
             }}

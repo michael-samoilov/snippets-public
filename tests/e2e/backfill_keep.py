@@ -69,5 +69,47 @@ with sync_playwright() as p:
         "(c) => [...document.querySelectorAll('textarea')].some(t => (t.value||'').includes(c))", CANARY)
     check("the composer is not still holding the words", not still_typed)
     pg.screenshot(path="/tmp/backfill-keep.png")
+    pg.close()
+
+    # ── a failed write restores the words (craft law 8) ──────────────────
+    # "no keep ever fails silently — a failed write un-stamps, restores the
+    # words, and says why." The inline invite composer used to latch "the
+    # card is born" before checking the abort, so a write that failed by the
+    # carding beat left the composer dark with the restored words stranded
+    # in a component that rendered nothing: a lone seal under an empty day.
+    FAIL_CANARY = "FAILED-KEEP-CANARY"
+    pg = b.new_page(viewport={"width": 393, "height": 852})
+    pg.add_init_script("""
+      const realAdd = IDBObjectStore.prototype.add;
+      IDBObjectStore.prototype.add = function (...args) {
+        if (this.name === "snippets" && window.__failWrites) {
+          throw new DOMException("harness: disk full", "QuotaExceededError");
+        }
+        return realAdd.apply(this, args);
+      };
+    """)
+    pg.goto(f"{BASE}/calendar?seed=40&years=1", wait_until="load")
+    pg.wait_for_timeout(6000)
+    ph = pg.evaluate(FIND)
+    check(f"failure leg: an invite composer is on screen ({ph!r})", ph is not None)
+    if ph is not None:
+        pg.wait_for_timeout(300)
+        check("failure leg: typed into it", pg.evaluate(TYPE, FAIL_CANARY))
+        pg.wait_for_timeout(600)
+        pg.evaluate("() => { window.__failWrites = true; }")
+        seal = pg.query_selector('[aria-label="Keep this"]')
+        check("failure leg: the keep stamp is armed", seal is not None)
+        if seal is not None:
+            seal.click()
+            pg.wait_for_timeout(6000)  # past the whole press-card-compose arc
+            check("failure leg: the entry is NOT stored",
+                  not pg.evaluate(STORED, FAIL_CANARY))
+            visible_words = pg.evaluate(
+                """(c) => [...document.querySelectorAll('textarea')].some(
+                     t => t.offsetParent && (t.value || '').includes(c))""",
+                FAIL_CANARY)
+            check("failure leg: the composer returns with the words in it",
+                  visible_words)
+    pg.screenshot(path="/tmp/backfill-keep-failed.png")
     b.close()
 sys.exit(0 if ok else 1)

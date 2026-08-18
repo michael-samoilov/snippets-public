@@ -53,15 +53,43 @@ export async function getBookKey(): Promise<CryptoKey | undefined> {
   return getMeta<CryptoKey>(KEY_META);
 }
 
+/** The account already holds wrapped keys — retrying enrollment can never
+    succeed. Its own class so the surface can say something truthful ("unlock
+    with your passphrase") instead of a generic failure. */
+export class AlreadyEnrolledError extends Error {
+  constructor() {
+    super("already enrolled");
+    this.name = "AlreadyEnrolledError";
+  }
+}
+
+export interface EnrollResult {
+  /** shown ONCE; never reconstructable */
+  recoveryCode: string;
+  /** whether this device now holds the unwrapped book key. "keyPending"
+      means the account is sealed but the local install step failed — the
+      unlock form takes the passphrase the writer just chose. */
+  device: "unlocked" | "keyPending";
+}
+
 /**
  * Turn on end-to-end encryption for this account. Generates the book
  * key, seals it under the passphrase and a fresh recovery code,
  * stores only the sealed envelopes server-side, keeps the
  * non-extractable key on this device, and sweeps the whole book for
- * re-encrypted upload. Returns the recovery code — show it ONCE and
- * offer the recovery-file download; it is never reconstructable.
+ * re-encrypted upload.
+ *
+ * The `/api/keys` PUT is the point of no return: it is write-once with
+ * no DELETE, so once it lands the account is sealed whether or not this
+ * function returns. Past that line, enroll must hand back the recovery
+ * code no matter what else fails — a post-commit throw used to eat the
+ * one chance to show it, leaving the account sealed forever with the
+ * code destroyed. Every step after the commit is therefore best-effort
+ * and self-healing: a failed key install lands in the ordinary locked
+ * state (the unlock form takes the passphrase just typed), and a failed
+ * sweep re-runs on the next sync cycle (maybeAadSweep).
  */
-export async function enroll(passphrase: string): Promise<string> {
+export async function enroll(passphrase: string): Promise<EnrollResult> {
   const bookKey = await generateBookKey();
   const recoveryCode = generateRecoveryCode();
   const [passphraseKey, recoveryKey] = await Promise.all([
@@ -74,16 +102,26 @@ export async function enroll(passphrase: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ passphraseKey, recoveryKey }),
   });
-  if (response.status === 409) throw new Error("already enrolled");
+  if (response.status === 409) throw new AlreadyEnrolledError();
   if (!response.ok) throw new Error(`keys ${response.status}`);
-
-  // day-to-day copy is non-extractable; re-derive it via unwrap
-  const local = await unwrapBookKey(passphraseKey, passphrase, "passphrase");
-  await setMeta(KEY_META, local);
+  // ── the account is sealed from here on ──
   enrolledCache = true;
 
-  await reencryptSweep();
-  return recoveryCode;
+  let device: EnrollResult["device"] = "unlocked";
+  try {
+    // day-to-day copy is non-extractable; re-derive it via unwrap
+    const local = await unwrapBookKey(passphraseKey, passphrase, "passphrase");
+    await setMeta(KEY_META, local);
+  } catch {
+    device = "keyPending";
+  }
+  try {
+    await reencryptSweep();
+  } catch {
+    // the once-per-device sweep flag was not set, so maybeAadSweep
+    // (sync.ts) runs the sweep on the next cycle
+  }
+  return { recoveryCode, device };
 }
 
 /** Throws on a wrong secret. */

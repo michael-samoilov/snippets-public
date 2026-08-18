@@ -14,7 +14,6 @@ import {
   eachDayOfInterval,
   endOfMonth,
   format,
-  getDay,
   isAfter,
   isSameDay,
   isSameMonth,
@@ -28,6 +27,7 @@ import { useScrollEdges, ScrollTerminus } from "@/components/ui/scroll-terminus"
 import { MonthSkeleton } from "./skeletons";
 import {
   buildMonthGeom,
+  cellIndex,
   indexAt,
   leadOffset,
   settleBottom,
@@ -202,7 +202,7 @@ function MonthFeedBase({
       const mi = indexOfMonth(startOfMonth(d));
       const m = g.months[mi];
       if (!m || !isSameMonth(d, m)) return null;
-      const idx = getDay(m) + d.getDate() - 1;
+      const idx = cellIndex(m, d.getDate(), weekStart);
       return {
         x: (idx % 7) * g.cell + g.cell / 2,
         y:
@@ -214,7 +214,7 @@ function MonthFeedBase({
         w: g.cell,
       };
     },
-    [indexOfMonth],
+    [indexOfMonth, weekStart],
   );
   useLayoutEffect(() => {
     handleRef.current = { goTo, originFor };
@@ -275,7 +275,7 @@ function MonthFeedBase({
     const mi = indexOfMonth(startOfMonth(d));
     const m = geom.months[mi];
     if (!m || !isSameMonth(d, m)) return null;
-    const idx = getDay(m) + d.getDate() - 1;
+    const idx = cellIndex(m, d.getDate(), weekStart);
     return {
       x: (idx % 7) * geom.cell + 3,
       // the top rule lives inside the cell's first pixel while the

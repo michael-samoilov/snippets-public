@@ -106,17 +106,26 @@ def wire(context):
         if "/api/sync/push" in url:
             data = json.loads(body)
             state["pushes"].append(data)
+            # per-row LWW, the real server's one rule (src/lib/merge.ts):
+            # the newer updatedAt wins; a losing change comes back
+            # "superseded" with the winning row attached. The stub used to
+            # apply everything, which hid the client's adoption paths.
+            results = []
             for c in data["changes"]:
+                existing = next(
+                    (r for r in state["rows"] if r["id"] == c["id"]), None)
+                if existing and c["updatedAt"] <= existing["updatedAt"]:
+                    results.append({"id": c["id"], "outcome": "superseded",
+                                    "row": dict(existing)})
+                    continue
                 state["rows"] = [r for r in state["rows"] if r["id"] != c["id"]]
                 state["rows"].append(dict(c))
+                results.append({"id": c["id"], "outcome": "applied"})
             for i, r in enumerate(state["rows"]):
                 r["serverSeq"] = i + 1
             route.fulfill(
                 json={
-                    "results": [
-                        {"id": c["id"], "outcome": "applied"}
-                        for c in data["changes"]
-                    ],
+                    "results": results,
                     "serverNow": int(time.time() * 1000),
                     "maxSeq": len(state["rows"]),
                 }
@@ -301,6 +310,90 @@ def main():
         check("…and the server copy is no longer readable",
               server_copy and server_copy[-1]["payloadFormat"] == 3
               and "LEGACY-PLAINTEXT" not in json.dumps(server_copy[-1]["payload"]))
+
+        # ── Contested legacy: a dirty local row that LOSES to a newer format-1
+        # server row must still converge to format 3. (Restore-from-JSON
+        # produces exactly this local shape: _dirty stamped, the archive's
+        # original clock preserved — db.ts importSnippets.) The re-seal rule
+        # rides every server-row adoption in sync.ts: the pull applier and the
+        # push's superseded adoption. This leg is a CONVERGENCE regression net,
+        # not a before/after discriminator: the stub replays the full feed on
+        # every pull (as the real cursor protocol does for any row a device
+        # has not pulled yet), so a clean re-delivery can also rescue a missed
+        # adoption. The window the adoption-side rule closes — an import
+        # landing between one cycle's push and pull phases — is too
+        # timing-dependent to stage deterministically here; the rule itself is
+        # pinned by the needsReseal cases in sync-wire.test.ts and by shape
+        # (one apply path per branch, each mapped through needsReseal).
+        contested_id = "01H00000000000CONTESTED1"
+        page2.evaluate(
+            """async (row) => {
+              const db = await new Promise((res, rej) => {
+                const q = indexedDB.open("snippets");
+                q.onsuccess = () => res(q.result);
+                q.onerror = () => rej(q.error);
+              });
+              await new Promise((res, rej) => {
+                const tx = db.transaction("snippets", "readwrite");
+                tx.objectStore("snippets").put(row);
+                tx.oncomplete = () => res();
+                tx.onerror = () => rej(tx.error);
+              });
+              db.close();
+            }""",
+            {
+                "id": contested_id, "text": "STALE-LOCAL-DRAFT from a restored archive",
+                "kind": None, "tags": [], "capturedAt": 1_690_000_100_000,
+                "day": "2023-07-22", "source": "typed", "favorite": 0,
+                "updatedAt": 1_690_000_100_000, "_dirty": 1,
+            },
+        )
+        state["rows"].append({
+            "id": contested_id,
+            "payloadFormat": 1,
+            "payload": {
+                "text": "CONTESTED-PLAINTEXT the newer copy from before encryption",
+                "kind": None, "tags": [], "capturedAt": 1_690_000_200_000,
+                "day": "2023-07-22", "source": "typed", "favorite": 0,
+            },
+            "updatedAt": 1_690_000_200_000,
+            "deletedAt": None,
+            "serverSeq": len(state["rows"]) + 1,
+        })
+        page2.reload()  # cycle: push loses (superseded) or pull contests — either
+                        # adoption path must re-dirty the row for its own re-seal
+        deadline = time.time() + 25
+        resealed2 = None
+        while time.time() < deadline:
+            for push in state["pushes"]:
+                for c in push["changes"]:
+                    if c["id"] == contested_id and c["payloadFormat"] == 3:
+                        resealed2 = c
+            if resealed2:
+                break
+            page2.wait_for_timeout(400)
+        check("contested legacy row is re-pushed as format 3", resealed2 is not None
+              and set(resealed2["payload"].keys()) == {"v", "iv", "ct"})
+        server_copy2 = [r for r in state["rows"] if r["id"] == contested_id]
+        check("…the server copy is no longer readable",
+              bool(server_copy2) and server_copy2[-1]["payloadFormat"] == 3
+              and "CONTESTED-PLAINTEXT" not in json.dumps(server_copy2[-1]["payload"]))
+        local_after = page2.evaluate(
+            """async (id) => {
+              const db = await new Promise((res) => {
+                const q = indexedDB.open("snippets");
+                q.onsuccess = () => res(q.result);
+              });
+              return await new Promise((res) => {
+                const g = db.transaction("snippets", "readonly")
+                  .objectStore("snippets").get(id);
+                g.onsuccess = () => res(g.result ? g.result.text : null);
+              });
+            }""",
+            contested_id,
+        )
+        check("…and the newer server content won locally (LWW held)",
+              local_after is not None and "CONTESTED-PLAINTEXT" in local_after)
         ctx2.close()
 
         # ── Wrong passphrase must not unlock ──────────────────────────

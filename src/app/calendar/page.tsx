@@ -6218,13 +6218,16 @@ function FlowBackfillCapture({
       // beat — after the seal animation — not before. So the card never blinks
       // out mid-press.
       seq.start(() => {
-        // the carding beat itself, whether or not the write took: this
-        // replaces an effect that watched seq.phase, so it latches at the same
-        // moment and a failed keep still hides the composer exactly as before.
-        // (Moving this below the abort check would ALSO restore the words on a
-        // failed write — a visible change, deliberately not made here.)
+        // Abort FIRST: on a failed write the card was never born, so the
+        // latch must not set — leaving it unset is what lets the composer
+        // wipe back in with the restored words instead of going dark with
+        // them stranded (craft law 8: no keep ever fails silently — a failed
+        // write un-stamps, restores the words, and says why; the catch above
+        // already restored the words and raised the toast). A rejection that
+        // lands only after this beat still strands — the full fix is the
+        // keep-run record, BACKLOG (2026-08 audit).
+        if (keepAbortedRef.current) return;
         setCarded(true);
-        if (keepAbortedRef.current) return; // failed write: the words stay put
         file();
         // Clear via state ONLY. The composer unmounts this same commit (carding
         // → composerOpen goes false), so an imperative `value = ""` + autosize

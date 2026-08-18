@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  fromWireRow,
-  toWireChange,
   KeyMismatchError,
   LockedError,
   PAYLOAD_FORMAT_PLAIN,
   PAYLOAD_FORMAT_SEALED,
   PAYLOAD_FORMAT_SEALED_AAD,
+  fromWireRow,
+  needsReseal,
+  toWireChange,
   type WireRow,
 } from "./sync-wire";
 import { encryptJSON, generateBookKey } from "./crypto";
@@ -191,5 +192,31 @@ describe("wire codec — tombstones", () => {
     const s = snippet({ deletedAt: 1_700_000_001_000 });
     const back = await fromWireRow(rowFromChange(s.id, await toWireChange(s, key)), key);
     expect(back.deletedAt).toBe(1_700_000_001_000);
+  });
+});
+
+describe("needsReseal — which pulled rows re-dirty for their own re-seal", () => {
+  const at = (payloadFormat: number, payload: unknown): WireRow => ({
+    id: "01HZY3ULIDEXAMPLE0003",
+    payloadFormat,
+    payload: payload as WireRow["payload"],
+    updatedAt: 1_700_000_000_000,
+    deletedAt: null,
+    serverSeq: 1,
+  });
+  const sealedShape = { v: 1, iv: "AA==", ct: "AA==" };
+
+  it("format 1 (plaintext) re-seals", () => {
+    expect(needsReseal(at(1, { text: "plain" }))).toBe(true);
+  });
+  it("format 2 (AAD-less envelope) re-seals", () => {
+    expect(needsReseal(at(2, sealedShape))).toBe(true);
+  });
+  it("format 3 rests as it is", () => {
+    expect(needsReseal(at(3, sealedShape))).toBe(false);
+  });
+  it("a scrubbed tombstone has nothing to re-seal, whatever its format", () => {
+    expect(needsReseal(at(1, null))).toBe(false);
+    expect(needsReseal(at(3, null))).toBe(false);
   });
 });

@@ -34,10 +34,10 @@ import {
 } from "@/lib/sync-state";
 import {
   fromWireRow,
+  needsReseal,
   toWireChange,
   KeyMismatchError,
   LockedError,
-  PAYLOAD_FORMAT_SEALED_AAD,
   type BackupStatusSummary,
   type PullResponse,
   type PushResponse,
@@ -335,11 +335,22 @@ async function pushAll(key: CryptoKey): Promise<void> {
     });
 
     // decrypt superseded rows BEFORE the transaction — Dexie
-    // transactions die on any foreign await (crypto included)
+    // transactions die on any foreign await (crypto included). The same
+    // re-seal rule as the pull applier rides the adoption: a winning
+    // server row still in an older format adopts DIRTY with a fresh
+    // clock, so its own next push re-seals it as format 3 — otherwise
+    // this third apply-branch would let a plaintext row rest on the
+    // server forever, exactly as the pull loop's contested branch did.
     const adopted = new Map<string, Snippet>();
     for (const result of data.results) {
-      if (result.outcome === "superseded")
-        adopted.set(result.id, await fromWireRow(result.row, key));
+      if (result.outcome !== "superseded") continue;
+      const snippet = await fromWireRow(result.row, key);
+      adopted.set(
+        result.id,
+        needsReseal(result.row)
+          ? { ...snippet, _dirty: 1, updatedAt: bumpClock(snippet.updatedAt) }
+          : snippet,
+      );
     }
 
     const pushed = new Map(dirty.map((s) => [s.id, s]));
@@ -392,39 +403,36 @@ async function pullAll(key: CryptoKey): Promise<void> {
       await db.transaction("rw", db.snippets, async () => {
         for (const { row, snippet } of prepared) {
           const local = await db.snippets.get(row.id);
-          if (!local || local._dirty !== 1) {
-            // clean rows mirror the server verbatim — except a row still
-            // resting on the server in an older format (plaintext 1 or
-            // AAD-less 2): store it dirty with a fresh clock so its own
-            // next push re-seals it as format 3. Content is unchanged, so
-            // the bump is LWW-safe, and the rule is idempotent — the
-            // re-pushed row arrives back as format 3 and rests clean.
-            const reseal =
-              row.payload !== null &&
-              row.payloadFormat < PAYLOAD_FORMAT_SEALED_AAD;
-            await db.snippets.put(
-              reseal
-                ? {
-                    ...snippet,
-                    _dirty: 1,
-                    updatedAt: bumpClock(snippet.updatedAt),
-                  }
-                : snippet,
-            );
-            continue;
-          }
-          const localSide: MergeSide = {
-            updatedAt: local.updatedAt,
-            deletedAt: local.deletedAt ?? null,
-          };
+          // One decision: a clean local row has no claim, so the incoming
+          // row takes the slot; a dirty one contests via the shared merge.
+          // A dirty row that loses keeps waiting for its own push.
+          const localSide: MergeSide | null =
+            local && local._dirty === 1
+              ? { updatedAt: local.updatedAt, deletedAt: local.deletedAt ?? null }
+              : null;
           const incomingSide: MergeSide = {
             updatedAt: row.updatedAt,
             deletedAt: row.deletedAt,
           };
-          if (incomingWins(localSide, incomingSide)) {
-            await db.snippets.put(snippet);
-          }
-          // else: the dirty local row stays; its own push will settle it
+          if (localSide && !incomingWins(localSide, incomingSide)) continue;
+          // One apply: a row still resting on the server in an older format
+          // (plaintext 1 or AAD-less 2) stores dirty with a fresh clock, so
+          // its own next push re-seals it as format 3. Content is unchanged,
+          // so the bump is LWW-safe, and the rule is idempotent — the
+          // re-pushed row arrives back as format 3 and rests clean. The rule
+          // rides the row, not the branch: it used to live on the clean
+          // branch only, so a dirty local row that LOST to a legacy server
+          // row adopted it clean — and a plaintext row could rest on the
+          // server forever on a device that believed it had converged.
+          await db.snippets.put(
+            needsReseal(row)
+              ? {
+                  ...snippet,
+                  _dirty: 1,
+                  updatedAt: bumpClock(snippet.updatedAt),
+                }
+              : snippet,
+          );
         }
       });
       // cursor advances only after the batch's transaction commits

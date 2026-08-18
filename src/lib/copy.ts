@@ -526,6 +526,9 @@ export const copy = {
       wrongSecret:
         "That didn’t open it. Codes and phrases must match exactly: spaces and capitals included.",
       enrollFailed: "Your entries couldn’t be encrypted just now. Try again in a moment.",
+      /** a 409 from /api/keys — this account was sealed elsewhere already */
+      alreadyEnrolled:
+        "This account is already encrypted. Unlock it with your passphrase instead.",
       recoveryTitle: "Your recovery code",
       recoveryBody:
         "Shown exactly once. If you forget your passphrase, this code is the only other key; save it somewhere safe.",

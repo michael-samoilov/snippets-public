@@ -77,6 +77,14 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **Enforcement:** `runCycle` in `src/lib/sync.ts` (the `needsSetup`
   branch), `src/components/encryption/enroll-flow.tsx`,
   `src/app/welcome/page.tsx`, the calendar's needs-setup letter.
+- **The recovery code survives the commit.** The `/api/keys` PUT is the
+  point of no return, so `enroll` (`src/lib/e2e.ts`) returns the code
+  past that line no matter which post-commit step fails: a failed local
+  key install returns `device: "keyPending"` (the unlock form takes the
+  passphrase just typed) and a failed sweep re-runs next cycle
+  (`maybeAadSweep`). A 409 raises `AlreadyEnrolledError`, which the
+  flow renders as "unlock instead" rather than a generic failure.
+  Pinned by the enroll cases in `src/lib/e2e.test.ts`.
 
 ### Can encryption be turned off?
 - **No — deliberately.** `disableEncryption` was deleted; `/api/keys` is
@@ -215,6 +223,50 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-08-18 — the format-3 re-seal rule now rides every server-row adoption
+Legacy rows (plaintext format 1, AAD-less format 2) converge to format 3
+through one rule: a pulled server row still in an older format stores
+dirty with a fresh clock, so its own next push re-seals it. That rule
+lived only on the pull applier's clean branch. Two other paths adopt
+server rows and skipped it: the pull applier's contested branch (a dirty
+local row that loses the merge) and the push path's superseded adoption.
+A row adopted there rested clean, and if no later pull re-delivered it,
+its plaintext copy stayed on the server. Analysis while staging the
+harness narrowed the live window: the cursor protocol re-delivers any
+row a device has not pulled yet, and the clean branch then rescues it —
+so stranding needed an import (Restore from JSON stamps `_dirty` while
+keeping old clocks) landing between one cycle's push and pull phases.
+Narrow, but the rule now rides the row, not the branch:
+`needsReseal(row)` lives in `src/lib/sync-wire.ts` beside the format
+constants, both `sync.ts` adoption paths map through it, and the pull
+loop is one decision + one apply so no future branch can miss it.
+Pinned by the `needsReseal` cases in `src/lib/sync-wire.test.ts`; the
+stub server in `tests/e2e/forced_e2e.py` now merges by LWW like the
+real one and a contested-legacy leg proves end-to-end convergence
+(25 checks). This closes the convergence prerequisite BACKLOG item 14
+names. Found by the 2026-08 codebase audit.
+
+### 2026-08-18 — a post-commit failure inside enroll() could destroy the recovery code
+`/api/keys` is write-once with no DELETE, so its PUT is the point of no
+return — yet three steps still ran after it inside `enroll`
+(`src/lib/e2e.ts`): unwrap the local key, store it in Dexie meta, and
+sweep the book for re-encryption. Any of them throwing (or the PUT's
+response being lost after the server committed) fell into the flow's
+one catch, so the code screen never rendered: the account was sealed
+forever and the once-only recovery code no longer existed anywhere.
+Retrying hit the 409 and showed the same generic failure. Now `enroll`
+returns `{recoveryCode, device}` once the PUT lands — the post-commit
+steps are best-effort, a failed key install reports
+`device: "keyPending"` and resolves through the ordinary locked state,
+and the 409 is a distinct `AlreadyEnrolledError` with truthful copy
+("already encrypted — unlock with your passphrase"). `EnrollFlow`'s
+`onEnrolled` split into `onSealed` (committed; nothing may navigate
+away from the code) and `onKeyInstalled` (this device holds the key),
+because its two call sites meant different things by it. The failure
+cases are pinned in `src/lib/e2e.test.ts`, including "a non-ok PUT
+yields no code" — the inverse hazard. Found by the 2026-08 codebase
+audit.
 
 ### 2026-08-18 — two Deepgram callers opened the socket without the training opt-out
 The app's take has sent `mip_opt_out=true` since 2026-07-23, but two other

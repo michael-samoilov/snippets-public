@@ -83,6 +83,26 @@ arm-freeze; 80–1300ms anchor tail; 140/300/450ms room settles;
 300/700/1200ms contained-field refits; 600ms walk windows; 120ms heal
 quiet rule). ~17 flags, ~20 timers, four systems, one scroller.
 
+## The keep protocol exists twice (added 2026-08, from the audit)
+
+An axis the censuses above do not cover: the write-at-submit / hold /
+abort / file-at-the-beat keep protocol, and the seal's pointer
+hit-test, are written twice — the backfill composer (~6136–6178) and
+the today zone (~7589–7619) — down to matching comments ("WRITE NOW,
+reveal at the beat"; "the keep did not take — stop the theatre… Never
+a silent loss"). `inSeal`/`sealDown`/`overSeal`/`pointerHandled` are
+declared in both. They have diverged in ways invisible from either
+side: the zone guards every pointer handler with `keeping.current` and
+cancels its settle watcher and timers on abort; the composer does
+neither (which is where the stranded-words failure lived until the
+2026-08-18 law-8 fix, and where the late-rejection case still does —
+BACKLOG 25). Only the beat engine (`keep-sequence.tsx`) was ever
+extracted, and only the composer uses it; the zone hand-rolls
+phase/timers inline. The eventual extraction (a shared
+useKeepRun/useSealPress) should lift ONE shape: land the keep-run
+record first (BACKLOG 25), then extract it, rather than reconciling
+two divergent flag sets in the same motion.
+
 ## Where sizes change (the jump inventory)
 
 | Threshold | Where | Failure mode |

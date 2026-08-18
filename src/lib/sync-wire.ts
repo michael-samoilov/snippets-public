@@ -49,6 +49,19 @@ export interface WireRow {
   serverSeq: number;
 }
 
+/**
+ * A row still resting on the server in an older format (plaintext 1 or
+ * AAD-less 2) must be re-dirtied on pull, so its own next push re-seals
+ * it as format 3. A scrubbed tombstone (`payload: null`) has nothing to
+ * re-seal. This is the one rule behind the legacy books converging on
+ * format 3, so it lives here with the format constants rather than as a
+ * comparison a caller has to remember.
+ */
+export function needsReseal(row: WireRow): boolean {
+  return row.payload !== null && row.payloadFormat < PAYLOAD_FORMAT_SEALED_AAD;
+}
+
+
 export type PushResult =
   | { id: string; outcome: "applied" }
   | {
