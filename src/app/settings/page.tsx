@@ -736,8 +736,14 @@ function EncryptionSection({ email }: { email: string }) {
   // (the locked-letter trap). The lingering param is harmless: a refresh
   // just re-offers enroll / re-scrolls to unlock, both gated on real state.
   // ?seal=1 arrives before the enrollment probe answers, so the intent waits
-  // here until it does rather than being written in as state on arrival.
-  const enrollOpen = enrollChoice ?? (wantSeal && enrolled === false);
+  // here until it does rather than being written in as state on arrival. A
+  // committed flow (enrollStarted) holds the dialog open on its own: the
+  // fallback's `enrolled === false` goes stale the moment enrollment lands,
+  // and a fallback that retracts then would close the dialog with the
+  // once-only recovery code on screen (recovery_guard.py caught exactly
+  // that). Only onDone releases it, through an explicit enrollChoice.
+  const enrollOpen =
+    enrollChoice ?? (enrollStarted || (wantSeal && enrolled === false));
 
   // arriving from the calendar's locked letter ("Unlock in Settings"):
   // bring the unlock form into view once it's actually the section's body.
