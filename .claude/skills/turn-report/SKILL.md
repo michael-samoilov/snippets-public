@@ -15,10 +15,16 @@ skips the template: answer concisely and stop.
 Keep the whole report under about 150 words plus attachments. Detail
 lives in commit messages and attached files, not in the reply.
 
-1. **Changed + merge state.** One or two sentences: what changed, at
-   which commit. Then the merge line. "Main" here means the production
-   branch `claude/nice-dijkstra-q7d285` (this repo has no `main`);
-   state "merged" or name the one blocker. CLAUDE.md authorizes merging
+1. **Changed + merge state.** One or two sentences of plain English on
+   what the app now does differently: the behavior a user or the owner
+   observes, never a list of files or internals (those live in the
+   commit message; name the commit so the owner can open it). When the
+   turn changed no app behavior (docs, tooling, a refactor), state what
+   now behaves differently for whoever it serves: "future sessions
+   start with X", "the build now fails on Y". Then the merge line.
+   "Main" here means the production branch
+   `claude/nice-dijkstra-q7d285` (this repo has no `main`); state
+   "merged" or name the one blocker. CLAUDE.md authorizes merging
    finished work without asking, so an unmerged turn needs a stated
    reason.
 2. **How it was verified.** Per change: the root-cause test (name it)
