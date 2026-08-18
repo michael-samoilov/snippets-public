@@ -40,17 +40,6 @@ export function useOnThisDay(): MemoryGroup[] | undefined {
   return useLiveQuery(() => onThisDay(), [dayKey()]);
 }
 
-/** Group a newest-first list by day key, preserving order. */
-export function groupByDay(snippets: Snippet[]): { day: string; snippets: Snippet[] }[] {
-  const groups: { day: string; snippets: Snippet[] }[] = [];
-  for (const s of snippets) {
-    const last = groups[groups.length - 1];
-    if (last && last.day === s.day) last.snippets.push(s);
-    else groups.push({ day: s.day, snippets: [s] });
-  }
-  return groups;
-}
-
 /**
  * Client-side full-text FILTER. Each entry's searchable text is
  * normalized once when the collection changes (instant at personal

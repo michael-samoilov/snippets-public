@@ -129,6 +129,8 @@ async function runSession(pcm, { chunkMs, language, auth, tag }) {
     channels: "1",
     interim_results: "true", // the whole point — live partials
     smart_format: "true",
+    // same opt-out the app sends on every take — see use-speech.ts
+    mip_opt_out: "true",
   });
   const t = performance.now();
   // auth rides the WebSocket subprotocols — ["bearer", <JWT>] (the app's

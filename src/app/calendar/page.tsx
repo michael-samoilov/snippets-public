@@ -33,8 +33,8 @@ import { RecordingWash } from "@/components/capture/wash-shaders";
 import { PressGlow } from "@/components/capture/press-glow";
 import { KEEP_BEATS, useKeepSequence } from "@/components/schedule/keep-sequence";
 import { useKeptDraft } from "@/lib/kept-draft";
+import { groupByDay } from "@/lib/day-groups";
 import {
-  groupByDay,
   useAllSnippets,
   useDayCounts,
   useSearch,

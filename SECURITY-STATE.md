@@ -100,7 +100,9 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   wins) and each provider's data posture live in ONE table:
   `src/lib/speech-providers.ts`. Default chain: **Soniox** (in-memory,
   no storage, no training) → **Speechmatics** (stores neither audio nor
-  transcript) → **Deepgram** (every request sends `mip_opt_out=true`).
+  transcript) → **Deepgram** (every request sends `mip_opt_out=true`,
+  enforced across all callers by the "every Deepgram listen socket opts
+  out of model training" guard in `src/lib/security-invariants.test.ts`).
   **ElevenLabs is out of the default chain** (its zero-retention is
   enterprise-only). Last-resort fallback is the browser's own Web Speech
   API — that audio is sent by the *browser* to Google/Apple, invisible to
@@ -213,6 +215,24 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-08-18 — two Deepgram callers opened the socket without the training opt-out
+The app's take has sent `mip_opt_out=true` since 2026-07-23, but two other
+callers built the same `/v1/listen` URL without it:
+`src/app/api/deepgram-selftest/route.ts` and `scripts/deepgram-live-test.mjs`.
+The selftest is reachable on the deployment (`?spend=yes`), so real speech
+could go to Deepgram under the model-improvement default — the one thing
+the privacy page says never happens — and, because that route exists to
+reproduce the browser's wire exactly, it also returned a confident pass for
+a socket the app never opens. The flag now rides all three callers, and the
+rule is mechanized per-CALLER rather than per-remembered-file: the new guard
+in `src/lib/security-invariants.test.ts` collects every file that constructs
+a `/v1/listen` URL (sweeping `src/` and, explicitly, the `scripts/` sibling
+its `.ts`-only walker cannot see) and fails if any lacks the flag. Verified
+by reverting one caller and watching the guard fail. No user-facing copy
+moved: the privacy page's claim was already the intended architecture — this
+makes it true of every caller, and testable. Found by the 2026-08 codebase
+audit.
 
 ### 2026-08-13 — first-run intro corrected; it still described optional encryption
 No behavior change. The first-ever intro in the today zone (the first
