@@ -7,6 +7,7 @@
  */
 import { format } from "date-fns";
 import { dateFromDayKey } from "@/lib/dates";
+import { groupByDay } from "@/lib/day-groups";
 import { KIND_META } from "@/lib/kinds";
 import type { Snippet } from "@/lib/types";
 
@@ -31,31 +32,28 @@ export function renderArchiveJSON(
 /** Human-readable Markdown, grouped by day. Expects newest-first order. */
 export function renderMarkdown(snippets: Snippet[], title = "Snippets"): string {
   const lines: string[] = [`# ${title}`, ""];
-  let currentDay = "";
-  for (const s of snippets) {
-    if (s.day !== currentDay) {
-      currentDay = s.day;
-      lines.push(
-        `## ${format(dateFromDayKey(s.day), "EEEE, MMMM d, yyyy")}`,
-        "",
-      );
-    } else {
+  // gather by day key rather than walking runs: a day whose entries are not
+  // neighbours (two devices, two UTC offsets) used to earn a second heading
+  // for the same date further down the file
+  for (const { day, snippets: rows } of groupByDay(snippets)) {
+    lines.push(`## ${format(dateFromDayKey(day), "EEEE, MMMM d, yyyy")}`, "");
+    rows.forEach((s, i) => {
       // a thematic break between entries within a day — ten dashes, not
       // three, so it stays an unambiguous boundary even when an entry's own
       // text contains blank lines or a literal "---" (Markdown renders any
       // run of 3+ dashes as the same horizontal rule)
-      lines.push("----------", "");
-    }
-    if (s.title) lines.push(`**${s.title}**`);
-    lines.push(s.text.trim());
-    if (s.attribution) lines.push(`— ${s.attribution}`);
-    const meta = [
-      s.kind ? KIND_META[s.kind].label.toLowerCase() : null,
-      ...s.tags.map((t) => `#${t}`),
-      s.favorite ? "★" : null,
-    ].filter(Boolean);
-    if (meta.length) lines.push(`*${meta.join(" · ")}*`);
-    lines.push("");
+      if (i > 0) lines.push("----------", "");
+      if (s.title) lines.push(`**${s.title}**`);
+      lines.push(s.text.trim());
+      if (s.attribution) lines.push(`— ${s.attribution}`);
+      const meta = [
+        s.kind ? KIND_META[s.kind].label.toLowerCase() : null,
+        ...s.tags.map((t) => `#${t}`),
+        s.favorite ? "★" : null,
+      ].filter(Boolean);
+      if (meta.length) lines.push(`*${meta.join(" · ")}*`);
+      lines.push("");
+    });
   }
   return lines.join("\n");
 }
