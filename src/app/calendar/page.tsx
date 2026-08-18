@@ -5987,7 +5987,11 @@ function FlowBackfillCapture({
   // and then unmount. Reset when a fresh keep begins. (Gating on carding, not
   // merely "a keep started", keeps the composer visible through the
   // settle-into-view wait and the press, which are still pre-card.)
-  const postCardRef = useRef(false);
+  // "the card has been born in this run" — the line past which a
+  // non-persisting composer stays dark. State, not a ref: the render reads it,
+  // so React has to know when it changes. useKeepSequence reports the beat
+  // through its onCard callback, so nothing has to infer it from seq.phase.
+  const [carded, setCarded] = useState(false);
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const sealBtnRef = useRef<HTMLButtonElement>(null);
@@ -6061,11 +6065,6 @@ function FlowBackfillCapture({
       onKeepSettled?.();
     }
   }, [seq.phase, onKeepSettled]);
-  // latch "the card is born" at the carding beat — the line past which a
-  // non-persisting composer stays dark (see composerOpen below)
-  useEffect(() => {
-    if (seq.phase === "carding") postCardRef.current = true;
-  }, [seq.phase]);
   const draftStore = useKeptDraft();
   // Does a VISIBLE entry sit above this composer? (Governs the mt-1 gap that
   // separates the composer from the cards above it.) Count only shown rows:
@@ -6119,7 +6118,7 @@ function FlowBackfillCapture({
     // can land within a couple of frames, well before the choreography even
     // starts (see keepInFlightRef's comment above).
     keepInFlightRef.current = true;
-    postCardRef.current = false; // a fresh keep — the card isn't born yet
+    setCarded(false); // a fresh keep — the card isn't born yet
     onKeepStart?.();
     const at = dateFromDayKey(day);
     at.setHours(12, 0, 0, 0);
@@ -6219,6 +6218,12 @@ function FlowBackfillCapture({
       // beat — after the seal animation — not before. So the card never blinks
       // out mid-press.
       seq.start(() => {
+        // the carding beat itself, whether or not the write took: this
+        // replaces an effect that watched seq.phase, so it latches at the same
+        // moment and a failed keep still hides the composer exactly as before.
+        // (Moving this below the abort check would ALSO restore the words on a
+        // failed write — a visible change, deliberately not made here.)
+        setCarded(true);
         if (keepAbortedRef.current) return; // failed write: the words stay put
         file();
         // Clear via state ONLY. The composer unmounts this same commit (carding
@@ -6250,7 +6255,7 @@ function FlowBackfillCapture({
   // the card is born and the composer simply unmounts, never flashing "Add
   // something from yesterday" only to vanish. Everything up to the card (the
   // resting invite, the settle-into-view wait, the press) still shows.
-  const composerReturnsEmpty = persistsAfterKeep || !postCardRef.current;
+  const composerReturnsEmpty = persistsAfterKeep || !carded;
   const composerOpen =
     seq.phase === "pressing" ||
     ((seq.phase === "idle" || seq.phase === "composing") && composerReturnsEmpty);
@@ -7510,8 +7515,17 @@ function TodayZoneFill({
   // the words must match reality: a "service" failure blames the browser
   // only when it's the browser's own engine that refused; a network
   // transcriber refusing (bad key, quota, unconfigured) is on our side.
+  const toastedFailure = useRef<typeof speech.failure>(null);
   useEffect(() => {
-    if (!speech.failure) return;
+    if (!speech.failure) {
+      toastedFailure.current = null;
+      return;
+    }
+    // engine words the message, so it belongs in the deps — but only a NEW
+    // failure earns a toast, or an engine change under a standing failure
+    // would raise the same one twice
+    if (toastedFailure.current === speech.failure) return;
+    toastedFailure.current = speech.failure;
     const f = copy.capture.voiceFailures;
     let m: { title: string; description: string };
     if (speech.failure === "service") {
@@ -7534,7 +7548,7 @@ function TodayZoneFill({
       m = f[speech.failure];
     }
     toast(m.title, { description: m.description });
-  }, [speech.failure]);
+  }, [speech.failure, speech.engine]);
 
   // the quill appears only once there's a real character typed (not on focus),
   // and stays through the keep
