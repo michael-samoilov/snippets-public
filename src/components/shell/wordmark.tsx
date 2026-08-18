@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { WaxStamp, type Tint } from "@/components/capture/wax-stamp";
 import { ICON_SEAL } from "@/lib/seal-spec";
@@ -26,6 +26,13 @@ export const DEEP_BLUE: Tint = { wax: "#2e5685", bright: "#3d6b9e", shadow: "#0a
 const DARK_S_INK = "#120f0b";  // the deep-ink S on Paper
 const LIGHT_S_INK = "#eae1cd"; // the light S on Lamplight
 
+// "has this hydrated yet?" as a value, not as an effect: the server
+// snapshot is false and the client snapshot is true, so the canvas seal
+// stays out of the server render without a mount flag.
+const subscribeNever = () => () => {};
+const onServer = () => false;
+const onClient = () => true;
+
 const SEAL_RATIO = 2.1;   // seal diameter / font size
 const OVERLAP = 0.37;     // "nippets" laps this fraction of the seal (over the wax, right of the S)
 const NUDGE = 0.04;       // small seal down-shift (× seal) so the S's baseline meets the text
@@ -36,8 +43,9 @@ export function Wordmark() {
   const ref = useRef<HTMLAnchorElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [fontPx, setFontPx] = useState(20.8);
-  const [mounted, setMounted] = useState(false);
-  const [settled, setSettled] = useState(false);
+  const hydrated = useSyncExternalStore(subscribeNever, onClient, onServer);
+  // the press plays on tap, never on load, so the seal starts at rest
+  const [settled, setSettled] = useState(true);
   // the resting shape is the canonical seal (same seed the app icon bakes), so
   // the masthead and the home-screen icon wear one silhouette. A tap still
   // reshuffles as before; the colours stay the per-theme blues below.
@@ -48,14 +56,23 @@ export function Wordmark() {
     setSettled(false);
     timer.current = setTimeout(() => setSettled(true), 1500);
   };
+  // the canvas needs the seal's size in pixels, so read the rendered font size
+  // rather than sizing in em. A ResizeObserver reports the first measurement on
+  // observe and every later one, so the seal also tracks a font-size change
+  // instead of holding the value it happened to see at mount.
   useEffect(() => {
-    setMounted(true);
-    if (ref.current) {
-      const fs = parseFloat(getComputedStyle(ref.current).fontSize);
+    const el = ref.current;
+    if (!el) return () => clearTimeout(timer.current);
+    const measure = () => {
+      const fs = parseFloat(getComputedStyle(el).fontSize);
       if (fs > 0) setFontPx(fs);
-    }
-    setSettled(true); // no entrance animation on load — the press plays only on tap (home)
-    return () => clearTimeout(timer.current);
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      clearTimeout(timer.current);
+    };
   }, []);
 
   const sealPx = Math.round(fontPx * SEAL_RATIO);
@@ -79,7 +96,7 @@ export function Wordmark() {
       className="wordmark voice-display pressable inline-flex items-center text-[1.3rem] italic tracking-tight text-ink"
     >
       <span className="relative inline-block shrink-0" style={{ width: sealPx, height: sealPx, transform: `translateY(${NUDGE * sealPx}px)` }}>
-        {mounted && (
+        {hydrated && (
           <WaxStamp
             playKey={playKey}
             size={sealPx}

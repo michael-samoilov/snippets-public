@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 const LIP_LO = 0.94, LIP_HI = 1.075; // trough/peak silhouette radius; also lump 0..1
 
 // radial structure (fractions of mean radius) + heights (0..1)
-const FIELD_R = 0.68, RIDGE_R = 0.745, MOAT_R = 0.8;
+const RIDGE_R = 0.745, MOAT_R = 0.8;
 const FIELDH = 0.45;          // field AND moat baseline
 const RIDGE_AMP = 0.18, RIDGE_W = 2.5; // raised ring (world units ~ /100 of MR)
 const CREST_BASE = 0.82, CREST_LUMP = 0.38; // trough crest ≈ ridge; lobes higher
@@ -881,7 +881,7 @@ function paintSeal(
 ) {
   const cx = dim / 2;
   const hgt = B.hgt, msk = B.msk, gly = B.gly, glyR = B.glyR;
-  const fieldR = FIELD_R * MR, ridgeR = RIDGE_R * MR, moatR = MOAT_R * MR;
+  const ridgeR = RIDGE_R * MR, moatR = MOAT_R * MR;
   const ridgeW = RIDGE_W * (MR / 100);
   // pass 1 — height field + AA silhouette mask
   for (let py = 0; py < dim; py++) {

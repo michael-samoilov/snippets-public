@@ -115,7 +115,10 @@ export function EnrollFlow({
 }) {
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [strength, setStrength] = useState<PassphraseStrength | null>(null);
+  const [graded, setGraded] = useState<PassphraseStrength | null>(null);
+  // an empty field has no strength to report, so derive that rather than
+  // clearing state from the effect below
+  const strength = pass ? graded : null;
   const [showPass, setShowPass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,13 +161,10 @@ export function EnrollFlow({
   // quiet live strength read; the dynamic zxcvbn import is memoized so
   // only the first keystroke pays for it
   useEffect(() => {
-    if (!pass) {
-      setStrength(null);
-      return;
-    }
+    if (!pass) return;
     let alive = true;
     void checkPassphrase(pass, guessHints).then((s) => {
-      if (alive) setStrength(s);
+      if (alive) setGraded(s);
     });
     return () => {
       alive = false;

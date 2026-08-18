@@ -103,7 +103,7 @@ function wsAttempt(url, auth) {
     let ws, done = false, opened = false;
     const finish = (outcome, detail = "") => {
       if (done) return; done = true;
-      try { ws && ws.close(); } catch {}
+      try { ws?.close(); } catch {}
       resolve({ url: url.replace(KEY, "<key>"), auth, opened, outcome, detail, events: events.slice(0, 4) });
     };
     const to = setTimeout(() => finish(opened ? "opened-no-transcript" : "timeout"), 6000);

@@ -706,7 +706,10 @@ function EncryptionSection({ email }: { email: string }) {
   const sync = useSyncStatus();
   const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
-  const [enrollOpen, setEnrollOpen] = useState(false);
+  // null = the reader has not opened or closed this yet, so the arrival
+  // intent below still stands. Any explicit open or close writes a boolean
+  // and takes over for good.
+  const [enrollChoice, setEnrollChoice] = useState<boolean | null>(null);
   const [enrollStarted, setEnrollStarted] = useState(false);
   const [secret, setSecret] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
@@ -732,9 +735,9 @@ function EncryptionSection({ email }: { email: string }) {
   // longer navigate away at all — back AND a forward <Link> both dead
   // (the locked-letter trap). The lingering param is harmless: a refresh
   // just re-offers enroll / re-scrolls to unlock, both gated on real state.
-  useEffect(() => {
-    if (wantSeal && enrolled === false) setEnrollOpen(true);
-  }, [wantSeal, enrolled]);
+  // ?seal=1 arrives before the enrollment probe answers, so the intent waits
+  // here until it does rather than being written in as state on arrival.
+  const enrollOpen = enrollChoice ?? (wantSeal && enrolled === false);
 
   // arriving from the calendar's locked letter ("Unlock in Settings"):
   // bring the unlock form into view once it's actually the section's body.
@@ -780,7 +783,7 @@ function EncryptionSection({ email }: { email: string }) {
           {copy.settings.encryption.pausedLead}
         </p>
         <div className="mt-4">
-          <PaperButton onClick={() => setEnrollOpen(true)}>
+          <PaperButton onClick={() => setEnrollChoice(true)}>
             {copy.settings.encryption.setUp}
           </PaperButton>
         </div>
@@ -874,7 +877,7 @@ function EncryptionSection({ email }: { email: string }) {
         open={enrollOpen}
         onOpenChange={(open) => {
           if (!open && enrollStarted) return;
-          setEnrollOpen(open);
+          setEnrollChoice(open);
         }}
       >
         <DialogContent className="float border-none bg-paper-raised sm:max-w-md">
@@ -893,7 +896,7 @@ function EncryptionSection({ email }: { email: string }) {
             }}
             onDone={() => {
               setEnrollStarted(false);
-              setEnrollOpen(false);
+              setEnrollChoice(false);
             }}
           />
         </DialogContent>

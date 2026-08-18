@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useScrollEdges } from "@/components/ui/scroll-terminus";
 import { cn } from "@/lib/utils";
 
@@ -121,15 +121,28 @@ function ShadcnCard({
   );
 }
 
-export default function ScrollFadeLab() {
-  const [supported, setSupported] = useState<boolean | null>(null);
-  const [top, setTop] = useState(false);
-  useEffect(() => {
-    setSupported(
+// Support never changes for a given engine, so cache the answer:
+// useSyncExternalStore calls the client snapshot on every render and must get
+// the same value back each time.
+let scrollTimeline: boolean | null = null;
+const subscribeNever = () => () => {};
+const supportsScrollTimeline = () => {
+  if (scrollTimeline === null)
+    scrollTimeline =
       typeof CSS !== "undefined" &&
-        CSS.supports("animation-timeline: scroll()"),
-    );
-  }, []);
+      CSS.supports("animation-timeline: scroll()");
+  return scrollTimeline;
+};
+// null on the server: the page says "checking" until it hydrates
+const unknownOnServer = () => null;
+
+export default function ScrollFadeLab() {
+  const supported = useSyncExternalStore(
+    subscribeNever,
+    supportsScrollTimeline,
+    unknownOnServer,
+  );
+  const [top, setTop] = useState(false);
   return (
     <main className="min-h-dvh px-5 py-10" style={{ background: "var(--desk)" }}>
       <div className="mx-auto flex max-w-5xl flex-col gap-6">

@@ -21,7 +21,7 @@
 
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 
 const PaperTexture = dynamic(
@@ -163,12 +163,11 @@ function Dial({
 function Tuner() {
   const { resolvedTheme, setTheme } = useTheme();
   const sp = useSearchParams();
-  const [mode, setMode] = useState<"light" | "dark">("light");
-  // follow the app theme once it resolves (until the user flips it here)
-  const [pinned, setPinned] = useState(false);
-  useEffect(() => {
-    if (!pinned && resolvedTheme) setMode(resolvedTheme === "dark" ? "dark" : "light");
-  }, [resolvedTheme, pinned]);
+  // follow the app theme until the reader flips it here, then hold their
+  // choice. One slot, derived at render: an unpinned mode has no state of its
+  // own to fall out of step with the theme.
+  const [pinnedMode, setPinnedMode] = useState<"light" | "dark" | null>(null);
+  const mode = pinnedMode ?? (resolvedTheme === "dark" ? "dark" : "light");
 
   // a recipe pinned in the URL (?fiber=0.8&crumples=0.3…) opens the tuner
   // pre-tuned, so a candidate is deep-linkable
@@ -185,8 +184,7 @@ function Tuner() {
 
   const flipMode = () => {
     const next = mode === "dark" ? "light" : "dark";
-    setMode(next);
-    setPinned(true);
+    setPinnedMode(next);
     setTheme(next);
   };
 
