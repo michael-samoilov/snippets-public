@@ -67,6 +67,22 @@ export function monthRows(m: Date, weekStart: 0 | 1): number {
   return Math.ceil((leadOffset(m, weekStart) + endOfMonth(m).getDate()) / 7);
 }
 
+/**
+ * Flat cell index (0-based, row-major) of a day in its month's grid — the
+ * same lead the grid renders with. The ring and the dive-camera origin used
+ * to derive this themselves with a bare `getDay(m)`, a Sunday-start lead:
+ * under a Monday week start the grid laid out with one lead while both
+ * measured with the other, so the ring drew up to six cells from the day it
+ * marked and the dive pivoted on the wrong cell.
+ */
+export function cellIndex(
+  m: Date,
+  dayOfMonth: number,
+  weekStart: 0 | 1,
+): number {
+  return leadOffset(m, weekStart) + dayOfMonth - 1;
+}
+
 /** Stand a scroller on its true bottom. The archive spacer is a
     quarter-million pixels tall and the engine shaves a fraction off a
     box that size, so the geometric bottom sits just past the real one.
