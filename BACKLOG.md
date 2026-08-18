@@ -384,7 +384,10 @@ close — is written into the plan but MUST NOT ship until:
    Neon shows no format-1 rows, and the database-backup retention
    window (~24 h on the free tier — confirm) has passed since.
 Until then their old rows are still readable server-side and the
-unqualified headline would overclaim. The interim page (shipped) is
+unqualified headline would overclaim. (2026-08-18: the client half is
+now complete — the format-3 re-seal rule rides every server-row
+adoption path, not just the pull applier's clean branch; see
+SECURITY-STATE's change log. Criterion 2's SQL query stays the gate.) The interim page (shipped) is
 already two-state and honest. When this lands: privacy likely drops
 PolicySection (terms keeps it), the contents nav shrinks, and the
 deep-dive/honest-limits/Drive/voice/leaving content survives below the
@@ -550,3 +553,276 @@ still holds the book unscrollable (`selLocked`, overflow:hidden for as
 long as the selection stands — which is exactly the state the recording
 was made in). Worth an A/B the next time it reproduces: does the drag
 work if the selection hold is lifted?
+
+
+## 20. Sync server hygiene: batch the push, type the payload column
+
+From the 2026-08 audit (S03). The push route runs 2N+2 sequential
+statements inside the per-user advisory lock — one select plus one
+write per change, 402 round trips at the 200-row batch that first sync
+always sends. The lock already guarantees a stable read set, so the
+shape is snapshot → decide → apply: one `inArray` select into a Map,
+the existing `incomingWins` loop, one multi-row upsert whose rows each
+carry `nextval('snippets_seq')`. The merge verdict stays in JS and
+stays `src/lib/merge.ts` verbatim — never express LWW in SQL. Fold
+duplicate ids by id first (untrusted boundary; a multi-row upsert
+rejects them) and keep results in request order. Drop `maxSeq` from
+the push response while there: nothing reads it, and it costs an
+aggregate inside the lock per push (`PushResponse` in sync-wire.ts
+moves with it). Also say the row shape once: `$type` the `payload`
+column (both routes cast it today, to the one type the server refuses),
+share one `toWireRow`, and add
+`CHECK (payload IS NOT NULL OR deleted_at IS NOT NULL)` — a payload-less
+live row currently reads as a tombstone on every device via
+`ghostTombstone`, so the constraint makes the dangerous combination
+unrepresentable. `ADD CONSTRAINT … NOT VALID` then `VALIDATE` on live
+data. Note: `push/route.test.ts` stubs the transaction to a no-op, so
+the rewrite must bring its own test with a fake `tx` recording
+statements.
+
+## 21. Sync status: a gate and a phase, not three fields
+
+From the audit (S02/S04). `SyncStatus` is `phase` × `locked` ×
+`needsSetup` — 20 combinations for ~7 real states, `locked &&
+needsSetup` representable, and each consumer re-derives the precedence
+(settings' seven-step chain, the calendar's letters). Split the axes:
+`gate: "open" | "locked" | "needsSetup" | "signedOut"` and `phase:
+"idle" | "syncing" | "offline" | "error"`. Assigning the gate IS the
+clear, so the hand-clears at the signedOut/locked/needsSetup sites
+disappear. Keep the member name `needsSetup` (SECURITY-STATE points at
+it), start the gate `"open"` so no pause renders before the first cycle
+decides, and reproduce `syncRow`'s copy precedence exactly (linted).
+Sibling wart, same pass: `clearLocalKey` writes `enrolledCache = false`
+— a device fact in an account slot; after a key mismatch on an
+unreachable server the engine flaps into error/retry where a truthful
+cache would rest at locked. Drop that line and the unused
+`e2eEnrolledCached` export, and add the two `e2e.test.ts` cases (a
+cleared key must not downgrade a known "enrolled").
+
+## 22. Voice capture: a take with identity, one engine chain
+
+From the audit (S05). `wantedRef` is the only "am I in a take" fact —
+ten async continuations cancel on a boolean that cannot tell "the
+writer stopped" from "the writer started another take". Exactly one
+site does the sound check (`wsRef.current !== ws` in onclose); its
+sibling onmessage does not, so an orphaned socket's finals land in the
+live take's transcript and its close tears the live take down. A
+superseded take also keeps its mic and socket until its own cap. Mint
+a take record — id, phase, adapter, stream, sockets, timers — and make
+every continuation open with `takeRef.current !== take`; per-adapter
+session state (sonioxFinalBuf, smSentFrames…) moves onto it. Keep the
+typed-failure law intact ("stopping" is `transcribe`, not `network`).
+Separately: the probe builds the full engine chain then stores it as
+two lossy pieces, so at tap time the fallback walks streaming providers
+only and hard-fails with a healthy batch proxy configured ("probes
+available, refuses to mint" is the normal quota case). Store one
+ordered candidate list; walk it handing over the same MediaStream.
+Policy line to keep: never promote the browser's own dictation (`web`)
+after a mint failure — batch is first-party and closes the hole without
+touching the CSP. Validate with tests/e2e/speech_adapters.py plus the
+deferred-token orphan checks; the iOS non-continuous restart loop is
+the riskiest edge and needs a device pass.
+
+## 23. Settings: unions for the encryption view and the backup action
+
+From the audit (S15). EncryptionSection holds two un-sequenced
+tri-state probes; `hasKey === null` falls into the locked arm, so a
+device holding the key can flash the unlock form, and opening Settings
+offline blanks the section (`enrolled === null` → body null). Derive
+one view — probing | unknown | notEnrolled | unlocked | locked — via
+the `Promise.all` + alive-guard shape `/welcome` already uses, with the
+rule that a failed probe never downgrades a known view. Keep
+`enrollOpen`'s committed-flow latch (see the 2026-08-18 recovery_guard
+regression) and the ?seal/?unlock no-strip comments. BackupSection:
+one `BackupAction` union instead of `connecting`/`disconnecting`/
+`error` (both buttons are on screen at once and don't gate each other),
+and stop discarding `adoptDriveToken()`'s deliberate tri-state —
+"none"/"transient" currently read as success. Also `deviceHasToken`
+refreshes off remote-ledger deps, so a just-connected second device
+keeps the "deliveries run from the device where Drive was connected"
+hint all session; set it from the outcomes that change it. Same class,
+different component: DangerZone's `onComplete={() => void
+onComplete()}` discards the erase promise and `doErase` has no
+try/catch — a rejection after the 10-second hold is invisible. Type the
+callback `() => void | Promise<void>` and give doErase the catch
+doDelete already has.
+
+## 24. Backup ledger: one health derivation, an attempt-stamped cadence
+
+From the audit (S07). The ledger's `state` is a fleet-wide last-writer
+slot: `delivered` lacks the `ne(state,'disconnected')` guard `failed`
+has, so a delivery in flight during a disconnect silently re-enables
+backups everywhere. `STALE_AFTER_DAYS` exists twice (backup-shared
+exports it; the cron re-declares the literal) and the two derivations
+of "failing" disagree — device B's dead grant marks the ledger error
+while device A's fresh delivery proves the Drive copy current, and
+Settings prints "haven't gone through since today". Split owner intent
+(`state`: active|disconnected, written only by connect/disconnect)
+from the fleet delivery record (`lastBackedUpSeq` via `greatest()`,
+failure as a timestamped observation outranked by a newer success), and
+derive health once in backup-shared for Settings AND the cron — which
+also makes the cron's one-email-per-silence rule unit-testable. Open
+decision: `pending` has no clock; a `connectedAt` column would let a
+never-delivered ledger expire into failing on the same threshold.
+Delivery cadence: `drive:lastDeliveryAt` stamps success only, so a
+failing device re-renders and re-uploads the whole book on every
+settled cycle with no backoff (multi-MB stringify per capture on a deep
+book) — stamp the attempt instead, and replace the per-tab `delivering`
+boolean with a `navigator.locks` request so two tabs cannot upload
+duplicate archives into the key-loss safety net. Do NOT gate delivery
+on `behind`: copy.ts promises a deleted Drive file is set right by the
+next delivery, and only the unconditional hourly re-upload keeps that
+promise. Fix the docstring, not the behavior.
+
+## 25. The keep-run record, and the one keep protocol
+
+From the audit (S11/S12). The 2026-08-18 law-8 fix moved the carded
+latch below the abort check, so a write that fails BEFORE the carding
+beat now returns the composer with the words. A rejection landing
+AFTER that beat still strands them — the full fix is one nullable
+`runRef` record ({id, text, aborted, carded, settled}) minted per keep,
+every continuation opening with `runRef.current !== run`. Identity is
+the guard; `aborted ∧ carded` becomes unrepresentable, and a slow
+quota rejection can no longer contaminate the NEXT keep (today it
+clears the newer draft, restores the older words, and strands the newer
+row in heldIds). Land it as a record, not another flag — because the
+same write-at-submit / hold / abort / file-at-the-beat protocol and the
+seal's pointer hit-test exist TWICE (backfill composer and today zone,
+down to matching comments) and have diverged: the zone guards every
+pointer handler and cancels its watchers on abort; the composer does
+neither. SCHEDULE-MAP.md now records this axis; the extraction
+(useKeepRun/useSealPress) should lift the record's shape, not two flag
+sets. tests/e2e/backfill_keep.py's fault-injection leg is the gate; add
+the late-rejection leg (reject at +5s, then a second successful keep —
+both entries must be stored AND rendered).
+
+## 26. Camera bookkeeping: release what was acquired, one day of truth
+
+From the audit (S09). The zoom effect releases every resource from a
+closure-local record — except the climb band, which finish() re-derives
+with a predicate the acquire side must stay "EXACTLY symmetric" with
+(the comment says so; it has already failed once, and the feed carries
+a 1500ms timeout band-aid). The reduced-motion path breaks the symmetry
+TODAY: it returns before the acquire, but finish() still computes
+`climbed === true` and calls clearOnStage on a book that never climbed
+— an unnecessary scrollTop write and a ~720-row observer re-prime per
+climb. One `bandOnStage` local beside the seven records that already
+exist; finish tests the record. (~5 lines.) Note: no harness sets
+prefers-reduced-motion, so this path has never been measured — add a
+reduced-motion leg first. Separately, "which day is the book on" is
+four fields with three write latencies, and the deferred writer wins:
+press Today mid-dive and finish() clobbers the newer jump
+(`setSelected(pendingSelectRef.current)`), leaving the h1 and the
+Today button on day X while the scroller and URL sit on today. Collapse
+to `selected` + `liveDayRef` (that split is deliberate and stays);
+delete `pendingSelectRef` (finish commits `liveDayRef.current`, so the
+latest writer wins by construction) and `selectedRef` (one reader, and
+it is the wrong mirror — openEntry pushes a stale ?d= URL). The
+strictly-safe first step is a one-line supersede check at the finish
+commit. Do NOT extend the zooming latch to appBack/closeSchedule —
+their unguardedness is documented and load-bearing.
+
+## 27. Today zone: a keyed keyboard baseline, listeners that remember
+
+From the audit (S12); neither is in SCHEDULE-MAP's census. `baseVh` is
+a monotonic running max standing for "viewport height with no
+keyboard", never reset — rotate in the browser, split-view an iPad, or
+shorten a desktop window and `baseVh - vv.height ≥ 60` forever: the
+rest stance becomes unreachable, the dismiss-pill rescue goes dead
+(`mustCycle` needs kb < 60), and a phantom reach spacer up to 640px
+seeds under the zone. Key the baseline by `vv.width` (a soft keyboard
+never changes visual-viewport WIDTH, so a width change proves the old
+baseline is from a viewport that no longer exists) and refresh it
+whenever the zone's own textarea is not focused. The existing __setKb
+harness trick cannot reproduce this — it shrinks vv.height only; a
+real viewport resize is required. And the six nullable listener refs:
+teardown re-derives its target (`scrollerOf()` via a btnRef that never
+clears), so unmount removes nothing and nulls the ref anyway — one
+inert orphan scroll listener per zone unmount on the app's hottest
+scroller, and "which of the 11 registrations are live" unanswerable.
+One disposers array, each attach pushing its own exact removal closure
+(the pan handler is on two targets — push two). Keep releaseTail's
+internal order (the spacer clear moves scrollHeight) and its
+idempotence; the subscriptions stay synchronous inside onFocus.
+
+## 28. The write fan-out: one keep re-renders one day, not the book
+
+From the audit (S10). `dayGroups` rebuilds every day's array identity
+on any snippets write, so a keep, an edit, or a background sync pull
+re-renders every BookRow — the comments claim per-day stability and the
+code delivers it only across probe changes. Reuse a day's previous
+array when its (id, updatedAt) sequence is unchanged (~12 lines;
+updatedAt is trustworthy because db.ts is the single write choke
+point; tolerate StrictMode double-invocation). Then give the kept-draft
+store a per-day subscription — context bypasses memo, so today a single
+keep re-renders ~all ScheduleCards four times inside the seal
+choreography (hold → set → release → clear). The ProbeStore +
+useSyncExternalStore pattern in the same file is the model; preserve
+the deliberate two-paint hand-off (release the hold, then clear the
+draft) and morphDays visibility for the affected day. Context: the
+audit's companion claim — that the per-row ref cycle strands data-warm
+marks — did NOT reproduce (tests/e2e/warm_window.py stands guard), so
+this item is efficiency with an honest measurement bar:
+a render counter proving one seeded keep is O(1) rows, and
+measure-lift-fire/-first-motion for the choreography.
+
+## 29. The entry rewrite: one owner for the commit
+
+From the audit (S13). `stopEdit` is fire-and-forget with five call
+sites; Escape runs it twice by bubbling (textarea then content div, no
+stopPropagation) and its own blur() re-enters it — one confirm, two or
+three identical db.transaction writes, each bumping the LWW clock and
+re-dirtying the row for sync. Collapse `editing` + `draft` to a mode
+value, read the text from the field at commit (it is already seeded
+imperatively), and make one `commit()` idempotent within a dispatch via
+a ref guard. The sharp edges to preserve verbatim: startEdit's
+synchronous focus() + setSelectionRange inside the tap (what raises the
+iOS keyboard), the rAF-deferred autosize, and both inline-height sheds
+— and leave the `compact` measurement machinery alone (every branch
+cites a recorded bug). A failed updateSnippet still silently drops the
+rewrite (law 8 again); making "written but not committed" representable
+is the door to fixing that, but the visible behavior is an owner call.
+New check: exactly one updateSnippet per confirm across all four exit
+paths, zero when unchanged.
+
+## 30. Accounts: "unavailable" is a state, and the welcome phase is a value
+
+From the audit (S08). A deployment with DATABASE_URL but no
+BETTER_AUTH_SECRET answers 401 "signed out" from ten `!serverDb`-guarded
+routes while /api/auth correctly 503s — three spellings of "is this
+install configured". Server side, one answer: `{state:"unconfigured"} |
+{state:"signed-out"} | {state:"in", userId, db, auth}` so a route
+cannot narrow serverDb without deciding auth. Client side, add
+`"unavailable"` to SessionStatus, derived from the session fetch's
+error (no new request), so /signin can say "not switched on" before the
+first keystroke instead of after submit (the copy already exists).
+"unavailable" only ever quiets an offer — never blocks capture; fail
+closed to "signed-out" when undeterminable. And the welcome page: the
+render gate is `if (!show || !user) return null`, where `user` is null
+both while loading and on any session blip — a refetch hiccup while the
+once-only recovery code is on screen unmounts EnrollFlow and loses the
+code (the flow's state is its only home; /api/keys never re-issues).
+Phase value — deciding | enroll | saved, email captured at flow start —
+so "saved" has no branch that can unmount. The step-aside's
+"enrolled !== false || key" outage reading survives verbatim. New
+harness step: reach the code screen, make get-session return 401,
+assert the code is still on screen. That fails today.
+
+## 31. Speech token routes: one mint policy, a policed grant
+
+From the audit (S06). Four token routes retype the same fail-closed
+guard, the same 401/403→503-else-502 mapping (comment included), and
+the same availability handler; the grant contract they share is typed
+only client-side, which is how `scheme` is emitted by three routes,
+read by no adapter, and has a member nobody sends. One server-only
+factory (`src/server/speech-token.ts`, the api/auth `export const {GET,
+POST} =` shape) over an honestly vendor-specific descriptor — apiKey as
+a lazy closure over a STATIC process.env member (Next inlining), the
+descriptor owning the whole fetch (scribe has no body and a non-Bearer
+header; speechmatics rides ?type=rt), vendor origins staying literal in
+the route files so the egress registry keeps its file attribution. GET
+and POST then read the same apiKey(), so a route can no longer
+advertise availability it cannot mint. New check that exists nowhere: a
+route.test.ts table across all four descriptors — no key → 503,
+upstream 401 → 503, upstream 500 → 502, malformed body → 502, success →
+exactly the SpeechGrant keys.
