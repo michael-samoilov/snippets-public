@@ -9,14 +9,19 @@
  * lives as its own component rather than a Settings dialog's insides.
  *
  * It owns form state and the enroll call only; the parent owns the
- * surrounding chrome (dialog or sheet) and hears `onEnrolled` the
- * moment the key exists, then `onDone` when the code is acknowledged.
+ * surrounding chrome (dialog or sheet) and hears `onSealed` the moment
+ * the account's wrapped keys land server-side (the write-once commit —
+ * past it, nothing may navigate away from the code on screen),
+ * `onKeyInstalled` when this device also holds the unwrapped key, then
+ * `onDone` when the code is acknowledged. The two commit callbacks are
+ * separate because they can genuinely diverge: a failed local install
+ * still returns the code, and the device unlocks later in Settings.
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { PaperButton } from "@/components/paper-button";
-import { enroll, recoveryKitText } from "@/lib/e2e";
+import { AlreadyEnrolledError, enroll, recoveryKitText } from "@/lib/e2e";
 import { requestSync } from "@/lib/sync";
 import { checkPassphrase, type PassphraseStrength } from "@/lib/passphrase";
 import { copy } from "@/lib/copy";
@@ -104,12 +109,15 @@ export function StrengthMeter({ score, label }: { score: number; label: string }
 
 export function EnrollFlow({
   email,
-  onEnrolled,
+  onSealed,
+  onKeyInstalled,
   onDone,
 }: {
   email: string;
-  /** the key now exists on this device (fired before the code is acknowledged) */
-  onEnrolled?: () => void;
+  /** the account is sealed server-side; the once-only code is on screen */
+  onSealed?: () => void;
+  /** this device now holds the unwrapped book key */
+  onKeyInstalled?: () => void;
   /** the recovery code has been acknowledged — the flow is complete */
   onDone: () => void;
 }) {
@@ -191,14 +199,19 @@ export function EnrollFlow({
         setBusy(false);
         return;
       }
-      const code = await enroll(pass);
+      const sealed = await enroll(pass);
       setPass("");
       setConfirm("");
-      setRecoveryCode(code);
-      onEnrolled?.();
+      setRecoveryCode(sealed.recoveryCode);
+      onSealed?.();
+      if (sealed.device === "unlocked") onKeyInstalled?.();
       requestSync();
-    } catch {
-      setError(copy.settings.encryption.enrollFailed);
+    } catch (error) {
+      setError(
+        error instanceof AlreadyEnrolledError
+          ? copy.settings.encryption.alreadyEnrolled
+          : copy.settings.encryption.enrollFailed,
+      );
     }
     setBusy(false);
   };

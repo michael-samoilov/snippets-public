@@ -889,11 +889,12 @@ function EncryptionSection({ email }: { email: string }) {
           </DialogHeader>
           <EnrollFlow
             email={email}
-            onEnrolled={() => {
+            onSealed={() => {
+              // committed: the code is on screen, the dialog must not dismiss
               setEnrollStarted(true);
               setEnrolled(true);
-              setHasKey(true);
             }}
+            onKeyInstalled={() => setHasKey(true)}
             onDone={() => {
               setEnrollStarted(false);
               setEnrollChoice(false);
