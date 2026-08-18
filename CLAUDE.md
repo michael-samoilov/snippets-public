@@ -324,14 +324,22 @@ owner's permission to merge is standing: a session instruction to
 develop on a feature branch says where the work happens, not that
 finished work waits here.
 
-**One thing waits for the owner: an unverified user-facing change.**
-UI, styling, copy, or motion that no harness run and no on-device pass
-has observed working stays on its branch until it is verified or the
-owner says to ship it — an untested visual change that reaches readers
-looks broken to them, and that is the whole reason for the gate. See
-"Prove the fix" for what counts as observed. Everything else merges as
-soon as it is finished: tooling, skills, docs, tests, server-side code,
-and any user-facing change you have watched work.
+**One thing waits: a change to the reader's experience that nobody has
+watched work.** The test is not "is it visual". It is "can a reader
+feel this if it is wrong" — a broken sign-in, a sync that drops an
+entry, a capture that loses a recording, and a card that paints wrong
+are the same class of bug, and shipping any of them unobserved is the
+whole reason for the gate. So the gate covers UI, styling, copy, and
+motion, and equally the flows behind them: auth and sign-in, sync and
+merge, encryption and enrollment, backup and restore, speech capture,
+and the API routes those flows call. Such a change stays on its branch
+until a harness run, a test that reproduces the old failure, or an
+on-device pass has observed it working, or until the owner says to
+ship it. See "Prove the fix" for what counts as observed.
+
+Everything else merges as soon as it is finished: tooling, skills,
+docs, internal refactors the test suite already covers, and any
+reader-facing change you have watched work.
 
 Every production page ships a strict Content-Security-Policy from
 `next.config.ts` — its `connect-src` is the browser-enforced list of
