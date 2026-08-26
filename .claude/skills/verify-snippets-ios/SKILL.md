@@ -31,16 +31,22 @@ So this skill runs two harnesses with two distinct jobs. Do not swap them:
   WebDriver has no pre-load script injection, so personas are unavailable
   there; it runs as plain desktop WebKit at a phone viewport.
 
+**Scrolling works, but only on WebKitGTK (measured).** A trusted W3C
+WebDriver wheel action scrolls the book feed on real WebKit and drives
+the app's scroll logic (warm window follows). The Chromium persona
+synthesizes no scroll at all — move the book there with `scrollTop`. Aim
+the wheel at a `[data-day]` card, not the today-zone composer overlay.
+See `features/book-navigation.md` and `scripts/webkit_wheel_scroll.py`.
+
 **Real device only — never claim these from this sandbox:** jetsam /
-memory kills (the FLAT-BOOK LAW class of bug), **thumb-scroll feel —
-momentum, rubber-band overscroll, and gesture-driven scrolling itself**
-(measured: neither a CDP touch flick nor `mouse.wheel` scrolls here,
-even on a plain page; move the book with `scrollTop` instead — see
-`features/book-navigation.md`), `env(safe-area-inset-*)` values
-(headless reports 0), real Safari dictation, the Add to Home Screen
-flow, manifest splash screens, and keyboard-driven `visualViewport`
-resizes. For those, hand the owner numbered on-device steps per "Prove
-the fix" in `CLAUDE.md`.
+memory kills (the FLAT-BOOK LAW class of bug), **iOS touch scroll feel —
+momentum and rubber-band** (touch-drag does not synthesize on either
+engine, and WebKitGTK is desktop, under Xvfb, software-rendered, no idle
+rAF, so its wheel scroll carries no faithful iOS physics),
+`env(safe-area-inset-*)` values (headless reports 0), real Safari
+dictation, the Add to Home Screen flow, manifest splash screens, and
+keyboard-driven `visualViewport` resizes. For those, hand the owner
+numbered on-device steps per "Prove the fix" in `CLAUDE.md`.
 
 ## Launch
 
@@ -164,7 +170,10 @@ xvfb-run -a /usr/bin/WebKitWebDriver --port=4599 &  # keep running
 `scripts/measure-webkit-spans.py` (repo root) is the complete working
 reference: raw W3C WebDriver over stdlib urllib — session capabilities,
 phone-sized window, seeding, synthetic touch taps, span readouts. Model
-new WebKit proofs on it. Caveats: one session at a time (on "session
+new WebKit proofs on it. For real scroll, `scripts/webkit_wheel_scroll.py`
+(in this skill) drives a trusted wheel action over a book card and
+asserts the warm window follows — the honest "scroll like the iOS engine"
+path, since the Chromium persona synthesizes no scroll. Caveats: one session at a time (on "session
 already exists": `pkill -9 -f WebKitWebDriver; pkill -9 -f MiniBrowser`,
 restart the driver); software-rendered, so paint costs read ~5× a real
 iPhone — use for relative A/Bs, not absolute numbers; no rAF ticks while
@@ -207,6 +216,12 @@ Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets-ios}/<run-name>/`
 
 - `scripts/ios_personas.py` — importable personas + `doctor` mode
   (invocations above). Executable; `--help` prints the same.
+- `scripts/webkit_wheel_scroll.py` — trusted wheel scroll of the book
+  feed on real WebKit, asserting the warm window follows. Executable;
+  needs the WebKitGTK driver and app server up (see Drive).
+- `scripts/probe_scroll.py`, `scripts/probe_scroll_control.py` — the
+  Chromium-persona probes that established no synthetic scroll works
+  there. Run under `with_server.py`; kept as reproducing evidence.
 
 ## Feature map
 
