@@ -32,11 +32,15 @@ So this skill runs two harnesses with two distinct jobs. Do not swap them:
   there; it runs as plain desktop WebKit at a phone viewport.
 
 **Real device only — never claim these from this sandbox:** jetsam /
-memory kills (the FLAT-BOOK LAW class of bug), `env(safe-area-inset-*)`
-values (headless reports 0), real Safari dictation, the Add to Home
-Screen flow, manifest splash screens, and keyboard-driven
-`visualViewport` resizes. For those, hand the owner numbered on-device
-steps per "Prove the fix" in `CLAUDE.md`.
+memory kills (the FLAT-BOOK LAW class of bug), **thumb-scroll feel —
+momentum, rubber-band overscroll, and gesture-driven scrolling itself**
+(measured: neither a CDP touch flick nor `mouse.wheel` scrolls here,
+even on a plain page; move the book with `scrollTop` instead — see
+`features/book-navigation.md`), `env(safe-area-inset-*)` values
+(headless reports 0), real Safari dictation, the Add to Home Screen
+flow, manifest splash screens, and keyboard-driven `visualViewport`
+resizes. For those, hand the owner numbered on-device steps per "Prove
+the fix" in `CLAUDE.md`.
 
 ## Launch
 

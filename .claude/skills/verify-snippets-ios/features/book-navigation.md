@@ -30,6 +30,22 @@ entries are on screen; after a rise the month layer is; the warm band
 tracks the viewport. Use synthetic `PointerEvent` taps with
 `pointerType: 'touch'` (dispatch pattern in
 `scripts/measure-webkit-spans.py:68`) — the app distinguishes touch.
+Taps work because they finish with a real `.click()`; a synthetic
+pointer *drag* does not, so use taps, not gesture scrolling.
+
+**Scrolling is programmatic, not a driven gesture (measured 2026-08-26).**
+The book's scroll container is the `SheetScroll` div
+(`app-shell.tsx:53`, `overflow-y-auto`), not the window. Move it by
+setting `scrollTop` / `scrollTo` on that element and assert the
+position-dependent logic (warm band, sticky date, anchor re-landing).
+Do NOT try to scroll it with a gesture: a probe drove the same container
+four ways — synthetic JS pointer drag, a real CDP
+`Input.dispatchTouchEvent` flick, and `mouse.wheel` all moved it 0px;
+only `scrollTo` moved it. A control proved the app is not the blocker
+(`touch-action: auto`, no `preventDefault`) — raw CDP touch and wheel
+just don't produce native scroll under headless mobile emulation, even
+on a plain tall page. So the harness gives you scroll *position*, never
+a thumb-driven gesture and never momentum.
 
 **Cost (WebKitGTK — the engine iOS actually runs):**
 `scripts/measure-webkit-spans.py [seed]` measures the dive/rise setup
@@ -52,3 +68,10 @@ that never materialized on the owner's iPhone.
   shadow) as safe from this sandbox — memory-pressure kills are
   real-device-only; the law stands regardless of what headless numbers
   say.
+- iOS scroll *feel* — momentum, rubber-band overscroll, and the
+  memory pressure that thumb-flicking a years-deep book triggers — is
+  not reproducible here. The Chromium persona is Blink (its
+  `userAgentData` brands leak `HeadlessChrome` through the iPhone UA
+  spoof); the WebKitGTK harness is the real engine but desktop, under
+  Xvfb, software-rendered with no idle rAF. Both are for logic and
+  relative cost, not scroll physics — that is an on-device pass.
