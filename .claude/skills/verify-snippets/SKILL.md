@@ -67,6 +67,17 @@ jetsam class (`globals.css`, `SCHEDULE-MAP.md`). Profile accordingly:
   / `performance.measure` (`zoom-run`, `fx:commitFlush`, `fz:loop`, …). These
   are engine-agnostic and what the authors trust — read them on WebKitGTK
   (`scripts/measure-webkit-spans.py`) and on-device, not just Blink.
+- **Frame budget (the 60fps target).** 60fps means the main thread must
+  yield every 16.7ms. Any change to the reader's surfaces — capture, the
+  book feed, dive/rise, scroll — must be checked for main-thread jank and
+  guarded against regressions. `scripts/cdp_frames.py` records long tasks
+  and rAF gaps while driving those interactions and fails on a main-thread
+  block past a budget (default 100ms). Honest scope: a long synchronous
+  task stalls frames on any engine, so this catches jank regressions
+  portably; it does NOT certify 60fps on an iPhone — GPU/compositor cost is
+  WebKit-specific and headless Blink has no real vsync (its dropped-frame %
+  is noise). The true 60fps sign-off is the app's `performance.measure`
+  marks read on WebKitGTK plus the on-device pass.
 - **CDP memory / leak checks are worth it.** `scripts/cdp_memory.py` stresses
   the book with N rise/dive/scroll cycles and watches CDP
   `Performance.getMetrics` — Nodes, JSEventListeners, JSHeapUsedSize — for
@@ -310,6 +321,10 @@ Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets}/<run-name>/`
 - `scripts/cdp_memory.py` — memory-leak regression guard: stresses the
   book and watches CDP `Performance.getMetrics` (Nodes, JSEventListeners,
   JS heap) for per-cycle growth. Run under `with_server.py` or a live :3000.
+- `scripts/cdp_frames.py` — frame-budget / main-thread-jank guard for the
+  60fps target: long tasks + rAF gaps during the reader's interactions.
+  Gates on main-thread blocks; frame-% is informational (headless has no
+  vsync). Real 60fps is WebKitGTK marks + on-device.
 - `scripts/appium_scroll.py` — the real-iOS lane: a genuine touch fling on
   a device farm or Simulator (`APPIUM_URL`). Unrun in the sandbox by
   design.
