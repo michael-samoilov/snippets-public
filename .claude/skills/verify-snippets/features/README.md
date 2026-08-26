@@ -1,4 +1,4 @@
-# Feature map — Snippets on iOS
+# Feature map — Snippets
 
 One file per user-facing feature. Each answers, from the reader's point
 of view: what it is, how to reach it, how to drive it with this skill's
@@ -12,6 +12,7 @@ others.
 | Voice capture | [capture-voice.md](capture-voice.md) | Chromium personas + speech stubs |
 | Book navigation (dive / rise / scroll) | [book-navigation.md](book-navigation.md) | Chromium for taps/position, WebKitGTK wheel for real scroll |
 | Offline PWA (service worker) | [pwa-offline.md](pwa-offline.md) | Chromium ios-pwa persona |
+| Cross-browser / cross-platform | [cross-browser.md](cross-browser.md) | Four personas + WebKitGTK; the surface→engine matrix |
 
 ## Not yet mapped
 
@@ -25,13 +26,12 @@ them verified:
   `/settings`; copy is linter-governed (`pnpm check:copy`).
 - **Search** (`copy.search.entriesLabel` surfaces in `calendar/page.tsx`).
 - **Drive backup** — device-delivered; needs real Google tokens.
-- **True iOS thumb-scroll** (touch momentum, rubber-band, and the
-  memory pressure of flicking a deep book) — not reproducible in this
-  sandbox. WebKitGTK wheel scrolls the feed and drives its scroll logic
-  (real engine, real scroll events), but carries no iOS momentum, and
-  the app's guard-flag logic (`SCHEDULE-MAP.md`) only fully exercises
-  under a real fling. Faithful thumb-scroll needs a real iOS device or a
-  cloud device farm (Appium on BrowserStack/Sauce) — see the "true
-  scrolling" note in `SKILL.md`.
-- **Anything else real-device-only** (jetsam, safe areas, dictation,
-  install flow) — see the list at the top of `SKILL.md`.
+- **Desktop Firefox (Gecko)** — no Gecko engine installed in this
+  sandbox; a gated lane (see `cross-browser.md` and `SKILL.md`).
+- **True iOS thumb-scroll and other device-only behavior** (touch
+  momentum, rubber-band, deep-book jetsam, safe areas, dictation, install
+  flow) — the real-iOS lane in `SKILL.md` covers these (device farm,
+  Simulator, or the manual iPhone protocol). WebKitGTK wheel scrolls the
+  feed and drives its scroll logic here, but carries no iOS momentum, and
+  the guard-flag logic (`SCHEDULE-MAP.md`) only fully exercises under a
+  real fling.

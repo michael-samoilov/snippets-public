@@ -305,6 +305,16 @@ FLAT-BOOK LAW in `globals.css`.)
   yes/no, not a vibe. State plainly which claims you verified vs. which
   depend on their device.
 
+**Cross-surface verification lives in one skill.** The `verify-snippets`
+skill (`.claude/skills/verify-snippets/`) is the single home for driving
+the app the way a reader does — the browser personas (iOS PWA, iOS Safari,
+iOS Chrome, Android Chrome, desktop Chrome), the real-WebKit WebKitGTK
+harness, the real-iOS lane (device farm, Simulator, or a manual iPhone
+protocol), and the feature map. Extend it — add a persona or a lane —
+rather than starting a second `verify-*` skill; there should stay exactly
+one. `webapp-testing` below remains the lower-level Playwright toolkit it
+builds on.
+
 ## Visual verification (do this for UI changes)
 
 `pnpm build`, then serve and screenshot with the `webapp-testing` skill:

@@ -4,12 +4,12 @@ what actually moves the scroller, and check for iOS-style momentum.
 Run via with_server.py.
 """
 import json, os, sys, time
-sys.path.insert(0, ".claude/skills/verify-snippets-ios/scripts")
-from ios_personas import ios_pwa_page
+sys.path.insert(0, ".claude/skills/verify-snippets/scripts")
+from personas import ios_pwa_page
 from playwright.sync_api import sync_playwright
 
 BASE = "http://127.0.0.1:3000"
-OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets-ios") + "/probe-scroll"
+OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets") + "/probe-scroll"
 os.makedirs(OUT, exist_ok=True)
 report = {}
 

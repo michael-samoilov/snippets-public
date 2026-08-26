@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""iOS personas for driving Snippets with Playwright Chromium, plus a doctor.
+"""Browser personas for driving Snippets with Playwright Chromium, plus a doctor.
 
 Import (from the repo root):
 
-    import sys; sys.path.insert(0, ".claude/skills/verify-snippets-ios/scripts")
-    from ios_personas import ios_pwa_page, chrome_ios_page, persona_report
+    import sys; sys.path.insert(0, ".claude/skills/verify-snippets/scripts")
+    from personas import ios_pwa_page, ios_safari_page, chrome_ios_page, \\
+        android_chrome_page, persona_report
 
 Doctor (read-only preflight; exit 0 = worth driving):
 
-    python3 .claude/skills/verify-snippets-ios/scripts/ios_personas.py doctor
+    python3 .claude/skills/verify-snippets/scripts/personas.py doctor
 
-Why stubs and not a simulator: every iOS browser is WebKit, and the app's
-iOS-conditional behavior keys off navigator.userAgent / platform /
-maxTouchPoints / standalone and the display-mode media query (readers:
-isIOS / isIOSStandalone in src/hooks/use-speech.ts). Chromium with these
-inputs stubbed proves those code paths; it proves nothing about WebKit
-paint cost — use the WebKitGTK harness in SKILL.md for that.
+Four capability personas, all on the Chromium (Blink) engine: ios-pwa,
+ios-safari, and chrome-ios differ only in the standalone flag and Web
+Speech availability; android-chrome is Blink for real (Chromium IS Blink),
+so it is a faithful engine for Android Chrome, not a spoof. The personas
+exercise the app's platform-conditional CODE (isIOS / isIOSStandalone /
+Web Speech probe in src/hooks/use-speech.ts). They prove nothing about the
+WebKit ENGINE — for real WebKit (all iOS browsers) use the WebKitGTK
+harness in SKILL.md; for desktop Chrome use plain Chromium; desktop Firefox
+(Gecko) is a gated lane (see SKILL.md), no engine installed here.
 """
 
 import json
@@ -71,6 +75,17 @@ Object.defineProperty(window, 'SpeechRecognition', {get: () => undefined, config
 Object.defineProperty(window, 'webkitSpeechRecognition', {get: () => undefined, configurable: true});
 """
 
+ANDROID_CHROME_UA = (
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.6478.71 Mobile Safari/537.36"
+)
+
+# Android identity: isIOS() reads platform + touch and must come back false.
+_INIT_ANDROID = """
+Object.defineProperty(navigator, 'platform', {get: () => 'Linux armv8l', configurable: true});
+Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 5, configurable: true});
+"""
+
 _VIEWPORT = {"width": 393, "height": 852}
 
 
@@ -92,11 +107,26 @@ def ios_pwa_page(browser, viewport=None):
     return _page(browser, IOS_PWA_UA, [_INIT_IPHONE, _INIT_STANDALONE], viewport)
 
 
+def ios_safari_page(browser, viewport=None):
+    """iOS Safari in a browser tab (not installed): Safari UA, standalone
+    false, Web Speech present (iOS Safari has webkitSpeechRecognition). This
+    is the third iOS profile — same WebKit engine as the PWA and iOS Chrome,
+    differing only in the standalone flag and Web Speech availability."""
+    return _page(browser, IOS_PWA_UA, [_INIT_IPHONE, _INIT_BROWSER], viewport)
+
+
 def chrome_ios_page(browser, viewport=None):
     """Chrome on iOS: CriOS UA, not standalone, no Web Speech API."""
     return _page(
         browser, CHROME_IOS_UA, [_INIT_IPHONE, _INIT_BROWSER, _INIT_NO_WEB_SPEECH], viewport
     )
+
+
+def android_chrome_page(browser, viewport=None):
+    """Chrome on Android: real Blink engine (Chromium IS Blink, so this is a
+    faithful engine, not a spoof), Android UA/platform, Web Speech present,
+    touch. isIOS() reads false here."""
+    return _page(browser, ANDROID_CHROME_UA, [_INIT_ANDROID], viewport)
 
 
 _REPORT_JS = """() => ({
@@ -163,7 +193,8 @@ def doctor(base="http://127.0.0.1:3000"):
     )
     ok &= len(orphans) <= 1
 
-    # 4. Both personas hold on a live page.
+    # 4. Every persona holds on a live page. `want` lists the exact
+    #    persona_report values each profile must show.
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -173,19 +204,28 @@ def doctor(base="http://127.0.0.1:3000"):
         browser = p.chromium.launch()
         for name, maker, want in (
             ("ios-pwa", ios_pwa_page,
-             {"standalone": True, "displayModeStandalone": True, "webSpeech": True}),
+             {"ua_has": "iPhone", "platform": "iPhone", "touchPoints": 5,
+              "standalone": True, "displayModeStandalone": True, "webSpeech": True}),
+            ("ios-safari", ios_safari_page,
+             {"ua_has": "iPhone", "platform": "iPhone", "touchPoints": 5,
+              "standalone": False, "displayModeStandalone": False, "webSpeech": True}),
             ("chrome-ios", chrome_ios_page,
-             {"standalone": False, "displayModeStandalone": False, "webSpeech": False}),
+             {"ua_has": "CriOS", "platform": "iPhone", "touchPoints": 5,
+              "standalone": False, "displayModeStandalone": False, "webSpeech": False}),
+            ("android-chrome", android_chrome_page,
+             {"ua_has": "Android", "platform": "Linux armv8l", "touchPoints": 5,
+              "standalone": None, "displayModeStandalone": False, "webSpeech": True}),
         ):
             page = maker(browser)
             page.goto("data:text/html,<title>persona</title>")
             rep = persona_report(page)
             good = (
-                "iPhone" in rep["ua"]
-                and rep["platform"] == "iPhone"
-                and rep["touchPoints"] == 5
-                and all(rep[k] == v for k, v in want.items())
-                and (("CriOS" in rep["ua"]) == (name == "chrome-ios"))
+                want["ua_has"] in rep["ua"]
+                and rep["platform"] == want["platform"]
+                and rep["touchPoints"] == want["touchPoints"]
+                and rep["standalone"] == want["standalone"]
+                and rep["displayModeStandalone"] == want["displayModeStandalone"]
+                and rep["webSpeech"] == want["webSpeech"]
             )
             ok &= _check(f"persona {name} stubs hold", good, json.dumps(rep))
             page.context.close()

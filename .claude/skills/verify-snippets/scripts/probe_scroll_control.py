@@ -5,12 +5,12 @@ sampling scrollTop DURING the gesture to catch a scroll that gets
 re-anchored back to 0 by the app's own choreography.
 """
 import json, os, sys, time
-sys.path.insert(0, ".claude/skills/verify-snippets-ios/scripts")
-from ios_personas import ios_pwa_page
+sys.path.insert(0, ".claude/skills/verify-snippets/scripts")
+from personas import ios_pwa_page
 from playwright.sync_api import sync_playwright
 
 BASE = "http://127.0.0.1:3000"
-OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets-ios") + "/probe-scroll"
+OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets") + "/probe-scroll"
 report = {}
 
 PLAIN = ("data:text/html,<meta name=viewport content='width=device-width'>"

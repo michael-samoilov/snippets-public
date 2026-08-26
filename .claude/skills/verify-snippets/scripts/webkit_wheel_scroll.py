@@ -8,7 +8,7 @@ Reference / runnable. Requires (see SKILL.md):
     apt-get install -y webkit2gtk-driver xvfb
     xvfb-run -a /usr/bin/WebKitWebDriver --port=4599 &   # keep running
     node_modules/.bin/next start -p 3000 &               # production build
-    python3 .claude/skills/verify-snippets-ios/scripts/webkit_wheel_scroll.py
+    python3 .claude/skills/verify-snippets/scripts/webkit_wheel_scroll.py
 
 What it proves (measured 2026-08-26): two wheel actions moved the book
 +16,000px, fired 3 real scroll events, warm window followed 2021→2024.
@@ -30,7 +30,7 @@ import base64, json, os, sys, time, urllib.request
 WD = os.environ.get("WEBKIT_WD", "http://127.0.0.1:4599")
 APP = os.environ.get("BASE_URL", "http://127.0.0.1:3000")
 BINARY = "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/MiniBrowser"
-OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets-ios") + "/webkit-wheel"
+OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets") + "/webkit-wheel"
 
 
 def req(method, path, body=None):

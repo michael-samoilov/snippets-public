@@ -30,7 +30,7 @@ except ImportError:
 
 APPIUM_URL = os.environ.get("APPIUM_URL")  # farm hub URL (with creds) or http://127.0.0.1:4723
 APP_URL = os.environ.get("APP_URL", "http://localhost:3000/calendar")
-OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets-ios") + "/device"
+OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets") + "/device"
 if not APPIUM_URL:
     sys.exit("set APPIUM_URL to a device-farm hub or a local Appium server (see SKILL.md, Lane B)")
 os.makedirs(OUT, exist_ok=True)
