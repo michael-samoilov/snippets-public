@@ -72,9 +72,12 @@ in rough order of fidelity and effort:
    pipeline and the app's scroll-dependent logic, without momentum. Use
    it for scroll-position regressions between device passes.
 
-If you set up option 1, add a `verify-snippets-ios-device` companion
-skill (or a mode here) that speaks the device-farm's Appium endpoint;
-keep this skill for the sandbox-local coverage.
+The `verify-snippets-ios-device` companion skill holds the real-iOS
+lane: a numbered manual protocol for the owner's iPhone, and an Appium
+scaffold for a device farm (option 1) or the iOS Simulator (option 2).
+Keep this skill for the sandbox-local coverage; reach for the companion
+whenever the claim is momentum, jetsam, safe areas, dictation, or the
+install flow.
 
 ## Launch
 
