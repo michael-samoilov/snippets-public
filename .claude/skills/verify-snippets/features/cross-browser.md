@@ -9,12 +9,12 @@ engine and the capability profile.
 
 | Surface | Engine | Persona / harness | Fidelity |
 | --- | --- | --- | --- |
-| iOS installed PWA | WebKit | `ios_pwa_page` + WebKitGTK | logic faithful; engine real via WebKitGTK; momentum device-only |
-| iOS Safari (tab) | WebKit | `ios_safari_page` + WebKitGTK | same as PWA, `standalone` false |
-| iOS Chrome | WebKit | `chrome_ios_page` + WebKitGTK | same engine; no Web Speech |
-| Android Chrome | Blink | `android_chrome_page` | faithful — Chromium **is** Blink |
-| Desktop Chrome | Blink | `p.chromium.launch()` | faithful |
-| Desktop Firefox | Gecko | gated (see below) | unverified here |
+| iOS installed PWA | WebKit | `ios_pwa_page` + `webkit_session.py` | logic faithful; engine real via WebKitGTK; momentum device-only |
+| iOS Safari (tab) | WebKit | `ios_safari_page` + `webkit_session.py` | same as PWA, `standalone` false |
+| iOS Chrome | WebKit | `chrome_ios_page` + `webkit_session.py` | same engine; no Web Speech |
+| Android Chrome | Blink | `android_chrome_page` | **real engine** — Chromium **is** Blink |
+| Desktop Chrome | Blink | `p.chromium.launch()` | real engine |
+| Desktop Firefox | Gecko | `firefox_gecko.py` | real Gecko lane; Firefox binary egress-blocked here |
 
 ## How to get to it (user POV)
 
@@ -31,19 +31,25 @@ viewport.
   code path under test: install-only copy → `ios_pwa_page`; the
   "open in Safari for voice" branch → `chrome_ios_page` vs
   `ios_safari_page`. For anything engine-shaped (paint, scroll, selector
-  cost), the persona is the wrong tool — use WebKitGTK.
+  cost, layout), the persona is the wrong tool — drive real WebKit with
+  `webkit_session.py` (WebKitGTK), which navigates, seeds, taps, and
+  screenshots the app on the actual iOS engine.
 - **Android Chrome is real Blink.** `android_chrome_page` on headless
   Chromium is the actual engine Android ships, so its rendering and scroll
   behavior are faithful (unlike the iOS personas, which only spoof
-  identity over Blink).
+  identity over Blink). Not a gap.
 - **Desktop Chrome** needs no persona: `p.chromium.launch()` with a
   desktop viewport (e.g. 1280×800) is the shipping engine.
-- **Desktop Firefox (Gecko) is gated.** Playwright's Firefox build is not
-  installed in this sandbox and downloads are blocked; there is no system
-  Firefox either. To cover it: `playwright install firefox` where
-  downloads are allowed, then `p.firefox.launch()` (real Gecko); or drive
-  a system Firefox via geckodriver. Until one exists, report desktop-Gecko
-  as unverified — never infer it from a Chromium run.
+- **Desktop Firefox (Gecko) — real lane, binary blocked here.**
+  `firefox_gecko.py` drives real Firefox via geckodriver and
+  self-bootstraps the driver (GitHub is allowed). The Firefox binary is
+  the blocker: the egress policy denies `download.mozilla.org`,
+  `archive.mozilla.org`, `packages.mozilla.org`, and `deb.debian.org`, and
+  Ubuntu 24.04 has no Firefox apt deb (snap only, and snap won't run in
+  the container). Run with `FIREFOX_BIN=/path/to/firefox`, or where
+  downloads are allowed, or after the org allowlists a Mozilla host. Until
+  a binary is present, report desktop-Gecko as unverified — never infer it
+  from a Chromium run.
 
 Assert the persona at the top of every proof
 (`persona_report(page)`), so a run can never silently verify the wrong

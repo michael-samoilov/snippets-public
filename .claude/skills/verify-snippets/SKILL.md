@@ -20,12 +20,12 @@ where the engine differs — everything else is a viewport or UA variation.
 
 | Surface | Engine | How this skill covers it |
 | --- | --- | --- |
-| iOS installed PWA | WebKit | `ios_pwa_page` persona (Blink) for logic; WebKitGTK for engine; device lane for momentum |
-| iOS Safari (tab) | WebKit | `ios_safari_page` persona; WebKitGTK for engine |
-| iOS Chrome | WebKit | `chrome_ios_page` persona (no Web Speech); WebKitGTK for engine |
-| Android Chrome | Blink | `android_chrome_page` persona — Chromium **is** Blink, so faithful |
+| iOS installed PWA | WebKit | `ios_pwa_page` persona for logic; `webkit_session.py` (real WebKit) for engine; device lane for momentum |
+| iOS Safari (tab) | WebKit | `ios_safari_page` persona; `webkit_session.py` for the real engine |
+| iOS Chrome | WebKit | `chrome_ios_page` persona (no Web Speech); `webkit_session.py` for the real engine |
+| Android Chrome | Blink | `android_chrome_page` — **real engine**: Chromium IS Blink, so this is faithful, not a spoof |
 | Desktop Chrome | Blink | plain `p.chromium.launch()`, no persona |
-| Desktop Firefox | Gecko | **gated** — no Gecko engine installed here (see Drive) |
+| Desktop Firefox | Gecko | `firefox_gecko.py` (real Gecko via geckodriver); geckodriver ready, Firefox binary egress-blocked (see Drive) |
 
 Two things the personas do NOT give you: the WebKit engine (they are all
 Blink — use WebKitGTK) and iOS touch physics (device only). The three iOS
@@ -160,15 +160,39 @@ with sync_playwright() as p:
   `platform` `Linux armv8l`, Web Speech present, `isIOS()` false.
 - **Desktop Chrome** — no persona; `p.chromium.launch()` with a desktop
   viewport is the real Blink engine.
-- **Desktop Firefox (Gecko) — gated.** Playwright's Firefox build is not
-  installed here and downloads are blocked, and there is no system
-  Firefox. Enable where downloads are allowed with `playwright install
-  firefox` then `p.firefox.launch()`, or drive a system Firefox over
-  geckodriver. Until then, desktop-Gecko is unverified — say so rather
-  than claiming it.
+- **Desktop Firefox (Gecko) — real lane, binary egress-blocked.**
+  `scripts/firefox_gecko.py` drives the app on real Firefox via
+  geckodriver. geckodriver downloads fine (GitHub is allowed) and the lane
+  self-bootstraps it; the Firefox BINARY is what is blocked — the egress
+  policy denies `download.mozilla.org`, `archive.mozilla.org`,
+  `packages.mozilla.org`, and `deb.debian.org`, and Ubuntu 24.04 ships
+  Firefox only as a snap (no apt deb, snap won't run in the container).
+  Run the lane with `FIREFOX_BIN=/path/to/firefox`, or where downloads are
+  allowed, or after the org allowlists a Mozilla download host. Until a
+  binary is present, report desktop-Gecko as unverified — never infer it
+  from a Chromium run.
 
 Personas accept `viewport=` and stack extra `page.add_init_script(...)`
 (speech stubs, failure injection) after creation.
+
+### Real WebKit driving (iOS Safari / iOS PWA / iOS Chrome engine)
+
+The personas are Blink; every iOS browser is WebKit. For iOS *engine*
+correctness — layout, selectors, scroll, anything the renderer decides —
+drive real WebKit with `scripts/webkit_session.py` (WebKitGTK MiniBrowser
+over W3C WebDriver, phone viewport). It navigates, seeds, runs JS, taps,
+and screenshots:
+
+```python
+from webkit_session import WebKitSession
+with WebKitSession() as wk:
+    wk.open("/calendar", seed=40, years=1)
+    wk.tap("[data-cal-title]")                       # rise to month view
+    assert wk.js('return !!document.querySelector("[data-layer=\\"month\\"]")')
+```
+
+Needs the driver up (see "The WebKit engine harness" below). Use personas
+for identity-conditional CODE, this for the WebKit ENGINE.
 
 ### Seeding a book
 
@@ -254,6 +278,12 @@ Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets}/<run-name>/`
 - `scripts/webkit_wheel_scroll.py` — trusted wheel scroll of the book feed
   on real WebKit, asserting the warm window follows. Needs the WebKitGTK
   driver and app server up.
+- `scripts/webkit_session.py` — drive the app on the real WebKit engine
+  (iOS Safari/PWA/Chrome share it): open/seed, js, tap, screenshot.
+  Executable; needs the WebKitGTK driver up.
+- `scripts/firefox_gecko.py` — the desktop-Gecko lane via geckodriver.
+  Self-bootstraps geckodriver; runs against a Firefox binary
+  (`FIREFOX_BIN`) when one is present, else reports the egress block.
 - `scripts/appium_scroll.py` — the real-iOS lane: a genuine touch fling on
   a device farm or Simulator (`APPIUM_URL`). Unrun in the sandbox by
   design.
