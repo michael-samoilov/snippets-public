@@ -58,6 +58,32 @@ quirks are the repo's whole risk surface (see `CLAUDE.md`).
 - Read `SCHEDULE-MAP.md` (repo root) before any scroll work — it maps the
   app's scroll machinery (~17 guard flags, ~20 timers, one scroller).
 
+## Performance and memory (what helps here, what misleads)
+
+This app's dominant performance risk is iOS memory pressure — the FLAT-BOOK
+jetsam class (`globals.css`, `SCHEDULE-MAP.md`). Profile accordingly:
+
+- **Read the app's own instrumentation first.** It emits `performance.mark`
+  / `performance.measure` (`zoom-run`, `fx:commitFlush`, `fz:loop`, …). These
+  are engine-agnostic and what the authors trust — read them on WebKitGTK
+  (`scripts/measure-webkit-spans.py`) and on-device, not just Blink.
+- **CDP memory / leak checks are worth it.** `scripts/cdp_memory.py` stresses
+  the book with N rise/dive/scroll cycles and watches CDP
+  `Performance.getMetrics` — Nodes, JSEventListeners, JSHeapUsedSize — for
+  per-cycle growth at a fixed view state. A JS leak (detached nodes, growing
+  listener/timer sets — this app has ~17 guard flags and ~20 timers) ports
+  across engines: it would leak on iOS too, so a Blink check is legitimate.
+  Verified: listeners and nodes stay flat across cycles today.
+- **Chromium CPU traces / flamegraphs mislead here — do not chase the jetsam
+  bug with them.** The costs are WebKit-compositor-specific and Blink hides
+  them; two optimization rounds tuned on throttled Chromium showed wins that
+  never appeared on the iPhone (see `measure-webkit-spans.py`). Paint and
+  compositor cost are the WebKitGTK harness's job, and the on-device pass's —
+  never a Chromium CPU profile.
+- **Full heap snapshots** (CDP `HeapProfiler`, detached-node analysis) are a
+  deeper follow-up when `cdp_memory.py` flags growth and you need the
+  retaining path; the getMetrics counters catch the regression first.
+
 ## Real device only, and the real-iOS lane
 
 **Never claim these from the sandbox:** jetsam / memory kills (the
@@ -281,6 +307,9 @@ Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets}/<run-name>/`
 - `scripts/firefox_gecko.py` — the desktop-Gecko lane via geckodriver.
   Self-bootstraps geckodriver; runs against a Firefox binary
   (`FIREFOX_BIN`) when one is present, else reports the egress block.
+- `scripts/cdp_memory.py` — memory-leak regression guard: stresses the
+  book and watches CDP `Performance.getMetrics` (Nodes, JSEventListeners,
+  JS heap) for per-cycle growth. Run under `with_server.py` or a live :3000.
 - `scripts/appium_scroll.py` — the real-iOS lane: a genuine touch fling on
   a device farm or Simulator (`APPIUM_URL`). Unrun in the sandbox by
   design.
