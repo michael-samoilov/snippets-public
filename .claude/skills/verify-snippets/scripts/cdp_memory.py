@@ -28,18 +28,20 @@ BASE = os.environ.get("BASE_URL", "http://127.0.0.1:3000")
 OUT = os.environ.get("EVIDENCE_DIR", "/tmp/verify-snippets") + "/cdp-memory"
 CYCLES = int(sys.argv[1]) if len(sys.argv) > 1 else 20
 
-TAP = """(sel) => {
-  const el = document.querySelector(sel);
-  if (!el) return false;
-  el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:1,pointerType:'touch',isPrimary:true}));
-  el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:1,pointerType:'touch',isPrimary:true}));
-  el.click();
-  return true;
-}"""
 PICK_DAY = """() => {
   const b = document.querySelector('[data-layer="month"] button[data-day-key]:not([disabled])');
   return b ? b.getAttribute('data-day-key') : null;
 }"""
+
+
+def tap(page, sel):
+    # ONE trusted activation (see cdp_frames.py): a synthetic pointerup plus
+    # el.click() double-activates and can navigate the run to about:blank.
+    try:
+        page.click(sel, timeout=2500)
+        return True
+    except Exception:
+        return False
 
 
 def metrics(cdp):
@@ -52,7 +54,10 @@ def metrics(cdp):
 def main():
     os.makedirs(OUT, exist_ok=True)
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        # --expose-gc so window.gc() is real; without it transient allocations
+        # that GC would reclaim read as a per-cycle leak (a false positive an
+        # eval caught, 2026-08). Force GC before every measurement below.
+        browser = p.chromium.launch(args=["--js-flags=--expose-gc"])
         page = ios_pwa_page(browser)
         cdp = page.context.new_cdp_session(page)
         cdp.send("Performance.enable")
@@ -66,18 +71,27 @@ def main():
         def stress_then_measure():
             day = page.evaluate(PICK_DAY)
             if not day:  # already in book view; rise to month to pick a day
-                page.evaluate(TAP, "[data-cal-title]"); page.wait_for_timeout(600)
+                tap(page, "[data-cal-title]"); page.wait_for_timeout(600)
                 day = page.evaluate(PICK_DAY)
             if day:
-                page.evaluate(TAP, f'[data-layer="month"] button[data-day-key="{day}"]')
+                tap(page, f'[data-layer="month"] button[data-day-key="{day}"]')
                 page.wait_for_timeout(700)                                  # dive
             page.evaluate("() => {const s=document.querySelector('[data-book-scroller]'); if(s){s.scrollTop=Math.random()*40000;}}")
             page.wait_for_timeout(300)
-            page.evaluate(TAP, "[data-cal-title]"); page.wait_for_timeout(700)  # rise -> book view
+            tap(page, "[data-cal-title]"); page.wait_for_timeout(700)       # rise -> book view
+            page.evaluate("() => { if (window.gc) { window.gc(); window.gc(); } }")
+            page.wait_for_timeout(200)                                       # let GC settle before measuring
             return metrics(cdp)
 
         stress_then_measure()          # warm-up: first mount caches, discard
         series = [stress_then_measure() for _ in range(CYCLES)]
+
+        # self-check: refuse a run that navigated off /calendar (the false-clean
+        # bug an eval caught, 2026-08).
+        if "/calendar" not in page.url or not page.evaluate("!!document.querySelector('[data-book-scroller]')"):
+            print(json.dumps({"verdict": "INCONCLUSIVE — navigated off /calendar mid-run", "url": page.url}))
+            browser.close()
+            return 2
 
         first, last = series[0], series[-1]
         report = {

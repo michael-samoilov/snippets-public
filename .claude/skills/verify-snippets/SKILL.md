@@ -71,8 +71,11 @@ jetsam class (`globals.css`, `SCHEDULE-MAP.md`). Profile accordingly:
   yield every 16.7ms. Any change to the reader's surfaces — capture, the
   book feed, dive/rise, scroll — must be checked for main-thread jank and
   guarded against regressions. `scripts/cdp_frames.py` records long tasks
-  and rAF gaps while driving those interactions and fails on a main-thread
-  block past a budget (default 100ms). Honest scope: a long synchronous
+  and rAF gaps while driving those interactions. It reports by default,
+  because the worst long task is usually legitimate month-view mount cost
+  (~130-160ms), not scroll — a real 60fps regression is a before/after
+  delta, so gate with a baseline or an explicit `JANK_MS`. Honest scope: a
+  long synchronous
   task stalls frames on any engine, so this catches jank regressions
   portably; it does NOT certify 60fps on an iPhone — GPU/compositor cost is
   WebKit-specific and headless Blink has no real vsync (its dropped-frame %
