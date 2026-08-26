@@ -26,8 +26,6 @@ them verified:
   `/settings`; copy is linter-governed (`pnpm check:copy`).
 - **Search** (`copy.search.entriesLabel` surfaces in `calendar/page.tsx`).
 - **Drive backup** — device-delivered; needs real Google tokens.
-- **Desktop Firefox (Gecko)** — no Gecko engine installed in this
-  sandbox; a gated lane (see `cross-browser.md` and `SKILL.md`).
 - **True iOS thumb-scroll and other device-only behavior** (touch
   momentum, rubber-band, deep-book jetsam, safe areas, dictation, install
   flow) — the real-iOS lane in `SKILL.md` covers these (device farm,

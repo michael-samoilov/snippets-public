@@ -14,7 +14,7 @@ engine and the capability profile.
 | iOS Chrome | WebKit | `chrome_ios_page` + `webkit_session.py` | same engine; no Web Speech |
 | Android Chrome | Blink | `android_chrome_page` | **real engine** — Chromium **is** Blink |
 | Desktop Chrome | Blink | `p.chromium.launch()` | real engine |
-| Desktop Firefox | Gecko | `firefox_gecko.py` | real Gecko lane; Firefox binary egress-blocked here |
+| Desktop Firefox | Gecko | `firefox_gecko.py` | real Gecko; self-provisions Firefox; verified on FF 154 |
 
 ## How to get to it (user POV)
 
@@ -40,16 +40,13 @@ viewport.
   identity over Blink). Not a gap.
 - **Desktop Chrome** needs no persona: `p.chromium.launch()` with a
   desktop viewport (e.g. 1280×800) is the shipping engine.
-- **Desktop Firefox (Gecko) — real lane, binary blocked here.**
-  `firefox_gecko.py` drives real Firefox via geckodriver and
-  self-bootstraps the driver (GitHub is allowed). The Firefox binary is
-  the blocker: the egress policy denies `download.mozilla.org`,
-  `archive.mozilla.org`, `packages.mozilla.org`, and `deb.debian.org`, and
-  Ubuntu 24.04 has no Firefox apt deb (snap only, and snap won't run in
-  the container). Run with `FIREFOX_BIN=/path/to/firefox`, or where
-  downloads are allowed, or after the org allowlists a Mozilla host. Until
-  a binary is present, report desktop-Gecko as unverified — never infer it
-  from a Chromium run.
+- **Desktop Firefox (Gecko) — real lane, working.** `firefox_gecko.py`
+  drives real Firefox via geckodriver and self-provisions both (geckodriver
+  from GitHub, Firefox from Mozilla). Verified on Firefox 154 (36 seeded
+  days). It needs two egress hosts allowlisted — `download.mozilla.org` and
+  `download-installer.cdn.mozilla.net` (`download.mozilla.org` only
+  redirects; the CDN serves the file). A 403 in a future session means the
+  policy was reset; re-add both, or pass `FIREFOX_BIN=/path/to/firefox`.
 
 Assert the persona at the top of every proof
 (`persona_report(page)`), so a run can never silently verify the wrong

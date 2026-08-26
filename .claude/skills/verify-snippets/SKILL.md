@@ -1,6 +1,6 @@
 ---
 name: verify-snippets
-description: The single verification skill for Snippets — drive the app the way a reader does, across every surface it ships on, and prove behavior with evidence. Covers iOS (installed PWA, Safari, Chrome), Android Chrome, and desktop Chrome from this Linux sandbox; real WebKit via WebKitGTK; and a real-iOS lane (device farm, Simulator, or a manual iPhone protocol) for what only exists on a device — touch-scroll momentum, jetsam, safe areas, dictation, install. Use for capture, book navigation, offline, sync/auth/encryption flows, cross-browser checks, and any platform-conditional code path before it ships.
+description: The single verification skill for Snippets — drive the app the way a reader does, across every surface it ships on, and prove behavior with evidence. Covers all three engines from this Linux sandbox — WebKit (iOS PWA/Safari/Chrome, real via WebKitGTK), Blink (Android and desktop Chrome), and Gecko (desktop Firefox, self-provisioned) — plus a real-iOS lane (device farm, Simulator, or a manual iPhone protocol) for what only exists on a device: touch-scroll momentum, jetsam, safe areas, dictation, install. Use for capture, book navigation, offline, sync/auth/encryption flows, cross-browser checks, and any platform-conditional code path before it ships.
 ---
 
 # Verify Snippets
@@ -25,7 +25,7 @@ where the engine differs — everything else is a viewport or UA variation.
 | iOS Chrome | WebKit | `chrome_ios_page` persona (no Web Speech); `webkit_session.py` for the real engine |
 | Android Chrome | Blink | `android_chrome_page` — **real engine**: Chromium IS Blink, so this is faithful, not a spoof |
 | Desktop Chrome | Blink | plain `p.chromium.launch()`, no persona |
-| Desktop Firefox | Gecko | `firefox_gecko.py` (real Gecko via geckodriver); geckodriver ready, Firefox binary egress-blocked (see Drive) |
+| Desktop Firefox | Gecko | `firefox_gecko.py` — real Gecko, self-provisions Firefox + geckodriver; verified on Firefox 154 |
 
 Two things the personas do NOT give you: the WebKit engine (they are all
 Blink — use WebKitGTK) and iOS touch physics (device only). The three iOS
@@ -160,17 +160,14 @@ with sync_playwright() as p:
   `platform` `Linux armv8l`, Web Speech present, `isIOS()` false.
 - **Desktop Chrome** — no persona; `p.chromium.launch()` with a desktop
   viewport is the real Blink engine.
-- **Desktop Firefox (Gecko) — real lane, binary egress-blocked.**
+- **Desktop Firefox (Gecko) — real lane, working.**
   `scripts/firefox_gecko.py` drives the app on real Firefox via
-  geckodriver. geckodriver downloads fine (GitHub is allowed) and the lane
-  self-bootstraps it; the Firefox BINARY is what is blocked — the egress
-  policy denies `download.mozilla.org`, `archive.mozilla.org`,
-  `packages.mozilla.org`, and `deb.debian.org`, and Ubuntu 24.04 ships
-  Firefox only as a snap (no apt deb, snap won't run in the container).
-  Run the lane with `FIREFOX_BIN=/path/to/firefox`, or where downloads are
-  allowed, or after the org allowlists a Mozilla download host. Until a
-  binary is present, report desktop-Gecko as unverified — never infer it
-  from a Chromium run.
+  geckodriver and self-provisions both: geckodriver from GitHub and
+  Firefox from Mozilla. Verified — drove the app on Firefox 154, 36 seeded
+  days. It needs two egress hosts allowlisted, `download.mozilla.org` and
+  `download-installer.cdn.mozilla.net` (added to the environment's network
+  policy 2026-08-26); a 403 in a future session means the policy was
+  reset — re-add those two hosts, or pass `FIREFOX_BIN=/path/to/firefox`.
 
 Personas accept `viewport=` and stack extra `page.add_init_script(...)`
 (speech stubs, failure injection) after creation.

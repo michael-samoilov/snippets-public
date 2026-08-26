@@ -3,23 +3,20 @@
 desktop-Firefox lane. stdlib urllib + geckodriver's W3C WebDriver, same
 shape as webkit_session.py; no Selenium dependency.
 
-Status in this sandbox (2026-08): geckodriver downloads fine from GitHub
-(allowed), but the Firefox BINARY is blocked — the egress policy denies
-download.mozilla.org, archive.mozilla.org, packages.mozilla.org, and
-deb.debian.org (403 / connect-rejected), and Ubuntu 24.04 ships Firefox
-only as a snap (no apt deb, snap won't run in the container). So this lane
-is staged and self-tests its own gating; it runs for real the moment a
-Firefox binary is present.
+Self-provisioning: it downloads geckodriver (GitHub) and Firefox (Mozilla)
+into ~/.cache/verify-snippets and runs hands-off. Firefox needs two egress
+hosts allowlisted — `download.mozilla.org` (the redirector) and
+`download-installer.cdn.mozilla.net` (the file CDN). Both were added to the
+environment's network policy on 2026-08-26; if a future session gets a 403,
+the policy was reset — re-add those two hosts. `FIREFOX_BIN=/path` overrides
+the download.
 
-To close the gap, either:
-  - point the lane at a Firefox binary you provide: FIREFOX_BIN=/path/to/firefox
-  - run it where downloads are allowed (a plain `playwright install firefox`
-    or Mozilla's tarball), or have the org egress policy allowlist
-    download.mozilla.org.
+Verified 2026-08-26: drove the app on real Firefox 154, 36 seeded days.
 
 Usage:
-    FIREFOX_BIN=/path/to/firefox \\
-      python3 .claude/skills/verify-snippets/scripts/firefox_gecko.py
+    python3 .claude/skills/verify-snippets/scripts/firefox_gecko.py
+    # or, with your own binary:
+    FIREFOX_BIN=/path/to/firefox python3 .../firefox_gecko.py
 """
 import json
 import os
@@ -33,22 +30,58 @@ import urllib.request
 GECKO_VER = "0.35.0"
 GECKO_URL = (f"https://github.com/mozilla/geckodriver/releases/download/"
              f"v{GECKO_VER}/geckodriver-v{GECKO_VER}-linux64.tar.gz")
+FIREFOX_URL = ("https://download.mozilla.org/"
+               "?product=firefox-latest-ssl&os=linux64&lang=en-US")
 CACHE = os.path.expanduser("~/.cache/verify-snippets")
 PORT = 4600
 APP = os.environ.get("BASE_URL", "http://127.0.0.1:3000")
 
 
 def find_firefox():
+    """Locate a Firefox binary, downloading Mozilla's official build if none
+    is present. Returns a path, or None if the download is egress-blocked."""
     if os.environ.get("FIREFOX_BIN") and os.path.exists(os.environ["FIREFOX_BIN"]):
         return os.environ["FIREFOX_BIN"]
     for name in ("firefox", "firefox-esr"):
         p = shutil.which(name)
         if p:
             return p
-    for p in ("/opt/firefox/firefox", "/usr/lib/firefox/firefox"):
+    for p in ("/opt/firefox/firefox", "/usr/lib/firefox/firefox",
+              os.path.join(CACHE, "firefox", "firefox")):
         if os.path.exists(p):
             return p
-    return None
+    # download Mozilla's official tarball (needs the two hosts allowlisted).
+    # curl handles the 87 MB through the proxy far more reliably than
+    # urllib.urlretrieve, which truncates on a dropped connection.
+    os.makedirs(CACHE, exist_ok=True)
+    tzx = os.path.join(CACHE, "firefox.tar.xz")
+    if not _download(FIREFOX_URL, tzx):
+        print("firefox download failed — is the egress policy allowing")
+        print("  download.mozilla.org AND download-installer.cdn.mozilla.net?")
+        return None
+    with tarfile.open(tzx, "r:xz") as t:
+        t.extractall(CACHE)
+    local = os.path.join(CACHE, "firefox", "firefox")
+    return local if os.path.exists(local) else None
+
+
+def _download(url, dest):
+    """Fetch a URL to dest robustly. Prefer curl (retries, resumes, follows
+    redirects through the proxy); fall back to urllib. Returns True on a
+    complete file."""
+    if shutil.which("curl"):
+        r = subprocess.run(["curl", "-sSL", "--retry", "4", "--retry-delay", "2",
+                            "-C", "-", "-o", dest, url])
+        if r.returncode == 0 and os.path.getsize(dest) > 50_000_000:
+            return True
+    for _ in range(3):
+        try:
+            urllib.request.urlretrieve(url, dest)
+            if os.path.getsize(dest) > 50_000_000:
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def ensure_geckodriver():
@@ -79,11 +112,10 @@ def main():
     gecko = ensure_geckodriver()
     print(f"geckodriver: {gecko}  (ready)")
     if not firefox:
-        print("firefox binary: NOT FOUND — Gecko lane is staged but cannot run here.")
-        print("  reason: egress policy blocks Mozilla/Debian download hosts, and")
-        print("          Ubuntu 24.04 has no Firefox apt deb (snap only).")
-        print("  fix:    set FIREFOX_BIN=/path/to/firefox, or run where downloads")
-        print("          are allowed, or allowlist download.mozilla.org in egress policy.")
+        print("firefox binary: unavailable — download blocked or extract failed.")
+        print("  fix: allowlist download.mozilla.org AND")
+        print("       download-installer.cdn.mozilla.net in the egress policy,")
+        print("       or set FIREFOX_BIN=/path/to/firefox.")
         return 2
 
     print(f"firefox: {firefox}")
