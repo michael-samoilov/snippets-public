@@ -10,7 +10,7 @@ others.
 | --- | --- | --- |
 | Typed capture (today + backfill) | [capture-typed.md](capture-typed.md) | Chromium personas |
 | Voice capture | [capture-voice.md](capture-voice.md) | Chromium personas + speech stubs |
-| Book navigation (dive / rise / scroll) | [book-navigation.md](book-navigation.md) | Chromium for correctness, WebKitGTK for cost |
+| Book navigation (dive / rise / scroll) | [book-navigation.md](book-navigation.md) | Chromium for taps/position, WebKitGTK wheel for real scroll |
 | Offline PWA (service worker) | [pwa-offline.md](pwa-offline.md) | Chromium ios-pwa persona |
 
 ## Not yet mapped
@@ -25,5 +25,13 @@ them verified:
   `/settings`; copy is linter-governed (`pnpm check:copy`).
 - **Search** (`copy.search.entriesLabel` surfaces in `calendar/page.tsx`).
 - **Drive backup** — device-delivered; needs real Google tokens.
-- **Anything real-device-only** (jetsam, safe areas, dictation, install
-  flow) — see the list at the top of `SKILL.md`.
+- **True iOS thumb-scroll** (touch momentum, rubber-band, and the
+  memory pressure of flicking a deep book) — not reproducible in this
+  sandbox. WebKitGTK wheel scrolls the feed and drives its scroll logic
+  (real engine, real scroll events), but carries no iOS momentum, and
+  the app's guard-flag logic (`SCHEDULE-MAP.md`) only fully exercises
+  under a real fling. Faithful thumb-scroll needs a real iOS device or a
+  cloud device farm (Appium on BrowserStack/Sauce) — see the "true
+  scrolling" note in `SKILL.md`.
+- **Anything else real-device-only** (jetsam, safe areas, dictation,
+  install flow) — see the list at the top of `SKILL.md`.

@@ -34,16 +34,20 @@ Taps work because they finish with a real `.click()`; a synthetic
 pointer *drag* does not, so use taps, not gesture scrolling.
 
 **How to scroll the book (measured 2026-08-26). The engine decides.**
-The book feed is the scroll-parent of the `[data-day]` cards — the
-`-mx-2 … overflow-y-auto overscroll-contain` `SheetScroll` div
-(`app-shell.tsx:53`). The page shell is `overflow-hidden`; there is also
-a second, taller `overflow-y-auto` layer. **Find the feed by walking up
-from a `[data-day]` card, never by "largest scrollHeight"** — that picks
-the wrong layer. The today-zone composer overlays the lower-middle of
-the viewport and owns its own scroll ancestor, so a wheel aimed there
-misses the feed. Verify your wheel point hits the feed
-(`elementFromPoint` → ancestor has your feed marker) before trusting a
-result; `scripts/webkit_wheel_scroll.py` does this correctly.
+The book feed is the element with the app's own `[data-book-scroller]`
+attribute (`calendar/page.tsx`; it lives under `data-layer="schedule"`).
+Use that selector — do NOT pick by "largest scrollHeight", because a
+second, taller `overflow-y-auto` layer overlaps it and that heuristic
+grabs the wrong one. The page shell itself is `overflow-hidden`. The
+today-zone composer overlays the lower-middle of the viewport and owns
+its own scroll ancestor, so a wheel aimed there misses the feed; verify
+your wheel point's `elementFromPoint` resolves inside `[data-book-scroller]`
+before trusting a result. `scripts/webkit_wheel_scroll.py` does all of
+this. **`SCHEDULE-MAP.md` in the repo root is the authoritative map of
+the app's scroll machinery** (~17 guard flags, ~20 timers, four systems,
+one scroller) — read it before verifying anything scroll-related, since
+iOS momentum flings are one of the scroll sources its guard logic must
+attribute, and that logic only fully exercises under real momentum.
 
 - **WebKitGTK — real scroll works (use this for scroll logic).** A
   trusted W3C WebDriver *wheel* action over a card scrolls the feed and

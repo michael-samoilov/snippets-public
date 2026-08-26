@@ -48,6 +48,34 @@ dictation, the Add to Home Screen flow, manifest splash screens, and
 keyboard-driven `visualViewport` resizes. For those, hand the owner
 numbered on-device steps per "Prove the fix" in `CLAUDE.md`.
 
+## Toward true iOS thumb-scroll
+
+Faithful thumb-scroll — iOS `UIScrollView` momentum, rubber-band, and
+the memory pressure of flicking a deep book — cannot be produced in this
+Linux sandbox. WebKitGTK wheel is the closest local approximation (real
+engine, real scroll events, but no momentum). To verify the real thing,
+in rough order of fidelity and effort:
+
+1. **Cloud real-iOS device farm (recommended for CI).** Drive real
+   Mobile Safari or the installed PWA on a physical iPhone through Appium
+   (W3C touch actions → genuine `UIScrollView` momentum) on BrowserStack,
+   Sauce Labs, or LambdaTest. Reaches this sandbox over the outbound
+   HTTPS proxy; needs an account and credentials. This is the only path
+   that exercises the app's momentum guard-flag logic (`SCHEDULE-MAP.md`)
+   and the jetsam class of bug.
+2. **Owner's own device or the iOS Simulator (local, high fidelity).**
+   A physical iPhone over `safaridriver`, or Xcode's iOS Simulator via
+   Appium/XCUITest — both real iOS scroll physics, both need macOS, so
+   they run on the owner's machine, not here. Good for a pre-ship pass.
+3. **WebKitGTK wheel (here, now — logic only).**
+   `scripts/webkit_wheel_scroll.py` drives the real engine's scroll
+   pipeline and the app's scroll-dependent logic, without momentum. Use
+   it for scroll-position regressions between device passes.
+
+If you set up option 1, add a `verify-snippets-ios-device` companion
+skill (or a mode here) that speaks the device-farm's Appium endpoint;
+keep this skill for the sandbox-local coverage.
+
 ## Launch
 
 The service worker registers in production builds only

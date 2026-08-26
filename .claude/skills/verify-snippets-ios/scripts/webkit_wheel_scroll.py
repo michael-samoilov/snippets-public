@@ -61,9 +61,13 @@ def main(seed="400", years="5"):
                 break
         time.sleep(6)
 
-        # 1. the book feed = scroll-parent of a [data-day] card (NOT largest scrollHeight)
-        js("""var d=document.querySelector('[data-day]'); var s=d;
-          while(s&&!(/(auto|scroll)/.test(getComputedStyle(s).overflowY)&&s.scrollHeight>s.clientHeight+4)) s=s.parentElement;
+        # 1. the book feed = the app's own [data-book-scroller] handle
+        # (SCHEDULE-MAP.md; calendar/page.tsx). Fall back to the [data-day]
+        # scroll-parent only if the attribute is ever renamed. NEVER pick by
+        # largest scrollHeight — a second overflow-y-auto layer overlaps it.
+        js("""var s=document.querySelector('[data-book-scroller]');
+          if(!s){var d=document.querySelector('[data-day]'); s=d;
+            while(s&&!(/(auto|scroll)/.test(getComputedStyle(s).overflowY)&&s.scrollHeight>s.clientHeight+4)) s=s.parentElement;}
           s.setAttribute('data-book','1'); s.addEventListener('scroll',function(){window.__bev=(window.__bev||0)+1;});""")
         js("document.querySelector('[data-book]').scrollTop=0; window.__bev=0;")
         time.sleep(1)
