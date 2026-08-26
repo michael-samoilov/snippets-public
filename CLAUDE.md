@@ -87,6 +87,41 @@ needed. The `turn-report` skill (`.claude/skills/turn-report/`) is the
 template; the same SessionStart hook injects it. Keep the report under
 about 150 words plus attachments; detail belongs in commits and files.
 
+**pstack is vendored; `/poteto-mode` is its entry point.** Open Pstack
+1.2.0 (`.claude/vendor/pstack/VENDORING.md` records the source commit and
+what was left out) adds 52 skills and 12 agent definitions under
+`.claude/`. Run `/poteto-mode` before a nontrivial code change and it
+routes the work to a playbook, the `principle-*` leaves, and the review
+skills. No session-start hook forces it — it runs when you ask for it.
+The multi-model panels in `arena`, `architect`, `interrogate`, and `how`
+need `/setup-pstack` plus the Codex and Grok command-line tools and Bun;
+without those, the skills run on the session's own model.
+
+Three overlaps to know about:
+
+- **Prose.** pstack's `unslop` says it "must always apply", and
+  `poteto-mode` bans the em dash outright. This repo's standards win:
+  `google-style` governs sentences, `action-first-replies` governs reply shape,
+  `turn-report` governs the closing reply, and `snippets-craft` plus the
+  copy linter govern app copy. Read `unslop` and `technical-writing` for
+  what they catch that `google-style` doesn't, not as a replacement.
+- **`babysit`.** The harness reads `.claude/skills/babysit/SKILL.md` as
+  this repo's PR guidance, so pstack's babysit skill now fills that slot.
+  That is intended. `poteto-mode` routes PR-status work to its own
+  Babysit playbook (`.claude/skills/poteto-mode/playbooks/babysit.md`)
+  rather than the skill.
+- **Verification.** pstack's `run` and `verify` built-ins are not in
+  this repo. Use `webapp-testing` and the harnesses described in "Prove
+  the fix" instead; `principle-prove-it-works` says the same thing this
+  file's "Prove the fix" section says.
+
+The vendored Bun scripts under `.claude/skills/poteto-mode/scripts/`
+reach none of the gates, so no config changed: TypeScript and ESLint skip
+dot-directories, vitest is scoped to `src/**`, and `oxlint.config.ts`
+already ignores `.claude/**`. Verified by running `tsc --listFiles` with
+and without an explicit exclude; both saw zero files under `.claude/`.
+
+
 ## Architecture
 
 - **Next.js 16 (App Router, Turbopack) + Tailwind v4** (tokens via
