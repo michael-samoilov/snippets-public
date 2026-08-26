@@ -55,6 +55,21 @@ them — the honest move is to clear a rule's backlog while working in
 that area, then promote that rule to `error`. Never silence a finding
 with a cast or a weakened severity to make the report quiet.
 
+**Agent failure modes are guarded, not just described.** When a review
+catches the same agent mistake twice, or a "do NOT" here would otherwise
+rely on the next agent noticing it, encode it as a build-failing check
+instead of more prose (principle "encode lessons in structure").
+`src/lib/agent-footguns.test.ts` is the append-only registry for agent
+slop and this repo's non-security "deleted things stay deleted"
+invariants; `security-invariants.test.ts` holds the encryption ones. Both
+ride `pnpm test`, so a violation fails the build. The one rule for
+writing a guard is that it must be targeted, never a blanket lexical ban:
+this repo's invariants are semantic, so the same construct is right in
+one file and wrong in another, and a guard that flags correct code trains
+the next agent to disable it. The `harden` skill
+(`.claude/skills/harden/`) runs the loop that proposes new guards from
+observed corrections; invoke it with `/harden`.
+
 **Claude's own prose follows the Google developers style guide.** All
 replies, visible thinking, commit messages, PR and review text, repo
 docs, and code comments follow the `google-style` skill
