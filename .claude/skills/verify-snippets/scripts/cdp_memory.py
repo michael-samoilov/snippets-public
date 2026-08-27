@@ -93,23 +93,32 @@ def main():
             browser.close()
             return 2
 
-        first, last = series[0], series[-1]
+        # Verdict from the FLOOR, not the endpoints. A real leak raises the
+        # baseline floor every cycle; transient mid-dive allocations spike a
+        # single sample and revert, so first-vs-last endpoints false-positive
+        # when the last sample lands on a spike (an eval caught this, 2026-08).
+        # Compare the floor (min) of the first half of cycles to the last half.
+        half = max(1, CYCLES // 2)
+
+        def floor(key, s):
+            return min(x[key] for x in s)
+
+        keys = ("Nodes", "JSEventListeners", "JSHeapUsedMB")
+        first_floor = {k: floor(k, series[:half]) for k in keys}
+        last_floor = {k: floor(k, series[half:]) for k in keys}
         report = {
             "cycles": CYCLES,
-            "first_sample": first,
-            "last_sample": last,
-            "growth_first_to_last": {k: last[k] - first[k]
-                                     for k in ("Nodes", "JSEventListeners", "JSHeapUsedMB")},
-            "per_cycle": {
-                "nodes": round((last["Nodes"] - first["Nodes"]) / CYCLES, 1),
-                "listeners": round((last["JSEventListeners"] - first["JSEventListeners"]) / CYCLES, 2),
+            "floor_first_half": first_floor,
+            "floor_last_half": last_floor,
+            "per_cycle_floor_growth": {
+                "nodes": round((last_floor["Nodes"] - first_floor["Nodes"]) / CYCLES, 2),
+                "listeners": round((last_floor["JSEventListeners"] - first_floor["JSEventListeners"]) / CYCLES, 2),
             },
             "series_listeners": [s["JSEventListeners"] for s in series],
             "series_nodes": [s["Nodes"] for s in series],
         }
-        # a real leak climbs listeners or nodes ~monotonically per cycle;
-        # small noise is fine. Thresholds are per-cycle, at the same view.
-        leak = report["per_cycle"]["listeners"] > 2 or report["per_cycle"]["nodes"] > 150
+        pc = report["per_cycle_floor_growth"]
+        leak = pc["listeners"] > 1 or pc["nodes"] > 100
         report["verdict"] = "LEAK SUSPECTED" if leak else "no unbounded growth"
         (open(f"{OUT}/report.json", "w")).write(json.dumps(report, indent=2))
         page.screenshot(path=f"{OUT}/after.png")
