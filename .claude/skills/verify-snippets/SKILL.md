@@ -285,6 +285,12 @@ iPhone (relative A/Bs only); no idle rAF under Xvfb.
 Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets}/<run-name>/`
 (create it first; it survives cleanup). Standards:
 
+- Find what actually changed before you verify. Diff the served tree
+  against `HEAD` (`git status`, `git diff HEAD -- src`) and verify the
+  invariants that change touches, not only the concerns the request
+  names — a blind eval shipped a planted `.book-card` paint regression
+  because the run checked capture, memory, and scroll but never the paint
+  invariant the CSS edit broke (see `features/book-navigation.md`).
 - Exercise the real user path — the composer and the seal, never `db.ts`
   setters or a test-only endpoint.
 - Capture the action *and* the resulting state: a screenshot plus the

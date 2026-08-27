@@ -93,26 +93,32 @@ def main():
             browser.close()
             return 2
 
-        # Verdict from the FLOOR, not the endpoints. A real leak raises the
-        # baseline floor every cycle; transient mid-dive allocations spike a
-        # single sample and revert, so first-vs-last endpoints false-positive
-        # when the last sample lands on a spike (an eval caught this, 2026-08).
-        # Compare the floor (min) of the first half of cycles to the last half.
-        half = max(1, CYCLES // 2)
-
+        # Verdict from the FLOOR of the POST-WARMUP plateau. A real leak raises
+        # the baseline floor every cycle; transient mid-dive allocations spike a
+        # single sample and revert. Two false-positive traps an eval caught
+        # (2026-08): (1) first-vs-last endpoints fire when the last sample lands
+        # on a spike; (2) the first cycles are a cold warmup (caches filling),
+        # so a floor over the whole series compares the cold low against the
+        # saturated plateau and reads the ramp as a leak. So discard the warmup
+        # third, then compare the floor of the plateau's first half to its last.
         def floor(key, s):
             return min(x[key] for x in s)
 
         keys = ("Nodes", "JSEventListeners", "JSHeapUsedMB")
-        first_floor = {k: floor(k, series[:half]) for k in keys}
-        last_floor = {k: floor(k, series[half:]) for k in keys}
+        warm = max(2, CYCLES // 3)
+        plateau = series[warm:] or series
+        n = max(1, len(plateau))
+        half = max(1, n // 2)
+        first_floor = {k: floor(k, plateau[:half]) for k in keys}
+        last_floor = {k: floor(k, plateau[half:]) for k in keys}
         report = {
             "cycles": CYCLES,
-            "floor_first_half": first_floor,
-            "floor_last_half": last_floor,
+            "warmup_discarded": warm,
+            "floor_plateau_first_half": first_floor,
+            "floor_plateau_last_half": last_floor,
             "per_cycle_floor_growth": {
-                "nodes": round((last_floor["Nodes"] - first_floor["Nodes"]) / CYCLES, 2),
-                "listeners": round((last_floor["JSEventListeners"] - first_floor["JSEventListeners"]) / CYCLES, 2),
+                "nodes": round((last_floor["Nodes"] - first_floor["Nodes"]) / n, 2),
+                "listeners": round((last_floor["JSEventListeners"] - first_floor["JSEventListeners"]) / n, 2),
             },
             "series_listeners": [s["JSEventListeners"] for s in series],
             "series_nodes": [s["Nodes"] for s in series],

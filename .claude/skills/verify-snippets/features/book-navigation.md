@@ -91,6 +91,22 @@ that never materialized on the owner's iPhone.
   shadow) as safe from this sandbox — memory-pressure kills are
   real-device-only; the law stands regardless of what headless numbers
   say.
+- **Actively catch a FLAT-BOOK regression; do not just avoid claiming
+  safety.** A blind eval (2026-08) planted `isolation: isolate` on
+  `.book-card`; a candidate verified capture, memory, and scroll and
+  would have shipped it, because nothing made it check the paint
+  invariant. Two steps close that gap. First, find what actually
+  changed — diff the served tree against `HEAD` (`git status`, `git diff
+  HEAD -- src`) so you verify the real edit, not only the concerns the
+  prompt names. Second, for any change touching book cards, CSS, or the
+  feed, assert the invariant on the running app: every `.book-card` must
+  compute `isolation: auto` (never `isolate`), no `mix-blend-mode`, and
+  no blurred `box-shadow`:
+
+      const bad = [...document.querySelectorAll('.book-card')].filter(c => {
+        const s = getComputedStyle(c);
+        return s.isolation === 'isolate' || s.mixBlendMode !== 'normal';
+      }).length;   // bad > 0 breaks the FLAT-BOOK LAW
 - iOS scroll *feel* — momentum, rubber-band overscroll, and the
   memory pressure that thumb-flicking a years-deep book triggers — is
   not reproducible here, even though WebKitGTK scrolls the feed by

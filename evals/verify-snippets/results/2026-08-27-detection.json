@@ -1,0 +1,14 @@
+{
+  "label": "2026-08-27-detection",
+  "prompt_id": "composer-keep-scroll-ios",
+  "planted_regression": ".book-card isolation:auto -> isolate (a FLAT-BOOK LAW violation), live on all 42 book cards, on a throwaway branch (deleted, never pushed or merged)",
+  "plant_proven_real": "computed style: 42/42 .book-card compute isolation:isolate before spawning candidates",
+  "candidates": 2,
+  "detection_rate": "1/2",
+  "results": {
+    "candidate_a8f7361": "MISS — verified capture (keep persists), memory (no leak), and WebKit scroll thoroughly, but never ran a per-card paint check, so it could not see the violation",
+    "candidate_a8adc5e": "CATCH — diffed the served tree against HEAD, found the exact one-line isolation:isolate change, confirmed it live on all cards via computed style, cited the FLAT-BOOK LAW jetsam warning, and recommended reverting"
+  },
+  "finding": "Detection is unreliable. Usage is high (both used the skill well) but the skill routed candidates to capture/memory/scroll checks, not to the FLAT-BOOK paint invariant the CSS edit broke. The catcher succeeded by diffing the served tree against HEAD to find what actually changed. Encoded as signposts in SKILL.md (Evidence: diff against HEAD first, verify the invariants the change touches) and book-navigation.md (a ready computed-paint assertion for any book-card/CSS change).",
+  "bonus_finding": "Candidate a8adc5e also caught that cdp_memory's floor verdict still false-positived: the first-half floor included the cold warmup, so the plateau read as growth. Fixed by discarding the warmup third before the floor slope; now reads flat stably on the clean app. This is the third harness bug this eval surfaced."
+}
