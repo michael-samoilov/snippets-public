@@ -1,0 +1,43 @@
+{
+  "_doc": "Fixed task set for the verify-snippets eval. Positive prompts are organic 'verify before I ship' tasks a user would type, with NO eval/skill/meta cues (poteto eval playbook blinding). Each carries rubric data the SCORER uses, never shown to candidates: expected_lanes are skill-script name substrings the claim should drive; must_scope_device_only are the honest caveats a report must name. Negative prompts should NOT trigger the skill; they measure over-triggering. Hold some positive prompts out when hillclimbing so the skill is not tuned to the eval.",
+  "lane_scripts": {
+    "persona": ["personas.py"],
+    "webkit": ["webkit_wheel_scroll.py", "webkit_session.py", "measure-webkit-spans.py"],
+    "memory": ["cdp_memory.py"],
+    "frames": ["cdp_frames.py"],
+    "gecko": ["firefox_gecko.py"],
+    "device": ["appium_scroll.py"]
+  },
+  "positive": [
+    {
+      "id": "composer-keep-scroll-ios",
+      "prompt": "I changed the calendar's today-zone composer and how the book feed scrolls. It's a local-first PWA read mostly on iPhone. Before I ship, I want confidence that a reader can still type an entry and press the wax seal to keep it, and that scrolling a deep book doesn't leak memory or stutter. The dev server is running at http://127.0.0.1:3000. Show me concrete evidence, and be explicit about what you can't confirm from here.",
+      "expected_lanes": ["memory", "frames", "webkit"],
+      "must_scope_device_only": ["momentum", "jetsam", "60fps", "device", "iphone"]
+    },
+    {
+      "id": "cross-browser-render",
+      "prompt": "I reworked some CSS on the calendar page. This ships to iPhone Safari, Chrome on Android, and desktop browsers. Can you check the calendar renders correctly across those engines and flag anything broken? Server is at http://127.0.0.1:3000.",
+      "expected_lanes": ["webkit", "persona", "gecko"],
+      "must_scope_device_only": ["safe-area", "device", "momentum"]
+    },
+    {
+      "id": "offline-pwa-relaunch",
+      "prompt": "I touched the service worker and the offline caching. As an installed home-screen app on iPhone, it must still open and show the book with no network. Can you verify the offline relaunch works? http://127.0.0.1:3000.",
+      "expected_lanes": ["persona"],
+      "must_scope_device_only": ["install", "device", "add to home screen"]
+    }
+  ],
+  "negative": [
+    {
+      "id": "sync-merge-algorithm",
+      "prompt": "In src/lib/merge.ts, two devices edited the same entry offline. I want to be sure the last-write-wins tie-break is correct when updatedAt is exactly equal. Can you reason through the merge rule and tell me if the tie case is handled right?",
+      "why_negative": "A pure data-logic question about server/merge code. It needs reading merge.ts and its unit tests, not driving a browser. Firing the browser lanes here is over-triggering."
+    },
+    {
+      "id": "rename-script",
+      "prompt": "Write me a small shell script that renames every measure-*.py in scripts/ to probe-*.py and updates any references. Just the script and how to run it.",
+      "why_negative": "A dev-tooling request with no reader-facing behavior to verify. The skill should not fire."
+    }
+  ]
+}

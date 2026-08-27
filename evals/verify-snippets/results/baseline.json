@@ -1,0 +1,18 @@
+{
+  "created": "2026-08-27",
+  "scorer": "score.py v1 — objective-first; honest_scoping is a keyword heuristic with a documented model-judge hook",
+  "prompt_id": "composer-keep-scroll-ios",
+  "calibration_fixtures": {
+    "good_candidate": 1.0,
+    "bad_candidate_overclaims_ios_no_evidence": 0.18,
+    "negative_prompt_correctly_not_triggered": 1.0,
+    "negative_prompt_over_triggered": 0.2
+  },
+  "live_candidates": {
+    "note": "two real blind candidates from the 2026-08-26 eval, scored from their on-disk sub-agent transcripts (transcript-only, evidence dirs were pruned worktrees)",
+    "candidate_A": 0.933,
+    "candidate_B": 0.95,
+    "mean": 0.942
+  },
+  "interpretation": "A strong verify-snippets run scores ~0.93-1.0: it discovers the skill, runs the expected lanes for the claim, stays in scope, and scopes device-only limits honestly. A run that fakes it (overclaims iOS from a sandbox, no real lane) scores <0.2. Over-triggering on a non-matching prompt scores 0.2. Hillclimb the mean of the objective criteria (discovered, executed, right_lane, over-trigger); treat honest_scoping as advisory until an independent judge model is wired in."
+}
