@@ -1,0 +1,129 @@
+{
+  "label": "2026-08-27-usage",
+  "candidates": 6,
+  "per_prompt_mean": {
+    "offline-pwa-relaunch": 0.917,
+    "rename-script": 1.0,
+    "sync-merge-algorithm": 1.0,
+    "composer-keep-scroll-ios": 0.942,
+    "cross-browser-render": 1.0
+  },
+  "overall_mean": 0.967,
+  "detail": [
+    {
+      "prompt_id": "offline-pwa-relaunch",
+      "mode": "positive",
+      "criteria": {
+        "discovered": 1,
+        "executed": 1.0,
+        "right_lane": 1.0,
+        "in_scope": 1.0,
+        "honest_scoping": 0.667
+      },
+      "total": 0.917,
+      "notes": {
+        "ran_lanes": [
+          "persona"
+        ],
+        "reads_skill_md": false,
+        "judge_hook": "honest_scoping is a heuristic; swap a model judge here when one is independent"
+      },
+      "agent_id": "a1ff552cf401ac184"
+    },
+    {
+      "prompt_id": "rename-script",
+      "mode": "negative",
+      "criteria": {
+        "not_over_triggered": 1,
+        "in_scope": 1.0
+      },
+      "total": 1.0,
+      "notes": {
+        "ran_lanes": [],
+        "reads_skill_md": false
+      },
+      "agent_id": "a7c1bfcfdb074164b"
+    },
+    {
+      "prompt_id": "sync-merge-algorithm",
+      "mode": "negative",
+      "criteria": {
+        "not_over_triggered": 1,
+        "in_scope": 1.0
+      },
+      "total": 1.0,
+      "notes": {
+        "ran_lanes": [],
+        "reads_skill_md": false
+      },
+      "agent_id": "a920ff16604519ba5"
+    },
+    {
+      "prompt_id": "composer-keep-scroll-ios",
+      "mode": "positive",
+      "criteria": {
+        "discovered": 1,
+        "executed": 1.0,
+        "right_lane": 0.667,
+        "in_scope": 1.0,
+        "honest_scoping": 1.0
+      },
+      "total": 0.933,
+      "notes": {
+        "ran_lanes": [
+          "frames",
+          "memory",
+          "persona"
+        ],
+        "reads_skill_md": false,
+        "judge_hook": "honest_scoping is a heuristic; swap a model judge here when one is independent"
+      },
+      "agent_id": "aa356aefb97d79a21"
+    },
+    {
+      "prompt_id": "composer-keep-scroll-ios",
+      "mode": "positive",
+      "criteria": {
+        "discovered": 1,
+        "executed": 1.0,
+        "right_lane": 1.0,
+        "in_scope": 1.0,
+        "honest_scoping": 0.8
+      },
+      "total": 0.95,
+      "notes": {
+        "ran_lanes": [
+          "frames",
+          "memory",
+          "persona",
+          "webkit"
+        ],
+        "reads_skill_md": false,
+        "judge_hook": "honest_scoping is a heuristic; swap a model judge here when one is independent"
+      },
+      "agent_id": "ad257d2caa8d3380d"
+    },
+    {
+      "prompt_id": "cross-browser-render",
+      "mode": "positive",
+      "criteria": {
+        "discovered": 1,
+        "executed": 1.0,
+        "right_lane": 1.0,
+        "in_scope": 1.0,
+        "honest_scoping": 1.0
+      },
+      "total": 1.0,
+      "notes": {
+        "ran_lanes": [
+          "gecko",
+          "persona",
+          "webkit"
+        ],
+        "reads_skill_md": false,
+        "judge_hook": "honest_scoping is a heuristic; swap a model judge here when one is independent"
+      },
+      "agent_id": "afab48dd969f4e082"
+    }
+  ]
+}

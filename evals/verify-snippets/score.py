@@ -31,12 +31,14 @@ LANES = {
     "webkit": (["webkit_wheel_scroll.py", "webkit_session.py", "measure-webkit-spans.py"],
                ["webkit-wheel", "webkit-session", "webkit"],
                r"PASS:|scrolled the book|rose_to_month|days_rendered|sections"),
-    "persona": (["personas.py"], [], r"doctor: OK|PASS  |stubs hold"),
+    "persona": (["personas.py", "ios_pwa_page", "ios_safari_page", "chrome_ios_page",
+                 "android_chrome_page"], [], r"doctor: OK|PASS  |stubs hold"),
     "gecko": (["firefox_gecko.py"], ["firefox-gecko"], r'"engine":\s*"gecko"|PASS|days_rendered'),
     "device": (["appium_scroll.py"], ["device"], r"PASS|momentum"),
 }
 SKILL_SCRIPTS = [s for (subs, _, _) in LANES.values() for s in subs]
 SKILL_MD = ".claude/skills/verify-snippets/SKILL.md"
+SKILL_DIR = ".claude/skills/verify-snippets/"
 OVERCLAIM = re.compile(r"(verified|confirmed|works?|pass(?:es|ed)?)[^.]{0,40}"
                        r"(iphone|ios|60\s?fps|momentum)", re.I)
 HEDGE = re.compile(r"can(?:not|'t)|device[- ]only|on[- ]device|manual|not verifiable|"
@@ -93,16 +95,20 @@ def parse_transcript(path):
     return reads, cmds, results, texts, (texts[-1] if texts else "")
 
 
-def lane_ran(cat, cmds, results, evidence):
+def lane_ran(cat, cmds, reads, results, report, evidence):
     subs, subdirs, verdict = LANES[cat]
-    invoked = any(s in c for c in cmds for s in subs)
+    ran_text = " ".join(cmds) + " " + " ".join(reads)
+    invoked = any(s in ran_text for s in subs)
+    if cat == "persona":
+        # personas are used by IMPORT, not a CLI, so there is no verdict line
+        # or evidence dir. Naming one in the run or the report is the signal.
+        return invoked or any(s in report for s in subs)
     if not invoked:
         return False
     saw_verdict = any(re.search(verdict, r) for r in results)
     have_evidence = any(evidence and os.path.isdir(os.path.join(evidence, d)) and os.listdir(os.path.join(evidence, d))
                         for d in subdirs)
-    # persona is stdout-only (no evidence dir); the others want one real signal
-    return saw_verdict or have_evidence or (cat == "persona" and invoked)
+    return saw_verdict or have_evidence
 
 
 def score(prompt_id, transcript, evidence, worktree, report_override):
@@ -112,10 +118,11 @@ def score(prompt_id, transcript, evidence, worktree, report_override):
         final = open(report_override).read()
 
     evidence_written = bool(evidence and os.path.isdir(evidence) and os.listdir(evidence))
-    discovered = int(any(r.endswith(SKILL_MD) for r in reads)
+    ran = {cat for cat in LANES if lane_ran(cat, cmds, reads, results, final, evidence)}
+    discovered = int(any(SKILL_DIR in r for r in reads)
                      or any(s in c for c in cmds for s in SKILL_SCRIPTS)
+                     or bool(ran)
                      or evidence_written)
-    ran = {cat for cat in LANES if lane_ran(cat, cmds, results, evidence)}
 
     def in_scope():
         if not worktree:
