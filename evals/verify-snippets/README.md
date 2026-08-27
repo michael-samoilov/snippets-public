@@ -50,6 +50,18 @@ other candidates exist.
 4. Aggregate the per-candidate totals to a mean per prompt and write
    `results/<YYYY-MM-DD-HHMM>.json`. Compare to `baseline.json`.
 
+`aggregate.py` does step 3-4 in one call once all candidates have finished.
+It maps each sub-agent transcript back to its prompt from the `description`
+you gave the candidate (start the description with the prompt id), scores each
+with `score.py`, and writes the aggregated result. Run it only after every
+candidate is done, since it scores whatever transcript exists, including a
+partial one:
+
+```sh
+python3 evals/verify-snippets/aggregate.py --label <YYYY-MM-DD>-usage \
+  [--session-id <thisSessionId>] [--evidence-root /tmp/vs-eval/<run>]
+```
+
 ## What the score means
 
 Per positive candidate, criteria in `[0,1]`, weighted:
