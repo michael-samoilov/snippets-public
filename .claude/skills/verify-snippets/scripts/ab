@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# agent-browser wrapper: the default browser driver for this repo.
+#
+# Bakes in the three things this sandbox needs and adds --persona, so a
+# proof reads as one batch of commands instead of a Playwright script.
+#
+#   ab [--persona <name>] [agent-browser args...] <command> [args...]
+#
+# Personas (Blink engine, app's platform-conditional CODE):
+#   ios-pwa, ios-safari, chrome-ios, android-chrome
+#
+# Examples:
+#   ab open http://127.0.0.1:3000/calendar
+#   ab --persona ios-pwa batch "open http://127.0.0.1:3000/calendar?seed=40" \
+#      "wait 6000" "eval (document.querySelectorAll('[data-day]').length)"
+#   ab -p ios --device "iPhone 15 Pro" open https://...   # real-iOS lane
+#
+# Sandbox facts this encodes (measured 2026-09-08):
+#  1. `agent-browser install` fails here: the Chrome for Testing CDN is
+#     blocked by the agent proxy. Point at the pinned Playwright Chromium.
+#  2. Chromium needs --no-sandbox --disable-dev-shm-usage as root.
+#  3. HTTPS_PROXY must not swallow localhost, or the app is unreachable.
+# Session state does NOT persist across separate invocations here, so put a
+# whole proof in ONE `batch` call. See SKILL.md, "Drive".
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PERSONA_DIR="$SCRIPT_DIR/personas"
+
+: "${AGENT_BROWSER_EXECUTABLE_PATH:=/opt/pw-browsers/chromium-1194/chrome-linux/chrome}"
+export AGENT_BROWSER_EXECUTABLE_PATH
+export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,0.0.0.0}"
+export AGENT_BROWSER_PROXY_BYPASS="${AGENT_BROWSER_PROXY_BYPASS:-localhost,127.0.0.1,0.0.0.0}"
+
+if [ ! -x "$AGENT_BROWSER_EXECUTABLE_PATH" ]; then
+  echo "ab: no browser at $AGENT_BROWSER_EXECUTABLE_PATH" >&2
+  echo "ab: set AGENT_BROWSER_EXECUTABLE_PATH, or ls /opt/pw-browsers" >&2
+  exit 127
+fi
+
+IOS_UA="Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+CRIOS_UA="Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1"
+ANDROID_UA="Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.71 Mobile Safari/537.36"
+
+PERSONA_ARGS=()
+if [ "${1:-}" = "--persona" ]; then
+  persona="${2:?ab: --persona needs a name}"
+  shift 2
+  case "$persona" in
+    ios-pwa)       ua="$IOS_UA";     scripts="_iphone.js,_standalone.js" ;;
+    ios-safari)    ua="$IOS_UA";     scripts="_iphone.js,_browser.js" ;;
+    chrome-ios)    ua="$CRIOS_UA";   scripts="_iphone.js,_browser.js,_no-web-speech.js" ;;
+    android-chrome) ua="$ANDROID_UA"; scripts="_android.js" ;;
+    *) echo "ab: unknown persona '$persona' (ios-pwa, ios-safari, chrome-ios, android-chrome)" >&2; exit 2 ;;
+  esac
+  PERSONA_ARGS=(--user-agent "$ua" --session "persona-$persona")
+  IFS=',' read -ra names <<< "$scripts"
+  for n in "${names[@]}"; do
+    PERSONA_ARGS+=(--init-script "$PERSONA_DIR/$n")
+  done
+fi
+
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+AGENT_BROWSER="$REPO_ROOT/node_modules/.bin/agent-browser"
+if [ ! -x "$AGENT_BROWSER" ]; then
+  AGENT_BROWSER="$(command -v agent-browser || true)"
+fi
+if [ -z "$AGENT_BROWSER" ]; then
+  echo "ab: agent-browser not found. Run: pnpm install" >&2
+  exit 127
+fi
+
+export AGENT_BROWSER_ARGS="${AGENT_BROWSER_ARGS:---no-sandbox,--disable-dev-shm-usage}"
+
+exec "$AGENT_BROWSER" "${PERSONA_ARGS[@]}" "$@"

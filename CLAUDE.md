@@ -332,11 +332,22 @@ builds on.
 
 ## Visual verification (do this for UI changes)
 
-`pnpm build`, then serve and screenshot with the `webapp-testing` skill:
+`pnpm build`, then serve and drive the app. **agent-browser (Vercel) is
+the default driver**; Playwright is the fallback where agent-browser
+cannot reach (non-Chromium engines, raw CDP sessions, the frozen
+`measure-*.py` harnesses). `.claude/skills/verify-snippets/scripts/ab`
+wraps it with this sandbox's settings and the four personas:
 
 ```sh
 python3 .claude/skills/webapp-testing/scripts/with_server.py \
-  --server "node_modules/.bin/next start" --port 3000 -- python3 <script>
+  --server "node_modules/.bin/next start" --port 3000 -- bash <proof>.sh
+
+# inside <proof>.sh
+.claude/skills/verify-snippets/scripts/ab --persona ios-pwa batch --bail \
+  "set viewport 393 852" \
+  "open http://127.0.0.1:3000/calendar" \
+  "wait 5000" \
+  "screenshot /tmp/verify-snippets/book.png"
 ```
 
 Gotchas learned the hard way:
@@ -345,7 +356,13 @@ Gotchas learned the hard way:
   serve stale chunk manifests → mysterious 500s. Clean up with
   `pkill -9 -f "next[-]server"` (brackets stop pkill matching itself).
 - This sandbox pins Playwright browsers at `/opt/pw-browsers`
-  (chromium 1194 ⇒ `pip install playwright==1.56.0`).
+  (chromium 1194 ⇒ `pip install playwright==1.56.0`). agent-browser
+  cannot fetch its own Chrome here — the Chrome for Testing CDN is
+  blocked by the agent proxy — so the `ab` wrapper points it at that same
+  pinned binary.
+- `ab batch` re-splits each command on spaces. Single-quote any argument
+  containing one (`"eval 'JSON.stringify({a: 1})'"`), or the argument is
+  truncated and you get a parse error or "Element not found".
 - To exercise voice capture headlessly, stub **both**
   `window.SpeechRecognition` and `window.webkitSpeechRecognition` via
   `add_init_script` (Chromium exposes the unprefixed one too).

@@ -1,6 +1,6 @@
 ---
 name: verify-snippets
-description: The single verification skill for Snippets — drive the app the way a reader does, across every surface it ships on, and prove behavior with evidence. Covers all three engines from this Linux sandbox — WebKit (iOS PWA/Safari/Chrome, real via WebKitGTK), Blink (Android and desktop Chrome), and Gecko (desktop Firefox, self-provisioned) — plus a real-iOS lane (device farm, Simulator, or a manual iPhone protocol) for what only exists on a device: touch-scroll momentum, jetsam, safe areas, dictation, install. Use for capture, book navigation, offline, sync/auth/encryption flows, cross-browser checks, and any platform-conditional code path before it ships.
+description: The single verification skill for Snippets — drive the app the way a reader does, across every surface it ships on, and prove behavior with evidence. agent-browser is the default driver; Playwright is the fallback where agent-browser cannot reach. Covers all three engines from this Linux sandbox — WebKit (iOS PWA/Safari/Chrome, real via WebKitGTK), Blink (Android and desktop Chrome), and Gecko (desktop Firefox, self-provisioned) — plus a real-iOS lane (device farm, Simulator, or a manual iPhone protocol) for what only exists on a device: touch-scroll momentum, jetsam, safe areas, dictation, install. Use for capture, book navigation, offline, sync/auth/encryption flows, cross-browser checks, and any platform-conditional code path before it ships.
 ---
 
 # Verify Snippets
@@ -20,11 +20,11 @@ where the engine differs — everything else is a viewport or UA variation.
 
 | Surface | Engine | How this skill covers it |
 | --- | --- | --- |
-| iOS installed PWA | WebKit | `ios_pwa_page` persona for logic; `webkit_session.py` (real WebKit) for engine; device lane for momentum |
-| iOS Safari (tab) | WebKit | `ios_safari_page` persona; `webkit_session.py` for the real engine |
-| iOS Chrome | WebKit | `chrome_ios_page` persona (no Web Speech); `webkit_session.py` for the real engine |
-| Android Chrome | Blink | `android_chrome_page` — **real engine**: Chromium IS Blink, so this is faithful, not a spoof |
-| Desktop Chrome | Blink | plain `p.chromium.launch()`, no persona |
+| iOS installed PWA | WebKit | `ab --persona ios-pwa` for logic; `webkit_session.py` (real WebKit) for engine; device lane for momentum |
+| iOS Safari (tab) | WebKit | `ab --persona ios-safari`; `webkit_session.py` for the real engine |
+| iOS Chrome | WebKit | `ab --persona chrome-ios` (no Web Speech); `webkit_session.py` for the real engine |
+| Android Chrome | Blink | `ab --persona android-chrome` — **real engine**: Chromium IS Blink, so this is faithful, not a spoof |
+| Desktop Chrome | Blink | plain `ab` with no persona |
 | Desktop Firefox | Gecko | `firefox_gecko.py` — real Gecko, self-provisions Firefox + geckodriver; verified on Firefox 154 |
 
 Two things the personas do NOT give you: the WebKit engine (they are all
@@ -35,12 +35,31 @@ to test": it is three engines and five personas, prioritized by where
 readers are and where the app has platform-specific code — iOS WebKit
 quirks are the repo's whole risk surface (see `CLAUDE.md`).
 
+## Drivers: agent-browser by default, Playwright as fallback
+
+`scripts/ab` (agent-browser, Vercel) is the default way to drive this app.
+It is a Chrome/CDP command-line driver, so a proof is a batch of commands
+rather than a script file. It carries the four personas via `--persona`.
+
+Fall back to Playwright for the three things agent-browser cannot do:
+
+- **Non-Chromium engines.** agent-browser is Chrome only. Real WebKit
+  (WebKitGTK) and Gecko (`scripts/firefox_gecko.py`) keep their own lanes,
+  neither of which was ever Playwright anyway.
+- **Raw CDP sessions.** `scripts/cdp_memory.py` and `scripts/cdp_frames.py`
+  attach a CDP client for `Performance.getMetrics` and long-task traces.
+  agent-browser exposes `get cdp-url`, but these harnesses are working
+  proofs — leave them on Playwright until one needs changing.
+- **Frozen harnesses.** `scripts/measure-*.py` (repo root) and
+  `tests/e2e/*.py` are proofs of past fixes. Do not port them speculatively.
+
 ## Two sandbox harnesses — do not swap them
 
-- **Playwright Chromium + personas** (`scripts/personas.py`) proves
-  *correctness* of platform-conditional paths: what the app does when it
-  believes it is the PWA, iOS Safari, iOS Chrome, or Android Chrome. Blink
-  engine — never use it to price paint or scroll cost.
+- **Chromium + personas** (`scripts/ab --persona ...`, or `scripts/personas.py`
+  on the Playwright fallback) proves *correctness* of platform-conditional
+  paths: what the app does when it believes it is the PWA, iOS Safari, iOS
+  Chrome, or Android Chrome. Blink engine — never use it to price paint or
+  scroll cost.
 - **WebKitGTK MiniBrowser over raw WebDriver** is a *real WebKit engine*
   for perf, pathology A/Bs, and real scroll (it catches costs Blink
   hides). Raw W3C WebDriver has no pre-load script injection, so personas
@@ -115,11 +134,26 @@ To verify those, use the real-iOS lane, in order of fidelity and effort:
    (BrowserStack / Sauce / LambdaTest). Set `APPIUM_URL` and run
    `scripts/appium_scroll.py`. Only this path exercises the momentum
    guard-flag logic and the jetsam class.
-2. **iOS Simulator or the owner's iPhone (local, macOS).** The Simulator
-   is macOS-only (no `xcrun`/`simctl` on this Linux host), so it runs on
-   the owner's Mac via Appium/XCUITest, or a physical iPhone over
-   `safaridriver`. Same `scripts/appium_scroll.py` with a local
-   `APPIUM_URL`.
+2. **iOS Simulator via agent-browser (local, macOS).** agent-browser
+   drives the Simulator directly with real touch gestures, which is the
+   shortest path to the momentum questions:
+
+   ```sh
+   agent-browser -p ios device list                    # list simulators
+   agent-browser -p ios --device "iPhone 15 Pro" open http://<host>:3000/calendar
+   agent-browser -p ios swipe up                       # a real touch fling
+   agent-browser -p ios tap @e1
+   ```
+
+   **This lane cannot run from this Linux sandbox** — measured 2026-09-08,
+   `-p ios` shells out to `xcrun simctl` and fails with "No such file or
+   directory". It needs macOS with Xcode and Appium, so it runs on the
+   owner's Mac. `AGENT_BROWSER_IOS_DEVICE` and `AGENT_BROWSER_IOS_UDID` set
+   the defaults. Unrun here by design; first run is on the Mac.
+
+   The Playwright-free alternative on the same hardware is
+   `scripts/appium_scroll.py` with a local `APPIUM_URL`, or a physical
+   iPhone over `safaridriver`.
 3. **Manual iPhone protocol (no account, today).** The owner runs it on a
    real iPhone; each step is an exact action and an unambiguous yes/no:
    1. Flick up, lift — momentum keeps moving and glides to a stop.
@@ -146,60 +180,94 @@ pnpm install --frozen-lockfile   # fresh checkouts ship no node_modules
 pnpm build   # once per code change; also the de facto typecheck gate
 python3 .claude/skills/webapp-testing/scripts/with_server.py \
   --server "node_modules/.bin/next start" --port 3000 -- \
-  python3 <your-proof-script>.py
+  bash <your-proof>.sh          # or: python3 <your-proof>.py on the fallback
 ```
 
 Check the build's own exit code, not a piped tail — on a missing install
 `pnpm build` prints `next: not found` and a pipe can mask it. The doctor
-catches a stale-or-absent `.next` either way. Playwright for Python:
-`pip install playwright==1.56.0` (this sandbox pins Chromium 1194 at
-`/opt/pw-browsers`; never `playwright install`).
+catches a stale-or-absent `.next` either way.
+
+`pnpm install` provides the default driver at
+`node_modules/.bin/agent-browser` (pinned in `package.json`). For the
+Playwright fallback: `pip install playwright==1.56.0` (this sandbox pins
+Chromium 1194 at `/opt/pw-browsers`; never `playwright install`).
 
 `with_server.py` waits for the port, runs your script, and kills the
 server it started. Ready = port 3000 answers; `/` redirects (307) to
 `/calendar`. Strand cleanup: `pkill -9 -f "next[-]server"` (the brackets
-stop pkill matching itself). Each Playwright context is a fresh profile
-(fresh IndexedDB), so parallel pages never share a book; if 3000 is owned
-by a server you did not start, use `--port 3010`.
+stop pkill matching itself). If 3000 is owned by a server you did not
+start, use `--port 3010`.
+
+**Book isolation differs by driver.** Each Playwright context is a fresh
+profile, so parallel pages never share a book. agent-browser isolates by
+`--session` and a session's storage PERSISTS across invocations — a
+`--persona` run reuses the session `persona-<name>`, so yesterday's seeded
+book is still there. Start a proof with `ab close --all`, or use a
+one-off `--session <run-name>`, when the run depends on an empty book.
 
 ## Doctor
 
 ```sh
 python3 .claude/skills/verify-snippets/scripts/personas.py doctor
+.claude/skills/verify-snippets/scripts/ab doctor        # the driver itself
 ```
 
-Read-only. Reports whether the port answers and redirects, whether
-`.next/BUILD_ID` is stale against `src/`, whether a `next-server` orphan
-exists, and whether all four persona stubs hold on a live page. Any FAIL
-names its fix; exit 0 = worth driving.
+The first is read-only and app-aware. It reports whether the port answers
+and redirects, whether `.next/BUILD_ID` is stale against `src/`, whether a
+`next-server` orphan exists, and whether all four persona stubs hold on a
+live page. Any FAIL names its fix; exit 0 = worth driving.
+
+`ab doctor` checks the driver. Two of its FAILs are expected here and are
+not a problem: the Chrome for Testing CDN is blocked by the agent proxy
+(the wrapper supplies a browser instead), and `AI_GATEWAY_API_KEY` is
+unset (only the `chat` command needs it). "Launch test: pass" is the line
+that matters.
 
 ## Drive
 
 ### Personas
 
-```python
-import sys; sys.path.insert(0, ".claude/skills/verify-snippets/scripts")
-from personas import (ios_pwa_page, ios_safari_page, chrome_ios_page,
-                      android_chrome_page, persona_report)
+`scripts/ab` is the default driver. `--persona` sets the user agent and
+the pre-load stubs; the whole proof goes in one `batch`:
 
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    browser = p.chromium.launch()
-    page = ios_pwa_page(browser)   # or ios_safari_page / chrome_ios_page / android_chrome_page
-    page.goto("http://127.0.0.1:3000/calendar?seed=40&years=1", wait_until="load")
-    assert persona_report(page)["standalone"] is True   # assert the persona at the top of a proof
+```sh
+ab=.claude/skills/verify-snippets/scripts/ab
+$ab --persona ios-pwa batch --bail \
+  "set viewport 393 852" \
+  "open http://127.0.0.1:3000/calendar?seed=40&years=1" \
+  "wait 8000" \
+  "eval 'JSON.stringify({standalone: navigator.standalone, days: document.querySelectorAll(\"[data-day]\").length})'" \
+  "screenshot $EVIDENCE_DIR/ios-pwa.png"
 ```
 
-- `ios_pwa_page` — installed home-screen app: Safari UA, `standalone`
-  true, display-mode standalone, Web Speech present.
-- `ios_safari_page` — Safari tab: same UA, `standalone` false, Web Speech
-  present.
-- `chrome_ios_page` — iOS Chrome: `CriOS` UA, `standalone` false, **Web
-  Speech removed** (iOS Chrome has none; headless Chromium would leak it).
-- `android_chrome_page` — Android Chrome on real Blink: Android UA,
-  `platform` `Linux armv8l`, Web Speech present, `isIOS()` false.
-- **Desktop Chrome** — no persona; `p.chromium.launch()` with a desktop
-  viewport is the real Blink engine.
+**Assert the persona at the top of a proof.** Read `navigator.platform`,
+`navigator.standalone`, and the Web Speech globals before trusting a run.
+
+| `--persona` | Identity it asserts |
+| --- | --- |
+| `ios-pwa` | Installed home-screen app: Safari UA, `platform` `iPhone`, `standalone` true, display-mode standalone, Web Speech present |
+| `ios-safari` | Safari tab: same UA, `standalone` false, Web Speech present |
+| `chrome-ios` | iOS Chrome: `CriOS` UA, `standalone` false, **Web Speech removed** (iOS Chrome has none; headless Chromium would leak it) |
+| `android-chrome` | Android Chrome on real Blink: Android UA, `platform` `Linux armv8l`, Web Speech present, `isIOS()` false |
+
+Verified against the running app 2026-09-08: all four report exactly those
+values, and `ios-pwa` seeded and rendered 36 days / 40 entries.
+
+- **Desktop Chrome** — no persona; plain `ab` at a desktop viewport is the
+  real Blink engine.
+- **Stack extra stubs** (speech, failure injection) with more
+  `--init-script <path>` flags; the persona's own stubs live in
+  `scripts/personas/`.
+- **Playwright fallback.** `scripts/personas.py` keeps the same four
+  personas as Playwright page factories, for a proof that needs
+  `new_context()` isolation or a raw CDP session:
+
+  ```python
+  import sys; sys.path.insert(0, ".claude/skills/verify-snippets/scripts")
+  from personas import ios_pwa_page, persona_report
+  ```
+
+  Both paths inject the same stubs — keep them in step when either changes.
 - **Desktop Firefox (Gecko) — real lane, working.**
   `scripts/firefox_gecko.py` drives the app on real Firefox via
   geckodriver and self-provisions both: geckodriver from GitHub and
@@ -257,8 +325,17 @@ Prefer these stable handles; never coordinates or tab order.
 | `[data-cal-title]` | Calendar title — tap to rise to month view |
 | `[data-layer="month"] button[data-day-key="YYYY-MM-DD"]` | A day in month view — tap to dive |
 
+**Quote any argument containing a space.** `ab batch` re-splits each
+command string on spaces, so `button[aria-label="Keep today's entry"]` is
+truncated and reports "Element not found". Use a space-free selector
+(`button[aria-label^="Keep"]`) or single-quote the whole argument. The
+same rule applies to `eval`: write `eval 'JSON.stringify({a: 1})'`, since
+an unwrapped object literal also parses as a block.
+
 React-controlled textareas ignore `.value =`; set through the prototype
 setter then dispatch `input` (pattern in `tests/e2e/backfill_keep.py:29`).
+Under `ab`, register that setter as an `--init-script` and call it from
+`eval`.
 Ground truth for storage is IndexedDB: database `snippets`, store
 `snippets`, text in `.text` (readout in `backfill_keep.py:38`).
 
@@ -309,6 +386,10 @@ Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets}/<run-name>/`
 - `with_server.py` kills the server it started; otherwise kill only what
   you started, by PID. The one sanctioned name-kill is `pkill -9 -f
   "next[-]server"`, after a doctor run shows the orphan is real.
+- `ab` runs leave a browser and a daemon alive on purpose, so a session
+  survives to the next invocation. End a proof with `ab close --all`, or
+  `ab --session <name> close` to end only yours. A stale daemon reports
+  `--args ignored: daemon already running`; `ab close --all` clears it.
 - WebKit runs: `DELETE /session/<id>`, then kill the
   `WebKitWebDriver`/`MiniBrowser` pair you spawned.
 - Seeded books live in throwaway profiles; nothing to clean.
@@ -316,8 +397,12 @@ Every proof writes to `${EVIDENCE_DIR:-/tmp/verify-snippets}/<run-name>/`
 
 ## Helpers
 
-- `scripts/personas.py` — the four personas + `persona_report` + `doctor`
-  mode. Executable.
+- `scripts/ab` — **the default driver.** agent-browser with this sandbox's
+  settings baked in, plus `--persona`. Executable.
+- `scripts/personas/*.js` — the persona pre-load stubs `ab --persona`
+  injects. Mirror `personas.py`; keep the two in step.
+- `scripts/personas.py` — the Playwright fallback: the same four personas
+  as page factories, plus `persona_report` and `doctor` mode. Executable.
 - `scripts/webkit_wheel_scroll.py` — trusted wheel scroll of the book feed
   on real WebKit, asserting the warm window follows. Needs the WebKitGTK
   driver and app server up.
