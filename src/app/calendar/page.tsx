@@ -6143,7 +6143,8 @@ function FlowBackfillCapture({
         keepAbortedRef.current = true;
         if (heldKeepRef.current === id) heldKeepRef.current = null;
         draftStore?.release(id);
-        draftStore?.clear(day);
+        // onlyId: a late reject must not clear a newer keep's draft for this day
+        draftStore?.clear(day, id);
         submittingRef.current = false; // the words are back — a retry must be allowed
         // the write never landed, so the day is still genuinely empty —
         // showComposer's own snippets.length===0 clause already covers it
@@ -7613,7 +7614,8 @@ function TodayZoneFill({
         // why. Never a silent loss.
         keepAbortedRef.current = true;
         draft?.release(id);
-        draft?.clear(day);
+        // onlyId: a late reject must not clear a newer keep's draft for this day
+        draft?.clear(day, id);
         clearTimers();
         settleCancel.current?.();
         settleCancel.current = null;

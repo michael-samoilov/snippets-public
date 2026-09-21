@@ -306,6 +306,18 @@ export async function snippetsForDay(day: string): Promise<Snippet[]> {
   return rows.filter(notDeleted);
 }
 
+/**
+ * Soft-deleted entries still on this device (inside the 30-day purge window).
+ * Newest let-go first. Settings offers these back — the undo toast is only a
+ * few seconds; this is the longer local recovery before purgeOldDeleted.
+ */
+export async function listSoftDeleted(): Promise<Snippet[]> {
+  const rows = await db.snippets
+    .filter((s) => s.deletedAt !== undefined)
+    .toArray();
+  return rows.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+}
+
 export async function allSnippetsNewestFirst(): Promise<Snippet[]> {
   const rows = await db.snippets.orderBy("capturedAt").reverse().toArray();
   return rows.filter(notDeleted);

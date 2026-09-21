@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ThemeProvider, useTheme } from "next-themes";
 import { MotionConfig } from "motion/react";
 import { Toaster } from "@/components/ui/sonner";
@@ -8,7 +8,11 @@ import { db, purgeOldDeleted } from "@/lib/db";
 import { checkStorageHealth } from "@/lib/storage-health";
 import { startSync } from "@/lib/sync";
 import { useSession } from "@/lib/auth";
-import { KeptDraftContext, type KeptDraftStore } from "@/lib/kept-draft";
+import {
+  KeptDraftContext,
+  clearDayDraft,
+  type KeptDraftStore,
+} from "@/lib/kept-draft";
 import { useZoomRelief } from "@/hooks/use-zoom-relief";
 import type { Snippet } from "@/lib/types";
 
@@ -114,6 +118,38 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // ids written at submit whose live row must stay invisible until the seal
   // choreography's beat reveals it (see KeptDraftStore.heldIds)
   const [heldIds, setHeldIds] = useState<Set<string>>(() => new Set());
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+  // Fail-open for stranded holds: between submit and carding there is no draft
+  // yet (intentional). Past the press window a hold with no covering draft is
+  // the BACKLOG-25 bug — the live row stays filtered out of ScheduleCards.
+  // Release orphans so a saved entry cannot stay invisible for the rest of the
+  // session. KEEP_BEATS.pressMs is 1700; 4s leaves headroom without feeling stuck.
+  useEffect(() => {
+    if (heldIds.size === 0) return;
+    const covered = new Set(
+      Object.values(drafts).map((d) => d.id),
+    );
+    const orphans = [...heldIds].filter((id) => !covered.has(id));
+    if (orphans.length === 0) return;
+    const t = window.setTimeout(() => {
+      const stillCovered = new Set(
+        Object.values(draftsRef.current).map((d) => d.id),
+      );
+      setHeldIds((h) => {
+        let changed = false;
+        const n = new Set(h);
+        for (const id of orphans) {
+          if (n.has(id) && !stillCovered.has(id)) {
+            n.delete(id);
+            changed = true;
+          }
+        }
+        return changed ? n : h;
+      });
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [heldIds, drafts]);
   const draftStore = useMemo<KeptDraftStore>(
     () => ({
       drafts,
@@ -139,17 +175,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
           return n;
         });
       },
-      clear: (day) => {
-        setDrafts((d) => {
-          const n = { ...d };
-          delete n[day];
-          return n;
-        });
-        // drop the morph flag in lockstep (both setStates batch in one commit)
+      clear: (day, onlyId) => {
+        const { next, clearedId } = clearDayDraft(drafts, day, onlyId);
+        if (!clearedId) return;
+        setDrafts(next);
         setMorphDays((m) => {
           if (!m.has(day)) return m;
           const n = new Set(m);
           n.delete(day);
+          return n;
+        });
+        setHeldIds((h) => {
+          if (!h.has(clearedId)) return h;
+          const n = new Set(h);
+          n.delete(clearedId);
           return n;
         });
       },

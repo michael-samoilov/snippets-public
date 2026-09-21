@@ -53,7 +53,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Current state (as of 2026-07-23)
+## Current state (as of 2026-09-21)
 
 ### Can we read your entries?
 - **No.** Signed out: entries live only in this browser's IndexedDB and
@@ -161,16 +161,17 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ### Leaving
 - Erase-all is permanent — there is no in-app undo for it (unlike a single
-  delete, which has a 10-second local undo toast). It soft-deletes
-  everywhere (propagates as tombstones), and a delivering device empties
-  the Drive backup on its next run. The permanent part is the tombstone
-  (id + timestamps, no words), kept forever server-side — that permanence,
-  not the payload, is what stops resurrection. The encrypted payload lingers
-  ≤30 days, then the cron scrubs it. That window feeds no feature today
-  (single undo reads the local row, not the server; no restore-erased UI
-  exists), so it is only a grace period before destruction and future
-  optionality for a restore feature; the plumbing (payload-carrying pull +
-  `restoreSnippet`) already exists. `PURGE_AFTER_MS` (client) and
+  delete, which has a short local undo toast AND a Settings recovery list).
+  It soft-deletes everywhere (propagates as tombstones), and a delivering
+  device empties the Drive backup on its next run. The permanent part is the
+  tombstone (id + timestamps, no words), kept forever server-side — that
+  permanence, not the payload, is what stops resurrection. On the device, a
+  soft-deleted row keeps its words until `purgeOldDeleted` (`PURGE_AFTER_MS`,
+  30 days); Settings → "Recently let go" (`listSoftDeleted` +
+  `restoreSnippet`) brings one back during that window. The encrypted
+  server payload lingers ≤30 days then the cron scrubs it — that server
+  window is still only a grace period before destruction (no
+  restore-from-server UI). `PURGE_AFTER_MS` (client) and
   `TOMBSTONE_SCRUB_AFTER_MS` (server) are the paired 30-day constants; the
   privacy copy's "within 30 days" must move with them.
   Account deletion removes the account, synced entries + tombstones,
@@ -223,6 +224,14 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-09-21 — soft-deleted entries recover from Settings for 30 days
+A single delete still raises the short undo toast. Soft-deleted rows keep
+their words on this device until `purgeOldDeleted` (30 days); Settings →
+"Recently let go" (`listSoftDeleted` + `restoreSnippet`) now lists them
+and brings one back. The server payload scrub window stays a grace period
+only (no restore-from-server UI). Surfaces: Settings data section,
+`SECURITY-STATE` Leaving bullet, `copy.settings.data.recentlyLetGo*`.
 
 ### 2026-08-18 — the format-3 re-seal rule now rides every server-row adoption
 Legacy rows (plaintext format 1, AAD-less format 2) converge to format 3
