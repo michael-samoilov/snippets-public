@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useTheme } from "next-themes";
 import { format, isToday, isYesterday } from "date-fns";
+import { useLiveQuery } from "dexie-react-hooks";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -21,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { eraseAll } from "@/lib/db";
+import { eraseAll, listSoftDeleted, restoreSnippet } from "@/lib/db";
 import { replaceUrl } from "@/lib/history";
 import { getBookKey, refreshEnrollment, unlock } from "@/lib/e2e";
 import {
@@ -453,6 +454,7 @@ export default function SettingsPage() {
             />
           </div>
           <StorageLine signedIn={!!user} />
+          <RecentlyLetGo />
         </section>
 
         <DangerZone user={user} />
@@ -528,6 +530,55 @@ function AgreementLink({
         <polyline points="9 6 15 12 9 18" />
       </svg>
     </Link>
+  );
+}
+
+/**
+ * Soft-deleted entries still on this device (inside the 30-day purge window).
+ * The let-go toast is only a few seconds; this is the longer local recovery.
+ * Hidden when the list is empty so Settings stays quiet for a clean book.
+ */
+function RecentlyLetGo() {
+  const gone = useLiveQuery(() => listSoftDeleted(), []);
+  if (!gone || gone.length === 0) return null;
+  return (
+    <div className="mt-8">
+      <SectionHeading>{copy.settings.data.recentlyLetGo}</SectionHeading>
+      <p className="voice-prose-sm mt-4">
+        {copy.settings.data.recentlyLetGoLead}
+      </p>
+      <ul className="mt-4 space-y-3">
+        {gone.map((s) => {
+          const preview =
+            s.text.trim().slice(0, 80) + (s.text.trim().length > 80 ? "…" : "");
+          const letGoDay = s.deletedAt
+            ? format(s.deletedAt, "d MMM")
+            : s.day;
+          return (
+            <li
+              key={s.id}
+              className="flex items-start justify-between gap-3 border-t border-rule-faint pt-3"
+            >
+              <div className="min-w-0">
+                <p className="voice-prose-sm truncate">{preview || "…"}</p>
+                <p className="voice-data mt-1 text-ink-faint">
+                  {copy.settings.data.recentlyLetGoMeta(s.day, letGoDay)}
+                </p>
+              </div>
+              <PaperButton
+                onClick={() => {
+                  void restoreSnippet(s.id).then(() =>
+                    toast(copy.settings.data.recentlyLetGoRestored),
+                  );
+                }}
+              >
+                {copy.settings.data.recentlyLetGoRestore}
+              </PaperButton>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

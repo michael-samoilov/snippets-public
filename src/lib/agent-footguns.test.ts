@@ -82,4 +82,29 @@ describe("agent-footgun guards", () => {
         "do not reintroduce the /api/enrich route, enrich.ts, or a caller.",
     ).toEqual([]);
   });
+
+  it("keep-abort clears name the keep's id so a newer draft is not dropped", () => {
+    // Drafts are keyed by day. A late-failed keep that called clear(day) with
+    // no id wiped a newer keep's draft for the same day; the newer row stayed
+    // in heldIds and vanished from the book while remaining in IndexedDB.
+    // Abort paths must pass the aborted id: clear(day, id).
+    const calendar = join(SRC, "app/calendar/page.tsx");
+    const src = readFileSync(calendar, "utf8");
+    // Find catch blocks that touch clear( — each must pass a second arg.
+    const abortClears = [
+      ...src.matchAll(
+        /\.catch\([\s\S]*?\.clear\(\s*day\s*(?:,\s*id)?\s*\)/g,
+      ),
+    ].map((m) => m[0]);
+    const unscoped = abortClears.filter((block) => !/\.clear\(\s*day\s*,\s*id\s*\)/.test(block));
+    expect(
+      unscoped,
+      "a keep abort's clear(day) must pass the aborted id (clear(day, id)) " +
+        "so it cannot drop a newer keep's draft for the same day.",
+    ).toEqual([]);
+    expect(
+      abortClears.length,
+      "expected at least the backfill + today-zone abort clears",
+    ).toBeGreaterThanOrEqual(2);
+  });
 });

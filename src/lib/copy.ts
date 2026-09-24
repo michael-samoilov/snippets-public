@@ -622,6 +622,15 @@ export const copy = {
       exportMarkdown: "Export Markdown",
       restore: "Restore from JSON…",
       eraseAll: "Let everything go…",
+      /** soft-deleted rows still on this device (30-day purge window) */
+      recentlyLetGo: "Recently let go",
+      recentlyLetGoLead:
+        "Entries you let go stay on this device for 30 days. Bring one back here.",
+      recentlyLetGoRestore: "Bring back",
+      recentlyLetGoRestored: "Brought back.",
+      /** day key of the entry, then the day it was let go */
+      recentlyLetGoMeta: (entryDay: string, letGoDay: string) =>
+        `${entryDay} · let go ${letGoDay}`,
     },
     about: {
       heading: "About",
