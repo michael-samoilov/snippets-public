@@ -25,6 +25,8 @@ const TECH_COPY_PATHS = [
   "settings.sync",
   "settings.encryption",
   "settings.backup",
+  // the watchdog email explains the same causes in the same register
+  "backupEmail",
   "settings.data",
   "settings.agreement",
   "settings.protection",

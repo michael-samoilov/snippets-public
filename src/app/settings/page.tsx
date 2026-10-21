@@ -1016,6 +1016,9 @@ function BackupSection() {
         // that bad copy in place. After a settled cycle the local book is
         // level with the server — the fullest copy there is.
         await adoptDriveToken();
+        // the mount-time probe can predate this adoption; the "behind"
+        // line names THIS device as the one delivering only if it is
+        setDeviceHasToken(await hasDriveToken());
       } catch {
         setError(copy.settings.backup.connectFailed);
       } finally {
@@ -1093,23 +1096,60 @@ function BackupSection() {
     action = connectButton(
       health === "off" ? copy.settings.backup.reconnect : copy.settings.backup.connect,
     );
-  } else if (health === "failing") {
-    // failing — a reported error, or quiet-too-long while entries pile up
+  } else if (health === "failing" || health === "behind") {
+    // failing: a device reported why (the ledger's cause). behind: no
+    // report at all, just a quiet ledger while entries piled up. Each
+    // names what was observed and the one action that resolves it;
+    // "Reconnect" appears only where reconnecting can help
+    const cause =
+      health === "behind" ? "behind" : (backup?.failure ?? "unknown");
+    const lines = copy.settings.backup.failures[cause];
+    const since = backup?.lastSuccessAt
+      ? format(new Date(backup.lastSuccessAt), "MMMM d")
+      : null;
+    const fix =
+      cause !== "behind"
+        ? lines.fix
+        : deviceHasToken === true
+          ? copy.settings.backup.failures.behind.fix
+          : deviceHasToken === false
+            ? copy.settings.backup.failures.behind.fixElsewhere
+            : null;
     statusLine = (
-      <ProtRow
-        glyph={<FolderGlyph />}
-        word={p.backupFailing}
-        sub={
-          backup?.lastSuccessAt
-            ? copy.settings.backup.failingSince(
-                format(new Date(backup.lastSuccessAt), "MMMM d"),
-              )
-            : copy.settings.backup.failingNoSuccess
-        }
-        state="attention"
-      />
+      <div className="space-y-3">
+        <ProtRow
+          glyph={<FolderGlyph />}
+          word={health === "behind" ? p.backupBehind : p.backupFailing}
+          sub={
+            health === "behind" && since
+              ? copy.settings.backup.behindSince(since)
+              : since
+                ? copy.settings.backup.failingSince(since)
+                : copy.settings.backup.failingNoSuccess
+          }
+          state="attention"
+        />
+        <p className="voice-prose-sm">{lines.cause}</p>
+        {cause === "unknown" && backup?.failureDetail && (
+          // Google's own words, verbatim: the only honest account of a
+          // cause Snippets can't name
+          <p className="voice-data break-words text-ink-soft">
+            {backup.failureDetail}
+          </p>
+        )}
+        {fix && <p className="voice-prose-sm">{fix}</p>}
+      </div>
     );
-    action = connectButton(copy.settings.backup.reconnect);
+    action =
+      cause === "revoked" || cause === "scope" || cause === "unknown" ? (
+        connectButton(copy.settings.backup.reconnect)
+      ) : cause === "storage" ? (
+        <PaperButton href="https://one.google.com/storage">
+          {copy.settings.backup.manageStorage}
+        </PaperButton>
+      ) : cause === "behind" && deviceHasToken === false ? (
+        connectButton(copy.settings.backup.connectHere)
+      ) : null;
   } else {
     // fresh, or pending its first delivery
     statusLine = (

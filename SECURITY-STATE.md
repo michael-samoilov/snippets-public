@@ -53,7 +53,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Current state (as of 2026-09-21)
+## Current state (as of 2026-10-21)
 
 ### Can we read your entries?
 - **No.** Signed out: entries live only in this browser's IndexedDB and
@@ -126,6 +126,13 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   folder). The server holds no Drive tokens and never carries the files.
 - **Do not encrypt these files.** Enforcement: `src/lib/backup-client.ts`,
   `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`.
+- **A failed delivery reports one line, no entry content:** its source and
+  Google's error code and message (`failureLine` in `backup-client.ts` →
+  `/api/backup/failed` → `backup_status.last_error`, 500 characters at
+  most). `classifyBackupError` reads it back into a cause that Settings and
+  the watchdog email print; Google's raw message is shown only for a cause
+  Snippets doesn't recognize. `/api/backup/refresh` returns Google's
+  token-endpoint error code with its 502/401, never a token.
 
 ### What leaves the app, ever (the CSP allowlist)
 - Every production page ships a strict `Content-Security-Policy` whose
@@ -224,6 +231,17 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-10-21 — backup failures name their cause
+The failure line a device reports now carries Google's own error code
+(`DriveError`, `RefreshError`), and the status route returns the cause
+`classifyBackupError` reads from it. Settings → Backup prints that cause
+and its fix; the watchdog email does the same and counts days instead of
+printing a UTC date. Still content-free. A 401 for an expired Snippets
+session no longer deletes the device's Drive token; only Google's
+`invalid_grant` does. Surfaces: Settings backup section,
+`copy.settings.backup.failures`, `copy.backupEmail`, the "Google Drive
+backup" row above.
 
 ### 2026-09-21 — soft-deleted entries recover from Settings for 30 days
 A single delete still raises the short undo toast. Soft-deleted rows keep

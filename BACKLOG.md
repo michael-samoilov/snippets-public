@@ -652,8 +652,7 @@ doDelete already has.
 From the audit (S07). The ledger's `state` is a fleet-wide last-writer
 slot: `delivered` lacks the `ne(state,'disconnected')` guard `failed`
 has, so a delivery in flight during a disconnect silently re-enables
-backups everywhere. `STALE_AFTER_DAYS` exists twice (backup-shared
-exports it; the cron re-declares the literal) and the two derivations
+backups everywhere. The two derivations
 of "failing" disagree — device B's dead grant marks the ledger error
 while device A's fresh delivery proves the Drive copy current, and
 Settings prints "haven't gone through since today". Split owner intent
@@ -672,7 +671,10 @@ boolean with a `navigator.locks` request so two tabs cannot upload
 duplicate archives into the key-loss safety net. Do NOT gate delivery
 on `behind`: copy.ts promises a deleted Drive file is set right by the
 next delivery, and only the unconditional hourly re-upload keeps that
-promise. Fix the docstring, not the behavior.
+promise. (2026-10-21: `behind` now *bypasses* the hourly gap, so an
+entry saved within the hour after a delivery goes out on the next sync
+instead of waiting for the next session; the cron imports
+`STALE_AFTER_DAYS`, and a quiet ledger reads "behind", not "failing".)
 
 ## 25. The keep-run record, and the one keep protocol
 

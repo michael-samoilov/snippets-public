@@ -276,13 +276,19 @@ and without an explicit exclude; both saw zero files under `.claude/`.
   and Drive writes converge by name, no duplicates. The device
   reports deliveries
   (`/api/backup/delivered`) AND failures (`/api/backup/failed` →
-  ledger state `error`); Settings derives its line via
-  `backupHealth()` (`backup-shared.ts`, unit-tested) — "failing" is
-  a reported error OR a ledger quiet past 3 days while the book
-  moved (`behind` flag from `/api/sync/status`), which catches the
-  vanished-device case no report can reach. The daily cron
-  (`CRON_SECRET`, vercel.json) is a watchdog only — stale ledger +
-  moving book → one email per silence — plus the tombstone
+  ledger state `error`, one line carrying Google's own error code);
+  Settings derives its line via `backupHealth()` (`backup-shared.ts`,
+  unit-tested) — "failing" is a reported error, named by
+  `classifyBackupError` with its own fix and action (never a blanket
+  "Reconnect": it can't fix a full Drive); "behind" is a ledger quiet
+  past 3 days while the book moved (`behind` flag from
+  `/api/sync/status`), the vanished-device case no report can reach.
+  New entries bypass the hourly delivery gap, and the Settings line
+  re-reads the ledger after each delivery.
+  `tests/e2e/backup_failures.py` observes every cause end to end. The
+  daily cron (`CRON_SECRET`, vercel.json) is a watchdog only — stale
+  ledger + moving book → one email per silence, naming the same cause
+  and fix (`backupEmail`) — plus the tombstone
   scrubber, plus an ops storage watchdog (`pg_database_size` vs the
   Neon free-tier 0.5 GB cap → emails `OPS_ALERT_EMAIL` past ~70%, so
   the owner upgrades before writes are refused; capture stays

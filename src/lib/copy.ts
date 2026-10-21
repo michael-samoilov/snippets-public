@@ -444,6 +444,8 @@ export const copy = {
       backedUpSub: (when: string) => `Sent to your Drive · ${when}`,
       backupFirstSub: "The first delivery is on its way…",
       backupFailing: "Backup failing",
+      /** quiet past the stale window with new entries, and no failure reported */
+      backupBehind: "Backup behind",
       backupOff: "Backup off",
       backupOffSub: "Connect Google Drive for a readable copy.",
     },
@@ -560,6 +562,84 @@ export const copy = {
       /** e.g. "Backups haven’t gone through since June 30." */
       failingSince: (when: string) => `Backups haven’t gone through since ${when}.`,
       failingNoSuccess: "Backups haven’t gone through yet.",
+      /** the "behind" readout: nothing failed, nothing was sent either */
+      behindSince: (when: string) => `Last sent to your Drive · ${when}`,
+      /**
+       * Why the last delivery failed, one entry per cause the device can
+       * observe (BackupFailure in backup-shared.ts), plus `behind` for a
+       * ledger that went quiet with no report. Each line states only what
+       * Google or the device reported. `fix` sits beside the Settings
+       * action; `emailFix` stands alone in the watchdog email, so it says
+       * where to go.
+       */
+      failures: {
+        revoked: {
+          cause:
+            "Google no longer accepts the permission Snippets uses to save to your Drive. Access was removed in your Google account, or the permission expired.",
+          fix: "Reconnect Google Drive to start backups again.",
+          emailFix:
+            "In Snippets, open Settings → Backup and tap “Reconnect Google Drive.”",
+        },
+        scope: {
+          cause:
+            "Google let you sign in but didn’t give Snippets permission to save files in your Drive.",
+          fix: "Reconnect Google Drive and leave the Drive box ticked.",
+          emailFix:
+            "In Snippets, open Settings → Backup, tap “Reconnect Google Drive,” and leave the Drive box ticked.",
+        },
+        storage: {
+          cause: "Your Google Drive is full, so Google refused the copy.",
+          fix: "Free up space or add storage in your Google account. Snippets tries again each time it syncs.",
+          emailFix:
+            "Free up space or add storage in your Google account. Snippets tries again each time it syncs.",
+        },
+        rateLimit: {
+          cause:
+            "Google limited how often Snippets can save to your Drive.",
+          fix: "You don’t need to do anything. Snippets tries again each time it syncs.",
+          emailFix:
+            "Open Snippets and it tries again. You don’t need to change anything.",
+        },
+        google: {
+          cause: "Google Drive had a problem on its side and didn’t save the copy.",
+          fix: "You don’t need to do anything. Snippets tries again each time it syncs.",
+          emailFix:
+            "Open Snippets and it tries again. You don’t need to change anything.",
+        },
+        network: {
+          cause:
+            "The connection to Google Drive ended before the copy finished. This happens offline, or when Snippets closes during a delivery.",
+          fix: "Snippets tries again each time it syncs. Leave it open until this line says “Backed up.”",
+          emailFix:
+            "Open Snippets on a working connection and leave it open until Settings → Backup says “Backed up.”",
+        },
+        server: {
+          cause:
+            "Snippets couldn’t get access to Google Drive. That’s on our side, not yours.",
+          fix: "You don’t need to do anything. Snippets tries again each time it syncs.",
+          emailFix:
+            "Open Snippets and it tries again. You don’t need to change anything.",
+        },
+        unknown: {
+          cause: "Google Drive refused the copy with a message Snippets doesn’t recognize.",
+          fix: "Try reconnecting Google Drive. If backups still fail, send the message to snippets.support@gmail.com.",
+          emailFix:
+            "In Snippets, open Settings → Backup and tap “Reconnect Google Drive.” If backups still fail, send the message to snippets.support@gmail.com.",
+        },
+        behind: {
+          cause:
+            "Newer entries haven’t reached your Drive. Copies go out only while Snippets is open on a device that backs up.",
+          /** this device holds a Drive grant: it is delivering right now */
+          fix: "This device backs up. Leave Snippets open until this line says “Backed up.”",
+          /** this device holds none: add it, or open one that does */
+          fixElsewhere:
+            "This device doesn’t back up yet. Add it, or open Snippets on a device that does.",
+          emailFix:
+            "Open Snippets on a device that backs up, and leave it open until Settings → Backup says “Backed up.” To add a device, open Settings → Backup on it and tap “Back up from this device too.”",
+        },
+      },
+      /** the storage fix's link, to Google's own storage page */
+      manageStorage: "Manage Google storage",
       reconnect: "Reconnect Google Drive",
       /** the danger-zone-style title + description that head the disconnect button */
       disconnectTitle: "Disconnect Google Drive",
@@ -655,6 +735,25 @@ export const copy = {
       importFailed: "That file couldn’t be read.",
       erased: "The page is blank again.",
     },
+  },
+
+  /**
+   * The watchdog email (api/cron/backup), one per silence. It reuses
+   * settings.backup.failures for the cause, so the email and Settings
+   * can't tell two stories. A day count, not a date: the server doesn't
+   * know the reader's time zone, and a UTC date once read a day later
+   * than Settings.
+   */
+  backupEmail: {
+    subjectBehind: "Your Snippets Drive copy is falling behind",
+    subjectFailing: "Your Snippets Drive backup is failing",
+    headline: (days: number) =>
+      `Nothing has reached your Google Drive for ${days} days, and newer entries are waiting.`,
+    headlineNever:
+      "Nothing has reached your Google Drive since you connected it, and entries are waiting.",
+    why: (cause: string) => `Why: ${cause}`,
+    detail: (line: string) => `Google’s message: ${line}`,
+    whatToDo: (fix: string) => `What to do: ${fix}`,
   },
 
   /** data import/export errors surfaced to the reader */

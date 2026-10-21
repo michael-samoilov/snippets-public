@@ -243,8 +243,14 @@ async function runCycle(): Promise<void> {
     writeSyncState({ lastSyncedAt: now });
     retryAttempt = 0;
     setStatus({ phase: "idle", lastSyncedAt: now });
-    // the book is settled on the server — a fresh copy can go to Drive
-    void maybeDeliverBackup(status.backup);
+    // the book is settled on the server — a fresh copy can go to Drive.
+    // A delivery or a failure rewrites the ledger, so re-read it: the
+    // Settings line otherwise kept the verdict fetched BEFORE the
+    // delivery (2026-10-21: "Backup failing" on screen while the copy
+    // landed in Drive the same minute)
+    void maybeDeliverBackup(status.backup).then((outcome) =>
+      outcome === "skipped" ? undefined : refreshCounts().catch(() => {}),
+    );
   } catch (error) {
     if (error instanceof SignedOut) {
       // session gone (expired, signed out elsewhere) — say so, or pending

@@ -16,7 +16,7 @@
 import { db, getMeta, setMeta, deleteMeta, notDeleted } from "@/lib/db";
 import { readSyncState } from "@/lib/sync-state";
 import { renderArchiveJSON, renderMarkdown, sortNewestFirst } from "@/lib/render-book";
-import { ensureFolder, upsertFile, DriveTokenRevoked } from "@/lib/drive-client";
+import { ensureFolder, upsertFile, DriveError } from "@/lib/drive-client";
 import type { BackupStatusSummary } from "@/lib/sync-wire";
 
 const REFRESH_TOKEN_META = "drive:refreshToken";
@@ -55,19 +55,36 @@ export async function adoptDriveToken(): Promise<
   return "adopted";
 }
 
+/** The token exchange failed; the message is the ledger's canonical line. */
+class RefreshError extends Error {}
+
+/**
+ * The ledger's one line for a failure: the source, then Google's own
+ * code where there is one. classifyBackupError (backup-shared) reads
+ * it on the server, so Settings and the email name the cause that was
+ * observed here and never a guess.
+ */
+function failureLine(error: unknown): string {
+  if (error instanceof DriveError || error instanceof RefreshError)
+    return error.message;
+  // fetch rejects with a TypeError only when no answer arrived at all:
+  // offline, a dropped connection, or iOS suspending a closed app
+  if (error instanceof TypeError) return `network: ${error.message}`;
+  return `error: ${error instanceof Error ? error.message : String(error)}`;
+}
+
 /**
  * Tell the ledger a delivery failed, so every device's Settings can
- * say so (and the watchdog email has company). Content-free: only an
- * error message travels. Best-effort — a failure to report a failure
- * just leaves the ledger stale, which the staleness check still catches.
+ * say why (and the watchdog email has company). Content-free: only
+ * the failure line travels. Best-effort — a failure to report a
+ * failure just leaves the ledger stale, which the staleness check
+ * still catches.
  */
 async function reportBackupFailure(error: unknown): Promise<void> {
-  const message =
-    error instanceof Error ? error.message : String(error ?? "unknown");
   await fetch("/api/backup/failed", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ error: message.slice(0, 500) }),
+    body: JSON.stringify({ error: failureLine(error).slice(0, 500) }),
   }).catch(() => {});
 }
 
@@ -82,18 +99,28 @@ async function accessToken(): Promise<string> {
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
   const refreshToken = await getMeta<string>(REFRESH_TOKEN_META);
-  if (!refreshToken) throw new DriveTokenRevoked("no refresh token on device");
+  if (!refreshToken) throw new RefreshError("no refresh token on device");
 
   const response = await fetch("/api/backup/refresh", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refreshToken }),
   });
-  if (response.status === 401) {
-    await deleteMeta(REFRESH_TOKEN_META);
-    throw new DriveTokenRevoked("grant revoked");
+  if (!response.ok) {
+    // SAFETY: all optional and only interpolated; an unexpected body
+    // still yields a "refresh <status> -:" line the classifier reads
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      google?: string;
+      description?: string;
+    };
+    // only Google's invalid_grant ends the grant; a 401 for an expired
+    // Snippets session must not throw away a token that still works
+    if (body.error === "revoked") await deleteMeta(REFRESH_TOKEN_META);
+    throw new RefreshError(
+      `refresh ${response.status} ${body.google ?? body.error ?? "-"}: ${body.description ?? ""}`,
+    );
   }
-  if (!response.ok) throw new Error(`refresh ${response.status}`);
   const data = (await response.json()) as {
     accessToken: string;
     expiresIn: number;
@@ -154,43 +181,58 @@ export async function deliverBackup(): Promise<void> {
 }
 
 /**
- * Called after each settled sync cycle. Delivers when connected, the
- * book has moved past the ledger, and the last delivery isn't fresh.
- * Failures surface through the ledger (state stays stale → Settings
- * line + watchdog email), never a dialog.
+ * Called after each settled sync cycle. Delivers when connected and
+ * either the book has moved past the ledger or the last delivery is
+ * over an hour old (the unconditional re-upload is what sets a
+ * hand-edited Drive file right again). Failures surface through the
+ * ledger (Settings line + watchdog email), never a dialog. The outcome
+ * tells the sync engine whether the ledger changed under Settings.
  */
 export async function maybeDeliverBackup(
   backup: BackupStatusSummary | null,
-): Promise<void> {
-  if (delivering) return;
-  if (!backup || backup.state === "disconnected") return;
+): Promise<"delivered" | "failed" | "skipped"> {
+  if (delivering) return "skipped";
+  if (!backup || backup.state === "disconnected") return "skipped";
   if (!(await hasDriveToken())) {
     // a device connected before delivery moved client-side (or a fresh
     // one) adopts the server-held token once; if the server has none to
     // give — already adopted on another device — this device won't
     // deliver until the writer adds it (Settings → "Back up from this
     // device too" mints it a grant of its own; every added device delivers)
-    if (adoptSettled) return;
+    if (adoptSettled) return "skipped";
     const adoption = await adoptDriveToken().catch(
       () => "transient" as const,
     );
     if (adoption === "none") {
       adoptSettled = true; // definitive — stop asking this session
-      return;
+      return "skipped";
     }
-    if (adoption !== "adopted") return; // transient — ask again next cycle
+    if (adoption !== "adopted") return "skipped"; // transient — ask again next cycle
   }
 
+  // New entries never wait out the hourly gap. They used to: an entry
+  // saved within the hour after a delivery stayed out of Drive until
+  // the next session, so a few days away read as "Backup failing" and
+  // sent the watchdog email for a working backup (2026-10-17 → 10-20).
   const last = (await getMeta<number>(LAST_DELIVERY_META)) ?? 0;
-  if (Date.now() - last < MIN_DELIVERY_GAP_MS) return;
+  if (!backup.behind && Date.now() - last < MIN_DELIVERY_GAP_MS) return "skipped";
 
   delivering = true;
   try {
-    await deliverBackup();
+    await deliverBackup().catch(async (error: unknown) => {
+      if (!(error instanceof DriveError && error.status === 401)) throw error;
+      // Drive stopped honoring the cached access token. One fresh
+      // exchange settles whether the grant itself is gone (invalid_grant)
+      // before the ledger is told so
+      await deleteMeta(ACCESS_TOKEN_META);
+      await deliverBackup();
+    });
+    return "delivered";
   } catch (error) {
-    // the ledger hears about it, so Settings (on every device) can say
-    // "Backups haven't gone through since…" instead of a stale calm line
-    void reportBackupFailure(error);
+    // the ledger hears why, so Settings (on every device) and the
+    // watchdog email can name the cause instead of a stale calm line
+    await reportBackupFailure(error);
+    return "failed";
   } finally {
     delivering = false;
   }

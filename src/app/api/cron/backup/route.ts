@@ -13,15 +13,14 @@
  * concern, since capture is local-first, but the owner's to act on.
  */
 import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
-import { format } from "date-fns";
 import { serverDb, schema } from "@/server/db";
 import { sendEmail } from "@/server/email";
+import { backupEmail, STALE_AFTER_DAYS } from "@/lib/backup-shared";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const TOMBSTONE_SCRUB_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
-const STALE_AFTER_DAYS = 3;
 
 // Neon free tier: 0.5 GB storage. Warn the owner well before the wall so
 // there's room to upgrade (or prune) in hand. Runs once a day with the
@@ -58,6 +57,8 @@ export async function GET(request: Request) {
       lastBackedUpSeq: schema.backupStatus.lastBackedUpSeq,
       lastSuccessAt: schema.backupStatus.lastSuccessAt,
       failureNotifiedAt: schema.backupStatus.failureNotifiedAt,
+      state: schema.backupStatus.state,
+      lastError: schema.backupStatus.lastError,
       email: schema.user.email,
       maxSeq: sql<number>`coalesce((select max(server_seq) from snippets where snippets.user_id = ${schema.backupStatus.userId}), 0)`,
     })
@@ -77,18 +78,9 @@ export async function GET(request: Request) {
   for (const row of stale) {
     if (Number(row.maxSeq) <= row.lastBackedUpSeq) continue; // book hasn't moved
     if (row.failureNotifiedAt) continue; // one email per silence
-    const since = row.lastSuccessAt
-      ? format(row.lastSuccessAt, "MMMM d")
-      : "it was connected";
     await sendEmail({
       to: row.email,
-      subject: "Your Snippets Drive copy is falling behind",
-      text: [
-        `You have new entries, but nothing has been delivered to your Google Drive since ${since}.`,
-        "",
-        "Deliveries run from your own devices — open Snippets on one where you've connected Google Drive and the copy refreshes itself.",
-        "Any signed-in device can deliver: open Settings → Backup on the device you use and tap “Back up from this device too.”",
-      ].join("\n"),
+      ...backupEmail(row, Date.now()),
     }).catch(() => {});
     await serverDb
       .update(schema.backupStatus)
@@ -142,3 +134,4 @@ export async function GET(request: Request) {
     storageAlerted,
   });
 }
+
