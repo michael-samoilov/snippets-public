@@ -11,8 +11,50 @@ const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
-/** The grant is gone (revoked, expired) — reconnect required. */
-export class DriveTokenRevoked extends Error {}
+/**
+ * Drive refused a request. The message is the ledger's canonical line,
+ * `drive <status> <reason>: <Google's message>`, where reason is Google's
+ * own code (storageQuotaExceeded, userRateLimitExceeded, …) or "-".
+ * classifyBackupError reads it; nothing here guesses a cause.
+ */
+export class DriveError extends Error {
+  constructor(
+    readonly status: number,
+    readonly reason: string | null,
+    googleMessage: string,
+  ) {
+    super(`drive ${status} ${reason ?? "-"}: ${googleMessage}`);
+  }
+}
+
+/**
+ * Google's error body, either shape: the classic `errors[].reason` and
+ * the newer `details[].reason` (ErrorInfo). First reason wins.
+ */
+async function readDriveError(response: Response): Promise<DriveError> {
+  const text = await response.text().catch(() => "");
+  let reason: string | null = null;
+  let message = text.slice(0, 200);
+  try {
+    // SAFETY: every field below is optional and read through ?., so a
+    // body of any other shape degrades to reason null, Google's text kept
+    const parsed = JSON.parse(text) as {
+      error?: {
+        message?: string;
+        errors?: { reason?: string }[];
+        details?: { reason?: string }[];
+      };
+    };
+    reason =
+      parsed.error?.errors?.find((e) => e.reason)?.reason ??
+      parsed.error?.details?.find((d) => d.reason)?.reason ??
+      null;
+    message = parsed.error?.message ?? message;
+  } catch {
+    // not JSON (a proxy page, an empty body): the status alone speaks
+  }
+  return new DriveError(response.status, reason, message);
+}
 
 async function driveFetch(
   token: string,
@@ -23,10 +65,8 @@ async function driveFetch(
     ...init,
     headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
   });
-  if (response.status === 401 || response.status === 403) {
-    const body = await response.text().catch(() => "");
-    throw new DriveTokenRevoked(`drive ${response.status}: ${body.slice(0, 200)}`);
-  }
+  // a missing file is an answer the callers handle (fileExists heals it)
+  if (!response.ok && response.status !== 404) throw await readDriveError(response);
   return response;
 }
 
@@ -36,7 +76,7 @@ async function fileExists(token: string, fileId: string): Promise<boolean> {
     `${API}/files/${fileId}?fields=id,trashed`,
   );
   if (response.status === 404) return false;
-  if (!response.ok) throw new Error(`drive get ${response.status}`);
+  if (!response.ok) throw await readDriveError(response);
   const data = (await response.json()) as { trashed?: boolean };
   return !data.trashed;
 }
@@ -55,7 +95,7 @@ async function findByName(
     token,
     `${API}/files?q=${encodeURIComponent(clauses.join(" and "))}&fields=files(id)&pageSize=1`,
   );
-  if (!response.ok) throw new Error(`drive list ${response.status}`);
+  if (!response.ok) throw await readDriveError(response);
   const data = (await response.json()) as { files?: { id: string }[] };
   return data.files?.[0]?.id ?? null;
 }
@@ -103,7 +143,7 @@ async function createFile(
       },
     );
   }
-  if (!response.ok) throw new Error(`drive create ${response.status}`);
+  if (!response.ok) throw await readDriveError(response);
   return ((await response.json()) as { id: string }).id;
 }
 
@@ -145,7 +185,7 @@ export async function upsertFile(
         body: multipartBody(boundary, { mimeType }, mimeType, body),
       },
     );
-    if (!response.ok) throw new Error(`drive update ${response.status}`);
+    if (!response.ok) throw await readDriveError(response);
     return fileId;
   }
   return createFile(token, { name, parents: [parentId] }, { mimeType, body });

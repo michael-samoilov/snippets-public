@@ -6,6 +6,7 @@
  * a `payloadFormat` bump — the protocol itself never changes shape.
  */
 import type { Snippet } from "@/lib/types";
+import type { BackupFailure } from "@/lib/backup-shared";
 import {
   aadForRow,
   decryptJSON,
@@ -90,6 +91,11 @@ export interface BackupStatusSummary {
   /** the book has moved past the last delivered seq — a stale ledger matters
       only while this is true (a dormant book is allowed to rest) */
   behind: boolean;
+  /** why the last delivery failed, read from the device's report; null
+      unless state is "error" */
+  failure: BackupFailure | null;
+  /** that report verbatim, for the cause Snippets doesn't recognize */
+  failureDetail: string | null;
 }
 
 export interface StatusResponse {

@@ -66,6 +66,7 @@ const ORIGIN_REGISTRY: Record<string, "self" | "connect" | "server" | "link" | "
   "https://github.com": "link",
   "https://gwern.net": "link",
   "https://matthewdicks.com": "link",
+  "https://one.google.com": "link", // Settings → Backup: a full Drive's "Manage Google storage"
 
   // referenced only in a comment
   "https://floating-ui.com": "doc",

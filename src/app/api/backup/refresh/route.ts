@@ -38,11 +38,18 @@ export async function POST(request: Request) {
     access_token?: string;
     expires_in?: number;
     error?: string;
+    error_description?: string;
   };
   if (!response.ok || !data.access_token) {
     const revoked = data.error === "invalid_grant";
+    // Google's own code and words travel back so the device can report
+    // the true cause (invalid_grant vs invalid_client, …); no token does
     return Response.json(
-      { error: revoked ? "revoked" : "refresh failed" },
+      {
+        error: revoked ? "revoked" : "refresh failed",
+        google: data.error ?? `http ${response.status}`,
+        description: (data.error_description ?? "").slice(0, 200),
+      },
       { status: revoked ? 401 : 502 },
     );
   }

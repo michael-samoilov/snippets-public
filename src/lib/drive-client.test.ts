@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DriveTokenRevoked,
-  ensureFolder,
-  upsertFile,
-} from "./drive-client";
+import { DriveError, ensureFolder, upsertFile } from "./drive-client";
 
 interface Call {
   url: string;
@@ -107,16 +103,74 @@ describe("drive-client — upsert", () => {
     expect(patch.body).toContain("# Snippets 2026");
   });
 
-  it("maps a 401 to DriveTokenRevoked (reconnect, not a crash)", async () => {
+  const upsert = () =>
+    upsertFile("tok", {
+      knownId: "FILE1",
+      name: "x.json",
+      parentId: "F",
+      mimeType: "text/plain",
+      body: "x",
+    });
+
+  it("a 401 becomes a DriveError the ledger reads as a lost grant", async () => {
     stubFetch(() => ({ status: 401 }));
-    await expect(
-      upsertFile("tok", {
-        knownId: "FILE1",
-        name: "x.json",
-        parentId: "F",
-        mimeType: "text/plain",
-        body: "x",
-      }),
-    ).rejects.toBeInstanceOf(DriveTokenRevoked);
+    await expect(upsert()).rejects.toBeInstanceOf(DriveError);
+    await expect(upsert()).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringMatching(/^drive 401 -: /),
+    });
+  });
+
+  it("carries Google's reason code from the classic error body", async () => {
+    stubFetch(() => ({
+      status: 403,
+      json: {
+        error: {
+          code: 403,
+          message: "The user's Drive storage quota has been exceeded.",
+          errors: [
+            {
+              domain: "usageLimits",
+              reason: "storageQuotaExceeded",
+              message: "The user's Drive storage quota has been exceeded.",
+            },
+          ],
+        },
+      },
+    }));
+    await expect(upsert()).rejects.toThrow(
+      "drive 403 storageQuotaExceeded: The user's Drive storage quota has been exceeded.",
+    );
+  });
+
+  it("carries Google's reason code from the newer ErrorInfo body", async () => {
+    stubFetch(() => ({
+      status: 403,
+      json: {
+        error: {
+          code: 403,
+          message: "Request had insufficient authentication scopes.",
+          status: "PERMISSION_DENIED",
+          details: [
+            {
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT",
+              domain: "googleapis.com",
+            },
+          ],
+        },
+      },
+    }));
+    await expect(upsert()).rejects.toThrow(
+      "drive 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT: Request had insufficient authentication scopes.",
+    );
+  });
+
+  it("a non-JSON failure keeps the status and the raw text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>Bad Gateway</html>", { status: 502 })),
+    );
+    await expect(upsert()).rejects.toThrow("drive 502 -: <html>Bad Gateway</html>");
   });
 });

@@ -7,6 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { getSession } from "@/server/auth";
 import type { StatusResponse } from "@/lib/sync-wire";
+import { classifyBackupError } from "@/lib/backup-shared";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,12 @@ export async function GET(request: Request) {
           // client pairs this with staleness to show "failing" even when
           // the delivering device vanished and can't report anything
           behind: Number(counts?.maxSeq ?? 0) > backup.lastBackedUpSeq,
+          ...(backup.state === "error"
+            ? {
+                failure: classifyBackupError(backup.lastError),
+                failureDetail: backup.lastError,
+              }
+            : { failure: null, failureDetail: null }),
         }
       : null,
   };
