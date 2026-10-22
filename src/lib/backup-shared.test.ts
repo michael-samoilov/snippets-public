@@ -5,6 +5,7 @@ import {
   classifyBackupError,
   daysQuiet,
   STALE_AFTER_DAYS,
+  yearsToUpload,
 } from "./backup-shared";
 import { copy } from "./copy";
 
@@ -118,14 +119,21 @@ describe("classifyBackupError — the ledger line read back into a cause", () =>
     ["drive 401 authError: Invalid Credentials", "revoked"],
     ["refresh 401 invalid_grant: Token has been expired or revoked.", "revoked"],
     ["refresh 502 invalid_client: The OAuth client was not found.", "server"],
-    ["refresh 502 http 500: ", "server"],
+    ["refresh 502 http 500: ", "google"],
     ["drive 503 backendError: Backend Error", "google"],
     ["drive 500 -: ", "google"],
     ["network: Load failed", "network"],
     ["network: Failed to fetch", "network"],
     ["drive 400 badRequest: Invalid multipart request.", "unknown"],
     ["drive 404 notFound: File not found: FILE1.", "unknown"],
-    ["error: QuotaExceededError", "unknown"],
+    ["network: no answer in 60 seconds", "network"],
+    // Google's token service down (our route wraps it as "http 5xx") is
+    // Google's side, not ours
+    ["refresh 502 http 503: ", "google"],
+    // broke on the device: never "Google Drive refused", never "network"
+    ["error: QuotaExceededError: The quota has been exceeded.", "device"],
+    ["error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again", "device"],
+    ["error: TypeError: Cannot read properties of undefined (reading 'slice')", "device"],
     // what devices before 2026-10 wrote
     [`drive 403: ${googleBody.slice(0, 200)}`, "storage"],
     ["grant revoked", "revoked"],
@@ -136,6 +144,9 @@ describe("classifyBackupError — the ledger line read back into a cause", () =>
     ["Load failed", "network"],
     ["Failed to fetch", "network"],
     ["NetworkError when attempting to fetch resource.", "network"],
+    // an old client wrote any other exception's bare message
+    ["Cannot read properties of undefined (reading 'slice')", "device"],
+    ["drive create 400", "unknown"],
   ])("%s → %s", (line, cause) => {
     expect(classifyBackupError(line)).toBe(cause);
   });
@@ -190,6 +201,17 @@ describe("backupEmail — the watchdog's one email per silence", () => {
     expect(email.text).not.toContain("storageQuotaExceeded");
   });
 
+  it("a device failure says Google wasn't involved, with the message", () => {
+    const line = "error: UnknownError: Connection to Indexed Database server lost.";
+    const email = backupEmail(
+      { state: "error", lastError: line, lastSuccessAt: new Date("2026-10-01T00:00:00Z") },
+      Date.parse("2026-10-06T00:00:00Z"),
+    );
+    expect(email.text).toContain(copy.settings.backup.failures.device.cause);
+    expect(email.text).not.toContain("Google Drive refused");
+    expect(email.text).toContain(copy.backupEmail.detail(line));
+  });
+
   it("an unrecognized failure carries Google's message verbatim", () => {
     const line = "drive 400 badRequest: Invalid multipart request.";
     const email = backupEmail(
@@ -198,5 +220,31 @@ describe("backupEmail — the watchdog's one email per silence", () => {
     );
     expect(email.text).toContain(copy.backupEmail.headlineNever);
     expect(email.text).toContain(copy.backupEmail.detail(line));
+  });
+});
+
+describe("yearsToUpload — which Markdown files a delivery rewrites", () => {
+  const rendered = { "2021": "h21", "2025": "h25", "2026": "h26-new" };
+  const uploaded = { "2021": "h21", "2025": "h25", "2026": "h26-old" };
+
+  it("an entry-driven delivery rewrites only the changed year", () => {
+    expect(yearsToUpload(rendered, uploaded, false)).toEqual(["2026"]);
+  });
+
+  it("the hourly full delivery rewrites every year, newest first", () => {
+    expect(yearsToUpload(rendered, uploaded, true)).toEqual(["2026", "2025", "2021"]);
+  });
+
+  it("a year never uploaded (or emptied) always goes", () => {
+    expect(yearsToUpload({ ...rendered, "2024": "h24" }, uploaded, false)).toEqual([
+      "2026",
+      "2024",
+    ]);
+  });
+
+  it("an edit to an old year sends that year too, still newest first", () => {
+    expect(
+      yearsToUpload({ ...rendered, "2021": "h21-edited" }, uploaded, false),
+    ).toEqual(["2026", "2021"]);
   });
 });

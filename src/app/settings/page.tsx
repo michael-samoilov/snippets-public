@@ -1130,9 +1130,9 @@ function BackupSection() {
           state="attention"
         />
         <p className="voice-prose-sm">{lines.cause}</p>
-        {cause === "unknown" && backup?.failureDetail && (
-          // Google's own words, verbatim: the only honest account of a
-          // cause Snippets can't name
+        {(cause === "unknown" || cause === "device") && backup?.failureDetail && (
+          // the error's own words, verbatim: the only honest account of
+          // a cause Snippets can't name any closer
           <p className="voice-data break-words text-ink-soft">
             {backup.failureDetail}
           </p>

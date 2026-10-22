@@ -56,12 +56,47 @@ async function readDriveError(response: Response): Promise<DriveError> {
   return new DriveError(response.status, reason, message);
 }
 
+/** One request may wait this long; a hung fetch must not wedge delivery. */
+const REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * No answer arrived at all: offline, a dropped connection, iOS
+ * suspending a closed app mid-upload, or the timeout. Typed here, at
+ * the fetch, so a bug elsewhere that happens to throw a TypeError is
+ * never reported as a network problem.
+ */
+export class NetworkError extends Error {
+  constructor(error: unknown) {
+    const name = error instanceof Error ? error.name : "Error";
+    super(
+      name === "TimeoutError"
+        ? `network: no answer in ${REQUEST_TIMEOUT_MS / 1000} seconds`
+        : `network: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/** fetch, with the timeout and the NetworkError above. */
+export async function fetchOrNetworkError(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new NetworkError(error);
+  }
+}
+
 async function driveFetch(
   token: string,
   url: string,
   init?: RequestInit,
 ): Promise<Response> {
-  const response = await fetch(url, {
+  const response = await fetchOrNetworkError(url, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
   });
@@ -185,8 +220,10 @@ export async function upsertFile(
         body: multipartBody(boundary, { mimeType }, mimeType, body),
       },
     );
-    if (!response.ok) throw await readDriveError(response);
-    return fileId;
+    if (response.ok) return fileId;
+    // gone between the check and the write (deleted from the folder
+    // mid-delivery): create it, the same healing as a missing file
+    if (response.status !== 404) throw await readDriveError(response);
   }
   return createFile(token, { name, parents: [parentId] }, { mimeType, body });
 }

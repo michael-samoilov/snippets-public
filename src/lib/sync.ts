@@ -248,9 +248,11 @@ async function runCycle(): Promise<void> {
     // Settings line otherwise kept the verdict fetched BEFORE the
     // delivery (2026-10-21: "Backup failing" on screen while the copy
     // landed in Drive the same minute)
-    void maybeDeliverBackup(status.backup).then((outcome) =>
-      outcome === "skipped" ? undefined : refreshCounts().catch(() => {}),
-    );
+    void maybeDeliverBackup(status.backup).then(async (outcome) => {
+      if (outcome === "skipped") return;
+      await refreshCounts().catch(() => {});
+      if (outcome === "outrun") requestSync();
+    });
   } catch (error) {
     if (error instanceof SignedOut) {
       // session gone (expired, signed out elsewhere) — say so, or pending

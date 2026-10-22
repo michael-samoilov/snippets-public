@@ -127,11 +127,12 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **Do not encrypt these files.** Enforcement: `src/lib/backup-client.ts`,
   `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`.
 - **A failed delivery reports one line, no entry content:** its source and
-  Google's error code and message (`failureLine` in `backup-client.ts` →
+  Google's error code and message, or for a failure on the device itself,
+  the error's name and message (`failureLine` in `backup-client.ts` →
   `/api/backup/failed` → `backup_status.last_error`, 500 characters at
   most). `classifyBackupError` reads it back into a cause that Settings and
-  the watchdog email print; Google's raw message is shown only for a cause
-  Snippets doesn't recognize. `/api/backup/refresh` returns Google's
+  the watchdog email print; the raw message is shown only for a cause
+  Snippets can't name any closer ("Google refused" or "this device"). `/api/backup/refresh` returns Google's
   token-endpoint error code with its 502/401, never a token.
 
 ### What leaves the app, ever (the CSP allowlist)
@@ -231,6 +232,15 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-10-22 — device-side backup errors no longer blamed on Google
+An independent review found that any exception that wasn't a Google
+answer was reported as "Google Drive refused the copy", and a plain
+TypeError as a network failure. Network failures are now typed at the
+fetch (`NetworkError`), and everything else is the "device" cause, with
+the error's name and message. The failure line stays content-free.
+Surfaces: Settings backup section, `copy.settings.backup.failures.device`,
+`copy.backupEmail.detail`, the "Google Drive backup" row above.
 
 ### 2026-10-21 — backup failures name their cause
 The failure line a device reports now carries Google's own error code

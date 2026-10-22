@@ -674,7 +674,10 @@ next delivery, and only the unconditional hourly re-upload keeps that
 promise. (2026-10-21: `behind` now *bypasses* the hourly gap, so an
 entry saved within the hour after a delivery goes out on the next sync
 instead of waiting for the next session; the cron imports
-`STALE_AFTER_DAYS`, and a quiet ledger reads "behind", not "failing".)
+`STALE_AFTER_DAYS`, and a quiet ledger reads "behind", not "failing".
+2026-10-22: those entry-driven deliveries rewrite only changed year
+files, newest first; the hourly one still rewrites every file, so the
+deleted-file promise holds within an hour of an open session.)
 
 ## 25. The keep-run record, and the one keep protocol
 

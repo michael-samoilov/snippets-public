@@ -17,10 +17,11 @@ export const BACKUP_FAILURES = [
   "scope", // the grant lacks the Drive permission
   "storage", // the writer's Drive is full
   "rateLimit", // Google asked us to slow down
-  "google", // Drive answered 5xx
+  "google", // Drive or Google's token service answered 5xx
   "network", // no answer at all: offline, or the app closed mid-delivery
   "server", // our side: the token exchange or the Google project config
-  "unknown",
+  "device", // broke on this device before Google was involved (storage, a bug)
+  "unknown", // Google Drive refused with a code Snippets doesn't know
 ] as const;
 export type BackupFailure = (typeof BACKUP_FAILURES)[number];
 
@@ -32,11 +33,15 @@ export type BackupFailure = (typeof BACKUP_FAILURES)[number];
  *   drive 403 storageQuotaExceeded: The user's Drive storage quota…
  *   refresh 401 invalid_grant: Token has been expired or revoked.
  *   network: Load failed
+ *   error: UnknownError: Connection to Indexed Database server lost…
  *
  * Older devices wrote "drive 403: {raw JSON body}", "grant revoked",
- * "refresh 502", or a bare fetch message; those still classify,
- * because the same codes appear in them. Order matters: a specific
- * Google reason outranks the HTTP status it arrived with.
+ * "refresh 502", a bare fetch message, or any other exception's bare
+ * message; those still classify, because the same codes appear in
+ * them. Order matters: a specific Google reason outranks the HTTP
+ * status it arrived with. Only a line from Drive itself can be
+ * "unknown" (Google refused, code unrecognized); every other line
+ * that matches nothing broke on the device.
  */
 export function classifyBackupError(detail: string | null): BackupFailure | null {
   if (!detail) return null;
@@ -51,11 +56,33 @@ export function classifyBackupError(detail: string | null): BackupFailure | null
     return "rateLimit";
   if (/invalid_grant|^grant revoked$|^drive 401\b|^no refresh token on device$/.test(detail))
     return "revoked";
+  // our route wraps Google's token-endpoint outage as "http 5xx"
+  if (/^refresh \d{3} http 5\d\d\b/.test(detail)) return "google";
   if (/^refresh \d{3}\b/.test(detail)) return "server";
   if (/^drive (?:(?:get|list|create|update) )?5\d\d\b/.test(detail)) return "google";
   if (/^network:|^(?:Load failed|Failed to fetch|NetworkError\b|The network connection was lost)/.test(detail))
     return "network";
-  return "unknown";
+  if (/^drive /.test(detail)) return "unknown";
+  return "device";
+}
+
+/**
+ * Which year files a delivery rewrites, newest first: a delivery that
+ * iOS cuts short has then already landed the year holding the new
+ * entry. `full` (the hourly delivery) takes every year, which sets a
+ * hand-edited or deleted file right; otherwise only years whose
+ * Markdown hash differs from the one at their last upload. Before
+ * 2026-10 every delivery rewrote every year, oldest first.
+ */
+export function yearsToUpload(
+  rendered: Record<string, string>,
+  uploaded: Record<string, string>,
+  full: boolean,
+): string[] {
+  return Object.keys(rendered)
+    .filter((year) => full || rendered[year] !== uploaded[year])
+    .sort()
+    .reverse();
 }
 
 /** What the Settings backup line should say. Pure so it's testable. */
@@ -103,8 +130,8 @@ export function daysQuiet(lastSuccessAt: string | Date, now: number): number {
 /**
  * The email names the cause the device reported (the same lines
  * Settings prints) or, with no report, says plainly that nothing was
- * sent. Google's own message rides along only when Snippets can't
- * name the cause.
+ * sent. The raw message rides along only when Snippets can't name
+ * the cause any closer than "Google refused" or "this device broke".
  */
 export function backupEmail(
   row: { state: string; lastError: string | null; lastSuccessAt: Date | null },
@@ -123,7 +150,9 @@ export function backupEmail(
         : e.headlineNever,
       "",
       e.why(lines.cause),
-      ...(failure === "unknown" && row.lastError ? [e.detail(row.lastError)] : []),
+      ...((failure === "unknown" || failure === "device") && row.lastError
+        ? [e.detail(row.lastError)]
+        : []),
       "",
       e.whatToDo(lines.emailFix),
     ].join("\n"),

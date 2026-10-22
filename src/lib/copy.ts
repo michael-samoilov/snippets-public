@@ -601,7 +601,7 @@ export const copy = {
             "Open Snippets and it tries again. You don’t need to change anything.",
         },
         google: {
-          cause: "Google Drive had a problem on its side and didn’t save the copy.",
+          cause: "Google had a problem on its side and didn’t save the copy.",
           fix: "You don’t need to do anything. Snippets tries again each time it syncs.",
           emailFix:
             "Open Snippets and it tries again. You don’t need to change anything.",
@@ -619,6 +619,13 @@ export const copy = {
           fix: "You don’t need to do anything. Snippets tries again each time it syncs.",
           emailFix:
             "Open Snippets and it tries again. You don’t need to change anything.",
+        },
+        device: {
+          cause:
+            "Something on this device failed before the copy reached Google Drive. Google wasn’t involved.",
+          fix: "Close and reopen Snippets; it tries again each time it syncs. If this keeps happening, send the message to snippets.support@gmail.com.",
+          emailFix:
+            "Close and reopen Snippets on the device you use; it tries again each time it syncs. If this keeps happening, send the message to snippets.support@gmail.com.",
         },
         unknown: {
           cause: "Google Drive refused the copy with a message Snippets doesn’t recognize.",
@@ -752,7 +759,7 @@ export const copy = {
     headlineNever:
       "Nothing has reached your Google Drive since you connected it, and entries are waiting.",
     why: (cause: string) => `Why: ${cause}`,
-    detail: (line: string) => `Google’s message: ${line}`,
+    detail: (line: string) => `The error message: ${line}`,
     whatToDo: (fix: string) => `What to do: ${fix}`,
   },
 
