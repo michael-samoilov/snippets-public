@@ -283,8 +283,13 @@ and without an explicit exclude; both saw zero files under `.claude/`.
   "Reconnect": it can't fix a full Drive); "behind" is a ledger quiet
   past 3 days while the book moved (`behind` flag from
   `/api/sync/status`), the vanished-device case no report can reach.
-  New entries bypass the hourly delivery gap, and the Settings line
-  re-reads the ledger after each delivery.
+  New entries bypass the hourly delivery gap and rewrite only the year
+  files that changed, newest first (`yearsToUpload`), so a delivery iOS
+  cuts short has already landed the new entry; the hourly delivery
+  still rewrites every file. The delivered seq is read BEFORE the book
+  snapshot, and an "outrun" delivery (newer rows pulled mid-upload)
+  queues a sync of its own. The Settings line re-reads the ledger after
+  each delivery.
   `tests/e2e/backup_failures.py` observes every cause end to end. The
   daily cron (`CRON_SECRET`, vercel.json) is a watchdog only — stale
   ledger + moving book → one email per silence, naming the same cause

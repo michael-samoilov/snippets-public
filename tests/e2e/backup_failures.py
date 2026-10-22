@@ -89,6 +89,7 @@ state = {
     "drive_mode": "ok", "refresh_mode": "ok",
     "events": [],            # ("delivered", seq) | ("failed", line)
     "refresh_bodies": [], "adopts": 0, "held": [],
+    "uploads": [],           # (file name, multipart body), in request order
     "drive": {"files": {}, "next": 1},
 }
 results = []
@@ -259,10 +260,13 @@ def answer_drive(route):
             json.loads(re.search(r"\r\n\r\n(\{.*?\})\r\n", req.post_data).group(1))
         fid = new_id()
         files[fid] = meta["name"]
+        if "/upload/" in url:
+            state["uploads"].append((meta["name"], req.post_data))
         route.fulfill(headers=CORS, json={"id": fid})
         return
     if req.method == "PATCH":
         fid = re.search(r"/files/([^?]+)\?", url).group(1)
+        state["uploads"].append((files.get(fid, fid), req.post_data))
         route.fulfill(headers=CORS, json={"id": fid})
         return
     route.fulfill(status=500, headers=CORS, json={})
@@ -294,8 +298,9 @@ def events(kind):
     return [e[1] for e in state["events"] if e[0] == kind]
 
 
-def write_entry(page, text):
-    page.goto(f"{BASE}/calendar")
+def write_entry(page, text, navigate=True):
+    if navigate:
+        page.goto(f"{BASE}/calendar")
     # the today zone's own field; once today holds an entry the page has
     # other textareas ahead of it
     area = page.get_by_role("textbox", name=re.compile(r"^Write an entry for")).first
@@ -349,6 +354,20 @@ CLEAR_GAP = """async () => {
 def clear_gap_if_before(page):
     if BEFORE:
         page.evaluate(CLEAR_GAP)
+
+
+def uploads_since(mark):
+    return [name for name, _ in state["uploads"][mark:]]
+
+
+def backfill_entry(page, day, text):
+    """Save an entry on a past day through the day view's composer."""
+    page.goto(f"{BASE}/calendar?d={day}")
+    area = page.get_by_role("textbox", name=re.compile(r"^Add an entry to")).first
+    area.wait_for(state="visible")
+    area.click(force=True)
+    area.fill(text)
+    area.press("Enter")
 
 
 def failure_round(page, mode, n, *, refresh=False):
@@ -459,13 +478,78 @@ def main():
               delivered and fresh,
               f"delivered={delivered} line={' / '.join(backup_section(page).inner_text().split(chr(10))[1:3])}")
 
+        # ── R1. an entry saved while a delivery runs is not lost ───────
+        # (review finding B: the seq was read AFTER the uploads, so the
+        # ledger called a mid-delivery entry delivered when it wasn't)
+        clear_gap_if_before(page)
+        state["drive_mode"] = "stall"
+        delivered_before = len(events("delivered"))
+        write_entry(page, "entry A, saved before the delivery")
+        wait_for(page, lambda: len(state["held"]) > 0)
+        pushes = state["pushes"]
+        write_entry(page, "entry B, saved DURING the delivery", navigate=False)
+        wait_for(page, lambda: state["pushes"] > pushes)
+        page.wait_for_timeout(1500)  # B's cycle pulls and settles mid-delivery
+        mark = len(state["uploads"])
+        state["drive_mode"] = "ok"
+        release()
+        wait_for(page, lambda: len(events("delivered")) > delivered_before
+                 and state["ledger"]["seq"] == len(state["rows"]), timeout=30)
+        md_2026 = [b for n, b in state["uploads"][mark:] if n.endswith("2026.md")]
+        in_drive = bool(md_2026) and "entry B, saved DURING" in md_2026[-1]
+        check("an entry saved mid-delivery reaches Drive, and the ledger says so honestly",
+              in_drive and state["ledger"]["seq"] == len(state["rows"]),
+              f"entry B in the last 2026.md upload={in_drive}; "
+              f"ledger seq={state['ledger']['seq']} of {len(state['rows'])}; "
+              f"deliveries +{len(events('delivered')) - delivered_before}")
+
+        if not BEFORE:
+            # ── R2. a two-year book: newest year first, unchanged skipped ─
+            mark = len(state["uploads"])
+            before = len(events("delivered"))
+            backfill_entry(page, "2025-03-01", "an entry from March 2025")
+            wait_for(page, lambda: len(events("delivered")) > before)
+            check("a 2025 entry uploads 2025 and the archive, not the unchanged 2026",
+                  uploads_since(mark) == ["Snippets 2025.md", "Snippets archive.json"],
+                  str(uploads_since(mark)))
+            mark = len(state["uploads"])
+            before = len(events("delivered"))
+            write_entry(page, "a 2026 entry after the 2025 one")
+            wait_for(page, lambda: len(events("delivered")) > before)
+            check("a 2026 entry uploads 2026 and the archive, not the unchanged 2025",
+                  uploads_since(mark) == ["Snippets 2026.md", "Snippets archive.json"],
+                  str(uploads_since(mark)))
+            # the hourly delivery (gap elapsed, nothing new) rewrites all, newest first
+            mark = len(state["uploads"])
+            before = len(events("delivered"))
+            page.evaluate(CLEAR_GAP)
+            page.evaluate("window.dispatchEvent(new Event('online'))")
+            wait_for(page, lambda: len(events("delivered")) > before)
+            check("the hourly delivery rewrites every file, newest year first",
+                  uploads_since(mark) == ["Snippets 2026.md", "Snippets 2025.md",
+                                          "Snippets archive.json"],
+                  str(uploads_since(mark)))
+
+            # ── R3. a failure on the device is never blamed on Google ──
+            line = "error: UnknownError: Connection to Indexed Database server lost. Refresh the page to try again"
+            state["ledger"].update(state="error", lastError=line)
+            page.goto(f"{BASE}/settings")
+            check("device error: Settings says Google wasn't involved",
+                  text_shows(page, "Google wasn’t involved"))
+            check("device error: no Google blame, no Reconnect, message shown",
+                  backup_section(page).get_by_text("Google Drive refused").count() == 0
+                  and backup_section(page).get_by_role("button", name="Reconnect Google Drive").count() == 0
+                  and backup_section(page).get_by_text("Connection to Indexed Database").count() > 0)
+            shot(page, "03-device")
+            state["ledger"].update(state="active", lastError=None)
+
         if not BEFORE:
             # ── 4. every other cause, as Google reports it ─────────────
             rounds = [
                 ("rate", False, "drive 403 userRateLimitExceeded:",
                  "Google limited how often", None),
                 ("google", False, "drive 503 backendError:",
-                 "Google Drive had a problem on its side", None),
+                 "Google had a problem on its side", None),
                 ("network", False, "network: ",
                  "The connection to Google Drive ended", None),
                 ("scope", False, "drive 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT:",

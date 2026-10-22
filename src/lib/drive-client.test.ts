@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DriveError, ensureFolder, upsertFile } from "./drive-client";
+import { DriveError, NetworkError, ensureFolder, upsertFile } from "./drive-client";
 
 interface Call {
   url: string;
@@ -164,6 +164,28 @@ describe("drive-client — upsert", () => {
     await expect(upsert()).rejects.toThrow(
       "drive 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT: Request had insufficient authentication scopes.",
     );
+  });
+
+  it("no answer at all is a NetworkError, typed at the fetch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Load failed");
+      }),
+    );
+    await expect(upsert()).rejects.toBeInstanceOf(NetworkError);
+    await expect(upsert()).rejects.toThrow("network: Load failed");
+  });
+
+  it("a file deleted between the check and the write is created again", async () => {
+    const calls = stubFetch((c) => {
+      if (c.method === "GET" && c.url.includes("/files/FILE1")) return { status: 200, json: { id: "FILE1", trashed: false } };
+      if (c.method === "PATCH") return { status: 404, json: { error: { code: 404, message: "File not found: FILE1." } } };
+      if (c.method === "POST") return { status: 200, json: { id: "FILE2" } };
+      throw new Error(`unexpected ${c.method} ${c.url}`);
+    });
+    expect(await upsert()).toBe("FILE2");
+    expect(calls.map((c) => c.method)).toEqual(["GET", "PATCH", "POST"]);
   });
 
   it("a non-JSON failure keeps the status and the raw text", async () => {
