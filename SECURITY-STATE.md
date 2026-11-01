@@ -223,7 +223,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   keys exist (likely Deepgram, mip-opted-out). The privacy page names
   only active providers, so it stays truthful automatically.
 - **On-device transcription** (BACKLOG #16), **ciphertext self-viewer**
-  (BACKLOG #15), **open-sourcing** (BACKLOG #17, brief in `OPEN-SOURCE.md`)
+  (BACKLOG #15), **open-sourcing** (BACKLOG #17, brief in `docs/notes/OPEN-SOURCE.md`)
   are deferred by decision.
 
 ---
@@ -394,7 +394,7 @@ explicit `{" "}`. On preview branch, pending merge.
   allowlist; the three-test "verify, don't trust" page. — `15a1955`
 - **Constitution/backlog/docs:** CLAUDE.md E2E + CSP rules, snippets-craft
   law 8, DESIGN.md "Privacy is architecture", BACKLOG #14–17,
-  `OPEN-SOURCE.md`. — `2b3f811`
+  `OPEN-SOURCE.md` (moved to `docs/notes/`). — `2b3f811`
 - **This file** created as the source of truth; CLAUDE.md points at it. —
   `471a496`
 - **Drift made mechanical:** CSP moved to a tested value
