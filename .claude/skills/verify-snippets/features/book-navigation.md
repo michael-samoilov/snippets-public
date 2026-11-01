@@ -43,7 +43,7 @@ today-zone composer overlays the lower-middle of the viewport and owns
 its own scroll ancestor, so a wheel aimed there misses the feed; verify
 your wheel point's `elementFromPoint` resolves inside `[data-book-scroller]`
 before trusting a result. `scripts/webkit_wheel_scroll.py` does all of
-this. **`SCHEDULE-MAP.md` in the repo root is the authoritative map of
+this. **`docs/notes/SCHEDULE-MAP.md` is the authoritative map of
 the app's scroll machinery** (~17 guard flags, ~20 timers, four systems,
 one scroller) — read it before verifying anything scroll-related, since
 iOS momentum flings are one of the scroll sources its guard logic must
