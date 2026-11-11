@@ -11,6 +11,12 @@ right paranoia: a client that can be coaxed into plaintext by server
 answers would be caught here, because the stub can answer anything and
 the sentinel scan covers every request body on every host.
 
+The second device then faces a hostile server: it plants a plaintext
+row, replays an older sealed copy, swaps an AAD-less envelope onto a
+held entry, sends a payload-less live row, and forges a deletion. Each
+leg reads the device's own IndexedDB to prove the entry it holds was
+not rearranged (src/lib/sync-wire.ts, adoptServerRow).
+
 Run:
   python3 .claude/skills/webapp-testing/scripts/with_server.py \
     --server "node_modules/.bin/next start" --port 3000 -- \
@@ -273,66 +279,60 @@ def main():
         check("device B decrypts device A's real ciphertext", found > 0)
         page2.screenshot(path=f"{SHOTS}/b3-unlocked-book.png")
 
-        # ── Legacy migration: a plaintext row on the server converges to 3 ──
-        # (an account that synced before encryption became part of sign-in
-        # has format-1 rows resting server-side; the pull rule re-dirties
-        # them so their own next push re-seals them)
-        legacy_id = "01H00000000000LEGACYROW1"
-        state["rows"].append({
-            "id": legacy_id,
-            "payloadFormat": 1,
-            "payload": {
-                "text": "LEGACY-PLAINTEXT a row from before required encryption",
-                "kind": None, "tags": [], "capturedAt": 1_690_000_000_000,
-                "day": "2023-07-22", "source": "typed", "favorite": 0,
-            },
-            "updatedAt": 1_690_000_000_500,
-            "deletedAt": None,
-            "serverSeq": len(state["rows"]) + 1,
-        })
-        page2.reload()  # boot trigger → cycle: pull the legacy row, re-dirty
-        deadline = time.time() + 25
-        resealed = None
-        while time.time() < deadline:
-            for push in state["pushes"]:
-                for c in push["changes"]:
-                    if c["id"] == legacy_id:
-                        resealed = c
-            if resealed:
-                break
-            page2.wait_for_timeout(400)
-        check("legacy format-1 row is re-pushed", resealed is not None)
-        if resealed:
-            check("…as format 3 with a sealed envelope",
-                  resealed["payloadFormat"] == 3
-                  and set(resealed["payload"].keys()) == {"v", "iv", "ct"})
-        server_copy = [r for r in state["rows"] if r["id"] == legacy_id]
-        check("…and the server copy is no longer readable",
-              server_copy and server_copy[-1]["payloadFormat"] == 3
-              and "LEGACY-PLAINTEXT" not in json.dumps(server_copy[-1]["payload"]))
+        # ── A hostile server, as seen by device B ─────────────────────
+        def run_cycle(pg):
+            # one boot-triggered cycle: push, then pull, then apply
+            before = state["pulls"]
+            pg.reload()
+            deadline = time.time() + 25
+            while state["pulls"] == before and time.time() < deadline:
+                pg.wait_for_timeout(250)
+            pg.wait_for_timeout(2500)
 
-        # ── Contested legacy: a dirty local row that LOSES to a newer format-1
-        # server row must still converge to format 3. (Restore-from-JSON
-        # produces exactly this local shape: _dirty stamped, the archive's
-        # original clock preserved — db.ts importSnippets.) The re-seal rule
-        # rides every server-row adoption in sync.ts: the pull applier and the
-        # push's superseded adoption. This leg is a CONVERGENCE regression net,
-        # not a before/after discriminator: the stub replays the full feed on
-        # every pull (as the real cursor protocol does for any row a device
-        # has not pulled yet), so a clean re-delivery can also rescue a missed
-        # adoption. The window the adoption-side rule closes — an import
-        # landing between one cycle's push and pull phases — is too
-        # timing-dependent to stage deterministically here; the rule itself is
-        # pinned by the needsReseal cases in sync-wire.test.ts and by shape
-        # (one apply path per branch, each mapped through needsReseal).
-        contested_id = "01H00000000000CONTESTED1"
-        page2.evaluate(
-            """async (row) => {
-              const db = await new Promise((res, rej) => {
-                const q = indexedDB.open("snippets");
-                q.onsuccess = () => res(q.result);
-                q.onerror = () => rej(q.error);
+        def serve(row):
+            # the stub's server copy of one id, replaced as a hostile
+            # server would: a fresh seq so the feed re-delivers it
+            state["rows"] = [r for r in state["rows"] if r["id"] != row["id"]]
+            row["serverSeq"] = len(state["rows"]) + 1
+            state["rows"].append(row)
+
+        def pushed_as(id_, fmt):
+            return [c for push in state["pushes"] for c in push["changes"]
+                    if c["id"] == id_ and c["payloadFormat"] == fmt]
+
+        def wait_pushed(pg, id_, fmt):
+            deadline = time.time() + 25
+            while not pushed_as(id_, fmt) and time.time() < deadline:
+                pg.wait_for_timeout(400)
+            found = pushed_as(id_, fmt)
+            return found[-1] if found else None
+
+        open_db = """const open = () => new Promise((res, rej) => {
+              const q = indexedDB.open("snippets");
+              q.onsuccess = () => res(q.result);
+              q.onerror = () => rej(q.error);
+            });"""
+
+        def local_rows(pg):
+            return pg.evaluate("""async () => {
+              %s
+              const db = await open();
+              const rows = await new Promise((res) => {
+                const g = db.transaction("snippets", "readonly")
+                  .objectStore("snippets").getAll();
+                g.onsuccess = () => res(g.result);
               });
+              db.close();
+              return rows;
+            }""" % open_db)
+
+        def local_row(pg, id_):
+            return next((r for r in local_rows(pg) if r["id"] == id_), None)
+
+        def put_local(pg, row):
+            pg.evaluate("""async (row) => {
+              %s
+              const db = await open();
               await new Promise((res, rej) => {
                 const tx = db.transaction("snippets", "readwrite");
                 tx.objectStore("snippets").put(row);
@@ -340,60 +340,156 @@ def main():
                 tx.onerror = () => rej(tx.error);
               });
               db.close();
-            }""",
-            {
-                "id": contested_id, "text": "STALE-LOCAL-DRAFT from a restored archive",
-                "kind": None, "tags": [], "capturedAt": 1_690_000_100_000,
-                "day": "2023-07-22", "source": "typed", "favorite": 0,
-                "updatedAt": 1_690_000_100_000, "_dirty": 1,
-            },
-        )
-        state["rows"].append({
-            "id": contested_id,
-            "payloadFormat": 1,
-            "payload": {
-                "text": "CONTESTED-PLAINTEXT the newer copy from before encryption",
-                "kind": None, "tags": [], "capturedAt": 1_690_000_200_000,
-                "day": "2023-07-22", "source": "typed", "favorite": 0,
-            },
-            "updatedAt": 1_690_000_200_000,
-            "deletedAt": None,
-            "serverSeq": len(state["rows"]) + 1,
-        })
-        page2.reload()  # cycle: push loses (superseded) or pull contests — either
-                        # adoption path must re-dirty the row for its own re-seal
-        deadline = time.time() + 25
-        resealed2 = None
-        while time.time() < deadline:
-            for push in state["pushes"]:
-                for c in push["changes"]:
-                    if c["id"] == contested_id and c["payloadFormat"] == 3:
-                        resealed2 = c
-            if resealed2:
-                break
-            page2.wait_for_timeout(400)
-        check("contested legacy row is re-pushed as format 3", resealed2 is not None
+            }""" % open_db, row)
+
+        def seal(pg, id_, updated_at, deleted_at, fmt, payload):
+            # an envelope under the account's real book key, sealed in the
+            # page (the key is non-extractable but usable): format 3 binds
+            # the row's clocks as AAD exactly like aadForRow; format 2 has
+            # none. This is what a server that kept old envelopes replays.
+            return pg.evaluate("""async (a) => {
+              %s
+              const db = await open();
+              const meta = await new Promise((res) => {
+                const g = db.transaction("meta", "readonly")
+                  .objectStore("meta").get("e2e:bookKey");
+                g.onsuccess = () => res(g.result);
+              });
+              db.close();
+              const iv = crypto.getRandomValues(new Uint8Array(12));
+              const params = { name: "AES-GCM", iv };
+              if (a.fmt === 3)
+                params.additionalData = new TextEncoder().encode(
+                  `snippets/aad/v1|${a.id}|${a.updatedAt}|${a.deletedAt ?? ""}|3`);
+              const ct = await crypto.subtle.encrypt(
+                params, meta.value, new TextEncoder().encode(JSON.stringify(a.payload)));
+              const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+              return { v: 1, iv: b64(iv), ct: b64(ct) };
+            }""" % open_db, {"id": id_, "updatedAt": updated_at,
+                             "deletedAt": deleted_at, "fmt": fmt,
+                             "payload": payload})
+
+        def content(text, captured):
+            return {"text": text, "kind": None, "tags": [],
+                    "capturedAt": captured, "day": "2023-07-22",
+                    "source": "typed", "favorite": 0}
+
+        # 1. A planted plaintext (format 1) row is refused. Nothing has
+        # been able to write format 1 since 2026-07-23, so a server that
+        # serves one is writing on its own — the device never stores it.
+        legacy_id = "01H00000000000LEGACYROW1"
+        serve({"id": legacy_id, "payloadFormat": 1,
+               "payload": content("LEGACY-PLAINTEXT a row the server planted",
+                                  1_690_000_000_000),
+               "updatedAt": 1_690_000_000_500, "deletedAt": None})
+        run_cycle(page2)
+        check("planted plaintext row: never stored on the device",
+              local_row(page2, legacy_id) is None)
+        check("…never pushed back", not [c for push in state["pushes"]
+                                         for c in push["changes"]
+                                         if c["id"] == legacy_id])
+        page2.goto(f"{BASE}/calendar")
+        page2.wait_for_timeout(1500)
+        check("…and never shown", page2.get_by_text("LEGACY-PLAINTEXT").count() == 0)
+
+        # 2. A legacy AAD-less (format 2) row the device has never held
+        # still opens and converges: stored dirty, re-pushed as format 3.
+        f2_id = "01H00000000000LEGACYSEAL"
+        serve({"id": f2_id, "payloadFormat": 2,
+               "payload": seal(page2, f2_id, 1_690_000_000_600, None, 2,
+                               content("LEGACY-SEALED a row from before the AAD format",
+                                       1_690_000_000_000)),
+               "updatedAt": 1_690_000_000_600, "deletedAt": None})
+        run_cycle(page2)
+        resealed = wait_pushed(page2, f2_id, 3)
+        check("legacy format-2 row is re-pushed as format 3",
+              resealed is not None
+              and set(resealed["payload"].keys()) == {"v", "iv", "ct"})
+        f2_row = local_row(page2, f2_id)
+        check("…and opens on the device",
+              f2_row is not None and "LEGACY-SEALED" in f2_row["text"])
+
+        # 3. Contested: an unsent local edit (Restore-from-JSON shape:
+        # dirty, the archive's old clock) meets a NEWER plaintext server
+        # row. The plaintext copy is refused, so the device's own edit
+        # re-asserts past it and its format-3 push replaces it.
+        contested_id = "01H00000000000CONTESTED1"
+        put_local(page2, {
+            **content("STALE-LOCAL-DRAFT from a restored archive", 1_690_000_100_000),
+            "id": contested_id, "updatedAt": 1_690_000_100_000, "_dirty": 1})
+        serve({"id": contested_id, "payloadFormat": 1,
+               "payload": content("CONTESTED-PLAINTEXT a newer readable copy",
+                                  1_690_000_200_000),
+               "updatedAt": 1_690_000_200_000, "deletedAt": None})
+        run_cycle(page2)
+        resealed2 = wait_pushed(page2, contested_id, 3)
+        check("contested: the device's edit is pushed as format 3", resealed2 is not None
               and set(resealed2["payload"].keys()) == {"v", "iv", "ct"})
         server_copy2 = [r for r in state["rows"] if r["id"] == contested_id]
         check("…the server copy is no longer readable",
               bool(server_copy2) and server_copy2[-1]["payloadFormat"] == 3
               and "CONTESTED-PLAINTEXT" not in json.dumps(server_copy2[-1]["payload"]))
-        local_after = page2.evaluate(
-            """async (id) => {
-              const db = await new Promise((res) => {
-                const q = indexedDB.open("snippets");
-                q.onsuccess = () => res(q.result);
-              });
-              return await new Promise((res) => {
-                const g = db.transaction("snippets", "readonly")
-                  .objectStore("snippets").get(id);
-                g.onsuccess = () => res(g.result ? g.result.text : null);
-              });
-            }""",
-            contested_id,
-        )
-        check("…and the newer server content won locally (LWW held)",
-              local_after is not None and "CONTESTED-PLAINTEXT" in local_after)
+        contested_row = local_row(page2, contested_id)
+        check("…and the refused plaintext never landed on the device",
+              contested_row is not None
+              and "STALE-LOCAL-DRAFT" in contested_row["text"])
+
+        # 4. Rollback: the server replays an OLDER format-3 copy of an
+        # entry the device holds, under the clocks it was sealed with —
+        # its AAD verifies, so only the never-go-back rule can refuse it.
+        canary = next(r for r in local_rows(page2) if "CANARY7F3A" in r["text"])
+        cid, cat = canary["id"], canary["updatedAt"]
+        serve({"id": cid, "payloadFormat": 3,
+               "payload": seal(page2, cid, cat - 1000, None, 3,
+                               content("ROLLBACK-OLD an earlier version", 1_690_000_000_000)),
+               "updatedAt": cat - 1000, "deletedAt": None})
+        run_cycle(page2)
+        row = local_row(page2, cid)
+        check("replayed older copy: the held entry keeps its version",
+              row is not None and "CANARY7F3A" in row["text"]
+              and row["updatedAt"] == cat)
+
+        # 5. Swap: an AAD-less (format 2) envelope with another entry's
+        # words, under the held entry's id and a newer clock.
+        serve({"id": cid, "payloadFormat": 2,
+               "payload": seal(page2, cid, cat + 5000, None, 2,
+                               content("SWAPPED-IN words from another entry",
+                                       1_690_000_000_000)),
+               "updatedAt": cat + 5000, "deletedAt": None})
+        run_cycle(page2)
+        row = local_row(page2, cid)
+        check("format-2 envelope swapped onto a held entry: refused",
+              row is not None and "CANARY7F3A" in row["text"])
+
+        # 6. A payload-less row that is not a deletion: no server rule
+        # produces one (the scrub nulls only rows deleted 30+ days ago).
+        held_f2 = local_row(page2, f2_id)
+        serve({"id": f2_id, "payloadFormat": 3, "payload": None,
+               "updatedAt": held_f2["updatedAt"] + 1000, "deletedAt": None})
+        run_cycle(page2)
+        row = local_row(page2, f2_id)
+        check("payload-less live row: refused, the entry stays live",
+              row is not None and "deletedAt" not in row
+              and "LEGACY-SEALED" in row["text"])
+
+        # 7. A forged deletion: payload-less, so it carries no proof. The
+        # entry leaves the book, but its words stay on the device for 30
+        # days from NOW (Settings → Recently let go), not from a clock the
+        # server chose.
+        t_forged = int(time.time() * 1000)
+        serve({"id": cid, "payloadFormat": 3, "payload": None,
+               "updatedAt": cat + 10_000, "deletedAt": 1_600_000_000_000})
+        run_cycle(page2)
+        row = local_row(page2, cid)
+        check("forged deletion: the entry is hidden",
+              row is not None and row.get("deletedAt") is not None)
+        check("…but its words stay on the device",
+              row is not None and "CANARY7F3A" in row["text"])
+        check("…restorable for 30 days from now, not the server's clock",
+              row is not None and (row.get("deletedAt") or 0) >= t_forged - 60_000)
+        page2.goto(f"{BASE}/settings?tab=account")
+        page2.wait_for_timeout(2500)
+        page2.screenshot(path=f"{SHOTS}/b4-forged-deletion-recoverable.png", full_page=True)
         ctx2.close()
 
         # ── Wrong passphrase must not unlock ──────────────────────────

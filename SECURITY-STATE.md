@@ -62,8 +62,9 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   before anything is sent, and the server refuses anything readable.
 - **Enforcement:** `src/lib/sync.ts` (no plaintext push path — `pushAll`/
   `pullAll`/`toWireChange` require the key), `src/app/api/sync/push/route.ts`
-  (accepts payload formats 2|3 only; format 1 → `409 encryption_required`),
-  `src/lib/sync-wire.ts` (format 3 = AAD-bound envelope).
+  (accepts payload format 3 only; format 1 → `409 encryption_required`,
+  the AAD-less format 2 → `400`), `src/lib/sync-wire.ts` (format 3 =
+  AAD-bound envelope; `fromWireRow` refuses a plaintext row on pull).
 - **Asserts it:** privacy `#can-you-read`, `#if-you-sign-in`,
   `#end-to-end-encryption`; terms `#encryption`; Settings Encryption
   section; the first-run intro (`copy.intro.about`, the today zone's
@@ -99,14 +100,47 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   stops opening. Pinned by `src/app/api/keys/route.test.ts`.
 
 ### What can the server do to a sealed entry?
-- **Nothing without failing loudly.** The row's `id`, `updatedAt`,
-  `deletedAt`, and `payloadFormat` are bound into the cipher as AES-GCM
-  AAD, so a moved, rolled-back, resurrected, or format-downgraded
-  envelope fails to decrypt (surfaces as the `locked` state, never a
-  silent swap). The server still sees that entries exist, their rough
-  size, and when each changed.
+- **It cannot read one, or change one a device holds; it can leave one
+  out or mark one deleted.** The row's `id`, `updatedAt`, `deletedAt`,
+  and `payloadFormat` are bound into the cipher as AES-GCM AAD, so an
+  envelope moved to another id, or given other clocks or another format,
+  fails to decrypt (`KeyMismatchError` → the `locked` state, never a
+  silent swap).
+- **AAD alone can't refuse a resend.** An older envelope sent again under
+  the clocks it was sealed with still decrypts. So `adoptServerRow`
+  refuses, for every entry the device holds: a copy older than its own
+  (a rolled-back version, or a deleted entry's pre-deletion copy), and an
+  AAD-less format-2 envelope (nothing writes format 2 any more, so on a
+  held entry it can only be a replay). `fromWireRow` refuses every row no
+  client writes: plaintext (format 1), an unknown format, a sealed format
+  that isn't an envelope, and a payload-less row that isn't a deletion.
+  A refused row is skipped, never stored; on the push path the device's
+  own edit re-asserts past it.
+- **What remains.** A payload-less deletion (what the cron leaves 30 days
+  after a delete, `TOMBSTONE_SCRUB_AFTER_MS`) carries no proof, so a
+  server can send one for any entry. The device applies it as a soft
+  delete that keeps the words, and the 30-day local recovery window
+  starts on arrival, not at the server's `deletedAt` (Settings →
+  "Recently let go"). The server can also leave rows out of the feed. A
+  device that holds no copy (a new device, or an entry purged 30 days
+  after its deletion) relies on the server for which entries exist and
+  which version is newest, though every entry it opens is one the
+  writer's devices encrypted. The server still sees that entries exist,
+  their rough size, and when each changed.
+- **Legacy rows.** Rows written before 2026-07-23 may rest as format 2.
+  A device opens one only for an entry it doesn't hold yet, stores it
+  dirty (`needsReseal`), and re-pushes it as format 3.
 - **Enforcement:** `aadForRow` in `src/lib/crypto.ts` (canonical string
-  pinned by a test), `fromWireRow`/`toWireChange` in `src/lib/sync-wire.ts`.
+  pinned by a test); `fromWireRow`, `adoptServerRow`, `toWireChange` in
+  `src/lib/sync-wire.ts`; both adoption paths in `src/lib/sync.ts` (the
+  pull applier and the push's superseded adoption) go through
+  `adoptServerRow`.
+- **Asserts it:** privacy `#how-the-encryption-works` (the deep dive).
+- **Proven by:** `src/lib/sync-wire.test.ts` (each refusal and each
+  held-entry rule); `tests/e2e/forced_e2e.py` (a hostile stub server
+  plants plaintext, replays an older copy, swaps a format-2 envelope onto
+  a held entry, sends a payload-less live row, and forges a deletion; the
+  device's IndexedDB is read after each).
 
 ### Voice
 - Speaking an entry streams audio to a transcription provider; words
@@ -242,11 +276,12 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   the Drive grant. Device copies and delivered Drive files remain yours.
 
 ### How each claim is proven (run these after touching the area)
-- **No plaintext window, end to end:** `tests/e2e/forced_e2e.py` (real
-  build + real WebCrypto vs stub server; sentinel scanned on every wire
-  body). 22 checks.
+- **No plaintext window, end to end, and a hostile server can't rearrange
+  a held entry:** `tests/e2e/forced_e2e.py` (real build + real WebCrypto
+  vs stub server; sentinel scanned on every wire body; IndexedDB read
+  after each hostile row). 33 checks.
 - **Server refusal matrix:** `src/app/api/sync/push/route.test.ts`.
-- **AAD binding + legacy-format reads:** `src/lib/crypto.test.ts`,
+- **AAD binding, pull refusals, held-entry rules:** `src/lib/crypto.test.ts`,
   `src/lib/sync-wire.test.ts`.
 - **Speech adapters speak the documented protocols:**
   `tests/e2e/speech_adapters.py` (14 checks).
@@ -297,6 +332,30 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — a hostile server can no longer rearrange the entries a device holds
+A review found that the pull path trusted the server further than the
+privacy page said. `fromWireRow` stored a plaintext (format 1) row as
+it came, so a server could plant a readable entry; it turned any
+payload-less row into a deletion that erased the device's copy of the
+words; and it opened AAD-less format-2 envelopes on any entry, so a
+server could move old content onto another entry. AAD also never
+covered a plain resend: an older envelope under its own clocks still
+opened, and a clean device row took it, so a server could roll an entry
+back or bring a deleted one back. The page's "a moved, rolled-back, or
+resurrected entry fails to open" was true only of an envelope whose
+clocks were edited. Now `fromWireRow` refuses rows no client writes,
+`adoptServerRow` refuses older copies and format-2 envelopes on held
+entries, and a payload-less deletion keeps the words for 30 days. The
+push route refuses format 2, so every row written from now on is bound.
+Nothing legitimate is stranded: the server has refused format-1 pushes
+since 2026-07-23, the short privacy page shipped only after the July
+re-encryption gate (BACKLOG #14) passed, and format-2 rows still open on
+a device that doesn't hold them. Proven by the new `sync-wire.test.ts`
+cases and five new legs in `tests/e2e/forced_e2e.py`: the unchanged
+build fails 9 of its checks, this one passes all 33. Surfaces: privacy
+`#how-the-encryption-works`, the "Can we read your entries?" and "What
+can the server do to a sealed entry?" rows above.
 
 ### 2026-11-11 — voice routes gated; self-tests deleted; codes hashed; KDF floor
 An independent review found five routes that spend the owner's speech

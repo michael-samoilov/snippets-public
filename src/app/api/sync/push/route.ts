@@ -16,7 +16,6 @@ import { getSession } from "@/server/auth";
 import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
   PAYLOAD_FORMAT_PLAIN,
-  PAYLOAD_FORMAT_SEALED,
   PAYLOAD_FORMAT_SEALED_AAD,
   type PushResult,
   type SnippetPayload,
@@ -27,13 +26,15 @@ export const runtime = "nodejs";
 
 const MAX_PAYLOAD_BYTES = 64_000;
 
-// Only sealed formats may be pushed: format 2 (legacy AES-GCM envelope)
-// and format 3 (envelope with the row's cleartext fields AAD-bound).
-// Format 1 (plaintext) is refused outright — see the 409 below — so the
-// "we cannot read your entries" claim rests on the server's own refusal,
-// not on client good behaviour. The payload must also LOOK like an
-// envelope: a sealed format wrapping plaintext fields is rejected here,
-// so mislabeling can't smuggle readable content in.
+// Only format 3 may be pushed: an envelope with the row's cleartext
+// fields AAD-bound. Format 1 (plaintext) is refused outright — see the
+// 409 below — so the "we cannot read your entries" claim rests on the
+// server's own refusal, not on client good behaviour. Format 2 (the
+// AAD-less legacy envelope) is refused too: no current client writes it,
+// so every row written from now on is bound to its id and clocks. The
+// payload must also LOOK like an envelope: a sealed format wrapping
+// plaintext fields is rejected here, so mislabeling can't smuggle
+// readable content in.
 const sealedPayloadSchema = z
   .object({
     v: z.literal(1),
@@ -44,10 +45,7 @@ const sealedPayloadSchema = z
 
 const changeSchema = z.object({
   id: z.string().min(10).max(40),
-  payloadFormat: z.union([
-    z.literal(PAYLOAD_FORMAT_SEALED),
-    z.literal(PAYLOAD_FORMAT_SEALED_AAD),
-  ]),
+  payloadFormat: z.literal(PAYLOAD_FORMAT_SEALED_AAD),
   payload: sealedPayloadSchema,
   updatedAt: z.number().int().positive(),
   deletedAt: z.number().int().positive().nullable().optional(),

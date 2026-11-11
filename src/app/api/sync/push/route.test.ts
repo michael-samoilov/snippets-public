@@ -19,6 +19,7 @@ vi.mock("@/server/auth", () => ({
 import { POST } from "./route";
 import { getSession } from "@/server/auth";
 
+
 const sealed = {
   v: 1,
   iv: "AAAAAAAAAAAAAAAA",
@@ -90,11 +91,14 @@ describe("push route — plaintext refusal", () => {
     expect(res.status).toBe(400);
   });
 
-  it("accepts sealed formats 2 and 3", async () => {
-    for (const payloadFormat of [2, 3]) {
-      const res = await POST(push([{ ...base, payloadFormat, payload: sealed }]));
-      expect(res.status).toBe(200);
-    }
+  it("accepts format 3, the only format a current client writes", async () => {
+    const res = await POST(push([{ ...base, payloadFormat: 3, payload: sealed }]));
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses the AAD-less legacy format 2, so every new row is bound", async () => {
+    const res = await POST(push([{ ...base, payloadFormat: 2, payload: sealed }]));
+    expect(res.status).toBe(400);
   });
 
   it("still answers 401 signed out and 413 oversized first", async () => {

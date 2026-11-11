@@ -5,12 +5,14 @@ import {
   PAYLOAD_FORMAT_PLAIN,
   PAYLOAD_FORMAT_SEALED,
   PAYLOAD_FORMAT_SEALED_AAD,
+  RefusedRowError,
+  adoptServerRow,
   fromWireRow,
   needsReseal,
   toWireChange,
   type WireRow,
 } from "./sync-wire";
-import { encryptJSON, generateBookKey } from "./crypto";
+import { aadForRow, encryptJSON, generateBookKey } from "./crypto";
 import type { Snippet } from "./types";
 
 const snippet = (over: Partial<Snippet> = {}): Snippet => ({
@@ -133,37 +135,81 @@ describe("wire codec — the AAD binding (a moved or edited envelope fails)", ()
   });
 });
 
-describe("wire codec — legacy formats still open on pull", () => {
-  it("a plaintext (format 1) server row still decodes", async () => {
-    // rows synced before encryption became required rest as format 1
-    // until their re-seal; the client must keep reading them
-    const s = snippet();
-    const { id, updatedAt, deletedAt, _dirty, ...payload } = s;
+describe("wire codec — rows no client writes are refused on pull", () => {
+  const plainPayload = () => {
+    const { id, updatedAt, deletedAt, _dirty, ...payload } = snippet();
+    void id;
+    void updatedAt;
+    void deletedAt;
     void _dirty;
+    return payload;
+  };
+  const refusal = (row: WireRow, key?: CryptoKey) =>
+    fromWireRow(row, key).then(
+      () => "opened",
+      (e: unknown) => (e instanceof RefusedRowError ? e.reason : String(e)),
+    );
+
+  it("a plaintext (format 1) row is refused: a server can't plant a readable entry", async () => {
     const row: WireRow = {
-      id,
+      id: snippet().id,
       payloadFormat: PAYLOAD_FORMAT_PLAIN,
-      payload,
-      updatedAt,
-      deletedAt: deletedAt ?? null,
+      payload: plainPayload(),
+      updatedAt: 1_700_000_000_500,
+      deletedAt: null,
       serverSeq: 1,
     };
-    const back = await fromWireRow(row);
-    expect(back.text).toBe(s.text);
-    expect(back._dirty).toBe(0);
+    expect(await refusal(row, await generateBookKey())).toBe("plaintext");
+  });
+
+  it("an unknown format is refused, not decrypted without its AAD", async () => {
+    const key = await generateBookKey();
+    const row: WireRow = {
+      id: snippet().id,
+      payloadFormat: 7,
+      payload: await encryptJSON(key, plainPayload()),
+      updatedAt: 1_700_000_000_500,
+      deletedAt: null,
+      serverSeq: 1,
+    };
+    expect(await refusal(row, key)).toBe("unknown-format");
+  });
+
+  it("a sealed label on a non-envelope is refused, not read as a stale key", async () => {
+    const row: WireRow = {
+      id: snippet().id,
+      payloadFormat: PAYLOAD_FORMAT_SEALED_AAD,
+      payload: plainPayload(),
+      updatedAt: 1_700_000_000_500,
+      deletedAt: null,
+      serverSeq: 1,
+    };
+    expect(await refusal(row, await generateBookKey())).toBe("not-an-envelope");
+  });
+
+  it("a payload-less row that isn't a deletion is refused", async () => {
+    const row: WireRow = {
+      id: snippet().id,
+      payloadFormat: PAYLOAD_FORMAT_SEALED_AAD,
+      payload: null,
+      updatedAt: 1_700_000_000_500,
+      deletedAt: null,
+      serverSeq: 1,
+    };
+    expect(await refusal(row)).toBe("empty-live-row");
   });
 
   it("an AAD-less sealed (format 2) row still decrypts with the key", async () => {
+    // legacy rows written before 2026-07-23 rest as format 2 until a
+    // device re-seals them; adoptServerRow decides where they may land
     const key = await generateBookKey();
     const s = snippet();
-    const { id, updatedAt, deletedAt, _dirty, ...payload } = s;
-    void _dirty;
     const row: WireRow = {
-      id,
+      id: s.id,
       payloadFormat: PAYLOAD_FORMAT_SEALED,
-      payload: await encryptJSON(key, payload), // no AAD — the legacy seal
-      updatedAt,
-      deletedAt: deletedAt ?? null,
+      payload: await encryptJSON(key, plainPayload()), // no AAD — the legacy seal
+      updatedAt: s.updatedAt,
+      deletedAt: null,
       serverSeq: 1,
     };
     const back = await fromWireRow(row, key);
@@ -195,6 +241,109 @@ describe("wire codec — tombstones", () => {
   });
 });
 
+describe("adoptServerRow — a server can't rearrange the entries a device holds", () => {
+  const NOW = 1_800_000_000_000;
+  const held = snippet({ text: "the version this device holds", _dirty: 0 });
+
+  async function sealedAt(over: Partial<Snippet>, format = PAYLOAD_FORMAT_SEALED_AAD) {
+    const key = await generateBookKey();
+    const s = snippet(over);
+    const { id, updatedAt, deletedAt, _dirty, ...payload } = s;
+    void _dirty;
+    const clocks = { id, updatedAt, deletedAt: deletedAt ?? null };
+    const row: WireRow = {
+      ...clocks,
+      payloadFormat: format,
+      payload: await encryptJSON(
+        key,
+        payload,
+        format === PAYLOAD_FORMAT_SEALED_AAD
+          ? aadForRow({ ...clocks, payloadFormat: format })
+          : undefined,
+      ),
+      serverSeq: 1,
+    };
+    return { row, decoded: await fromWireRow(row, key) };
+  }
+
+  it("refuses an older copy, though its AAD verifies (a replayed version)", async () => {
+    const { row, decoded } = await sealedAt({
+      text: "an earlier version",
+      updatedAt: held.updatedAt - 1_000,
+    });
+    expect(adoptServerRow(row, decoded, held, false, NOW)).toBeNull();
+  });
+
+  it("refuses a pre-deletion copy replayed onto a deleted entry", async () => {
+    const deleted = { ...held, deletedAt: held.updatedAt };
+    const { row, decoded } = await sealedAt({ updatedAt: held.updatedAt - 1 });
+    expect(adoptServerRow(row, decoded, deleted, false, NOW)).toBeNull();
+  });
+
+  it("takes a newer format-3 copy, and re-applies an equal clock", async () => {
+    const newer = await sealedAt({ text: "edited elsewhere", updatedAt: held.updatedAt + 1 });
+    expect(adoptServerRow(newer.row, newer.decoded, held, false, NOW)?.text).toBe(
+      "edited elsewhere",
+    );
+    const same = await sealedAt({ updatedAt: held.updatedAt });
+    expect(adoptServerRow(same.row, same.decoded, held, false, NOW)).not.toBeNull();
+  });
+
+  it("a contested (unsent) edit needs a strictly newer server copy", async () => {
+    const dirty = { ...held, _dirty: 1 as const };
+    const tie = await sealedAt({ updatedAt: held.updatedAt });
+    expect(adoptServerRow(tie.row, tie.decoded, dirty, true, NOW)).toBeNull();
+    const newer = await sealedAt({ updatedAt: held.updatedAt + 1 });
+    expect(adoptServerRow(newer.row, newer.decoded, dirty, true, NOW)).not.toBeNull();
+  });
+
+  it("refuses an AAD-less format-2 envelope on a held entry, even with a newer clock", async () => {
+    const { row, decoded } = await sealedAt(
+      { text: "words moved here from another entry", updatedAt: held.updatedAt + 5_000 },
+      PAYLOAD_FORMAT_SEALED,
+    );
+    expect(adoptServerRow(row, decoded, held, false, NOW)).toBeNull();
+  });
+
+  it("takes a format-2 entry the device doesn't hold, dirty for its re-seal", async () => {
+    const { row, decoded } = await sealedAt({ updatedAt: 1_690_000_000_000 }, PAYLOAD_FORMAT_SEALED);
+    const stored = adoptServerRow(row, decoded, undefined, false, NOW);
+    expect(stored?._dirty).toBe(1);
+    expect(stored!.updatedAt).toBeGreaterThan(row.updatedAt);
+  });
+
+  it("a payload-less deletion hides a held entry but keeps its words for 30 days", async () => {
+    const row: WireRow = {
+      id: held.id,
+      payloadFormat: PAYLOAD_FORMAT_SEALED_AAD,
+      payload: null,
+      updatedAt: held.updatedAt + 1,
+      deletedAt: 1_600_000_000_000, // a clock the server chose — not trusted
+      serverSeq: 2,
+    };
+    const stored = adoptServerRow(row, await fromWireRow(row), held, false, NOW);
+    expect(stored?.text).toBe(held.text);
+    // the 30-day local recovery window starts now, not at the server's clock
+    expect(stored?.deletedAt).toBe(NOW);
+    expect(stored?.updatedAt).toBe(row.updatedAt);
+    expect(stored?._dirty).toBe(0);
+  });
+
+  it("a payload-less deletion of an entry the device doesn't hold stores a ghost", async () => {
+    const row: WireRow = {
+      id: held.id,
+      payloadFormat: PAYLOAD_FORMAT_SEALED_AAD,
+      payload: null,
+      updatedAt: held.updatedAt,
+      deletedAt: held.updatedAt - 1,
+      serverSeq: 2,
+    };
+    const stored = adoptServerRow(row, await fromWireRow(row), undefined, false, NOW);
+    expect(stored?.text).toBe("");
+    expect(stored?.deletedAt).toBe(held.updatedAt - 1);
+  });
+});
+
 describe("needsReseal — which pulled rows re-dirty for their own re-seal", () => {
   const at = (payloadFormat: number, payload: unknown): WireRow => ({
     id: "01HZY3ULIDEXAMPLE0003",
@@ -206,9 +355,6 @@ describe("needsReseal — which pulled rows re-dirty for their own re-seal", () 
   });
   const sealedShape = { v: 1, iv: "AA==", ct: "AA==" };
 
-  it("format 1 (plaintext) re-seals", () => {
-    expect(needsReseal(at(1, { text: "plain" }))).toBe(true);
-  });
   it("format 2 (AAD-less envelope) re-seals", () => {
     expect(needsReseal(at(2, sealedShape))).toBe(true);
   });

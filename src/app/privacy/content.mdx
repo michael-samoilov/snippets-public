@@ -1,6 +1,6 @@
 import { Flows, Flow, Providers, Deepdive } from "@/components/policy-mdx";
 
-export const updated = "July 24, 2026";
+export const updated = "November 11, 2026";
 
 # We cannot read your entries.
 
@@ -23,7 +23,9 @@ If you sign in, you set a passphrase and are given a recovery code. Each one enc
 **One honest limit every encrypted web app lives with.** The app is a website: your browser downloads its code from us on each visit, so you are trusting that code. But don't take our word for it, [verify for yourself that the app works as explained →](/verify)
 
 <Deepdive>
-Every entry is encrypted with `AES-256-GCM` (an authenticated cipher, so a tampered entry fails to open rather than decrypting to something wrong) under a fresh random value each time, so two identical entries still encrypt to different characters. The entry's identifier and timestamps are bound into that check, so a moved, rolled-back, or resurrected entry fails to open too. All of your entries share one random 256-bit key, made on your device.
+Every entry is encrypted with `AES-256-GCM` (an authenticated cipher, so a tampered entry fails to open rather than decrypting to something wrong) under a fresh random value each time, so two identical entries still encrypt to different characters. The entry's identifier and timestamps are bound into that check, so an entry moved to another identifier, or given other timestamps, fails to open too. All of your entries share one random 256-bit key, made on your device.
+
+Your device also refuses a copy of an entry that is older than the one it holds, so our server cannot bring back an earlier version or an entry you deleted. It refuses anything that arrives unencrypted, too. What our server can still do is leave entries out, or mark one deleted. Your device then keeps that entry's words for 30 days, and Settings can bring it back. A new device has nothing to compare against, so it relies on our server for which entries exist and which version is newest. Every entry it opens is still one your devices encrypted. Entries saved before July 23, 2026, used an older format without the bound identifier and timestamps. Each device encrypts them again in the current format the first time it syncs them.
 
 That key is encrypted by your passphrase and by your recovery code, so it can travel between your devices without ever being exposed: once under a key stretched from your passphrase with `PBKDF2-HMAC-SHA-256, 600,000 iterations` and a random salt, and once under a key stretched from a ~120-bit recovery code. The server stores only those two encrypted copies, written once and never silently replaced; it can open neither, and they can be removed only by deleting your account.
 
