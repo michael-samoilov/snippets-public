@@ -27,7 +27,7 @@ let granted: string[] = [];
 let issued = 0;
 
 function idToken(): string {
-  const part = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const part = (o: Record<string, string | number | boolean>) => Buffer.from(JSON.stringify(o)).toString("base64url");
   return [
     part({ alg: "RS256", kid: "test" }),
     part({

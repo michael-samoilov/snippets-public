@@ -27,7 +27,7 @@ vi.mock("@/server/auth", () => ({
 
 import { POST } from "./route";
 
-function del(body?: object): Request {
+function del(body?: { driveToken?: string }): Request {
   return new Request("http://test/api/account/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
