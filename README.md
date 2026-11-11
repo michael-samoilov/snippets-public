@@ -11,6 +11,8 @@ offline, and keeps your entries on your device.
 
 Live app: [www.snippets.ink](https://www.snippets.ink)
 
+**Status:** Live, maintained solo; not accepting contributions.
+
 It follows the **Homework for Life** practice from Matthew Dicks's
 *Storyworthy*: at the end of each day, keep the most storyworthy moment
 that happened. Do it for a month, and you find that an ordinary life is
@@ -48,6 +50,22 @@ seeder (`src/lib/dev-seed.ts`).
   you lose your key. Spoken audio leaves the device only to be
   transcribed.
 
+## Start here
+
+These files show how the app works:
+
+- [`src/lib/crypto.ts`](src/lib/crypto.ts): end-to-end encryption, the book
+  key, and the row fields bound into each encrypted entry.
+- [`src/lib/sync.ts`](src/lib/sync.ts) with
+  [`src/lib/merge.ts`](src/lib/merge.ts): the sync engine and the one merge
+  rule that the client and the server share.
+- [`SECURITY-STATE.md`](SECURITY-STATE.md): what the app does with user data,
+  each claim tied to the code and test that prove it, and the known gaps.
+- [`src/lib/speech-providers.ts`](src/lib/speech-providers.ts): the one table
+  of speech-provider facts that the CSP and the privacy page read.
+- [`DESIGN.md`](DESIGN.md): the design system and the copy voice.
+- [`docs/architecture.md`](docs/architecture.md): how the parts fit.
+
 ## Run it locally
 
 ```sh
@@ -57,7 +75,9 @@ pnpm dev            # http://localhost:3000
 
 ### Optional speech keys
 
-Every key is optional; the app works with none of them. Server-side
+Every key is optional; the app works with none of them.
+[`.env.example`](.env.example) lists every variable that the app and its
+tools read. Server-side
 keys never reach the browser: the server mints a short-lived token for
 each recording.
 
@@ -165,4 +185,22 @@ contributors.
 | Sync (optional) | Better Auth · Neon Postgres with Drizzle · end-to-end encryption |
 | Typography | Fraunces (display and prose) · IBM Plex Mono (metadata) |
 
-All rights reserved. The code in this repository is not licensed for reuse.
+## Known limits
+
+- **One large file.** [`src/app/calendar/page.tsx`](src/app/calendar/page.tsx)
+  has about 8,000 lines. It holds the book, the month and year views, and
+  the today zone's scroll machinery.
+- **One device without an account.** Without sign-in, entries stay in one
+  browser's IndexedDB. Export them to JSON or Markdown to keep a copy.
+- **Browser dictation leaves the app's control.** With no speech key set,
+  the browser's own engine sends the audio to Google or Apple.
+- **Device-only checks.** Some iOS behavior, such as scroll momentum and
+  memory limits, shows only on a real iPhone, so those checks are manual.
+- **Known security gaps.** [`SECURITY-STATE.md`](SECURITY-STATE.md) lists
+  them under "Known gaps".
+
+## License
+
+Copyright (c) 2026 Michael Samoilov. All rights reserved. See [LICENSE](LICENSE).
+The code is published for reading, not for reuse.
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
