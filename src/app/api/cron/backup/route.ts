@@ -7,14 +7,18 @@
  * refresh your Drive copy"). Also the tombstone scrubber: content of
  * rows deleted more than 30 days ago is nulled; the rows themselves
  * stay forever — that permanence is what makes resurrection
- * impossible. And the ops storage watchdog: if the database crosses a
- * share of the Neon free-tier cap, it emails the owner (OPS_ALERT_EMAIL)
- * so an upgrade happens before writes are ever refused — never a user's
- * concern, since capture is local-first, but the owner's to act on.
+ * impossible. It also deletes the voice routes' day-old abuse counts
+ * (src/server/speech-guard.ts). And the ops storage watchdog: if the
+ * database crosses a share of the Neon free-tier cap, it emails the
+ * owner (OPS_ALERT_EMAIL) so an upgrade happens before writes are
+ * ever refused — never a user's concern, since capture is local-first,
+ * but the owner's to act on.
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { sendEmail } from "@/server/email";
+import { SPEECH_LIMIT_ROW_TTL_MS } from "@/server/speech-guard";
 import { backupEmail, STALE_AFTER_DAYS } from "@/lib/backup-shared";
 
 export const runtime = "nodejs";
@@ -29,9 +33,19 @@ const TOMBSTONE_SCRUB_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 const STORAGE_CAP_BYTES = 512 * 1024 * 1024;
 const STORAGE_ALERT_FRACTION = 0.7;
 
+/**
+ * Constant-time check of the Authorization header. Both sides are
+ * hashed first so the comparison runs on equal lengths and the time
+ * taken says nothing about the secret's length or prefix.
+ */
+function authorized(header: string | null, secret: string): boolean {
+  const digest = (v: string) => createHash("sha256").update(v).digest();
+  return timingSafeEqual(digest(header ?? ""), digest(`Bearer ${secret}`));
+}
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`)
+  if (!secret || !authorized(request.headers.get("authorization"), secret))
     return Response.json({ error: "unauthorized" }, { status: 401 });
   if (!serverDb)
     return Response.json(
@@ -47,6 +61,14 @@ export async function GET(request: Request) {
     .where(
       sql`deleted_at is not null and deleted_at < ${scrubBefore} and payload is not null`,
     );
+
+  // the voice routes' abuse counts: a row older than a day is a window
+  // long ended. Best-effort: the table appears on first use, so it may
+  // not exist yet.
+  await serverDb
+    .delete(schema.speechRateLimit)
+    .where(lt(schema.speechRateLimit.windowStart, Date.now() - SPEECH_LIMIT_ROW_TTL_MS))
+    .catch(() => {});
 
   // stale = connected, the book moved past the ledger, and no delivery
   // has landed for STALE_AFTER_DAYS

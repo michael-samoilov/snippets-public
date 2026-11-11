@@ -53,7 +53,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Current state (as of 2026-10-21)
+## Current state (as of 2026-11-11)
 
 ### Can we read your entries?
 - **No.** Signed out: entries live only in this browser's IndexedDB and
@@ -91,6 +91,12 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   write-once (no DELETE, no replace). Only deleting the whole account
   removes the wrapped keys (server-side cascade).
 - **Enforcement:** `src/app/api/keys/route.ts`, `src/lib/e2e.ts`.
+- **A new envelope must use the client's key-derivation strength.** The
+  PUT refuses a passphrase envelope below 600,000 PBKDF2 rounds and a
+  recovery envelope below 10,000 (`PASSPHRASE_ITERATIONS` /
+  `RECOVERY_ITERATIONS` in `src/lib/crypto.ts`, imported by the route's
+  schema). GET returns stored envelopes as they are, so no enrolled key
+  stops opening. Pinned by `src/app/api/keys/route.test.ts`.
 
 ### What can the server do to a sealed entry?
 - **Nothing without failing loudly.** The row's `id`, `updatedAt`,
@@ -119,6 +125,43 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   (only those whose API key is set on this deployment).
 - **Asserts it:** privacy `#voice`, `/verify` test 2; the retention lines
   are STE-linted (in `copy-clarity.test.ts` PAGES).
+
+### Who can spend the voice providers' credit
+- **Only the app's own pages, and only so fast.** The four token routes
+  (`/api/{soniox,speechmatics,deepgram,scribe}-token`) and the
+  transcription proxy (`/api/transcribe`) need no account, because
+  capture without one is the product. Their POST runs `speechGuard`
+  (`src/server/speech-guard.ts`) before any upstream call:
+  - **Same origin.** `Sec-Fetch-Site` must be absent or `same-origin`,
+    and `Origin` must be present and name the host the request reached;
+    anything else is `403 cross_site`. This stops another site from
+    spending credit through its visitors' browsers. A script can forge
+    both headers, so the next check is the limit.
+  - **Per-IP budget.** A fixed window per bucket (`SPEECH_BUDGETS`): 30
+    token mints per address per 10 minutes across all four providers, 20
+    uploads per 10 minutes; over it, `429 rate_limited` with
+    `Retry-After`. Counted in Postgres (`speech_rate_limit`, one atomic
+    upsert) so all serverless instances share one count; without
+    `DATABASE_URL` + `BETTER_AUTH_SECRET`, or when the query fails, an
+    in-process count stands in (voice is never refused for a database
+    error).
+  - **Token lifetimes are capped.** `tokenTtlSeconds` clamps the Soniox,
+    Speechmatics, and Deepgram TTL overrides to 60–600 seconds (a
+    non-number falls back to 300). ElevenLabs fixes its own token at 15
+    minutes, single use.
+  - **Upload size.** `/api/transcribe` refuses a declared
+    `Content-Length` over 25 MB (plus 64 KB of form overhead) with 413
+    before it reads the body.
+- **What the budget does not bound:** how long a provider session runs
+  once its token is accepted. The providers' own spend limits are the
+  backstop.
+- **No self-test routes.** The two diagnostics that streamed audio on
+  the owner's accounts without a session (`/api/scribe-selftest`,
+  `/api/deepgram-selftest`) are deleted.
+- **Enforcement:** `src/server/speech-guard.ts`, the five route files,
+  and the guard in `src/lib/security-invariants.test.ts` that fails any
+  API route that reads a `*_API_KEY` and calls `fetch` without running
+  `speechGuard` first.
 
 ### Google Drive backup
 - Plaintext **by design** — it's the key-loss safety net, delivered by
@@ -166,6 +209,18 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   content. Only measurement: anonymous page-view counting (Vercel,
   same-origin `/_vercel/insights`). Only emails: a sign-in code, or a
   backup-stopped warning.
+- **Sign-in codes rest as a keyed hash.** The email-code plugin stores
+  an HMAC-SHA-256 of the code under `BETTER_AUTH_SECRET` (`storeOTP` in
+  `src/server/auth.ts`), never the code. A plain hash would not do: six
+  digits have a million values. Pinned by the "sign-in codes rest as a
+  keyed hash" guard in `src/lib/security-invariants.test.ts`.
+- **Abuse counters.** The voice routes' budget stores, per address and
+  bucket, a 22-character HMAC of the IP (keyed by `BETTER_AUTH_SECRET`),
+  a window start, and a count; never the address. The daily cron
+  deletes rows older than a day (`SPEECH_LIMIT_ROW_TTL_MS`). Better
+  Auth's own sign-in rate limit is different: its `rate_limit` rows key
+  on the raw IP and path (`ip|path`), and Better Auth deletes them once
+  their window has passed.
 
 ### Leaving
 - Erase-all is permanent — there is no in-app undo for it (unlike a single
@@ -195,6 +250,16 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   `src/lib/sync-wire.test.ts`.
 - **Speech adapters speak the documented protocols:**
   `tests/e2e/speech_adapters.py` (14 checks).
+- **Voice routes refuse other sites and bursts, and run for the app:**
+  `src/server/speech-guard.test.ts` (route-level: cross-site 403, burst
+  429, oversized 413 without reading the body, TTL cap) and
+  `tests/e2e/speech_routes.py` (the real build in a real browser, the
+  real routes against a stub provider: the page's own mint and upload
+  succeed, a cross-site page's fetch and a burst are refused). The
+  Postgres count was proven against a real Postgres 16 when it landed:
+  table created on first use, 32 sequential hits gave 30 passes then
+  429s, 50 parallel hits counted exactly 50, an ended window reset to 1,
+  and no row held the address.
 - **Copy stays in the STE register:** `pnpm check:copy`.
 - **No undeclared data destination; CSP == code egress; deleted plaintext
   paths stay deleted:** `src/lib/security-invariants.test.ts` (rides
@@ -232,6 +297,23 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — voice routes gated; self-tests deleted; codes hashed; KDF floor
+An independent review found five routes that spend the owner's speech
+credit with no gate: any site or script could mint provider tokens or
+proxy 25 MB uploads, and two self-test routes streamed audio on the
+ElevenLabs and Deepgram accounts for anyone who added `?spend=yes`. The
+self-tests are deleted. The token routes and `/api/transcribe` now run
+`speechGuard`: same-origin only, a per-IP fixed-window budget counted in
+Postgres under a keyed hash of the address, token lifetimes clamped to
+60–600 s, and an oversized declared upload refused before it is read.
+Capture without an account still works. Sign-in codes now rest as an
+HMAC instead of plain text; a code issued before the deploy stops
+verifying, so a reader mid-sign-in at that moment requests a new one.
+`/api/keys` refuses a new envelope weaker than the client's own PBKDF2
+rounds. The cron compares its secret in constant time. No user-facing
+copy moved. Surfaces: the "Who can spend the voice providers' credit"
+and "Data we collect" rows, the keys row above.
 
 ### 2026-10-22 — device-side backup errors no longer blamed on Google
 An independent review found that any exception that wasn't a Google

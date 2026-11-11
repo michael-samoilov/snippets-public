@@ -1,3 +1,5 @@
+import { speechGuard } from "@/server/speech-guard";
+
 export const runtime = "nodejs";
 
 /**
@@ -6,6 +8,8 @@ export const runtime = "nodejs";
  * back as they're spoken — this route only guards the key: POST mints
  * a single-use token (15-minute, consumed on connect) so the client
  * can open that socket without ever seeing ELEVENLABS_API_KEY.
+ * speechGuard refuses cross-site callers and bursts first. ElevenLabs
+ * fixes the token's lifetime, so it has no TTL override to clamp.
  * GET is the availability probe the speech hook reads on page load.
  *
  * Without a key the client falls back to the batch Whisper-dialect
@@ -20,7 +24,9 @@ export async function GET() {
   return Response.json({ available: Boolean(process.env.ELEVENLABS_API_KEY) });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const refused = await speechGuard(request, "token");
+  if (refused) return refused;
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) {
     return Response.json({ error: "transcription_unconfigured" }, { status: 503 });

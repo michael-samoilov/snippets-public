@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { speechGuard } from "@/server/speech-guard";
 
 export const runtime = "nodejs";
 
@@ -28,6 +28,8 @@ const BASE = (
 ).replace(/\/$/, "");
 const MODEL = process.env.TRANSCRIBE_MODEL ?? process.env.AQUA_MODEL ?? "avalon-v1.5";
 const MAX_BYTES = 25 * 1024 * 1024;
+/** room for the multipart boundaries and part headers around the file */
+const FORM_OVERHEAD_BYTES = 64 * 1024;
 
 const apiKey = () => process.env.TRANSCRIBE_API_KEY ?? process.env.AQUA_API_KEY;
 
@@ -35,10 +37,20 @@ export async function GET() {
   return Response.json({ available: Boolean(apiKey()) });
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
+  const refused = await speechGuard(request, "transcribe");
+  if (refused) return refused;
   const key = apiKey();
   if (!key) {
     return Response.json({ error: "transcription_unconfigured" }, { status: 503 });
+  }
+
+  // Refuse by the declared size before reading a byte of the body. A
+  // request that declares none is still bounded: Vercel refuses any
+  // function body over 4.5 MB, and the size check below runs after.
+  const declared = Number(request.headers.get("content-length"));
+  if (declared > MAX_BYTES + FORM_OVERHEAD_BYTES) {
+    return Response.json({ error: "audio_too_long" }, { status: 413 });
   }
 
   let audio: Blob | null = null;

@@ -1,3 +1,5 @@
+import { speechGuard, tokenTtlSeconds } from "@/server/speech-guard";
+
 export const runtime = "nodejs";
 
 /**
@@ -12,7 +14,8 @@ export const runtime = "nodejs";
  * set SPEECHMATICS_LANGUAGE; there is no code-switching "multi" mode.
  *
  * POST mints the JWT via the management API; the real key never leaves
- * the server. GET is the availability probe.
+ * the server. speechGuard refuses cross-site callers and bursts first.
+ * GET is the availability probe.
  */
 
 const MP = (process.env.SPEECHMATICS_MP_URL ?? "https://mp.speechmatics.com").replace(/\/$/, "");
@@ -20,14 +23,16 @@ const WS = (process.env.SPEECHMATICS_WS_URL ?? "wss://eu2.rt.speechmatics.com/v2
 const LANGUAGE = process.env.SPEECHMATICS_LANGUAGE ?? "en";
 /** operating point: "enhanced" is their accuracy tier */
 const MODEL = process.env.SPEECHMATICS_OPERATING_POINT ?? "enhanced";
-// Speechmatics floors the JWT ttl at 60s
-const TTL_SECONDS = Math.max(Number(process.env.SPEECHMATICS_TOKEN_TTL ?? 300), 60);
+// clamped to 60..600 s (Speechmatics itself floors the JWT ttl at 60 s)
+const TTL_SECONDS = tokenTtlSeconds(process.env.SPEECHMATICS_TOKEN_TTL);
 
 export async function GET() {
   return Response.json({ available: Boolean(process.env.SPEECHMATICS_API_KEY) });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const refused = await speechGuard(request, "token");
+  if (refused) return refused;
   const key = process.env.SPEECHMATICS_API_KEY;
   if (!key) {
     return Response.json({ error: "transcription_unconfigured" }, { status: 503 });

@@ -39,8 +39,10 @@ export interface EncryptedPayload {
   ct: string;
 }
 
-const PASSPHRASE_ITERATIONS = 600_000;
-const RECOVERY_ITERATIONS = 10_000; // the code itself carries ~123 bits
+/** Also the floor `/api/keys` enforces on a new passphrase envelope. */
+export const PASSPHRASE_ITERATIONS = 600_000;
+/** Also the floor for a new recovery envelope: the code itself carries ~123 bits. */
+export const RECOVERY_ITERATIONS = 10_000;
 
 // ── small codecs ────────────────────────────────────────────────
 

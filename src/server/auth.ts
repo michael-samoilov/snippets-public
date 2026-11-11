@@ -11,6 +11,7 @@
  * grant with the drive.file scope) depends on holding one.
  */
 import "server-only";
+import { createHmac } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
@@ -52,6 +53,13 @@ function buildAuth() {
       emailOTP({
         otpLength: 6,
         expiresIn: 600,
+        // The verification row holds an HMAC of the code, keyed by the
+        // auth secret. A plain hash would not help: a 6-digit code has a
+        // million values, so a leaked table would reverse in a second.
+        storeOTP: {
+          hash: async (otp) =>
+            createHmac("sha256", secret).update(otp).digest("base64url"),
+        },
         async sendVerificationOTP({ email, otp }) {
           await sendSignInCode(email, otp);
         },

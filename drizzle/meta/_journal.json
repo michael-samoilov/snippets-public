@@ -15,6 +15,13 @@
       "when": 1783457368948,
       "tag": "0001_user-keys",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794432347027,
+      "tag": "0002_speech-rate-limit",
+      "breakpoints": true
     }
   ]
 }

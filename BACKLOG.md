@@ -16,8 +16,6 @@ the spoken fixture word-perfect at both chunk sizes. Measured — mint
 ~2s at either chunk size (model-side session warm-up, not our
 buffering — if that lag ever matters, it's an ElevenLabs conversation,
 not a client tune). Remaining chores, whenever convenient:
-- gate or remove `GET /api/scribe-selftest` (spends credit; it was the
-  no-secret verification path and is now redundant with CI)
 - decide /lab/wax-wash's fate after the wash iterations conclude
   (owner: lab-in-prod is fine short-term)
 

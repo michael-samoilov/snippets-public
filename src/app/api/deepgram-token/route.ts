@@ -1,3 +1,5 @@
+import { speechGuard, tokenTtlSeconds } from "@/server/speech-guard";
+
 export const runtime = "nodejs";
 
 /**
@@ -6,7 +8,8 @@ export const runtime = "nodejs";
  * they're spoken — measured ~2x lower latency than Scribe, first word
  * and steady. This route only guards the key: POST mints a short-lived
  * JWT (Deepgram's /v1/auth/grant) so the client opens that socket with
- * a bearer token instead of the raw key. GET is the availability probe.
+ * a bearer token instead of the raw key. speechGuard refuses cross-site
+ * callers and bursts first. GET is the availability probe.
  *
  * `language=multi` (Nova-3) accepts any supported language and switches
  * mid-sentence without configuration. Model/language overridable via
@@ -18,14 +21,16 @@ const WS = (process.env.DEEPGRAM_WS_URL ?? "wss://api.deepgram.com").replace(/\/
 const MODEL = process.env.DEEPGRAM_MODEL ?? "nova-3";
 const LANGUAGE = process.env.DEEPGRAM_LANGUAGE ?? "multi";
 // long enough to pre-mint and keep a take's socket warm; the client
-// refreshes well before this lapses
-const TTL_SECONDS = Number(process.env.DEEPGRAM_TOKEN_TTL ?? 300);
+// refreshes well before this lapses. Clamped to 60..600 s.
+const TTL_SECONDS = tokenTtlSeconds(process.env.DEEPGRAM_TOKEN_TTL);
 
 export async function GET() {
   return Response.json({ available: Boolean(process.env.DEEPGRAM_API_KEY) });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const refused = await speechGuard(request, "token");
+  if (refused) return refused;
   const key = process.env.DEEPGRAM_API_KEY;
   if (!key) {
     return Response.json({ error: "transcription_unconfigured" }, { status: 503 });

@@ -226,7 +226,7 @@ describe("absence guards — the deleted plaintext paths stay deleted", () => {
   it("every Deepgram listen socket opts out of model training", () => {
     // `mip_opt_out=true` is what makes the privacy page's "the audio is not
     // kept" true for Deepgram. It lived in the hook alone while the selftest
-    // route and the CLI script opened the same socket without it — so a
+    // route (since deleted) and the CLI script opened the same socket without it — so a
     // diagnostic sent real speech into training and certified a wire the app
     // never opens. The rule is per-CALLER, not per-file-we-remember: anything
     // that builds a /v1/listen URL carries the flag. The scripts/ sweep is
@@ -247,5 +247,54 @@ describe("absence guards — the deleted plaintext paths stay deleted", () => {
       "a Deepgram socket is opened without mip_opt_out — that audio may be " +
         "retained and used for training, which the privacy page forbids.",
     ).toEqual([]);
+  });
+});
+
+describe("provider credit — only the app's own pages can spend it", () => {
+  /**
+   * Any API route that reads a provider key (`*_API_KEY`) and calls out
+   * spends that provider's credit for its caller. Signed-out capture is
+   * the product, so these routes cannot ask for a session; speechGuard
+   * (src/server/speech-guard.ts) refuses cross-site callers and bursts
+   * instead. Two credit-spending self-test routes once shipped with no
+   * gate at all, so the rule is per-route, not per-route-we-remember:
+   * a new route that spends a key must run the guard before its first
+   * upstream call.
+   */
+  const apiRoutes = sourceFiles(join(SRC, "app", "api")).filter((f) =>
+    f.endsWith("route.ts"),
+  );
+  const spenders = apiRoutes.filter((f) => {
+    const text = readFileSync(f, "utf8");
+    return /process\.env\.[A-Z_]*API_KEY/.test(text) && text.includes("fetch(");
+  });
+
+  it("finds the routes it guards", () => {
+    expect(spenders.length, "no key-spending route found — did they move?")
+      .toBeGreaterThanOrEqual(5);
+  });
+
+  it("every key-spending route runs speechGuard before its first fetch", () => {
+    const unguarded = spenders.filter((f) => {
+      const text = readFileSync(f, "utf8");
+      const guard = text.search(/await speechGuard\(request, "(?:token|transcribe)"\)/);
+      return guard === -1 || guard > text.indexOf("fetch(");
+    });
+    expect(
+      unguarded.map((f) => f.slice(SRC.length)),
+      "this route spends a provider key without speechGuard — any site or " +
+        "script could run up the bill through it.",
+    ).toEqual([]);
+  });
+});
+
+describe("sign-in codes rest as a keyed hash", () => {
+  it("the email-code plugin stores an HMAC, not the code", () => {
+    // A 6-digit code has a million values, so a plain SHA-256 reverses in
+    // a second; the auth secret keys the hash so a leaked verification
+    // table reveals nothing usable.
+    const auth = readFileSync(join(SRC, "server", "auth.ts"), "utf8");
+    expect(/storeOTP:\s*\{\s*hash:/.test(auth)).toBe(true);
+    expect(auth.includes('createHmac("sha256", secret)')).toBe(true);
   });
 });
