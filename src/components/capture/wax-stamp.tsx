@@ -532,16 +532,7 @@ export function WaxStamp({ playKey, size = 96, glyph = "S", variant = "spring", 
     const cycleTotal = DROP_MS + IDLE_MS + PRESS_MS + lingerMs + exitMs;
     const tapTotal = TAP_TOTAL(lingerMs, exitMs);
     let raf = 0;
-    // TODO(remove before ship): deterministic seek for visual capture
-    type SeekWin = Window & { __stampSeek?: (t: number) => void };
-    (window as SeekWin).__stampSeek = (t) => {
-      cancelAnimationFrame(raf);
-      const tt = clamp(t);
-      draw(mode === "loop" ? cycleBeat(tt * cycleTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
-        : mode === "tap" ? tapBeat(tt * tapTotal, variant, ease, bounce, rotate, lingerMs, exitMs, exit)
-        : stateAt(tt, variant, ease, bounce, rotate));
-    };
-    const cleanup = () => { cancelAnimationFrame(raf); clearTimeout(warmRef.current); (window as SeekWin).__stampSeek = undefined; };
+    const cleanup = () => { cancelAnimationFrame(raf); clearTimeout(warmRef.current); };
 
     const reduced = ignoreReducedMotion ? false : reduce.current;
     if (still || reduced) { draw(mode === "tap" ? domeBeat(1, 1) : stateAt(1, variant, ease, bounce, rotate)); return cleanup; }

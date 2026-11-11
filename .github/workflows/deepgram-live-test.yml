@@ -1,18 +1,15 @@
 # Live-fire latency test of Deepgram Nova-3 streaming
 # (scripts/deepgram-live-test.mjs) — the head-to-head against ElevenLabs
 # Scribe on the same audio. Spends a few seconds of Deepgram credit per
-# run; on demand or when the harness changes. Key from the
+# run, so it runs on demand only (workflow_dispatch). Key from the
 # DEEPGRAM_API_KEY repo secret — write-only, masked in logs. The key must
 # have Member+ scope so it can mint the browser's short-lived JWT
 # (/v1/auth/grant); the bearer session in the harness proves that path.
 name: deepgram-live-test
 
 on:
+  # on demand only: every run spends provider credit, so no push trigger
   workflow_dispatch:
-  push:
-    paths:
-      - "scripts/deepgram-live-test.mjs"
-      - ".github/workflows/deepgram-live-test.yml"
 
 jobs:
   live-transcribe:

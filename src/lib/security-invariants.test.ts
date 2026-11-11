@@ -70,6 +70,7 @@ const ORIGIN_REGISTRY: Record<string, "self" | "connect" | "server" | "link" | "
 
   // referenced only in a comment
   "https://floating-ui.com": "doc",
+  "https://polyformproject.org": "doc", // the Paper Shaders license banner
 };
 
 const SPEECH_ORIGINS = new Set(

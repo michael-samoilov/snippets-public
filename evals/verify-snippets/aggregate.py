@@ -8,7 +8,7 @@ manual tracking. It runs score.py per candidate, then means per prompt and
 overall, and writes results/<label>.json.
 
     python3 evals/verify-snippets/aggregate.py --label 2026-08-27-usage \\
-        [--session-id <id>] [--evidence-root /tmp/vs-eval/<run>]
+        --session-id <SESSION_ID> [--evidence-root /tmp/vs-eval/<run>]
 
 Only transcripts whose description matches a known prompt id are scored, so
 unrelated sub-agents (explorers, earlier runs) are skipped.
@@ -32,7 +32,12 @@ def prompt_ids():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", required=True)
-    ap.add_argument("--session-id", default="74079780-9c45-5a8e-bc16-a09b8e30c4e3")
+    ap.add_argument(
+        "--session-id",
+        required=True,
+        metavar="SESSION_ID",
+        help="the orchestrating session's id; its subagent transcripts are scored",
+    )
     ap.add_argument("--evidence-root", default="")
     a = ap.parse_args()
 

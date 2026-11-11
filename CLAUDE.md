@@ -213,12 +213,20 @@ load-bearing: without it `pnpm lint` fails on a vendored test.
   rest + a warm band — already limits how much of the book LAYS OUT; the
   law is about per-card PAINT cost and stands regardless.)
 - **Shaders:** `src/vendor/paper-shaders/` is the vendored PaperTexture
-  chain from paper-design/shaders (Apache-2.0, LICENSE alongside) — no
-  npm dependency, same rule as the shadcn sources. Used only by the
-  `/lab/texture` bake route; the app ships baked bitmaps from
-  `public/textures`. The wax-wash lab's aurora/neuro candidates sit on
-  a small hand-rolled WebGL mount in
-  `src/app/(dev)/lab/wax-wash/shader-box.tsx`.
+  chain from paper-design/shaders (PolyForm Shield License 1.0.0, full
+  terms in the LICENSE alongside) — no npm dependency, same rule as the
+  shadcn sources. The license lets us use, change, and ship the code for
+  any purpose except a product that competes with Paper's, and anyone
+  who gets a copy must get the terms or their URL. Source comments do
+  not survive the production minifier, so the notice rides strings that
+  ship: the CSS that `core/shader-mount.js` injects into the page, and
+  the GLSL source of `NEURO_FRAG` (adapted from their neuro-noise) in
+  `src/components/capture/wash-shaders.tsx`. Keep both, and put the same
+  notice in a shipped string of any other code taken from Paper.
+  PaperTexture runs only in the `/lab/texture` bake route; the app ships
+  baked bitmaps from `public/textures`. `PulsingBorder` ships in the
+  recording wash. The aurora/neuro candidates sit on a small hand-rolled
+  WebGL mount (`ShaderBox` in `src/components/capture/wash-shaders.tsx`).
 - **Accounts + sync (optional):** Better Auth (Google + email OTP via
   Resend) on Neon Postgres/Drizzle — schema in `src/server/db/schema.ts`,
   SQL migrations in `drizzle/` (`pnpm db:generate` / `db:migrate`).
