@@ -10,12 +10,24 @@
  * cookie-clearing headers second, delete last. Device copies are
  * untouched — they belong to the writer, and the client returns the
  * book to local-only on its own.
+ *
+ * The server rarely holds a Google token to revoke: a sign-in stores
+ * none, and the Drive grant rests here only until a device adopts it
+ * (src/server/oauth-tokens.ts). So the deleting device sends the Drive
+ * refresh token it holds, if any. Revoking any one token ends the whole
+ * grant (Google revokes every token of that user for this app), so one
+ * device's token is enough.
  */
+import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
-import { auth, getSession } from "@/server/auth";
+import { auth, getSession, readStoredToken } from "@/server/auth";
 
 export const runtime = "nodejs";
+
+const bodySchema = z.object({
+  driveToken: z.string().min(10).max(1024).optional(),
+});
 
 export async function POST(request: Request) {
   if (!serverDb || !auth)
@@ -27,6 +39,10 @@ export async function POST(request: Request) {
   if (!session)
     return Response.json({ error: "signed out" }, { status: 401 });
   const userId = session.user.id;
+  // an older client sends no body; a malformed one is ignored, never a
+  // reason to keep the account
+  const body = bodySchema.safeParse(await request.json().catch(() => ({})));
+  const deviceToken = body.success ? body.data.driveToken : undefined;
 
   // best-effort: hand Google back its grant so the connection doesn't
   // outlive the account in the user's Google security settings
@@ -43,17 +59,21 @@ export async function POST(request: Request) {
           eq(schema.account.providerId, "google"),
         ),
       );
-    await Promise.allSettled(
+    const stored = await Promise.all(
       accounts
         .map((a) => a.refreshToken ?? a.accessToken)
         .filter((token): token is string => !!token)
-        .map((token) =>
-          fetch("https://oauth2.googleapis.com/revoke", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: `token=${encodeURIComponent(token)}`,
-          }),
-        ),
+        .map((token) => readStoredToken(token)),
+    );
+    const tokens = deviceToken ? [deviceToken, ...stored] : stored;
+    await Promise.allSettled(
+      tokens.map((token) =>
+        fetch("https://oauth2.googleapis.com/revoke", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `token=${encodeURIComponent(token)}`,
+        }),
+      ),
     );
   } catch {
     // revocation is a courtesy; deletion proceeds regardless

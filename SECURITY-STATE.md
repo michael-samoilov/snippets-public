@@ -289,8 +289,17 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   `TOMBSTONE_SCRUB_AFTER_MS` (server) are the paired 30-day constants; the
   privacy copy's "within 30 days" must move with them.
   Account deletion removes the account, synced entries + tombstones,
-  wrapped keys, and backup record from the server immediately; revokes
-  the Drive grant. Device copies and delivered Drive files remain yours.
+  wrapped keys, and backup record from the server immediately. It asks
+  Google to revoke the grant only with a token in hand: the deleting
+  device sends the Drive refresh token it holds (Settings' `doDelete` →
+  `/api/account/delete`), plus any token still resting on the server
+  before adoption. Revoking one token ends the whole grant for this app,
+  every device's token included. A device with no Drive token (and no
+  server-held one) leaves the grant listed in the user's Google Account;
+  the privacy page says so and links the page where they can remove it.
+  Device copies and delivered Drive files remain yours. Proven by
+  `src/app/api/account/delete/route.test.ts` and
+  `tests/e2e/delete_revoke.py`.
 
 ### How each claim is proven (run these after touching the area)
 - **No plaintext window, end to end, and a hostile server can't rearrange
@@ -349,6 +358,19 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — account deletion revokes the grant the deleting device holds
+This file and the privacy page said account deletion revokes the Drive
+grant. The route revoked only tokens the server held, and after a
+device adopts its grant the server holds none, so in the usual case
+nothing was revoked. Now the deleting device sends its Drive refresh
+token with the request and the route revokes it before the delete;
+the device then forgets its Drive tokens. The privacy page states the
+condition and links the Google Account page where the reader can remove
+the access themselves. Proven by `src/app/api/account/delete/route.test.ts`
+(the old route fails it) and `tests/e2e/delete_revoke.py`, which holds
+the real "Hold to delete" control. Surfaces: privacy `#leaving`, the
+"Leaving" row above.
 
 ### 2026-11-11 — a Google sign-in no longer stores a Drive-capable token
 This file said the server holds no Drive tokens, and the privacy page

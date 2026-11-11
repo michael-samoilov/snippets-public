@@ -27,6 +27,7 @@ import { replaceUrl } from "@/lib/history";
 import { getBookKey, refreshEnrollment, unlock } from "@/lib/e2e";
 import {
   adoptDriveToken,
+  deviceDriveToken,
   forgetDriveTokens,
   hasDriveToken,
 } from "@/lib/backup-client";
@@ -595,12 +596,20 @@ function DangerZone({ user }: { user: { email: string } | null }) {
   };
   const doDelete = async () => {
     try {
-      const response = await fetch("/api/account/delete", { method: "POST" });
+      // the server revokes this device's Drive grant before it deletes:
+      // it holds no Drive token of its own once a device has adopted one
+      const driveToken = await deviceDriveToken().catch(() => undefined);
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ driveToken }),
+      });
       if (!response.ok) throw new Error(`delete ${response.status}`);
     } catch {
       toast(copy.settings.account.deleteAccount.failed);
       return;
     }
+    await forgetDriveTokens().catch(() => {});
     await releaseBinding().catch(() => {});
     await authClient.signOut().catch(() => {});
     toast(copy.settings.account.deleteAccount.done);
