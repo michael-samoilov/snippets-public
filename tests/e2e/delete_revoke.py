@@ -101,7 +101,8 @@ def main():
         page.wait_for_timeout(1500)
 
         check("the delete request went out once", len(deletes) == 1, f"{len(deletes)}")
-        body = json.loads(deletes[0]) if deletes else {}
+        # an older client sent no body at all
+        body = json.loads(deletes[0]) if deletes and deletes[0] else {}
         check("it carried this device's Drive token for the server to revoke",
               body.get("driveToken") == DEVICE_TOKEN)
         check("the device forgot its Drive token afterwards",
