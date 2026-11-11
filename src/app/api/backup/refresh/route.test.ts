@@ -21,7 +21,12 @@ function refresh(): Request {
   });
 }
 
-function google(status: number, body: object) {
+/** The two bodies Google's token endpoint documents: a grant or an error. */
+type GoogleTokenBody =
+  | { access_token: string; expires_in: number }
+  | { error: string; error_description: string };
+
+function google(status: number, body: GoogleTokenBody) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(JSON.stringify(body), { status })),

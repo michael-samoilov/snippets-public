@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { ThemeProvider, useTheme } from "next-themes";
 import { MotionConfig } from "motion/react";
 import { Toaster } from "@/components/ui/sonner";
@@ -118,8 +118,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // ids written at submit whose live row must stay invisible until the seal
   // choreography's beat reveals it (see KeptDraftStore.heldIds)
   const [heldIds, setHeldIds] = useState<Set<string>>(() => new Set());
-  const draftsRef = useRef(drafts);
-  draftsRef.current = drafts;
+  // Reads the drafts committed when the timer fires, not the ones the
+  // effect saw when it armed it (an Effect Event always sees the latest
+  // render's values without becoming a dependency).
+  const releaseOrphans = useEffectEvent((orphans: string[]) => {
+    const stillCovered = new Set(Object.values(drafts).map((d) => d.id));
+    setHeldIds((h) => {
+      let changed = false;
+      const n = new Set(h);
+      for (const id of orphans) {
+        if (n.has(id) && !stillCovered.has(id)) {
+          n.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? n : h;
+    });
+  });
   // Fail-open for stranded holds: between submit and carding there is no draft
   // yet (intentional). Past the press window a hold with no covering draft is
   // the BACKLOG-25 bug — the live row stays filtered out of ScheduleCards.
@@ -132,22 +147,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     );
     const orphans = [...heldIds].filter((id) => !covered.has(id));
     if (orphans.length === 0) return;
-    const t = window.setTimeout(() => {
-      const stillCovered = new Set(
-        Object.values(draftsRef.current).map((d) => d.id),
-      );
-      setHeldIds((h) => {
-        let changed = false;
-        const n = new Set(h);
-        for (const id of orphans) {
-          if (n.has(id) && !stillCovered.has(id)) {
-            n.delete(id);
-            changed = true;
-          }
-        }
-        return changed ? n : h;
-      });
-    }, 4000);
+    const t = window.setTimeout(() => releaseOrphans(orphans), 4000);
     return () => clearTimeout(t);
   }, [heldIds, drafts]);
   const draftStore = useMemo<KeptDraftStore>(

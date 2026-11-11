@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     "src/vendor/**",
     // Vendored oxlint rules (anti-slop) — same rule; oxlint ignores them too.
     "tools/oxlint/anti-slop/**",
+    // Agent tooling (vendored pstack skills and their Bun scripts) — not
+    // app code; flat config lints dot-directories unless told otherwise.
+    ".claude/**",
   ]),
 ]);
 
