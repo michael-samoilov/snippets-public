@@ -197,17 +197,16 @@ export const speechRateLimit = pgTable("speech_rate_limit", {
  * One row per Drive refresh token a device adopted: the token's SHA-256
  * and the account that adopted it. /api/backup/refresh exchanges a token
  * only for that account, so a token from anywhere else can't borrow the
- * server's Google client secret. The token itself never rests here, and
- * deleting the account deletes its rows, which ends every device's
- * exchange with it.
+ * server's Google client secret. The token itself never rests here.
+ * Deleting the account empties `user_id` rather than the row: a row with
+ * no account is never exchanged, where a missing row could be claimed
+ * (src/server/drive-grant.ts).
  */
 export const driveGrant = pgTable(
   "drive_grant",
   {
     tokenHash: text("token_hash").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [index("drive_grant_user").on(t.userId)],

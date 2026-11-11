@@ -13,7 +13,11 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/server/auth";
 import { serverDb, schema } from "@/server/db";
-import { grantVerdict, hashRefreshToken } from "@/server/drive-grant";
+import {
+  driveGrantTableReady,
+  grantVerdict,
+  hashRefreshToken,
+} from "@/server/drive-grant";
 
 export const runtime = "nodejs";
 
@@ -33,12 +37,17 @@ export async function POST(request: Request) {
   if (!parsed.success)
     return Response.json({ error: "malformed" }, { status: 400 });
 
+  await driveGrantTableReady(serverDb);
   const tokenHash = hashRefreshToken(parsed.data.refreshToken);
   const [binding] = await serverDb
     .select({ userId: schema.driveGrant.userId })
     .from(schema.driveGrant)
     .where(eq(schema.driveGrant.tokenHash, tokenHash));
-  const verdict = grantVerdict(binding?.userId, session.user.id, Date.now());
+  const verdict = grantVerdict(
+    binding ? binding.userId : undefined,
+    session.user.id,
+    Date.now(),
+  );
   if (verdict === "refuse")
     // the same shape as Google's refusal: the device drops the token and
     // Settings offers Reconnect, which mints and binds a fresh grant

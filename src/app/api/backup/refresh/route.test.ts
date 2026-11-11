@@ -10,11 +10,12 @@ vi.mock("@/server/auth", () => ({
   getSession: vi.fn(async () => ({ user: { id: "user-1" } })),
 }));
 // the binding table: the token's hash → the account that adopted it
-const grants = vi.hoisted(() => ({ rows: new Map<string, string>() }));
+const grants = vi.hoisted(() => ({ rows: new Map<string, string | null>() }));
 vi.mock("@/server/db", () => {
   // each case holds at most one binding, so a lookup returns it
   return {
     serverDb: {
+      execute: async () => {},
       select: () => ({
         from: () => ({
           where: async () =>
@@ -138,6 +139,14 @@ describe("refresh route — a token is exchanged only for the account it is boun
     const res = await POST(refresh());
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: "revoked", google: "unbound_grant" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a token whose account was deleted; it is never claimable again", async () => {
+    grants.rows = new Map([[TOKEN_HASH, null]]);
+    google(200, { access_token: "ya29.example", expires_in: 3599 });
+    const res = await POST(refresh());
+    expect(res.status).toBe(401);
     expect(fetch).not.toHaveBeenCalled();
   });
 

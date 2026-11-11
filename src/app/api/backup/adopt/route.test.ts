@@ -20,6 +20,7 @@ vi.mock("@/server/db", () => {
   };
   return {
     serverDb: {
+      execute: async () => {},
       select: () => ({
         from: () => ({
           where: async () => [{ id: "acc-1", refreshToken: "stored", accessToken: null }],
