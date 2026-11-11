@@ -11,6 +11,7 @@
 import { and, eq } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { auth, getSession, readStoredToken } from "@/server/auth";
+import { driveGrantTableReady, hashRefreshToken } from "@/server/drive-grant";
 
 export const runtime = "nodejs";
 
@@ -38,11 +39,19 @@ export async function POST(request: Request) {
 
   const refreshToken = await readStoredToken(account.refreshToken);
 
-  // the forgetting is the feature
-  await serverDb
-    .update(schema.account)
-    .set({ refreshToken: null, accessToken: null })
-    .where(eq(schema.account.id, account.id));
+  // bind the token to this account (only its hash rests), then forget
+  // the token itself — the forgetting is the feature
+  await driveGrantTableReady(serverDb);
+  await serverDb.transaction(async (tx) => {
+    await tx
+      .insert(schema.driveGrant)
+      .values({ tokenHash: hashRefreshToken(refreshToken), userId: session.user.id })
+      .onConflictDoNothing();
+    await tx
+      .update(schema.account)
+      .set({ refreshToken: null, accessToken: null })
+      .where(eq(schema.account.id, account.id));
+  });
 
   return Response.json({ refreshToken });
 }

@@ -54,7 +54,9 @@ export function classifyBackupError(detail: string | null): BackupFailure | null
     return "server";
   if (/rateLimitExceeded|RATE_LIMIT_EXCEEDED|rate limit exceeded|^drive 429\b/i.test(detail))
     return "rateLimit";
-  if (/invalid_grant|^grant revoked$|^drive 401\b|^no refresh token on device$/.test(detail))
+  // unbound_grant: our refresh route refused a token bound to no grant of
+  // this account; Reconnect fixes it the same way
+  if (/invalid_grant|unbound_grant|^grant revoked$|^drive 401\b|^no refresh token on device$/.test(detail))
     return "revoked";
   // our route wraps Google's token-endpoint outage as "http 5xx"
   if (/^refresh \d{3} http 5\d\d\b/.test(detail)) return "google";

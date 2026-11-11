@@ -226,7 +226,24 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   a Google sign-in stores no token, though Google's covers Drive after a
   grant (Better Auth sends `include_granted_scopes=true`), and neither
   does a link with Drive unticked. `/api/backup/refresh` exchanges the
-  device's token statelessly and stores nothing.
+  device's token statelessly and stores no token.
+- **A token is exchanged only for the account that adopted it.** Adoption
+  records the token's SHA-256 with the account (`drive_grant`); the
+  refresh route refuses any other account with `401 revoked` /
+  `unbound_grant`, without asking Google, so a token from elsewhere
+  can't borrow the server's client secret. Deleting the account empties
+  the row's account (`on delete set null`) instead of removing the row:
+  a row with no account is never exchanged, where a missing row could be
+  claimed. Only the hash rests, with no account once deleted. Tokens
+  adopted before bindings existed are claimed by the first account that
+  exchanges them, until `CLAIM_UNBOUND_UNTIL` (2026-12-31); after that an
+  unclaimed device reconnects from Settings. The table creates itself on
+  first use (`driveGrantTableReady`), and migration
+  `drizzle/0003_drive-grants.sql` runs the same idempotent statements, so
+  either may run first. Enforcement: `src/server/drive-grant.ts`,
+  `/api/backup/adopt`, `/api/backup/refresh`. Proven by
+  `adopt/route.test.ts`, `refresh/route.test.ts`, and a run of both real
+  routes against a fresh Postgres 16 holding only migrations 0000-0001.
 - **Proven by:** `src/server/oauth-tokens.test.ts` drives a real Better
   Auth through Google's sign-in and link callbacks (token endpoint
   stubbed) and reads the `account` row after each; the
@@ -363,10 +380,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   A new device can't tell an omitted entry, or an older version, from
   the current book. Closing that needs a signed index of the whole book.
   Not built.
-- **`/api/backup/refresh` checks for a session, not for whose token it
-  is.** Any signed-in account can exchange any Drive refresh token it
-  holds. Binding each adopted token to its account is written and waits
-  on a database migration (branch `fix/drive-grant-binding`).
+- **Drive tokens adopted before the binding shipped are bound on first
+  use.** Until 2026-12-31 the first signed-in account to exchange an
+  unbound token claims it (`CLAIM_UNBOUND_UNTIL`); an active device
+  claims its own on its next delivery.
 - **Revoking the Google grant needs a token.** Account deletion from a
   device with no Drive token leaves the grant listed in the reader's
   Google Account. The privacy page says so and links the page that
@@ -384,6 +401,24 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — a Drive token is exchanged only for the account that adopted it
+`/api/backup/refresh` checked only that some session existed, then
+attached the server's Google client secret to whatever refresh token it
+received. Any signed-in account could use it to turn a Drive refresh
+token from anywhere into an access token. Adoption now records the
+token's SHA-256 with the account (`drive_grant`), and the refresh route
+exchanges a token only for that account. Account deletion keeps the
+row with no account, so a deleted account's tokens can never be
+claimed. Tokens adopted earlier are claimed on first use until
+2026-12-31. A refused token reads to the device as revoked
+(`unbound_grant`), so Settings offers Reconnect. The table creates
+itself on first use, like `speech_rate_limit`, so the deploy needs no
+manual migration; migration 0003 is idempotent. Run against a fresh
+Postgres holding only migrations 0000-0001, the previous version of
+this change failed 5 of 7 checks with `relation "drive_grant" does not
+exist`; this one passes all 7. Surfaces: the "Google Drive backup" row
+above.
 
 ### 2026-11-11 — "Known gaps" rewritten as a dated note
 The section said both that the short privacy page was not live and that

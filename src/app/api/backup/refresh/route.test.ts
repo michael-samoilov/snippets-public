@@ -9,9 +9,36 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/server/auth", () => ({
   getSession: vi.fn(async () => ({ user: { id: "user-1" } })),
 }));
+// the binding table: the token's hash → the account that adopted it
+const grants = vi.hoisted(() => ({ rows: new Map<string, string | null>() }));
+vi.mock("@/server/db", () => {
+  // each case holds at most one binding, so a lookup returns it
+  return {
+    serverDb: {
+      execute: async () => {},
+      select: () => ({
+        from: () => ({
+          where: async () =>
+            [...grants.rows].map(([, userId]) => ({ userId })).slice(0, 1),
+        }),
+      }),
+      insert: () => ({
+        values: (v: { tokenHash: string; userId: string }) => ({
+          onConflictDoNothing: async () => {
+            if (!grants.rows.has(v.tokenHash)) grants.rows.set(v.tokenHash, v.userId);
+          },
+        }),
+      }),
+    },
+    schema: { driveGrant: {} },
+  };
+});
 
 import { POST } from "./route";
 import { getSession } from "@/server/auth";
+import { CLAIM_UNBOUND_UNTIL, hashRefreshToken } from "@/server/drive-grant";
+
+const TOKEN_HASH = hashRefreshToken("1//refresh-token-example");
 
 function refresh(): Request {
   return new Request("http://test/api/backup/refresh", {
@@ -34,6 +61,8 @@ function google(status: number, body: GoogleTokenBody) {
 }
 
 beforeEach(() => {
+  // the device's token is bound to user-1 unless a case says otherwise
+  grants.rows = new Map([[TOKEN_HASH, "user-1"]]);
   vi.stubEnv("GOOGLE_CLIENT_ID", "client-id");
   vi.stubEnv("GOOGLE_CLIENT_SECRET", "client-secret");
   vi.mocked(getSession).mockResolvedValue({
@@ -43,6 +72,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("refresh route — Google's verdict travels back", () => {
@@ -99,5 +129,42 @@ describe("refresh route — Google's verdict travels back", () => {
     expect(res.status).toBe(401);
     // the device deletes its Drive token only on error === "revoked"
     expect(await res.json()).toEqual({ error: "signed out" });
+  });
+});
+
+describe("refresh route — a token is exchanged only for the account it is bound to", () => {
+  it("refuses a token bound to another account, without asking Google", async () => {
+    grants.rows = new Map([[TOKEN_HASH, "someone-else"]]);
+    google(200, { access_token: "ya29.example", expires_in: 3599 });
+    const res = await POST(refresh());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: "revoked", google: "unbound_grant" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a token whose account was deleted; it is never claimable again", async () => {
+    grants.rows = new Map([[TOKEN_HASH, null]]);
+    google(200, { access_token: "ya29.example", expires_in: 3599 });
+    const res = await POST(refresh());
+    expect(res.status).toBe(401);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("an unbound token from before bindings is claimed by its first account", async () => {
+    vi.useFakeTimers({ now: CLAIM_UNBOUND_UNTIL - 1, toFake: ["Date"] });
+    grants.rows = new Map();
+    google(200, { access_token: "ya29.example", expires_in: 3599 });
+    const res = await POST(refresh());
+    expect(res.status).toBe(200);
+    expect(grants.rows.get(TOKEN_HASH)).toBe("user-1");
+  });
+
+  it("after the claim window an unbound token is refused", async () => {
+    vi.useFakeTimers({ now: CLAIM_UNBOUND_UNTIL, toFake: ["Date"] });
+    grants.rows = new Map();
+    google(200, { access_token: "ya29.example", expires_in: 3599 });
+    const res = await POST(refresh());
+    expect(res.status).toBe(401);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

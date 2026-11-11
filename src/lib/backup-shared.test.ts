@@ -118,6 +118,7 @@ describe("classifyBackupError — the ledger line read back into a cause", () =>
     ["drive 403 accessNotConfigured: Google Drive API has not been used in project 1 before or it is disabled.", "server"],
     ["drive 401 authError: Invalid Credentials", "revoked"],
     ["refresh 401 invalid_grant: Token has been expired or revoked.", "revoked"],
+    ["refresh 401 unbound_grant: This Drive connection is not bound to this account.", "revoked"],
     ["refresh 502 invalid_client: The OAuth client was not found.", "server"],
     ["refresh 502 http 500: ", "google"],
     ["drive 503 backendError: Backend Error", "google"],
