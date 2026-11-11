@@ -83,9 +83,15 @@ Encryption is required at sign-in, and there is no unencrypted sync.
   `payloadFormat`) are bound in as additional authenticated data
   (`aadForRow` in [`src/lib/crypto.ts`](../src/lib/crypto.ts)). A moved,
   rolled-back, revived, or downgraded row fails to decrypt.
-- The push route accepts only encrypted formats and refuses format 1 with
-  `409 encryption_required`. Older encrypted rows still open, and each
-  device re-encrypts them to the current format.
+- The push route accepts format 3 only. It refuses format 1 with
+  `409 encryption_required` and format 2 with `400`.
+- Pull refuses plaintext, an unknown format, and a live row with no
+  payload ([`src/lib/sync-wire.ts`](../src/lib/sync-wire.ts)). For an entry
+  that a device already holds, it refuses an older copy and an envelope
+  without bound fields (format 2). A deletion with no payload hides the
+  entry and keeps its words on the device for 30 days.
+- A format-2 row still opens for an entry that the device does not hold,
+  and the device re-encrypts it to format 3.
 - The book key is wrapped twice, under the passphrase and under a recovery
   code. The server stores only the wrapped copies (`/api/keys`), once, and
   never replaces them through the API. On the device, the key is a
@@ -105,11 +111,15 @@ folder in the user's own Google Drive.
   ([`src/lib/render-book.ts`](../src/lib/render-book.ts)), as Markdown and a
   JSON archive that Restore from JSON reads, and uploads them after each
   sync ([`src/lib/backup-client.ts`](../src/lib/backup-client.ts)).
-- The server holds a Drive refresh token only until a device collects it
-  from `/api/backup/adopt`, and it encrypts the token while it waits.
-  Adoption records the token's SHA-256 with the account. The device then
-  exchanges its token through `/api/backup/refresh` for a short-lived access
-  token. That route stores nothing and refuses any other account.
+- A Google sign-in stores no token. The server holds a Drive refresh token
+  only until a device collects it from `/api/backup/adopt`, and OAuth tokens
+  are encrypted at rest.
+- Adoption records the token's SHA-256 with the account in a `drive_grant`
+  table. The device then exchanges its token through `/api/backup/refresh`
+  for a short-lived access token. That route stores no token and refuses
+  any other account.
+- Account deletion revokes the Drive token that the deleting device sends,
+  and that account's tokens are never exchanged again.
 - The device reports each delivery and each failure, with Google's own error
   code. Settings names the cause and the one action that fixes it.
 - A daily cron job emails the user when a backup falls behind while the book

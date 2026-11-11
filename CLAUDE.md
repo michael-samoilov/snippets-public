@@ -248,12 +248,23 @@ load-bearing: without it `pnpm lint` fails on a vendored test.
   (`aadForRow` in `src/lib/crypto.ts` — the canonical pipe string is
   pinned by a test; changing it orphans every sealed book) so a moved /
   rolled-back / resurrected / format-downgraded envelope fails to open.
-  Formats 1|2 remain READABLE on pull (legacy rows re-seal to 3 via the
-  one-time per-device sweep + the pull re-dirty rule in `sync.ts`);
-  nothing can WRITE them — `pushAll`/`pullAll`/`toWireChange` take the
-  key as a required argument, and the push route accepts 2|3 only
-  (format 1 → 409 `encryption_required`, sealed payloads must be shaped
-  `{v:1,iv,ct}`). `disableEncryption` was deleted deliberately — do not
+  Pull REFUSES what no client writes (`fromWireRow` in
+  `src/lib/sync-wire.ts` → `RefusedRowError`): plaintext format 1, an
+  unknown format, a sealed label on a non-envelope, and a live row with
+  no payload; the applier skips such a row and never locks or retries.
+  For an entry the device already holds, `adoptServerRow` never goes
+  back (an older copy is refused) and never takes an AAD-less format-2
+  envelope (on a held entry it can only be a replay); a payload-less
+  deletion carries no proof, so it hides the entry but keeps its words
+  on the device, restorable from Settings for 30 days. Format 2 still
+  opens for an entry the device does NOT hold, so legacy rows convert:
+  they re-seal to 3 via the one-time per-device sweep in `sync.ts` and
+  the pull re-dirty rule (`needsReseal`). Nothing can WRITE an old
+  format — `pushAll`/`pullAll`/`toWireChange` take the key as a
+  required argument, and the push route accepts format 3 only
+  (format 1 → 409 `encryption_required`, format 2 → 400; sealed
+  payloads must be shaped `{v:1,iv,ct}`). `disableEncryption` was
+  deleted deliberately — do not
   reintroduce any path that re-pushes plaintext. The key is wrapped
   under the passphrase AND a recovery code; only the wrapped envelopes
   rest server-side (`/api/keys` — PUT once, never replaceable or
@@ -278,10 +289,19 @@ load-bearing: without it `pnpm lint` fails on a vendored test.
   (keep `src/lib/render-book.ts` the single renderer — the JSON stays
   bit-compatible with Restore from JSON) and uploads to the visible
   Drive folder itself (`src/lib/backup-client.ts` + `drive-client.ts`),
-  after each settled sync. The server keeps NO Drive tokens: each
-  device adopts its own refresh token once (`/api/backup/adopt` —
-  the server then forgets it) and exchanges it statelessly
-  (`/api/backup/refresh`). Grants are PER DEVICE and additive — any
+  after each settled sync. The server holds a Drive token ONLY until a
+  device adopts it: a Google sign-in stores no token (`accountTokenHooks`
+  in `src/server/oauth-tokens.ts` null every token write except the
+  Drive link's), OAuth tokens rest encrypted (`encryptOAuthTokens`),
+  and the device collects its refresh token once from
+  `/api/backup/adopt`, which nulls it. Adoption binds the token's
+  SHA-256 to the account in `drive_grant` (`src/server/drive-grant.ts`,
+  a table the routes create on first use); `/api/backup/refresh`
+  exchanges a token statelessly and only for the account it is bound
+  to. Account deletion revokes the Drive token the deleting device sends
+  (`/api/account/delete`), and the deletion empties that account's
+  bindings (`on delete set null`), so its tokens never exchange again.
+  Grants are PER DEVICE and additive — any
   signed-in device can mint its own via the same consent (Settings →
   "Back up from this device too"); every device holding one delivers,
   and Drive writes converge by name, no duplicates. The device
