@@ -18,7 +18,8 @@ vi.mock("@/server/auth", () => ({
 
 import { POST } from "./route";
 import { getSession } from "@/server/auth";
-
+import { serverDb } from "@/server/db";
+import { QUOTA_BYTES, QUOTA_ROWS } from "@/server/sync-quota";
 
 const sealed = {
   v: 1,
@@ -120,5 +121,70 @@ describe("push route — plaintext refusal", () => {
       ]),
     );
     expect(big.status).toBe(413);
+  });
+});
+
+describe("push route — the per-account quota", () => {
+  // A fake transaction: each select answers from a queue, in the order
+  // the route issues them; writes are recorded. Enough to run the quota
+  // check under the lock exactly as the route does.
+  function fakeTx(selects: unknown[][]) {
+    const writes: string[] = [];
+    const chain = (rows: unknown[]) => ({
+      from: () => ({ where: async () => rows }),
+    });
+    const tx = {
+      execute: async () => {},
+      select: () => chain(selects.shift() ?? []),
+      insert: () => ({ values: async () => void writes.push("insert") }),
+      update: () => ({ set: () => ({ where: async () => void writes.push("update") }) }),
+    };
+    vi.mocked(serverDb!.transaction).mockImplementationOnce(
+      (async (fn: (t: typeof tx) => Promise<void>) => fn(tx)) as never,
+    );
+    return writes;
+  }
+
+  it("refuses a new entry past the row ceiling with 507 quota_exceeded, writing nothing", async () => {
+    const writes = fakeTx([[], [{ rows: QUOTA_ROWS, bytes: 1000 }]]);
+    const res = await POST(push([{ ...base, payloadFormat: 3, payload: sealed }]));
+    expect(res.status).toBe(507);
+    expect(await res.json()).toEqual({ error: "quota_exceeded" });
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses an entry that would cross the byte ceiling", async () => {
+    const writes = fakeTx([[], [{ rows: 10, bytes: QUOTA_BYTES - 10 }]]);
+    const res = await POST(push([{ ...base, payloadFormat: 3, payload: sealed }]));
+    expect(res.status).toBe(507);
+    expect(writes).toEqual([]);
+  });
+
+  it("an account over the ceiling can still delete", async () => {
+    const big = { ...sealed, ct: "A".repeat(4000) };
+    const stored = { ...base, payload: big, payloadFormat: 3, serverSeq: 7 };
+    // pre-pass sees the stored row; no usage read (the batch shrinks
+    // the account); the merge loop's select; the max-seq read
+    const writes = fakeTx([[stored], [stored], [{ max: 8 }]]);
+    const res = await POST(
+      push([
+        {
+          ...base,
+          payloadFormat: 3,
+          payload: sealed,
+          updatedAt: base.updatedAt + 1,
+          deletedAt: base.updatedAt + 1,
+        },
+      ]),
+    );
+    expect(res.status).toBe(200);
+    expect(writes).toEqual(["update"]);
+  });
+
+  it("a new entry under the ceiling is applied", async () => {
+    const writes = fakeTx([[], [{ rows: 10, bytes: 10_000 }], [], [{ max: 1 }]]);
+    const res = await POST(push([{ ...base, payloadFormat: 3, payload: sealed }]));
+    expect(res.status).toBe(200);
+    expect(writes).toEqual(["insert"]);
   });
 });

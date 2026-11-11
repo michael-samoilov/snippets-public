@@ -10,9 +10,10 @@
  * final — that, not merge cleverness, is what guarantees convergence.
  */
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { getSession } from "@/server/auth";
+import { exceedsQuota, growth } from "@/server/sync-quota";
 import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
   PAYLOAD_FORMAT_PLAIN,
@@ -112,9 +113,50 @@ export async function POST(request: Request) {
   const userId = session.user.id;
   const results: PushResult[] = [];
   let maxSeq = 0;
+  let overQuota = false;
 
   await serverDb.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+
+    // the per-account ceiling (src/server/sync-quota.ts), checked under
+    // the same lock as the writes it guards. The account's total is read
+    // only when this batch would grow it, so deletions stay cheap.
+    const ids = [...new Set(parsed.data.changes.map((c) => c.id))];
+    const stored = await tx
+      .select({
+        id: schema.snippets.id,
+        payload: schema.snippets.payload,
+        updatedAt: schema.snippets.updatedAt,
+      })
+      .from(schema.snippets)
+      .where(
+        and(
+          eq(schema.snippets.userId, userId),
+          inArray(schema.snippets.id, ids),
+        ),
+      );
+    const added = growth(
+      parsed.data.changes,
+      new Map(stored.map((r) => [r.id, r])),
+    );
+    if (added.rows > 0 || added.bytes > 0) {
+      const [usage] = await tx
+        .select({
+          rows: sql<number>`count(*)`,
+          bytes: sql<number>`coalesce(sum(pg_column_size(payload)), 0)`,
+        })
+        .from(schema.snippets)
+        .where(eq(schema.snippets.userId, userId));
+      if (
+        exceedsQuota(
+          { rows: Number(usage.rows), bytes: Number(usage.bytes) },
+          added,
+        )
+      ) {
+        overQuota = true;
+        return;
+      }
+    }
 
     for (const change of parsed.data.changes) {
       const [existing] = await tx
@@ -176,5 +218,7 @@ export async function POST(request: Request) {
     maxSeq = Number(max);
   });
 
+  if (overQuota)
+    return Response.json({ error: "quota_exceeded" }, { status: 507 });
   return Response.json({ results, serverNow: Date.now(), maxSeq });
 }

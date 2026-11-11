@@ -142,6 +142,21 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   a held entry, sends a payload-less live row, and forges a deletion; the
   device's IndexedDB is read after each).
 
+### How much one account can store
+- **50,000 rows and 50 MB of encrypted entries per account.** A push
+  that would grow an account past either ceiling gets
+  `507 quota_exceeded` and writes nothing; a push that does not grow it
+  (a deletion, a shorter edit) is never refused, so an account over the
+  ceiling can always shrink. Checked under the per-user lock, so two
+  pushes can't both slip under it. The numbers and the arithmetic behind
+  them live in `src/server/sync-quota.ts`: a 100-word entry is about
+  1 KB encrypted, so the ceiling is 137 years of one entry a day, and
+  one account at the ceiling uses about a tenth of the 512 MB database.
+- **Enforcement:** `growth` + `exceedsQuota` in `src/server/sync-quota.ts`,
+  applied in `src/app/api/sync/push/route.ts`. **Proven by:**
+  `src/server/sync-quota.test.ts`, the quota cases in
+  `src/app/api/sync/push/route.test.ts`.
+
 ### Voice
 - Speaking an entry streams audio to a transcription provider; words
   come back; **we store none of it**. Provider order (first available
@@ -358,6 +373,16 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — a per-account storage ceiling on sync
+The push route took 200 changes of up to 64 KB each per request with
+no per-account limit, so one account could fill the 512 MB database and
+stop every writer's sync. It now refuses, with `507 quota_exceeded`, a
+push that would grow an account past 50,000 rows or 50 MB of encrypted
+entries, and never refuses one that shrinks it. Capture is unaffected:
+entries stay on the device. Proven by `src/server/sync-quota.test.ts`
+and the quota cases in `push/route.test.ts` (the old route fails them).
+Surfaces: the "How much one account can store" row above.
 
 ### 2026-11-11 — account deletion revokes the grant the deleting device holds
 This file and the privacy page said account deletion revokes the Drive
