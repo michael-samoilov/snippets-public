@@ -8,7 +8,11 @@
  * passwords anywhere. Google is configured `accessType: "offline"` +
  * `prompt: "select_account consent"` so a refresh token is granted on
  * every consent — the Drive backup (a later, separate `linkSocial`
- * grant with the drive.file scope) depends on holding one.
+ * grant with the drive.file scope) depends on holding one. The provider
+ * config is shared by sign-in and that link, so the account hooks below
+ * decide which tokens may rest: only the Drive grant, until a device
+ * adopts it (src/server/oauth-tokens.ts). Those that rest are encrypted
+ * under BETTER_AUTH_SECRET (`encryptOAuthTokens`).
  */
 import "server-only";
 import { createHmac } from "node:crypto";
@@ -17,6 +21,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
 import { serverDb, schema } from "./db";
 import { sendSignInCode } from "./email";
+import { accountTokenHooks, decryptStoredToken } from "./oauth-tokens";
 
 function buildAuth() {
   const secret = process.env.BETTER_AUTH_SECRET;
@@ -49,6 +54,8 @@ function buildAuth() {
           },
         }
       : undefined,
+    account: { encryptOAuthTokens: true },
+    databaseHooks: { account: accountTokenHooks },
     plugins: [
       emailOTP({
         otpLength: 6,
@@ -77,6 +84,12 @@ function buildAuth() {
 }
 
 export const auth = buildAuth();
+
+/** A Google token from the `account` table, decrypted (see oauth-tokens). */
+export async function readStoredToken(stored: string): Promise<string> {
+  if (!auth) throw new Error("accounts are not configured");
+  return decryptStoredToken(stored, (await auth.$context).secretConfig);
+}
 
 /** Session lookup for API routes; null when signed out or unconfigured. */
 export async function getSession(headers: Headers) {

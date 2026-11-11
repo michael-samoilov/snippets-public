@@ -200,9 +200,26 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 ### Google Drive backup
 - Plaintext **by design** — it's the key-loss safety net, delivered by
   the writer's own device to their own Drive (`drive.file` scope, visible
-  folder). The server holds no Drive tokens and never carries the files.
+  folder). The server never carries the files.
+- **The server holds a Drive token only until a device adopts it.** The
+  Drive link (`linkSocial` with `drive.file`) writes its refresh token to
+  the `account` row; the device collects it from `/api/backup/adopt`
+  (Settings calls it right after the consent), and the route nulls it.
+  While it waits it is encrypted under `BETTER_AUTH_SECRET`
+  (`encryptOAuthTokens`). Every other token write is nulled by the
+  account hooks (`accountTokenHooks` in `src/server/oauth-tokens.ts`):
+  a Google sign-in stores no token, though Google's covers Drive after a
+  grant (Better Auth sends `include_granted_scopes=true`), and neither
+  does a link with Drive unticked. `/api/backup/refresh` exchanges the
+  device's token statelessly and stores nothing.
+- **Proven by:** `src/server/oauth-tokens.test.ts` drives a real Better
+  Auth through Google's sign-in and link callbacks (token endpoint
+  stubbed) and reads the `account` row after each; the
+  `security-invariants.test.ts` case pins the wiring in `auth.ts`.
 - **Do not encrypt these files.** Enforcement: `src/lib/backup-client.ts`,
-  `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`.
+  `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`
+  (including "our server stores none of your Drive credentials" after
+  the device collects the grant).
 - **A failed delivery reports one line, no entry content:** its source and
   Google's error code and message, or for a failure on the device itself,
   the error's name and message (`failureLine` in `backup-client.ts` →
@@ -332,6 +349,23 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — a Google sign-in no longer stores a Drive-capable token
+This file said the server holds no Drive tokens, and the privacy page
+said it keeps none of your Drive credentials. But Better Auth's default
+`updateAccountOnSignIn` wrote each Google sign-in's tokens to the
+`account` row, in plaintext, and its Google provider always sends
+`include_granted_scopes=true`: after a Drive grant, a sign-in's refresh
+token opens Drive too. Now the account hooks (`accountTokenHooks`, in
+`src/server/oauth-tokens.ts`) null every token write except the Drive
+link's, and `encryptOAuthTokens` encrypts the grant while it waits for
+adoption; `/api/backup/adopt` decrypts it (`readStoredToken`), and a
+token stored before this change still reads as written. A later Google
+sign-in also clears any token an earlier sign-in left. Proven by
+`src/server/oauth-tokens.test.ts`: under the old config a sign-in after
+the grant leaves `1//refresh-3` in plaintext; now it leaves null.
+Surfaces: privacy `#google-drive-backup`, the "Google Drive backup" row
+above, DESIGN.md.
 
 ### 2026-11-11 — a hostile server can no longer rearrange the entries a device holds
 A review found that the pull path trusted the server further than the

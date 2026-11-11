@@ -487,8 +487,9 @@ to its allowlist when you write one.
   device delivers readable Markdown + a restorable JSON archive into
   a visible folder in their own Drive after each settled sync; the
   JSON stays bit-compatible with "Restore from JSON…" so the book
-  outlives the app. The server keeps no Drive credentials (tokens
-  transit, never rest) and, under end-to-end encryption, no readable
+  outlives the app. The server keeps no Drive credentials at rest
+  beyond the seconds between the consent and a device adopting the
+  grant (encrypted while it waits; a sign-in stores none) and, under end-to-end encryption, no readable
   entries either — the operator cannot read the book. The plaintext
   Drive files double as the key-loss safety net; they are never
   encrypted. Failures escalate: ledger → Settings line → one quiet
