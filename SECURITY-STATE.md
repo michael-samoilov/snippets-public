@@ -362,7 +362,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **A device with no copy trusts the server about which entries exist.**
   A new device can't tell an omitted entry, or an older version, from
   the current book. Closing that needs a signed index of the whole book.
-  Not planned.
+  Not built.
 - **`/api/backup/refresh` checks for a session, not for whose token it
   is.** Any signed-in account can exchange any Drive refresh token it
   holds. Binding each adopted token to its account is written and waits
