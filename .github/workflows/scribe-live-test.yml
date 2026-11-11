@@ -1,18 +1,13 @@
 # Live-fire check of the Scribe v2 Realtime dialect against the real
 # ElevenLabs API (scripts/scribe-live-test.mjs). It spends a few
 # seconds of transcription credit per run, so it only runs on demand
-# or when the harness itself changes. The key comes from the
+# (workflow_dispatch). The key comes from the
 # ELEVENLABS_API_KEY repo secret — write-only, masked in logs.
 name: scribe-live-test
 
 on:
+  # on demand only: every run spends provider credit, so no push trigger
   workflow_dispatch:
-  # any touch to the harness re-runs it — the dispatch API needs app
-  # permissions the integration doesn't have, a push always works
-  push:
-    paths:
-      - "scripts/scribe-live-test.mjs"
-      - ".github/workflows/scribe-live-test.yml"
 
 jobs:
   live-transcribe:

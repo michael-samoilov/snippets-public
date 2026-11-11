@@ -4,15 +4,12 @@
 # exist — to learn what Aqua's OpenAI-compatibility actually covers:
 # file transcription, streamed output, and whether a browser-safe
 # ephemeral token exists for true live streaming. Spends a little
-# transcription credit; on demand or when the probe changes.
+# transcription credit, so it runs on demand only (workflow_dispatch).
 name: aqua-live-test
 
 on:
+  # on demand only: every run spends provider credit, so no push trigger
   workflow_dispatch:
-  push:
-    paths:
-      - "scripts/aqua-live-test.mjs"
-      - ".github/workflows/aqua-live-test.yml"
 
 jobs:
   probe:
@@ -26,6 +23,5 @@ jobs:
       - name: Probe Aqua Avalon (batch + streamed + realtime)
         env:
           AQUA_API_KEY: ${{ secrets.AQUA_API_KEY }}
-        # a synthesized speech clip already in the repo (16k mono) — the same
-        # fixture the Scribe/Deepgram harnesses transcribe
+        # a synthesized speech clip already in the repo (16k mono)
         run: node scripts/aqua-live-test.mjs public/scribe-sample.wav fox morning

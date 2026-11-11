@@ -10,21 +10,29 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { getSession } from "@/server/auth";
+import { PASSPHRASE_ITERATIONS, RECOVERY_ITERATIONS } from "@/lib/crypto";
 
 export const runtime = "nodejs";
 
-const wrappedKeySchema = z.object({
-  v: z.literal(1),
-  kdf: z.literal("PBKDF2-SHA256"),
-  iterations: z.number().int().min(1).max(5_000_000),
-  salt: z.string().min(8).max(64),
-  iv: z.string().min(8).max(32),
-  ct: z.string().min(16).max(256),
-});
+/**
+ * A wrapped key whose KDF runs at least `minIterations` rounds — the
+ * same counts the client writes (src/lib/crypto.ts). The floor applies
+ * at enrollment only: GET returns stored envelopes as they are, so
+ * keys enrolled before the floor keep opening.
+ */
+const wrappedKeySchema = (minIterations: number) =>
+  z.object({
+    v: z.literal(1),
+    kdf: z.literal("PBKDF2-SHA256"),
+    iterations: z.number().int().min(minIterations).max(5_000_000),
+    salt: z.string().min(8).max(64),
+    iv: z.string().min(8).max(32),
+    ct: z.string().min(16).max(256),
+  });
 
 const bodySchema = z.object({
-  passphraseKey: wrappedKeySchema,
-  recoveryKey: wrappedKeySchema,
+  passphraseKey: wrappedKeySchema(PASSPHRASE_ITERATIONS),
+  recoveryKey: wrappedKeySchema(RECOVERY_ITERATIONS),
 });
 
 export async function GET(request: Request) {

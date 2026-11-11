@@ -59,7 +59,7 @@ partial one:
 
 ```sh
 python3 evals/verify-snippets/aggregate.py --label <YYYY-MM-DD>-usage \
-  [--session-id <thisSessionId>] [--evidence-root /tmp/vs-eval/<run>]
+  --session-id <thisSessionId> [--evidence-root /tmp/vs-eval/<run>]
 ```
 
 ## What the score means

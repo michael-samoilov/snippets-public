@@ -437,7 +437,8 @@ function createProgram(gl, vertexShaderSource2, fragmentShaderSource) {
   gl.deleteShader(fragmentShader);
   return program;
 }
-const defaultStyle = `@layer paper-shaders {
+const defaultStyle = `/* Paper Shaders (https://github.com/paper-design/shaders), licensed under the PolyForm Shield License 1.0.0: https://polyformproject.org/licenses/shield/1.0.0 */
+@layer paper-shaders {
   :where([data-paper-shader]) {
     isolation: isolate;
     position: relative;

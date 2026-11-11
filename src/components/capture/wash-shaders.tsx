@@ -10,7 +10,8 @@
    AURORA_FRAG is ours: domain-warped value noise shaped into hanging
    curtains with sway and shimmer — the thing flat gradients can't do.
    NEURO_FRAG is adapted from Paper Shaders' neuro-noise
-   (https://github.com/paper-design/shaders, Apache-2.0), vendored per
+   (https://github.com/paper-design/shaders, PolyForm Shield 1.0.0; the
+   full terms are in src/vendor/paper-shaders/LICENSE), vendored per
    house style rather than installed, and re-tinted to the wash ink. */
 
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -429,11 +430,13 @@ export function WashBorderBeam({ o, corner = 16 }: { o: BeamOpts; corner?: numbe
 }
 
 /* ---- neuro: vendored from Paper Shaders -------------------------------
-   Adapted from paper-design/shaders `neuro-noise` (Apache-2.0):
+   Adapted from paper-design/shaders `neuro-noise` (PolyForm Shield 1.0.0):
    the 15-layer rotating-sine accumulator is theirs; the wash tint,
    uv handling, and premultiplied output are ours. */
 
 export const NEURO_FRAG = `#version 300 es
+// Adapted from Paper Shaders neuro-noise (https://github.com/paper-design/shaders),
+// licensed under the PolyForm Shield License 1.0.0: https://polyformproject.org/licenses/shield/1.0.0
 precision mediump float;
 
 uniform vec2 u_resolution;

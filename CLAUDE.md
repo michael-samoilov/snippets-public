@@ -26,7 +26,7 @@ pnpm lint         # eslint
 pnpm lint:slop    # oxlint + the vendored anti-slop rules (advisory)
 pnpm test         # vitest — merge/e2e/backup units + the copy-clarity linter
 pnpm check:copy   # just the STE-informed copy linter (copy-clarity.test.ts)
-pnpm icons        # regenerate app icons from scripts/generate-icons.mjs
+pnpm icons        # regenerate app icons from scripts/bake-icons.mjs
 ```
 
 **Technical-register copy is linted.** Copy that explains a mechanism
@@ -48,9 +48,10 @@ low-evidence TypeScript: `unknown` parameters, chained `as` casts,
 `object` as a type, runtime `typeof` where a boundary parse belongs, an
 assertion with no `SAFETY:` comment. It is NOT the build gate — `pnpm
 lint` (eslint) and `pnpm build` are. Five rules the codebase already
-satisfies are set to `error`; the other ten are `warn` with their
-2026-08 counts recorded in `oxlint.config.ts` (263 findings, mostly
-missing `SAFETY:` comments and boundary `typeof`s). Don't bulk-"fix"
+satisfies are set to `error` (0 errors as of 2026-11-11); the other ten
+are `warn`. `oxlint.config.ts` records each rule's count at the 2026-08
+install (263 in all); a 2026-11-11 run counts 271 warnings, mostly
+missing `SAFETY:` comments and boundary `typeof`s. Don't bulk-"fix"
 them — the honest move is to clear a rule's backlog while working in
 that area, then promote that rule to `error`. Never silence a finding
 with a cast or a weakened severity to make the report quiet.
@@ -131,10 +132,12 @@ Three overlaps to know about:
   file's "Prove the fix" section says.
 
 The vendored Bun scripts under `.claude/skills/poteto-mode/scripts/`
-reach none of the gates, so no config changed: TypeScript and ESLint skip
-dot-directories, vitest is scoped to `src/**`, and `oxlint.config.ts`
-already ignores `.claude/**`. Verified by running `tsc --listFiles` with
-and without an explicit exclude; both saw zero files under `.claude/`.
+reach none of the gates: TypeScript skips dot-directories (verified by
+running `tsc --listFiles` with and without an explicit exclude; both saw
+zero files under `.claude/`), vitest is scoped to `src/**`, and both
+`eslint.config.mjs` and `oxlint.config.ts` ignore `.claude/**`. ESLint's
+flat config lints dot-directories by default, so that ignore entry is
+load-bearing: without it `pnpm lint` fails on a vendored test.
 
 
 ## Architecture
@@ -210,12 +213,20 @@ and without an explicit exclude; both saw zero files under `.claude/`.
   rest + a warm band — already limits how much of the book LAYS OUT; the
   law is about per-card PAINT cost and stands regardless.)
 - **Shaders:** `src/vendor/paper-shaders/` is the vendored PaperTexture
-  chain from paper-design/shaders (Apache-2.0, LICENSE alongside) — no
-  npm dependency, same rule as the shadcn sources. Used only by the
-  `/lab/texture` bake route; the app ships baked bitmaps from
-  `public/textures`. The wax-wash lab's aurora/neuro candidates sit on
-  a small hand-rolled WebGL mount in
-  `src/app/(dev)/lab/wax-wash/shader-box.tsx`.
+  chain from paper-design/shaders (PolyForm Shield License 1.0.0, full
+  terms in the LICENSE alongside) — no npm dependency, same rule as the
+  shadcn sources. The license lets us use, change, and ship the code for
+  any purpose except a product that competes with Paper's, and anyone
+  who gets a copy must get the terms or their URL. Source comments do
+  not survive the production minifier, so the notice rides strings that
+  ship: the CSS that `core/shader-mount.js` injects into the page, and
+  the GLSL source of `NEURO_FRAG` (adapted from their neuro-noise) in
+  `src/components/capture/wash-shaders.tsx`. Keep both, and put the same
+  notice in a shipped string of any other code taken from Paper.
+  PaperTexture runs only in the `/lab/texture` bake route; the app ships
+  baked bitmaps from `public/textures`. `PulsingBorder` ships in the
+  recording wash. The aurora/neuro candidates sit on a small hand-rolled
+  WebGL mount (`ShaderBox` in `src/components/capture/wash-shaders.tsx`).
 - **Accounts + sync (optional):** Better Auth (Google + email OTP via
   Resend) on Neon Postgres/Drizzle — schema in `src/server/db/schema.ts`,
   SQL migrations in `drizzle/` (`pnpm db:generate` / `db:migrate`).
