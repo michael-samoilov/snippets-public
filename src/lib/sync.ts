@@ -14,16 +14,18 @@
  *           returns that copy, and we adopt it: the server's verdict
  *           is final.
  *   pull  — walk the change feed from the stored cursor. Clean rows
- *           mirror the server verbatim; dirty rows contest via the
- *           shared merge and, if they win locally, stay dirty to be
- *           arbitrated at their own push.
+ *           mirror the server; dirty rows contest via the shared merge
+ *           and, if they win locally, stay dirty to be arbitrated at
+ *           their own push. A row no client writes is refused, and a
+ *           held entry never takes an older or unbound copy
+ *           (`adoptServerRow`).
  *   count — refresh the trust numbers (device count vs server count).
  *
  * Every failure lands in a visible status — never a silent stall.
  */
 import { useSyncExternalStore } from "react";
 import { db, getMeta, setWriteNotifier, reencryptSweep } from "@/lib/db";
-import { bumpClock, incomingWins, type MergeSide } from "@/lib/merge";
+import { bumpClock } from "@/lib/merge";
 import {
   clearSyncState,
   currentDbName,
@@ -33,15 +35,17 @@ import {
   writeSyncState,
 } from "@/lib/sync-state";
 import {
+  adoptServerRow,
   fromWireRow,
-  needsReseal,
   toWireChange,
   KeyMismatchError,
   LockedError,
+  RefusedRowError,
   type BackupStatusSummary,
   type PullResponse,
   type PushResponse,
   type StatusResponse,
+  type WireRow,
 } from "@/lib/sync-wire";
 import { getBookKey, refreshEnrollment, clearLocalKey } from "@/lib/e2e";
 import { maybeDeliverBackup } from "@/lib/backup-client";
@@ -343,27 +347,20 @@ async function pushAll(key: CryptoKey): Promise<void> {
     });
 
     // decrypt superseded rows BEFORE the transaction — Dexie
-    // transactions die on any foreign await (crypto included). The same
-    // re-seal rule as the pull applier rides the adoption: a winning
-    // server row still in an older format adopts DIRTY with a fresh
-    // clock, so its own next push re-seals it as format 3 — otherwise
-    // this third apply-branch would let a plaintext row rest on the
-    // server forever, exactly as the pull loop's contested branch did.
-    const adopted = new Map<string, Snippet>();
+    // transactions die on any foreign await (crypto included). The
+    // adoption itself goes through the same adoptServerRow as the pull
+    // applier, so the re-seal rule and the held-entry guards ride this
+    // path too. null = a server copy this device refuses.
+    const decoded = new Map<string, Snippet | null>();
     for (const result of data.results) {
       if (result.outcome !== "superseded") continue;
-      const snippet = await fromWireRow(result.row, key);
-      adopted.set(
-        result.id,
-        needsReseal(result.row)
-          ? { ...snippet, _dirty: 1, updatedAt: bumpClock(snippet.updatedAt) }
-          : snippet,
-      );
+      decoded.set(result.id, await decodeServerRow(result.row, key));
     }
 
     const pushed = new Map(dirty.map((s) => [s.id, s]));
     let progressed = false;
     await db.transaction("rw", db.snippets, async () => {
+      const now = Date.now();
       for (const result of data.results) {
         const sent = pushed.get(result.id);
         if (!sent) continue;
@@ -373,11 +370,23 @@ async function pushAll(key: CryptoKey): Promise<void> {
         progressed = true;
         if (result.outcome === "applied") {
           await db.snippets.update(result.id, { _dirty: 0 });
-        } else {
-          // the server's copy won; adopt it
-          const row = adopted.get(result.id);
-          if (row) await db.snippets.put(row);
+          continue;
         }
+        // the server's copy won; adopt it — unless this device refuses
+        // it, and then this edit re-asserts with a clock past the
+        // server's, so its next push replaces the refused copy
+        const server = decoded.get(result.id);
+        const next = server
+          ? adoptServerRow(result.row, server, current, false, now)
+          : null;
+        if (next) await db.snippets.put(next);
+        else
+          await db.snippets.update(result.id, {
+            updatedAt: bumpClock(
+              Math.max(current.updatedAt, result.row.updatedAt),
+            ),
+            _dirty: 1,
+          });
       }
     });
 
@@ -386,6 +395,19 @@ async function pushAll(key: CryptoKey): Promise<void> {
       throw new Error("push made no progress");
     }
     if (dirty.length < PUSH_BATCH) return;
+  }
+}
+
+/** fromWireRow, with a refused row as null for the caller to skip. */
+async function decodeServerRow(
+  row: WireRow,
+  key: CryptoKey,
+): Promise<Snippet | null> {
+  try {
+    return await fromWireRow(row, key);
+  } catch (error) {
+    if (error instanceof RefusedRowError) return null;
+    throw error;
   }
 }
 
@@ -405,42 +427,29 @@ async function pullAll(key: CryptoKey): Promise<void> {
       const prepared = await Promise.all(
         data.rows.map(async (row) => ({
           row,
-          snippet: await fromWireRow(row, key),
+          snippet: await decodeServerRow(row, key),
         })),
       );
       await db.transaction("rw", db.snippets, async () => {
+        const now = Date.now();
         for (const { row, snippet } of prepared) {
+          // refused: no client writes this row, so it is never stored
+          if (!snippet) continue;
           const local = await db.snippets.get(row.id);
-          // One decision: a clean local row has no claim, so the incoming
-          // row takes the slot; a dirty one contests via the shared merge.
-          // A dirty row that loses keeps waiting for its own push.
-          const localSide: MergeSide | null =
-            local && local._dirty === 1
-              ? { updatedAt: local.updatedAt, deletedAt: local.deletedAt ?? null }
-              : null;
-          const incomingSide: MergeSide = {
-            updatedAt: row.updatedAt,
-            deletedAt: row.deletedAt,
-          };
-          if (localSide && !incomingWins(localSide, incomingSide)) continue;
-          // One apply: a row still resting on the server in an older format
-          // (plaintext 1 or AAD-less 2) stores dirty with a fresh clock, so
-          // its own next push re-seals it as format 3. Content is unchanged,
-          // so the bump is LWW-safe, and the rule is idempotent — the
-          // re-pushed row arrives back as format 3 and rests clean. The rule
-          // rides the row, not the branch: it used to live on the clean
-          // branch only, so a dirty local row that LOST to a legacy server
-          // row adopted it clean — and a plaintext row could rest on the
-          // server forever on a device that believed it had converged.
-          await db.snippets.put(
-            needsReseal(row)
-              ? {
-                  ...snippet,
-                  _dirty: 1,
-                  updatedAt: bumpClock(snippet.updatedAt),
-                }
-              : snippet,
+          // One decision per row: a clean local row mirrors the server
+          // unless the server row is older or unbound; a dirty one
+          // contests via the shared merge, and if it wins it keeps
+          // waiting for its own push. The re-seal rule rides the row,
+          // not the branch: a format-2 row stores dirty with a fresh
+          // clock, so its own next push re-seals it as format 3.
+          const next = adoptServerRow(
+            row,
+            snippet,
+            local,
+            local?._dirty === 1,
+            now,
           );
+          if (next) await db.snippets.put(next);
         }
       });
       // cursor advances only after the batch's transaction commits

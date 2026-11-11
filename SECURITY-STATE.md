@@ -62,8 +62,9 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   before anything is sent, and the server refuses anything readable.
 - **Enforcement:** `src/lib/sync.ts` (no plaintext push path — `pushAll`/
   `pullAll`/`toWireChange` require the key), `src/app/api/sync/push/route.ts`
-  (accepts payload formats 2|3 only; format 1 → `409 encryption_required`),
-  `src/lib/sync-wire.ts` (format 3 = AAD-bound envelope).
+  (accepts payload format 3 only; format 1 → `409 encryption_required`,
+  the AAD-less format 2 → `400`), `src/lib/sync-wire.ts` (format 3 =
+  AAD-bound envelope; `fromWireRow` refuses a plaintext row on pull).
 - **Asserts it:** privacy `#can-you-read`, `#if-you-sign-in`,
   `#end-to-end-encryption`; terms `#encryption`; Settings Encryption
   section; the first-run intro (`copy.intro.about`, the today zone's
@@ -99,14 +100,62 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   stops opening. Pinned by `src/app/api/keys/route.test.ts`.
 
 ### What can the server do to a sealed entry?
-- **Nothing without failing loudly.** The row's `id`, `updatedAt`,
-  `deletedAt`, and `payloadFormat` are bound into the cipher as AES-GCM
-  AAD, so a moved, rolled-back, resurrected, or format-downgraded
-  envelope fails to decrypt (surfaces as the `locked` state, never a
-  silent swap). The server still sees that entries exist, their rough
-  size, and when each changed.
+- **It cannot read one, or change one a device holds; it can leave one
+  out or mark one deleted.** The row's `id`, `updatedAt`, `deletedAt`,
+  and `payloadFormat` are bound into the cipher as AES-GCM AAD, so an
+  envelope moved to another id, or given other clocks or another format,
+  fails to decrypt (`KeyMismatchError` → the `locked` state, never a
+  silent swap).
+- **AAD alone can't refuse a resend.** An older envelope sent again under
+  the clocks it was sealed with still decrypts. So `adoptServerRow`
+  refuses, for every entry the device holds: a copy older than its own
+  (a rolled-back version, or a deleted entry's pre-deletion copy), and an
+  AAD-less format-2 envelope (nothing writes format 2 any more, so on a
+  held entry it can only be a replay). `fromWireRow` refuses every row no
+  client writes: plaintext (format 1), an unknown format, a sealed format
+  that isn't an envelope, and a payload-less row that isn't a deletion.
+  A refused row is skipped, never stored; on the push path the device's
+  own edit re-asserts past it.
+- **What remains.** A payload-less deletion (what the cron leaves 30 days
+  after a delete, `TOMBSTONE_SCRUB_AFTER_MS`) carries no proof, so a
+  server can send one for any entry. The device applies it as a soft
+  delete that keeps the words, and the 30-day local recovery window
+  starts on arrival, not at the server's `deletedAt` (Settings →
+  "Recently let go"). The server can also leave rows out of the feed. A
+  device that holds no copy (a new device, or an entry purged 30 days
+  after its deletion) relies on the server for which entries exist and
+  which version is newest, though every entry it opens is one the
+  writer's devices encrypted. The server still sees that entries exist,
+  their rough size, and when each changed.
+- **Legacy rows.** Rows written before 2026-07-23 may rest as format 2.
+  A device opens one only for an entry it doesn't hold yet, stores it
+  dirty (`needsReseal`), and re-pushes it as format 3.
 - **Enforcement:** `aadForRow` in `src/lib/crypto.ts` (canonical string
-  pinned by a test), `fromWireRow`/`toWireChange` in `src/lib/sync-wire.ts`.
+  pinned by a test); `fromWireRow`, `adoptServerRow`, `toWireChange` in
+  `src/lib/sync-wire.ts`; both adoption paths in `src/lib/sync.ts` (the
+  pull applier and the push's superseded adoption) go through
+  `adoptServerRow`.
+- **Asserts it:** privacy `#how-the-encryption-works` (the deep dive).
+- **Proven by:** `src/lib/sync-wire.test.ts` (each refusal and each
+  held-entry rule); `tests/e2e/forced_e2e.py` (a hostile stub server
+  plants plaintext, replays an older copy, swaps a format-2 envelope onto
+  a held entry, sends a payload-less live row, and forges a deletion; the
+  device's IndexedDB is read after each).
+
+### How much one account can store
+- **50,000 rows and 50 MB of encrypted entries per account.** A push
+  that would grow an account past either ceiling gets
+  `507 quota_exceeded` and writes nothing; a push that does not grow it
+  (a deletion, a shorter edit) is never refused, so an account over the
+  ceiling can always shrink. Checked under the per-user lock, so two
+  pushes can't both slip under it. The numbers and the arithmetic behind
+  them live in `src/server/sync-quota.ts`: a 100-word entry is about
+  1 KB encrypted, so the ceiling is 137 years of one entry a day, and
+  one account at the ceiling uses about a tenth of the 512 MB database.
+- **Enforcement:** `growth` + `exceedsQuota` in `src/server/sync-quota.ts`,
+  applied in `src/app/api/sync/push/route.ts`. **Proven by:**
+  `src/server/sync-quota.test.ts`, the quota cases in
+  `src/app/api/sync/push/route.test.ts`.
 
 ### Voice
 - Speaking an entry streams audio to a transcription provider; words
@@ -166,9 +215,26 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 ### Google Drive backup
 - Plaintext **by design** — it's the key-loss safety net, delivered by
   the writer's own device to their own Drive (`drive.file` scope, visible
-  folder). The server holds no Drive tokens and never carries the files.
+  folder). The server never carries the files.
+- **The server holds a Drive token only until a device adopts it.** The
+  Drive link (`linkSocial` with `drive.file`) writes its refresh token to
+  the `account` row; the device collects it from `/api/backup/adopt`
+  (Settings calls it right after the consent), and the route nulls it.
+  While it waits it is encrypted under `BETTER_AUTH_SECRET`
+  (`encryptOAuthTokens`). Every other token write is nulled by the
+  account hooks (`accountTokenHooks` in `src/server/oauth-tokens.ts`):
+  a Google sign-in stores no token, though Google's covers Drive after a
+  grant (Better Auth sends `include_granted_scopes=true`), and neither
+  does a link with Drive unticked. `/api/backup/refresh` exchanges the
+  device's token statelessly and stores nothing.
+- **Proven by:** `src/server/oauth-tokens.test.ts` drives a real Better
+  Auth through Google's sign-in and link callbacks (token endpoint
+  stubbed) and reads the `account` row after each; the
+  `security-invariants.test.ts` case pins the wiring in `auth.ts`.
 - **Do not encrypt these files.** Enforcement: `src/lib/backup-client.ts`,
-  `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`.
+  `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`
+  (including "our server stores none of your Drive credentials" after
+  the device collects the grant).
 - **A failed delivery reports one line, no entry content:** its source and
   Google's error code and message, or for a failure on the device itself,
   the error's name and message (`failureLine` in `backup-client.ts` →
@@ -238,15 +304,25 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   `TOMBSTONE_SCRUB_AFTER_MS` (server) are the paired 30-day constants; the
   privacy copy's "within 30 days" must move with them.
   Account deletion removes the account, synced entries + tombstones,
-  wrapped keys, and backup record from the server immediately; revokes
-  the Drive grant. Device copies and delivered Drive files remain yours.
+  wrapped keys, and backup record from the server immediately. It asks
+  Google to revoke the grant only with a token in hand: the deleting
+  device sends the Drive refresh token it holds (Settings' `doDelete` →
+  `/api/account/delete`), plus any token still resting on the server
+  before adoption. Revoking one token ends the whole grant for this app,
+  every device's token included. A device with no Drive token (and no
+  server-held one) leaves the grant listed in the user's Google Account;
+  the privacy page says so and links the page where they can remove it.
+  Device copies and delivered Drive files remain yours. Proven by
+  `src/app/api/account/delete/route.test.ts` and
+  `tests/e2e/delete_revoke.py`.
 
 ### How each claim is proven (run these after touching the area)
-- **No plaintext window, end to end:** `tests/e2e/forced_e2e.py` (real
-  build + real WebCrypto vs stub server; sentinel scanned on every wire
-  body). 22 checks.
+- **No plaintext window, end to end, and a hostile server can't rearrange
+  a held entry:** `tests/e2e/forced_e2e.py` (real build + real WebCrypto
+  vs stub server; sentinel scanned on every wire body; IndexedDB read
+  after each hostile row). 33 checks.
 - **Server refusal matrix:** `src/app/api/sync/push/route.test.ts`.
-- **AAD binding + legacy-format reads:** `src/lib/crypto.test.ts`,
+- **AAD binding, pull refusals, held-entry rules:** `src/lib/crypto.test.ts`,
   `src/lib/sync-wire.test.ts`.
 - **Speech adapters speak the documented protocols:**
   `tests/e2e/speech_adapters.py` (14 checks).
@@ -269,27 +345,38 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Known gaps / pending (do not describe as done)
+## Known gaps (as of 2026-11-11; do not describe as done)
 
-- **The short, unqualified privacy page is NOT live yet.** The current
-  privacy page is the honest *interim* two-state version. The headline
-  "We cannot read your entries. Not won't, can't." + 4-row data-flow
-  table is **gated** on the pre-2026-07-23 accounts re-encrypting — see
-  BACKLOG #14. Do not swap it in until the gate check passes.
-- **The short privacy page + digestibility revision** is on preview branch
-  `claude/privacy-short-page-preview`, pending owner review and merge. The
-  gate is met, so the unqualified
-  "We cannot read your entries" headline is architecturally true. Not yet
-  on prod.
-- The old "early accounts / plaintext lingers" note is removed from the
-  privacy page, because the re-encryption gate in BACKLOG #14 passed.
-- **Soniox / Speechmatics are wired but dormant** until their API keys
-  are set in the environment. Until then the active chain is whatever
-  keys exist (likely Deepgram, mip-opted-out). The privacy page names
-  only active providers, so it stays truthful automatically.
-- **On-device transcription** (BACKLOG #16), **ciphertext self-viewer**
-  (BACKLOG #15), **open-sourcing** (BACKLOG #17, brief in `docs/notes/OPEN-SOURCE.md`)
-  are deferred by decision.
+- **Encryption was optional before 2026-07-23.** Entries an account
+  synced without it rested on the server unencrypted. Since then the
+  server refuses an unencrypted write (`409 encryption_required`), each
+  device re-encrypted such entries on its next sync (`needsReseal`), and
+  since 2026-11-11 a device also refuses an unencrypted row on pull. The
+  privacy page's unqualified "We cannot read your entries" shipped on
+  2026-07-24, after those entries were re-encrypted.
+- **A payload-less deletion carries no proof.** The server can mark any
+  entry deleted; a device that holds it keeps the words for 30 days
+  (see "What can the server do to a sealed entry?"). Proving a deletion
+  would need a proof the cron leaves in place when it clears a deleted
+  entry's words. Not built.
+- **A device with no copy trusts the server about which entries exist.**
+  A new device can't tell an omitted entry, or an older version, from
+  the current book. Closing that needs a signed index of the whole book.
+  Not built.
+- **`/api/backup/refresh` checks for a session, not for whose token it
+  is.** Any signed-in account can exchange any Drive refresh token it
+  holds. Binding each adopted token to its account is written and waits
+  on a database migration (branch `fix/drive-grant-binding`).
+- **Revoking the Google grant needs a token.** Account deletion from a
+  device with no Drive token leaves the grant listed in the reader's
+  Google Account. The privacy page says so and links the page that
+  removes it.
+- **Speech providers follow the deployment's keys.** The privacy page
+  names only the providers whose API keys are set
+  (`activeSpeechProviders()`), so it stays truthful as keys change.
+- **Deferred by decision:** on-device transcription (BACKLOG #16), the
+  ciphertext self-viewer (BACKLOG #15), and open-sourcing (BACKLOG #17,
+  brief in `docs/notes/OPEN-SOURCE.md`).
 
 ---
 
@@ -297,6 +384,78 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — "Known gaps" rewritten as a dated note
+The section said both that the short privacy page was not live and that
+its gate was met, though the page has been live since 2026-07-24. It
+also carried a production database query result and the database's
+history-retention setting. It now lists, neutrally and dated, what a
+reader needs: the pre-2026-07-23 history, the limits this file's rows
+describe, and the open and deferred items. No code change.
+
+### 2026-11-11 — a per-account storage ceiling on sync
+The push route took 200 changes of up to 64 KB each per request with
+no per-account limit, so one account could fill the 512 MB database and
+stop every writer's sync. It now refuses, with `507 quota_exceeded`, a
+push that would grow an account past 50,000 rows or 50 MB of encrypted
+entries, and never refuses one that shrinks it. Capture is unaffected:
+entries stay on the device. Proven by `src/server/sync-quota.test.ts`
+and the quota cases in `push/route.test.ts` (the old route fails them).
+Surfaces: the "How much one account can store" row above.
+
+### 2026-11-11 — account deletion revokes the grant the deleting device holds
+This file and the privacy page said account deletion revokes the Drive
+grant. The route revoked only tokens the server held, and after a
+device adopts its grant the server holds none, so in the usual case
+nothing was revoked. Now the deleting device sends its Drive refresh
+token with the request and the route revokes it before the delete;
+the device then forgets its Drive tokens. The privacy page states the
+condition and links the Google Account page where the reader can remove
+the access themselves. Proven by `src/app/api/account/delete/route.test.ts`
+(the old route fails it) and `tests/e2e/delete_revoke.py`, which holds
+the real "Hold to delete" control. Surfaces: privacy `#leaving`, the
+"Leaving" row above.
+
+### 2026-11-11 — a Google sign-in no longer stores a Drive-capable token
+This file said the server holds no Drive tokens, and the privacy page
+said it keeps none of your Drive credentials. But Better Auth's default
+`updateAccountOnSignIn` wrote each Google sign-in's tokens to the
+`account` row, in plaintext, and its Google provider always sends
+`include_granted_scopes=true`: after a Drive grant, a sign-in's refresh
+token opens Drive too. Now the account hooks (`accountTokenHooks`, in
+`src/server/oauth-tokens.ts`) null every token write except the Drive
+link's, and `encryptOAuthTokens` encrypts the grant while it waits for
+adoption; `/api/backup/adopt` decrypts it (`readStoredToken`), and a
+token stored before this change still reads as written. A later Google
+sign-in also clears any token an earlier sign-in left. Proven by
+`src/server/oauth-tokens.test.ts`: under the old config a sign-in after
+the grant leaves `1//refresh-3` in plaintext; now it leaves null.
+Surfaces: privacy `#google-drive-backup`, the "Google Drive backup" row
+above, DESIGN.md.
+
+### 2026-11-11 — a hostile server can no longer rearrange the entries a device holds
+A review found that the pull path trusted the server further than the
+privacy page said. `fromWireRow` stored a plaintext (format 1) row as
+it came, so a server could plant a readable entry; it turned any
+payload-less row into a deletion that erased the device's copy of the
+words; and it opened AAD-less format-2 envelopes on any entry, so a
+server could move old content onto another entry. AAD also never
+covered a plain resend: an older envelope under its own clocks still
+opened, and a clean device row took it, so a server could roll an entry
+back or bring a deleted one back. The page's "a moved, rolled-back, or
+resurrected entry fails to open" was true only of an envelope whose
+clocks were edited. Now `fromWireRow` refuses rows no client writes,
+`adoptServerRow` refuses older copies and format-2 envelopes on held
+entries, and a payload-less deletion keeps the words for 30 days. The
+push route refuses format 2, so every row written from now on is bound.
+Nothing legitimate is stranded: the server has refused format-1 pushes
+since 2026-07-23, the short privacy page shipped only after the July
+re-encryption gate (BACKLOG #14) passed, and format-2 rows still open on
+a device that doesn't hold them. Proven by the new `sync-wire.test.ts`
+cases and five new legs in `tests/e2e/forced_e2e.py`: the unchanged
+build fails 9 of its checks, this one passes all 33. Surfaces: privacy
+`#how-the-encryption-works`, the "Can we read your entries?" and "What
+can the server do to a sealed entry?" rows above.
 
 ### 2026-11-11 — voice routes gated; self-tests deleted; codes hashed; KDF floor
 An independent review found five routes that spend the owner's speech

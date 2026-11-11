@@ -10,13 +10,13 @@
  * final — that, not merge cleverness, is what guarantees convergence.
  */
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { getSession } from "@/server/auth";
+import { exceedsQuota, growth } from "@/server/sync-quota";
 import { incomingWins, type MergeSide } from "@/lib/merge";
 import {
   PAYLOAD_FORMAT_PLAIN,
-  PAYLOAD_FORMAT_SEALED,
   PAYLOAD_FORMAT_SEALED_AAD,
   type PushResult,
   type SnippetPayload,
@@ -27,13 +27,15 @@ export const runtime = "nodejs";
 
 const MAX_PAYLOAD_BYTES = 64_000;
 
-// Only sealed formats may be pushed: format 2 (legacy AES-GCM envelope)
-// and format 3 (envelope with the row's cleartext fields AAD-bound).
-// Format 1 (plaintext) is refused outright — see the 409 below — so the
-// "we cannot read your entries" claim rests on the server's own refusal,
-// not on client good behaviour. The payload must also LOOK like an
-// envelope: a sealed format wrapping plaintext fields is rejected here,
-// so mislabeling can't smuggle readable content in.
+// Only format 3 may be pushed: an envelope with the row's cleartext
+// fields AAD-bound. Format 1 (plaintext) is refused outright — see the
+// 409 below — so the "we cannot read your entries" claim rests on the
+// server's own refusal, not on client good behaviour. Format 2 (the
+// AAD-less legacy envelope) is refused too: no current client writes it,
+// so every row written from now on is bound to its id and clocks. The
+// payload must also LOOK like an envelope: a sealed format wrapping
+// plaintext fields is rejected here, so mislabeling can't smuggle
+// readable content in.
 const sealedPayloadSchema = z
   .object({
     v: z.literal(1),
@@ -44,10 +46,7 @@ const sealedPayloadSchema = z
 
 const changeSchema = z.object({
   id: z.string().min(10).max(40),
-  payloadFormat: z.union([
-    z.literal(PAYLOAD_FORMAT_SEALED),
-    z.literal(PAYLOAD_FORMAT_SEALED_AAD),
-  ]),
+  payloadFormat: z.literal(PAYLOAD_FORMAT_SEALED_AAD),
   payload: sealedPayloadSchema,
   updatedAt: z.number().int().positive(),
   deletedAt: z.number().int().positive().nullable().optional(),
@@ -114,9 +113,50 @@ export async function POST(request: Request) {
   const userId = session.user.id;
   const results: PushResult[] = [];
   let maxSeq = 0;
+  let overQuota = false;
 
   await serverDb.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
+
+    // the per-account ceiling (src/server/sync-quota.ts), checked under
+    // the same lock as the writes it guards. The account's total is read
+    // only when this batch would grow it, so deletions stay cheap.
+    const ids = [...new Set(parsed.data.changes.map((c) => c.id))];
+    const stored = await tx
+      .select({
+        id: schema.snippets.id,
+        payload: schema.snippets.payload,
+        updatedAt: schema.snippets.updatedAt,
+      })
+      .from(schema.snippets)
+      .where(
+        and(
+          eq(schema.snippets.userId, userId),
+          inArray(schema.snippets.id, ids),
+        ),
+      );
+    const added = growth(
+      parsed.data.changes,
+      new Map(stored.map((r) => [r.id, r])),
+    );
+    if (added.rows > 0 || added.bytes > 0) {
+      const [usage] = await tx
+        .select({
+          rows: sql<number>`count(*)`,
+          bytes: sql<number>`coalesce(sum(pg_column_size(payload)), 0)`,
+        })
+        .from(schema.snippets)
+        .where(eq(schema.snippets.userId, userId));
+      if (
+        exceedsQuota(
+          { rows: Number(usage.rows), bytes: Number(usage.bytes) },
+          added,
+        )
+      ) {
+        overQuota = true;
+        return;
+      }
+    }
 
     for (const change of parsed.data.changes) {
       const [existing] = await tx
@@ -178,5 +218,7 @@ export async function POST(request: Request) {
     maxSeq = Number(max);
   });
 
+  if (overQuota)
+    return Response.json({ error: "quota_exceeded" }, { status: 507 });
   return Response.json({ results, serverNow: Date.now(), maxSeq });
 }

@@ -4,16 +4,18 @@
  * the user's Drive — tokens transit through /api/backup/refresh but
  * never rest here again. This is half of the "operator cannot read"
  * posture: the other half is entry encryption; this one closes the
- * door where readable backups live.
+ * door where readable backups live. Until adoption the token rests
+ * encrypted (`encryptOAuthTokens`); only the Drive link writes one
+ * (src/server/oauth-tokens.ts).
  */
 import { and, eq } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
-import { getSession } from "@/server/auth";
+import { auth, getSession, readStoredToken } from "@/server/auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  if (!serverDb)
+  if (!serverDb || !auth)
     return Response.json({ error: "accounts are not configured" }, { status: 503 });
   const session = await getSession(request.headers);
   if (!session) return Response.json({ error: "signed out" }, { status: 401 });
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
   if (!account?.refreshToken)
     return Response.json({ error: "no token to adopt" }, { status: 404 });
 
-  const refreshToken = account.refreshToken;
+  const refreshToken = await readStoredToken(account.refreshToken);
 
   // the forgetting is the feature
   await serverDb

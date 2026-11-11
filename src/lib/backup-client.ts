@@ -108,6 +108,11 @@ export async function hasDriveToken(): Promise<boolean> {
   return !!(await getMeta<string>(REFRESH_TOKEN_META));
 }
 
+/** The Drive refresh token this device holds, for account deletion to revoke. */
+export async function deviceDriveToken(): Promise<string | undefined> {
+  return getMeta<string>(REFRESH_TOKEN_META);
+}
+
 async function accessToken(): Promise<string> {
   const cached = await getMeta<{ token: string; expiresAt: number }>(
     ACCESS_TOKEN_META,

@@ -224,6 +224,18 @@ describe("absence guards — the deleted plaintext paths stay deleted", () => {
     expect(push.includes("encryption_required")).toBe(true);
   });
 
+  it("Better Auth keeps Google tokens out of the account table except the Drive grant", () => {
+    // oauth-tokens.test.ts proves the hooks keep a sign-in's tokens out and
+    // encrypt the Drive grant; this pins that auth.ts still wires them in
+    // (without them each Google sign-in stored a Drive-capable refresh token
+    // in plaintext, and SECURITY-STATE says the server holds none)
+    const authConfig = read("server/auth.ts");
+    expect(authConfig.includes("databaseHooks: { account: accountTokenHooks }")).toBe(
+      true,
+    );
+    expect(authConfig.includes("encryptOAuthTokens: true")).toBe(true);
+  });
+
   it("every Deepgram listen socket opts out of model training", () => {
     // `mip_opt_out=true` is what makes the privacy page's "the audio is not
     // kept" true for Deepgram. It lived in the hook alone while the selftest
