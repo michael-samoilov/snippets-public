@@ -345,27 +345,38 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Known gaps / pending (do not describe as done)
+## Known gaps (as of 2026-11-11; do not describe as done)
 
-- **The short, unqualified privacy page is NOT live yet.** The current
-  privacy page is the honest *interim* two-state version. The headline
-  "We cannot read your entries. Not won't, can't." + 4-row data-flow
-  table is **gated** on the pre-2026-07-23 accounts re-encrypting — see
-  BACKLOG #14. Do not swap it in until the gate check passes.
-- **The short privacy page + digestibility revision** is on preview branch
-  `claude/privacy-short-page-preview`, pending owner review and merge. The
-  gate is met, so the unqualified
-  "We cannot read your entries" headline is architecturally true. Not yet
-  on prod.
-- The old "early accounts / plaintext lingers" note is removed from the
-  privacy page, because the re-encryption gate in BACKLOG #14 passed.
-- **Soniox / Speechmatics are wired but dormant** until their API keys
-  are set in the environment. Until then the active chain is whatever
-  keys exist (likely Deepgram, mip-opted-out). The privacy page names
-  only active providers, so it stays truthful automatically.
-- **On-device transcription** (BACKLOG #16), **ciphertext self-viewer**
-  (BACKLOG #15), **open-sourcing** (BACKLOG #17, brief in `docs/notes/OPEN-SOURCE.md`)
-  are deferred by decision.
+- **Encryption was optional before 2026-07-23.** Entries an account
+  synced without it rested on the server unencrypted. Since then the
+  server refuses an unencrypted write (`409 encryption_required`), each
+  device re-encrypted such entries on its next sync (`needsReseal`), and
+  since 2026-11-11 a device also refuses an unencrypted row on pull. The
+  privacy page's unqualified "We cannot read your entries" shipped on
+  2026-07-24, after those entries were re-encrypted.
+- **A payload-less deletion carries no proof.** The server can mark any
+  entry deleted; a device that holds it keeps the words for 30 days
+  (see "What can the server do to a sealed entry?"). Proving a deletion
+  would need a proof the cron leaves in place when it clears a deleted
+  entry's words. Not built.
+- **A device with no copy trusts the server about which entries exist.**
+  A new device can't tell an omitted entry, or an older version, from
+  the current book. Closing that needs a signed index of the whole book.
+  Not planned.
+- **`/api/backup/refresh` checks for a session, not for whose token it
+  is.** Any signed-in account can exchange any Drive refresh token it
+  holds. Binding each adopted token to its account is written and waits
+  on a database migration (branch `fix/drive-grant-binding`).
+- **Revoking the Google grant needs a token.** Account deletion from a
+  device with no Drive token leaves the grant listed in the reader's
+  Google Account. The privacy page says so and links the page that
+  removes it.
+- **Speech providers follow the deployment's keys.** The privacy page
+  names only the providers whose API keys are set
+  (`activeSpeechProviders()`), so it stays truthful as keys change.
+- **Deferred by decision:** on-device transcription (BACKLOG #16), the
+  ciphertext self-viewer (BACKLOG #15), and open-sourcing (BACKLOG #17,
+  brief in `docs/notes/OPEN-SOURCE.md`).
 
 ---
 
@@ -373,6 +384,14 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-11 — "Known gaps" rewritten as a dated note
+The section said both that the short privacy page was not live and that
+its gate was met, though the page has been live since 2026-07-24. It
+also carried a production database query result and the database's
+history-retention setting. It now lists, neutrally and dated, what a
+reader needs: the pre-2026-07-23 history, the limits this file's rows
+describe, and the open and deferred items. No code change.
 
 ### 2026-11-11 — a per-account storage ceiling on sync
 The push route took 200 changes of up to 64 KB each per request with
