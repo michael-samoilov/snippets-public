@@ -26,8 +26,9 @@
  *
  *   DEEPGRAM_API_KEY=… node scripts/deepgram-live-test.mjs <speech.wav> [expected…]
  *
- * CI: .github/workflows/deepgram-live-test.yml. Spends a few seconds of
- * Deepgram credit per run; a diagnostic, not a shipped feature.
+ * CI runs it on demand only, from a workflow that holds the key. Spends a
+ * few seconds of Deepgram credit per run; a diagnostic, not a shipped
+ * feature.
  */
 
 import { readFileSync } from "node:fs";
