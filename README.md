@@ -1,5 +1,7 @@
 # Snippets
 
+[![public-ci](https://github.com/michael-samoilov/snippets-public/actions/workflows/public-ci.yml/badge.svg)](https://github.com/michael-samoilov/snippets-public/actions/workflows/public-ci.yml)
+
 *A pocket notebook for the day's stories.*
 
 Snippets is a journaling app for people who want to keep the small
@@ -12,11 +14,6 @@ offline, and keeps your entries on your device.
 Live app: [www.snippets.ink](https://www.snippets.ink)
 
 **Status:** Live, maintained solo; not accepting contributions.
-
-**Source:** [github.com/michael-samoilov/snippets-public](https://github.com/michael-samoilov/snippets-public)
-is the read-only public copy of a private working repository, updated
-weekly. Branch names in the agent docs refer to the private repository.
-Commits arrive in small, verified steps from parallel work sessions.
 
 It follows the **Homework for Life** practice from Matthew Dicks's
 *Storyworthy*: at the end of each day, keep the most storyworthy moment
@@ -180,9 +177,7 @@ included.
 A desk under lamplight with one sheet of paper on it. Paper and ink
 carry the words, and sealing-wax blue marks recording, the margin rule,
 and today. The full system (tokens, type voices, motion budget, and
-copy voice) is in [`DESIGN.md`](./DESIGN.md), and the skills in
-[`.claude/skills/`](./.claude/skills/) enforce it for agent
-contributors.
+copy voice) is in [`DESIGN.md`](./DESIGN.md).
 
 | | |
 |---|---|
@@ -204,6 +199,16 @@ contributors.
   memory limits, shows only on a real iPhone, so those checks are manual.
 - **Known security gaps.** [`SECURITY-STATE.md`](SECURITY-STATE.md) lists
   them under "Known gaps".
+
+## About this repository
+
+[github.com/michael-samoilov/snippets-public](https://github.com/michael-samoilov/snippets-public)
+is the read-only public copy of a private working repository, updated
+weekly. Branch names in the contributor docs refer to the private
+repository. Commit IDs cited in the docs refer to the private working
+repository. Commits arrive in small, verified steps from parallel work
+sessions. The public copy runs lint, the unit tests, and a production
+build on every update.
 
 ## License
 
