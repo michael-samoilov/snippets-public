@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { connectOrigins, FIXED_CONNECT_ORIGINS } from "./security-headers";
 import { SPEECH_PROVIDERS } from "./speech-providers";
+import { tokenOverride } from "@/server/oauth-tokens";
 
 /**
  * The mechanized half of SECURITY-STATE.md — the copy linter's sibling,
@@ -234,6 +235,20 @@ describe("absence guards — the deleted plaintext paths stay deleted", () => {
       true,
     );
     expect(authConfig.includes("encryptOAuthTokens: true")).toBe(true);
+    // the hook itself: a sign-in's tokens, ID token included, are nulled
+    expect(
+      tokenOverride({ accessToken: "a", refreshToken: "r", idToken: "i", scope: "openid" }, false),
+    ).toEqual({ accessToken: null, refreshToken: null, idToken: null });
+  });
+
+  it("the database refuses a plaintext token, and the backfill that adds that refusal still runs", () => {
+    // account_tokens_encrypted (schema.ts, migration 0004) is the structural
+    // guard; encryptLegacyTokens adds it once the old values are encrypted,
+    // run from getSession on each new instance
+    expect(read("server/db/schema.ts").includes("check(TOKEN_CONSTRAINT, sql.raw(ENCRYPTED_TOKENS_SQL))")).toBe(true);
+    const authConfig = read("server/auth.ts");
+    expect(authConfig.includes("await encryptTokensOnce();")).toBe(true);
+    expect(authConfig.includes("encryptLegacyTokens(serverDb")).toBe(true);
   });
 
   it("every Deepgram listen socket opts out of model training", () => {

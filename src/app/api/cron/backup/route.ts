@@ -18,6 +18,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { sendEmail } from "@/server/email";
+import { plaintextTokenRows } from "@/server/token-encryption";
 import { SPEECH_LIMIT_ROW_TTL_MS } from "@/server/speech-guard";
 import { backupEmail, STALE_AFTER_DAYS } from "@/lib/backup-shared";
 
@@ -149,11 +150,37 @@ export async function GET(request: Request) {
     // storage check is best-effort; the rest of the cron still ran
   }
 
+  // ── plaintext token watchdog ───────────────────────────────────
+  // Every Google token at rest must be encrypted; the CHECK constraint
+  // (src/server/token-encryption.ts) refuses any other write. This counts
+  // what would slip past a dropped constraint, and reports the count
+  // only, never a row.
+  let plaintextTokens: number | null = null;
+  try {
+    plaintextTokens = await plaintextTokenRows(serverDb);
+    if (plaintextTokens > 0) {
+      console.error(`[token-watchdog] ${plaintextTokens} account rows hold a plaintext token`);
+      if (opsEmail)
+        await sendEmail({
+          to: opsEmail,
+          subject: `Snippets: ${plaintextTokens} stored Google tokens are not encrypted`,
+          text: [
+            `${plaintextTokens} rows in the account table hold a Google token that is not encrypted.`,
+            "",
+            "Every token should be encrypted at rest, and the account_tokens_encrypted constraint should refuse any other write. Check that the constraint still exists; each new server instance re-encrypts old tokens and re-adds it before its first session lookup. This note repeats daily while any are found.",
+          ].join("\n"),
+        }).catch(() => {});
+    }
+  } catch {
+    // best-effort, like the storage check
+  }
+
   return Response.json({
     watched: stale.length,
     notified,
     storageBytes,
     storageAlerted,
+    plaintextTokens,
   });
 }
 

@@ -29,6 +29,13 @@
       "when": 1794435050680,
       "tag": "0003_drive-grants",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794443292394,
+      "tag": "0004_account-tokens-encrypted",
+      "breakpoints": true
     }
   ]
 }

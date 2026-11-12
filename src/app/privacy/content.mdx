@@ -1,6 +1,6 @@
 import { Flows, Flow, Providers, Deepdive } from "@/components/policy-mdx";
 
-export const updated = "November 11, 2026";
+export const updated = "November 12, 2026";
 
 # We cannot read your entries.
 
@@ -44,7 +44,7 @@ If the transcription service cannot be reached, the app falls back to your brows
 
 If you connect Google Drive, unencrypted copies land in a folder in your own Drive named "Snippets", so that if you lose your passphrase and recovery code you can still import your entries, and if this app ever disappears you still hold an up-to-date copy. These are plain, readable files by design; that is what lets them rescue you. They live in your Google account, where Google can read them like any other file in your Drive ([Google's privacy policy](https://policies.google.com/privacy)).
 
-The permission this app uses (`drive.file`) lets it see only files it created; it cannot read, list, or touch anything else in your Drive. Your device makes these files and uploads them straight to Google, so our server never receives them. When you connect Drive, our server holds the permission Google grants, encrypted, until your device collects it, usually within seconds. After that, our server stores none of your Drive credentials.
+The permission this app uses (`drive.file`) lets it see only files it created; it cannot read, list, or touch anything else in your Drive. Your device makes these files and uploads them straight to Google, so our server never receives them. When you connect Drive, our server holds the permission Google grants, encrypted, until your device collects it, usually within seconds. After that, our server stores none of your Drive credentials. One exception: a Google sign-in before November 11, 2026, may have left one, now encrypted. It stays until a device collects it, you next sign in with Google, or you delete your account.
 
 ## What we collect
 

@@ -38,6 +38,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "no token to adopt" }, { status: 404 });
 
   const refreshToken = await readStoredToken(account.refreshToken);
+  // a token that no longer decrypts (the auth secret changed) is absent
+  if (!refreshToken)
+    return Response.json({ error: "no token to adopt" }, { status: 404 });
 
   // bind the token to this account (only its hash rests), then forget
   // the token itself — the forgetting is the feature

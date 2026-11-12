@@ -16,6 +16,7 @@
 import { getOAuthState } from "better-auth/api";
 import { symmetricDecrypt, type SecretConfig } from "better-auth/crypto";
 import { DRIVE_SCOPE } from "@/lib/backup-shared";
+import { isEncryptedToken } from "@/server/db/token-format";
 
 /** Google returns scopes space-separated; Better Auth joins them with commas. */
 export function grantedScopes(scope: string | null | undefined): string[] {
@@ -25,23 +26,30 @@ export function grantedScopes(scope: string | null | undefined): string[] {
 type TokenFields = {
   accessToken?: string | null;
   refreshToken?: string | null;
+  idToken?: string | null;
   scope?: string | null;
 };
 
+type TokenNulls = { accessToken?: null; refreshToken?: null; idToken?: null };
+
 /**
- * The override for an account write: `{}` keeps the tokens as written,
- * otherwise both token columns are nulled. A write that carries no token
- * is left alone. `linking` is true only inside the `linkSocial` callback.
+ * The override for an account write. The Drive grant keeps its access
+ * and refresh tokens (Better Auth encrypts both); every other token write
+ * nulls them. The ID token is always nulled: Better Auth writes it
+ * without encryption, and nothing reads it back for Google (its provider
+ * has no end-session URL, the one consumer). A write that carries no
+ * token is left alone. `linking` is true only inside the `linkSocial`
+ * callback.
  */
-export function tokenOverride(
-  write: TokenFields,
-  linking: boolean,
-): { accessToken?: null; refreshToken?: null } {
-  const carriesToken = "accessToken" in write || "refreshToken" in write;
+export function tokenOverride(write: TokenFields, linking: boolean): TokenNulls {
+  const carriesToken =
+    "accessToken" in write || "refreshToken" in write || "idToken" in write;
   if (!carriesToken) return {};
   const isDriveGrant =
     linking && grantedScopes(write.scope).includes(DRIVE_SCOPE);
-  return isDriveGrant ? {} : { accessToken: null, refreshToken: null };
+  return isDriveGrant
+    ? { idToken: null }
+    : { accessToken: null, refreshToken: null, idToken: null };
 }
 
 /** True only inside a `linkSocial` callback (its OAuth state names a link). */
@@ -70,16 +78,15 @@ export const accountTokenHooks = {
 
 /**
  * A Google token as the `account` table holds it, decrypted with Better
- * Auth's own key and envelope test. A token written before
- * `encryptOAuthTokens` was on is plain and reads back as written: Google
- * tokens carry `.` or `/`, never an envelope prefix or bare hex.
+ * Auth's own key, or null when it can't be: a token encrypted under a
+ * `BETTER_AUTH_SECRET` that has since changed reads as absent, never as a
+ * crash. A plaintext value (none can be written once the constraint in
+ * src/server/token-encryption.ts exists) reads back as written.
  */
 export async function decryptStoredToken(
   stored: string,
   key: string | SecretConfig,
-): Promise<string> {
-  const encrypted =
-    stored.startsWith("$ba$") ||
-    (stored.length % 2 === 0 && /^[0-9a-f]+$/i.test(stored));
-  return encrypted ? symmetricDecrypt({ key, data: stored }) : stored;
+): Promise<string | null> {
+  if (!isEncryptedToken(stored)) return stored;
+  return symmetricDecrypt({ key, data: stored }).catch(() => null);
 }

@@ -65,7 +65,8 @@ export async function POST(request: Request) {
         .filter((token): token is string => !!token)
         .map((token) => readStoredToken(token)),
     );
-    const tokens = deviceToken ? [deviceToken, ...stored] : stored;
+    const readable = stored.filter((token): token is string => token !== null);
+    const tokens = deviceToken ? [deviceToken, ...readable] : readable;
     await Promise.allSettled(
       tokens.map((token) =>
         fetch("https://oauth2.googleapis.com/revoke", {
