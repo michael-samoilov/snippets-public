@@ -107,6 +107,24 @@ describe("speechGuard — how much", () => {
     expect(await speechGuard(call("/api/x", "10.1.0.3"), "token")).toBeNull();
   });
 
+  it("counts one IPv6 /64 as one caller, however its addresses are spelled", async () => {
+    const { limit } = SPEECH_BUDGETS.token;
+    for (let i = 0; i < limit; i++) {
+      expect(await speechGuard(call("/api/x", "2001:db8:1:2::1"), "token")).toBeNull();
+    }
+    for (const sibling of ["2001:db8:1:2:ffff:ffff:ffff:fffe", "2001:0DB8:0001:0002::9", "2001:db8:1:2::a%eth0"]) {
+      expect((await speechGuard(call("/api/x", sibling), "token"))?.status).toBe(429);
+    }
+    expect(await speechGuard(call("/api/x", "2001:db8:1:3::1"), "token")).toBeNull();
+  });
+
+  it("counts each IPv4-mapped IPv6 address as its own IPv4 address", async () => {
+    const { limit } = SPEECH_BUDGETS.token;
+    for (let i = 0; i <= limit; i++) await speechGuard(call("/api/x", "::ffff:10.1.0.5"), "token");
+    expect((await speechGuard(call("/api/x", "10.1.0.5"), "token"))?.status).toBe(429);
+    expect(await speechGuard(call("/api/x", "::ffff:10.1.0.6"), "token")).toBeNull();
+  });
+
   describe("window end", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
