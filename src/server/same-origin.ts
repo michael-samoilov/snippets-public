@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * True when a request did not come from a page on this app's own
  * origin. Same-origin means: `Sec-Fetch-Site` is absent or
