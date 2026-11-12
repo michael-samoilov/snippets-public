@@ -13,6 +13,11 @@ Live app: [www.snippets.ink](https://www.snippets.ink)
 
 **Status:** Live, maintained solo; not accepting contributions.
 
+**Source:** [github.com/michael-samoilov/snippets-public](https://github.com/michael-samoilov/snippets-public)
+is the read-only public copy of a private working repository, updated
+weekly. Branch names in the agent docs refer to the private repository.
+Commits arrive in small, verified steps from parallel work sessions.
+
 It follows the **Homework for Life** practice from Matthew Dicks's
 *Storyworthy*: at the end of each day, keep the most storyworthy moment
 that happened. Do it for a month, and you find that an ordinary life is
@@ -132,9 +137,10 @@ encrypted copy of your entries on the server for sync across devices.
 Entries are encrypted end to end on the device before they're sent, so
 the server never holds readable text. Each signed-in device also writes
 readable Markdown and a restorable JSON archive to a visible "Snippets"
-folder in the user's own Google Drive. The server keeps no Drive
-tokens, and the files stay with the user even if the app goes away.
-Set these environment variables:
+folder in the user's own Google Drive. The server keeps the Drive
+permission Google grants, encrypted, only until the device collects
+it, and the files stay with the user even if the app goes away. Set
+these environment variables:
 
 ```sh
 DATABASE_URL=…          # Neon Postgres (pooled URL); run pnpm db:migrate once

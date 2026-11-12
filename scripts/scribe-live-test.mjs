@@ -18,7 +18,7 @@
  *   ELEVENLABS_API_KEY=… node scripts/scribe-live-test.mjs <speech.wav> [expected words…]
  *
  * CI: .github/workflows/scribe-live-test.yml generates the WAV with
- * espeak-ng and runs this on demand or on any push touching it.
+ * espeak-ng and runs this on demand.
  */
 
 import { readFileSync } from "node:fs";

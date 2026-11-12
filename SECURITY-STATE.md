@@ -440,6 +440,13 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
 
+### 2026-11-12 — the README states the Drive-permission lifetime
+The README's sync and backup section said the server keeps no Drive
+tokens. It now matches the privacy page: the server keeps the Drive
+permission Google grants, encrypted, only until the device collects
+it. No behavior change. Surfaces: README "Accounts, sync, and Drive
+backup".
+
 ### 2026-11-12 — the privacy page states the Drive-permission lifetime in one sentence
 The Drive paragraph now says the server keeps the Drive permission,
 encrypted, only until a device collects it. That one sentence covers
