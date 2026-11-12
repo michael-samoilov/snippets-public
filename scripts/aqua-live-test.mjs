@@ -17,8 +17,8 @@
  *
  *   AQUA_API_KEY=… node scripts/aqua-live-test.mjs <audio.wav> [expected…]
  *
- * CI runs it on demand only, from a workflow that holds the key. Spends a
- * little transcription credit. A diagnostic, not a shipped feature.
+ * CI: .github/workflows/aqua-live-test.yml. Spends a little transcription
+ * credit. A diagnostic, not a shipped feature.
  */
 
 import { readFileSync } from "node:fs";
