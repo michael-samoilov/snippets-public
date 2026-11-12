@@ -431,8 +431,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   names only the providers whose API keys are set
   (`activeSpeechProviders()`), so it stays truthful as keys change.
 - **Deferred by decision:** on-device transcription (BACKLOG #16), the
-  ciphertext self-viewer (BACKLOG #15), and open-sourcing (BACKLOG #17,
-  brief in `docs/notes/OPEN-SOURCE.md`).
+  ciphertext self-viewer (BACKLOG #15), and open-sourcing (BACKLOG #17).
 
 ---
 
@@ -733,8 +732,8 @@ explicit `{" "}`. On preview branch, pending merge.
 - **Strict CSP + `/verify`:** `connect-src` as the browser-enforced
   allowlist; the three-test "verify, don't trust" page. — `15a1955`
 - **Constitution/backlog/docs:** CLAUDE.md E2E + CSP rules, snippets-craft
-  law 8, DESIGN.md "Privacy is architecture", BACKLOG #14–17,
-  `OPEN-SOURCE.md` (moved to `docs/notes/`). — `2b3f811`
+  law 8, DESIGN.md "Privacy is architecture", BACKLOG #14–17, and an
+  open-sourcing brief. — `2b3f811`
 - **This file** created as the source of truth; CLAUDE.md points at it. —
   `471a496`
 - **Drift made mechanical:** CSP moved to a tested value

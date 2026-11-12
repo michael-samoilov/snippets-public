@@ -424,8 +424,8 @@ saturates the user base. Until then the Soniox/Speechmatics chain
 
 ## 17. Open-source the client
 
-Owner is "not in principle opposed"; implications written up in
-docs/notes/OPEN-SOURCE.md (license choice, history secret-scan at publish time,
+Owner is "not in principle opposed"; implications written up in a
+separate decision brief (license choice, history secret-scan at publish time,
 what it does and doesn't obligate, and that an OSI license + public
 repo unlocks eligibility for a free OTF Red Team Lab security audit —
 the only realistic third-party-audit path at indie budget). When the
@@ -693,7 +693,7 @@ same write-at-submit / hold / abort / file-at-the-beat protocol and the
 seal's pointer hit-test exist TWICE (backfill composer and today zone,
 down to matching comments) and have diverged: the zone guards every
 pointer handler and cancels its watchers on abort; the composer does
-neither. docs/notes/SCHEDULE-MAP.md now records this axis; the extraction
+neither. docs/schedule-map.md now records this axis; the extraction
 (useKeepRun/useSealPress) should lift the record's shape, not two flag
 sets. tests/e2e/backfill_keep.py's fault-injection leg is the gate; add
 the late-rejection leg (reject at +5s, then a second successful keep —
@@ -727,7 +727,7 @@ their unguardedness is documented and load-bearing.
 
 ## 27. Today zone: a keyed keyboard baseline, listeners that remember
 
-From the audit (S12); neither is in SCHEDULE-MAP's census. `baseVh` is
+From the audit (S12); neither is in the census in docs/schedule-map.md. `baseVh` is
 a monotonic running max standing for "viewport height with no
 keyboard", never reset — rotate in the browser, split-view an iPad, or
 shorten a desktop window and `baseVh - vv.height ≥ 60` forever: the

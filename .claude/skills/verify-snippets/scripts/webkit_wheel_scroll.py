@@ -62,7 +62,7 @@ def main(seed="400", years="5"):
         time.sleep(6)
 
         # 1. the book feed = the app's own [data-book-scroller] handle
-        # (docs/notes/SCHEDULE-MAP.md; calendar/page.tsx). Fall back to the [data-day]
+        # (docs/schedule-map.md; calendar/page.tsx). Fall back to the [data-day]
         # scroll-parent only if the attribute is ever renamed. NEVER pick by
         # largest scrollHeight — a second overflow-y-auto layer overlaps it.
         js("""var s=document.querySelector('[data-book-scroller]');

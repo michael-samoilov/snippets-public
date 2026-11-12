@@ -31,5 +31,5 @@ them verified:
   flow) — the real-iOS lane in `SKILL.md` covers these (device farm,
   Simulator, or the manual iPhone protocol). WebKitGTK wheel scrolls the
   feed and drives its scroll logic here, but carries no iOS momentum, and
-  the guard-flag logic (`docs/notes/SCHEDULE-MAP.md`) only fully exercises
+  the guard-flag logic (`docs/schedule-map.md`) only fully exercises
   under a real fling.
