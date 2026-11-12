@@ -9,7 +9,11 @@ browser with the browser's own request headers:
      (Deepgram socket opened with the stub's token, words land),
   2. the batch engine's real upload passes the gate and its words land,
   3. a page on another site cannot reach the provider through the routes,
-  4. a burst from one address is cut off at the budget.
+  4. a burst from one address is cut off at the budget,
+  5. every address in one IPv6 /64 draws on one budget, and the next /64
+     has its own. `next start` takes the caller's address from
+     `x-real-ip`, so this step sets it; on Vercel the platform's proxy
+     overwrites that header.
 
 Run (the provider env points the routes at the stub):
   python3 .claude/skills/webapp-testing/scripts/with_server.py \\
@@ -269,6 +273,34 @@ def run_burst(browser):
     ctx.close()
 
 
+def run_ipv6_network(browser):
+    ctx = browser.new_context(service_workers="block")
+    page = ctx.new_page()
+    page.goto(f"{BASE}/privacy")
+    before = provider_calls["grant"]
+    result = page.evaluate(f"""async () => {{
+      const mint = async (ip) => (await fetch("/api/deepgram-token", {{
+        method: "POST", headers: {{ "x-real-ip": ip }} }})).status;
+      const first = [];
+      for (let i = 0; i < {TOKEN_BUDGET}; i++) first.push(await mint("2001:db8:5:6::1"));
+      return {{
+        first,
+        sibling: await mint("2001:db8:5:6:ffff:ffff:ffff:fffe"),
+        nextNetwork: await mint("2001:db8:5:7::1"),
+      }};
+    }}""")
+    check("ipv6: one address spends the whole budget",
+          result["first"] == [200] * TOKEN_BUDGET, json.dumps(result["first"]))
+    check("ipv6: another address in the same /64 is refused",
+          result["sibling"] == 429, str(result["sibling"]))
+    check("ipv6: the next /64 has its own budget",
+          result["nextNetwork"] == 200, str(result["nextNetwork"]))
+    check("ipv6: the provider saw only the passes",
+          provider_calls["grant"] - before == TOKEN_BUDGET + 1,
+          f"provider grants {provider_calls['grant'] - before}")
+    ctx.close()
+
+
 def main():
     stub = ThreadingHTTPServer(("0.0.0.0", STUB_PORT), Stub)
     threading.Thread(target=stub.serve_forever, daemon=True).start()
@@ -282,6 +314,7 @@ def main():
             run_batch(browser)
             run_cross_site(browser)
             run_burst(browser)
+            run_ipv6_network(browser)
             browser.close()
     finally:
         stub.shutdown()

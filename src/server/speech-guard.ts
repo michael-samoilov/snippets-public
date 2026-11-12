@@ -9,21 +9,24 @@
  *    forge either. That stops another site from spending this app's
  *    credit through its visitors' browsers. A script can forge both
  *    headers, so this check is not the limit.
- * 2. A per-IP budget: a fixed window per bucket, counted in Postgres so
- *    every serverless instance shares one count. The database stores a
- *    keyed hash of the address, never the address. Without the database
+ * 2. A per-network budget: a fixed window per bucket, counted in
+ *    Postgres so every serverless instance shares one count. A network
+ *    is one IPv4 address or one IPv6 /64. The database stores a keyed
+ *    hash of the network, never the address. Without the database
  *    and the auth secret (local runs, device-only deploys), or when a
  *    query fails, a count in this process stands in: weaker across
  *    instances, and never a reason to refuse voice.
  *
- * The budget bounds how many provider sessions one address can open.
+ * The budget bounds how many provider sessions one network can open.
  * It does not bound how long a session runs once a provider accepts
  * its token; the providers' own spend limits are the backstop for that.
  */
 import "server-only";
 import { createHmac } from "node:crypto";
+import { isIPv6 } from "node:net";
 import { sql } from "drizzle-orm";
 import { serverDb, schema } from "./db";
+import { isCrossSite } from "./same-origin";
 
 export type SpeechBucket = "token" | "transcribe";
 
@@ -33,7 +36,7 @@ interface Budget {
 }
 
 /**
- * Requests one address may make per window. A writer mints one token
+ * Requests one network may make per window. A writer mints one token
  * per page load and one per take, and uploads one recording per take
  * (two when the first upload fails), so these sit far above real use
  * and far below what a script would want. All four token routes share
@@ -81,34 +84,13 @@ export async function speechGuard(
   );
 }
 
-/**
- * Same-origin means: `Sec-Fetch-Site` is absent or `same-origin`, and
- * `Origin` is present and names the host the request was sent to. A
- * missing `Origin` fails: every browser sends it on a POST, so only a
- * script leaves it out.
- */
-function isCrossSite(headers: Headers): boolean {
-  const site = headers.get("sec-fetch-site");
-  if (site !== null && site !== "same-origin") return true;
-  const origin = headers.get("origin");
-  const host = (headers.get("x-forwarded-host") ?? headers.get("host"))
-    ?.split(",")[0]
-    .trim();
-  if (!origin || !host) return true;
-  try {
-    return new URL(origin).host !== host;
-  } catch {
-    return true;
-  }
-}
-
 /** Keys the address hash, so a stored row cannot be reversed to an IP. */
 const hashKey = process.env.BETTER_AUTH_SECRET;
 
 /**
- * The caller's address, as the platform's proxy reports it (Vercel
- * overwrites both headers, so a client cannot choose its own), reduced
- * to a keyed hash. Requests with no address share one bucket.
+ * The caller's network, from the address the platform's proxy reports
+ * (Vercel overwrites both headers, so a client cannot choose its own),
+ * reduced to a keyed hash. Requests with no address share one bucket.
  */
 function callerId(headers: Headers): string {
   const ip =
@@ -116,9 +98,43 @@ function callerId(headers: Headers): string {
     headers.get("x-forwarded-for")?.split(",")[0].trim() ||
     "unknown";
   return createHmac("sha256", hashKey ?? "snippets-speech-guard")
-    .update(ip)
+    .update(budgetNetwork(ip))
     .digest("base64url")
     .slice(0, 22);
+}
+
+/**
+ * The network one budget covers. An IPv4 address counts alone. An IPv6
+ * address counts as its /64: one home or one server usually holds a
+ * whole /64, so a budget per full address would hand a script 2^64
+ * fresh budgets. An IPv4-mapped IPv6 address counts as its IPv4
+ * address, and a zone index is dropped.
+ */
+function budgetNetwork(raw: string): string {
+  const ip = raw
+    .replace(/%.*$/, "")
+    .replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, "");
+  return isIPv6(ip) ? `${ipv6Prefix64(ip)}::/64` : ip;
+}
+
+/**
+ * The first four groups of a valid IPv6 address, expanded from `::`
+ * and without leading zeros, so every spelling of one /64 gives one
+ * string. A dotted IPv4 tail fills the last two groups.
+ */
+function ipv6Prefix64(ip: string): string {
+  const groupsOf = (part: string) =>
+    part ? part.split(":").flatMap((g) => (g.includes(".") ? ["0", "0"] : [g])) : [];
+  const [head, tail = ""] = ip.split("::");
+  const left = groupsOf(head);
+  const right = groupsOf(tail);
+  const groups = ip.includes("::")
+    ? [...left, ...Array<string>(8 - left.length - right.length).fill("0"), ...right]
+    : left;
+  return groups
+    .slice(0, 4)
+    .map((g) => parseInt(g, 16).toString(16))
+    .join(":");
 }
 
 interface Window {

@@ -53,9 +53,9 @@ prototype established (reuse freely):
   the seal to keep it · hold it to speak more".
 - The separate ink Keep button was removed; `⌘↵` kept working.
 - e2e flow passed: record → settle → seal arms → press keeps.
-- Full prototype source preserved at `/tmp/seal-prototype-capture.tsx`
-  during the session (gone with the container — the notes above are
-  the durable record).
+- **Lost:** the prototype source lived only at
+  `/tmp/seal-prototype-capture.tsx` in that session's container and did
+  not survive it. The notes above are the only record.
 
 ## 2. The stamping moment — make keeping an entry juicy
 
@@ -366,31 +366,6 @@ WaxStamp press frame-by-frame with Playwright, assemble with sharp/
 gifsicle. Re-verify per-platform behavior against live unfurls at ship
 time — the platform matrix above is from research, not measurement.
 
-## 14. The short privacy page — GATED on the legacy books re-encrypting
-
-The privacy push (2026-07-23) made the architecture true: sign-in
-implies end-to-end encryption (wire format 3, AAD-bound), the server
-refuses plaintext pushes, the plaintext window is gone (proven by
-tests/e2e/forced_e2e.py), and /verify exists. The final step — the
-short, unqualified page modeled on "We cannot read your entries. Not
-won't, can't." with a 4-row data-flow table (Your words / Sync / Your
-voice / Drive backup) and the "Don't take our word for it → /verify"
-close — is written into the plan but MUST NOT ship until:
-1. the pre-push users have opened the app and set a passphrase
-   (their old format-1 rows re-encrypt in place automatically), and
-2. `select payload_format, count(*) from snippets group by 1` on prod
-   Neon shows no format-1 rows, and the database-backup retention
-   window (~24 h on the free tier — confirm) has passed since.
-Until then their old rows are still readable server-side and the
-unqualified headline would overclaim. (2026-08-18: the client half is
-now complete — the format-3 re-seal rule rides every server-row
-adoption path, not just the pull applier's clean branch; see
-SECURITY-STATE's change log. Criterion 2's SQL query stays the gate.) The interim page (shipped) is
-already two-state and honest. When this lands: privacy likely drops
-PolicySection (terms keeps it), the contents nav shrinks, and the
-deep-dive/honest-limits/Drive/voice/leaving content survives below the
-fold in compact form. Bump LAST_UPDATED; run pnpm check:copy.
-
 ## 15. Ciphertext self-viewer — "see what our server sees"
 
 The one verify-tier item no journal app ships (prior art: Notesnook's
@@ -433,6 +408,11 @@ owner says go: run gitleaks/trufflehog over full history first; if
 anything surfaces, publish a fresh-history mirror and rotate the
 secret regardless; add LICENSE + a short outsider README. Publishing
 upgrades every /verify claim from "we say" to "you can read."
+
+Status (2026-11-12): a source-available copy is published at
+github.com/michael-samoilov/snippets-public, all rights reserved, so the
+code is readable. An open-source license, and with it the audit
+eligibility, is still undecided.
 
 ## 18. CSP: drop `unsafe-inline` from script-src via a nonce
 

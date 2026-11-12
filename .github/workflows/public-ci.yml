@@ -1,0 +1,30 @@
+# Lint, unit tests, and a production build of the public copy, on every
+# push to its main branch. The job runs only in michael-samoilov/snippets-public,
+# so the private repository never starts it. It uses no secrets: without
+# the database and speech-provider keys, the app builds device-only.
+name: public-ci
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.repository == 'michael-samoilov/snippets-public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # reads the pnpm version from packageManager in package.json
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build

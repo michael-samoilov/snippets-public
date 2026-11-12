@@ -191,10 +191,10 @@ export const backupStatus = pgTable(
 /**
  * Fixed-window request counts for the voice routes
  * (src/server/speech-guard.ts). `key` is "<bucket>:<keyed hash of the
- * caller's IP>", never the address. A table of its own because Better
- * Auth prunes every row of `rate_limit` that has been idle past its own
- * longest window, which would reset these counts. The daily cron
- * deletes rows older than a day.
+ * caller's IPv4 address or IPv6 /64>", never the address. A table of
+ * its own because Better Auth prunes every row of `rate_limit` that has
+ * been idle past its own longest window, which would reset these
+ * counts. The daily cron deletes rows older than a day.
  */
 export const speechRateLimit = pgTable("speech_rate_limit", {
   key: text("key").primaryKey(),

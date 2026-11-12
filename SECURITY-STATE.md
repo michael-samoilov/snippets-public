@@ -186,10 +186,12 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
     anything else is `403 cross_site`. This stops another site from
     spending credit through its visitors' browsers. A script can forge
     both headers, so the next check is the limit.
-  - **Per-IP budget.** A fixed window per bucket (`SPEECH_BUDGETS`): 30
-    token mints per address per 10 minutes across all four providers, 20
-    uploads per 10 minutes; over it, `429 rate_limited` with
-    `Retry-After`. Counted in Postgres (`speech_rate_limit`, one atomic
+  - **Per-network budget.** A fixed window per bucket (`SPEECH_BUDGETS`):
+    30 token mints per network per 10 minutes across all four providers,
+    20 uploads per 10 minutes; over it, `429 rate_limited` with
+    `Retry-After`. A network is one IPv4 address or one IPv6 /64, because
+    one home or server usually holds a whole /64. An IPv4-mapped IPv6
+    address counts as its IPv4 address. Counted in Postgres (`speech_rate_limit`, one atomic
     upsert) so all serverless instances share one count; without
     `DATABASE_URL` + `BETTER_AUTH_SECRET`, or when the query fails, an
     in-process count stands in (voice is never refused for a database
@@ -207,9 +209,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **No self-test routes.** The two diagnostics that streamed audio on
   the owner's accounts without a session (`/api/scribe-selftest`,
   `/api/deepgram-selftest`) are deleted.
-- **Enforcement:** `src/server/speech-guard.ts`, the five route files,
-  and the guard in `src/lib/security-invariants.test.ts` that fails any
-  API route that reads a `*_API_KEY` and calls `fetch` without running
+- **Enforcement:** `src/server/speech-guard.ts` (its same-origin test
+  lives in `src/server/same-origin.ts`), the five route files, and the
+  guard in `src/lib/security-invariants.test.ts` that fails any API
+  route that reads a `*_API_KEY` and calls `fetch` without running
   `speechGuard` first.
 
 ### Google Drive backup
@@ -336,9 +339,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   `src/server/auth.ts`), never the code. A plain hash would not do: six
   digits have a million values. Pinned by the "sign-in codes rest as a
   keyed hash" guard in `src/lib/security-invariants.test.ts`.
-- **Abuse counters.** The voice routes' budget stores, per address and
-  bucket, a 22-character HMAC of the IP (keyed by `BETTER_AUTH_SECRET`),
-  a window start, and a count; never the address. The daily cron
+- **Abuse counters.** The voice routes' budget stores, per network and
+  bucket, a 22-character HMAC of the IPv4 address or the IPv6 /64 prefix
+  (keyed by `BETTER_AUTH_SECRET`), a window start, and a count; never
+  the address. The daily cron
   deletes rows older than a day (`SPEECH_LIMIT_ROW_TTL_MS`). Better
   Auth's own sign-in rate limit is different: its `rate_limit` rows key
   on the raw IP and path (`ip|path`), and Better Auth deletes them once
@@ -431,7 +435,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   names only the providers whose API keys are set
   (`activeSpeechProviders()`), so it stays truthful as keys change.
 - **Deferred by decision:** on-device transcription (BACKLOG #16), the
-  ciphertext self-viewer (BACKLOG #15), and open-sourcing (BACKLOG #17).
+  ciphertext self-viewer (BACKLOG #15), and an open-source license
+  (BACKLOG #17). The source itself is readable: a source-available
+  copy is published at github.com/michael-samoilov/snippets-public, all
+  rights reserved.
 
 ---
 
@@ -439,6 +446,26 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-12 — the dev-only icon writer refuses other sites
+`/api/lab/bake-icons` writes icon files into the working tree. A
+production build answers 404, but under `pnpm dev` any site open in the
+same browser could POST to it. Its POST now runs the same-origin check
+that `speechGuard` uses (`src/server/same-origin.ts`) and answers
+`403 cross_site` otherwise. Proven by
+`src/app/api/lab/bake-icons/route.test.ts` (the old route fails 2 of
+its 3 cases). No production behavior changed. Surfaces: none.
+
+### 2026-11-12 — the voice budget counts an IPv6 /64 as one caller
+`speechGuard` keyed its budget by the full address. An IPv6 caller
+usually holds a whole /64, so a script could rotate addresses and get a
+fresh budget for each one. The guard now hashes the /64 prefix of an
+IPv6 address, and the IPv4 address inside an IPv4-mapped one. IPv4
+budgets are unchanged. Proven by two cases in
+`src/server/speech-guard.test.ts` (the old guard fails both) and the
+IPv6 leg of `tests/e2e/speech_routes.py`. No user-facing copy moved.
+Surfaces: the "Who can spend the voice providers' credit" and "Data we
+collect" rows above.
 
 ### 2026-11-12 — the README states the Drive-permission lifetime
 The README's sync and backup section said the server keeps no Drive

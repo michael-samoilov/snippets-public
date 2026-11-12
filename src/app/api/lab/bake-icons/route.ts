@@ -3,10 +3,13 @@
  * icon-seal spec; POST persists a new spec (src/lib/icon-seal.json) and writes the
  * baked PNGs the studio composed. 404s in production — it writes to the repo and
  * must never exist on a deployed server. Writes are whitelisted to the icon paths.
+ * A POST from any page but the studio's own origin is refused, so another site
+ * open in the same browser cannot rewrite the icons while `pnpm dev` runs.
  */
 import { NextResponse } from "next/server";
 import { writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
+import { isCrossSite } from "@/server/same-origin";
 
 const ROOT = process.cwd();
 const SPEC = "src/lib/icon-seal.json";
@@ -28,6 +31,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   if (devOnly()) return new NextResponse("Not found", { status: 404 });
+  if (isCrossSite(req.headers)) {
+    return NextResponse.json({ error: "cross_site" }, { status: 403 });
+  }
   const { spec, files } = (await req.json()) as {
     spec?: unknown;
     files?: { file: string; dataUrl: string }[];
