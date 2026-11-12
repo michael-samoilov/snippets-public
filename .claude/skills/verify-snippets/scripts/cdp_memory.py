@@ -7,7 +7,7 @@ traces mislead about it — the costs are WebKit-compositor-specific and Blink
 hides them (see scripts/measure-webkit-spans.py, and the FLAT-BOOK LAW in
 globals.css). What DOES port across engines is a JS leak: detached DOM
 nodes, and growing listener/timer sets (this app carries ~17 guard flags
-and ~20 timers, see docs/notes/SCHEDULE-MAP.md). This lane stresses the book
+and ~20 timers, see docs/schedule-map.md). This lane stresses the book
 with many rise/dive/scroll cycles and watches CDP Performance.getMetrics —
 Nodes, JSEventListeners, JSHeapUsedSize — for unbounded growth after warmup.
 

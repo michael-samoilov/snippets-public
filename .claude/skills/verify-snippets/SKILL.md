@@ -74,13 +74,13 @@ Fall back to Playwright for the three things agent-browser cannot do:
 - **The Chromium persona synthesizes no scroll at all** (confirmed on a
   plain page, headless and headed, including `gpuBenchmarking`). Move the
   book there with `scrollTop`; drive dive/rise with taps.
-- Read `docs/notes/SCHEDULE-MAP.md` before any scroll work — it maps the
+- Read `docs/schedule-map.md` before any scroll work — it maps the
   app's scroll machinery (~17 guard flags, ~20 timers, one scroller).
 
 ## Performance and memory (what helps here, what misleads)
 
 This app's dominant performance risk is iOS memory pressure — the FLAT-BOOK
-jetsam class (`globals.css`, `docs/notes/SCHEDULE-MAP.md`). Profile accordingly:
+jetsam class (`globals.css`, `docs/schedule-map.md`). Profile accordingly:
 
 - **Read the app's own instrumentation first.** It emits `performance.mark`
   / `performance.measure` (`zoom-run`, `fx:commitFlush`, `fz:loop`, …). These
