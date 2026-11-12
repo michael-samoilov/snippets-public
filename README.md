@@ -132,9 +132,10 @@ encrypted copy of your entries on the server for sync across devices.
 Entries are encrypted end to end on the device before they're sent, so
 the server never holds readable text. Each signed-in device also writes
 readable Markdown and a restorable JSON archive to a visible "Snippets"
-folder in the user's own Google Drive. The server keeps no Drive
-tokens, and the files stay with the user even if the app goes away.
-Set these environment variables:
+folder in the user's own Google Drive. The server keeps the Drive
+permission Google grants, encrypted, only until the device collects
+it, and the files stay with the user even if the app goes away. Set
+these environment variables:
 
 ```sh
 DATABASE_URL=…          # Neon Postgres (pooled URL); run pnpm db:migrate once
