@@ -209,9 +209,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **No self-test routes.** The two diagnostics that streamed audio on
   the owner's accounts without a session (`/api/scribe-selftest`,
   `/api/deepgram-selftest`) are deleted.
-- **Enforcement:** `src/server/speech-guard.ts`, the five route files,
-  and the guard in `src/lib/security-invariants.test.ts` that fails any
-  API route that reads a `*_API_KEY` and calls `fetch` without running
+- **Enforcement:** `src/server/speech-guard.ts` (its same-origin test
+  lives in `src/server/same-origin.ts`), the five route files, and the
+  guard in `src/lib/security-invariants.test.ts` that fails any API
+  route that reads a `*_API_KEY` and calls `fetch` without running
   `speechGuard` first.
 
 ### Google Drive backup
@@ -442,6 +443,15 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-12 — the dev-only icon writer refuses other sites
+`/api/lab/bake-icons` writes icon files into the working tree. A
+production build answers 404, but under `pnpm dev` any site open in the
+same browser could POST to it. Its POST now runs the same-origin check
+that `speechGuard` uses (`src/server/same-origin.ts`) and answers
+`403 cross_site` otherwise. Proven by
+`src/app/api/lab/bake-icons/route.test.ts` (the old route fails 2 of
+its 3 cases). No production behavior changed. Surfaces: none.
 
 ### 2026-11-12 — the voice budget counts an IPv6 /64 as one caller
 `speechGuard` keyed its budget by the full address. An IPv6 caller

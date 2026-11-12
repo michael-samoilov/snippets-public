@@ -26,6 +26,7 @@ import { createHmac } from "node:crypto";
 import { isIPv6 } from "node:net";
 import { sql } from "drizzle-orm";
 import { serverDb, schema } from "./db";
+import { isCrossSite } from "./same-origin";
 
 export type SpeechBucket = "token" | "transcribe";
 
@@ -81,27 +82,6 @@ export async function speechGuard(
     { error: "rate_limited" },
     { status: 429, headers: { "Retry-After": String(retryAfter) } },
   );
-}
-
-/**
- * Same-origin means: `Sec-Fetch-Site` is absent or `same-origin`, and
- * `Origin` is present and names the host the request was sent to. A
- * missing `Origin` fails: every browser sends it on a POST, so only a
- * script leaves it out.
- */
-function isCrossSite(headers: Headers): boolean {
-  const site = headers.get("sec-fetch-site");
-  if (site !== null && site !== "same-origin") return true;
-  const origin = headers.get("origin");
-  const host = (headers.get("x-forwarded-host") ?? headers.get("host"))
-    ?.split(",")[0]
-    .trim();
-  if (!origin || !host) return true;
-  try {
-    return new URL(origin).host !== host;
-  } catch {
-    return true;
-  }
 }
 
 /** Keys the address hash, so a stored row cannot be reversed to an IP. */
