@@ -141,12 +141,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Google tokens at rest in the account table", () => {
-  it("a sign-in stores no token", async () => {
+  it("a sign-in stores no token, ID token included", async () => {
     const { auth, db } = makeAuth();
     await oauthRoundTrip(auth, new Map(), "sign-in/social", []);
     expect(db.account).toHaveLength(1);
     expect(db.account[0].refreshToken).toBeNull();
     expect(db.account[0].accessToken).toBeNull();
+    expect(db.account[0].idToken).toBeNull();
   });
 
   it("the Drive link stores its refresh token, encrypted", async () => {
@@ -156,6 +157,8 @@ describe("Google tokens at rest in the account table", () => {
     await oauthRoundTrip(auth, jar, "link-social", [DRIVE_SCOPE]);
     const stored = db.account[0].refreshToken as string;
     expect(stored).not.toContain("refresh-");
+    // Better Auth writes the ID token unencrypted; the hook drops it
+    expect(db.account[0].idToken).toBeNull();
     expect(await symmetricDecrypt({ key: SECRET, data: stored })).toBe(
       `1//refresh-${issued}`,
     );
@@ -185,13 +188,13 @@ describe("tokenOverride", () => {
   it("leaves a write that carries no token alone", () => {
     expect(tokenOverride({ scope: DRIVE_SCOPE }, false)).toEqual({});
   });
-  it("reads scopes split by commas or spaces", () => {
+  it("reads scopes split by commas or spaces; a Drive grant keeps its tokens, not its ID token", () => {
     expect(
       tokenOverride({ refreshToken: "t", scope: `openid ${DRIVE_SCOPE}` }, true),
-    ).toEqual({});
+    ).toEqual({ idToken: null });
     expect(
       tokenOverride({ refreshToken: "t", scope: `openid,${DRIVE_SCOPE}` }, true),
-    ).toEqual({});
+    ).toEqual({ idToken: null });
   });
 });
 
@@ -200,6 +203,11 @@ describe("decryptStoredToken — what /api/backup/adopt hands the device", () =>
     const stored = await symmetricEncrypt({ key: SECRET, data: "1//refresh-x" });
     expect(await decryptStoredToken(stored, SECRET)).toBe("1//refresh-x");
   });
+  it("reads a token encrypted under a since-changed secret as absent, without throwing", async () => {
+    const stored = await symmetricEncrypt({ key: SECRET, data: "1//refresh-x" });
+    expect(await decryptStoredToken(stored, "a-rotated-secret-0123456789abcdef0123")).toBeNull();
+  });
+
   it("returns a token stored before encryption as written", async () => {
     expect(await decryptStoredToken("1//0gPlainLegacyToken", SECRET)).toBe(
       "1//0gPlainLegacyToken",

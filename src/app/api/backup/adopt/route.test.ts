@@ -31,10 +31,11 @@ vi.mock("@/server/db", () => {
     schema: { account: {}, driveGrant: {} },
   };
 });
+const stored = vi.hoisted(() => ({ token: "1//adopted-refresh-token" as string | null }));
 vi.mock("@/server/auth", () => ({
   auth: {},
   getSession: async () => ({ user: { id: "user-1" } }),
-  readStoredToken: async () => "1//adopted-refresh-token",
+  readStoredToken: async () => stored.token,
 }));
 
 import { POST } from "./route";
@@ -48,5 +49,13 @@ describe("adopt route", () => {
       { bind: { tokenHash: hashRefreshToken("1//adopted-refresh-token"), userId: "user-1" } },
       { account: { refreshToken: null, accessToken: null } },
     ]);
+  });
+
+  it("a stored token that no longer decrypts (the secret changed) reads as none, not a crash", async () => {
+    stored.token = null;
+    log.writes = [];
+    const res = await POST(new Request("http://test/api/backup/adopt", { method: "POST" }));
+    expect(res.status).toBe(404);
+    expect(log.writes).toEqual([]);
   });
 });

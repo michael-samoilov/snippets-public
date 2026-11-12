@@ -53,7 +53,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Current state (as of 2026-11-11)
+## Current state (as of 2026-11-12)
 
 ### Can we read your entries?
 - **No.** Signed out: entries live only in this browser's IndexedDB and
@@ -216,17 +216,47 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - Plaintext **by design** — it's the key-loss safety net, delivered by
   the writer's own device to their own Drive (`drive.file` scope, visible
   folder). The server never carries the files.
-- **The server holds a Drive token only until a device adopts it.** The
-  Drive link (`linkSocial` with `drive.file`) writes its refresh token to
-  the `account` row; the device collects it from `/api/backup/adopt`
-  (Settings calls it right after the consent), and the route nulls it.
-  While it waits it is encrypted under `BETTER_AUTH_SECRET`
-  (`encryptOAuthTokens`). Every other token write is nulled by the
-  account hooks (`accountTokenHooks` in `src/server/oauth-tokens.ts`):
-  a Google sign-in stores no token, though Google's covers Drive after a
-  grant (Better Auth sends `include_granted_scopes=true`), and neither
-  does a link with Drive unticked. `/api/backup/refresh` exchanges the
-  device's token statelessly and stores no token.
+- **Every Google token at rest is encrypted, and the database refuses
+  one that is not.** The CHECK constraint `account_tokens_encrypted`
+  (`src/server/db/token-format.ts`, migration 0004) admits only null or
+  Better Auth's encrypted format in `access_token`, `refresh_token`, and
+  `id_token`. Writes are encrypted under `BETTER_AUTH_SECRET`
+  (`encryptOAuthTokens`); the plaintext values stored before 2026-11-11
+  were encrypted in place, each checked to decrypt to the original
+  before it was written, and the constraint went in only once none was
+  left (`encryptLegacyTokens`, run once per instance before its first
+  session lookup; the constraint is its completion record).
+- **How long the server keeps each Google token:**
+  - *Drive link (`linkSocial` with `drive.file`), access + refresh
+    token:* from the consent until a device collects it from
+    `/api/backup/adopt` (Settings calls it right after the consent;
+    normally seconds), which nulls both. Otherwise until the account's
+    next Google sign-in or link (the hooks null them), or account
+    deletion.
+  - *Google sign-in since 2026-11-11, any token:* none. The account
+    hooks (`accountTokenHooks` in `src/server/oauth-tokens.ts`) null
+    every token write except the Drive link's access and refresh
+    tokens, though a sign-in's tokens cover Drive after a grant (Better
+    Auth sends `include_granted_scopes=true`).
+  - *ID tokens:* none since 2026-11-12. Better Auth writes them
+    unencrypted and nothing reads them back for Google (its provider has
+    no end-session URL), so the hooks null them on every write.
+  - *Tokens a Google sign-in stored before 2026-11-11 (access, refresh,
+    ID):* encrypted since 2026-11-12. The refresh token may still reach
+    a device with none through adoption, so it was not deleted. Each
+    stays until a device adopts it (adopt nulls the access and refresh
+    token), the account's next Google sign-in or link (the hooks null
+    all three), or account deletion.
+  - `/api/backup/refresh` exchanges a device's token statelessly and
+    stores no token; `drive_grant` keeps only its SHA-256.
+- **A changed `BETTER_AUTH_SECRET` fails safe.** A stored token that no
+  longer decrypts reads as absent (`decryptStoredToken` → null): adopt
+  answers 404, as for no token, and deletion skips it. Nothing crashes
+  and nothing is nulled. Rotating through Better Auth's versioned
+  secrets keeps old values readable; replacing the secret outright
+  strands any token not yet adopted, so that device reconnects.
+- **The daily cron counts plaintext tokens** (`plaintextTokenRows`) and
+  mails the count, never a row, to `OPS_ALERT_EMAIL` if any is found.
 - **A token is exchanged only for the account that adopted it.** Adoption
   records the token's SHA-256 with the account (`drive_grant`); the
   refresh route refuses any other account with `401 revoked` /
@@ -246,8 +276,17 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   routes against a fresh Postgres 16 holding only migrations 0000-0001.
 - **Proven by:** `src/server/oauth-tokens.test.ts` drives a real Better
   Auth through Google's sign-in and link callbacks (token endpoint
-  stubbed) and reads the `account` row after each; the
-  `security-invariants.test.ts` case pins the wiring in `auth.ts`.
+  stubbed) and reads the `account` row after each;
+  `src/server/token-encryption.test.ts` covers the checked encryption;
+  two `security-invariants.test.ts` cases pin `encryptOAuthTokens`, the
+  hooks' nulling, the constraint, and the backfill's wiring. Against
+  Postgres 16 shaped like production: old plaintext rows encrypted and
+  decrypting to the originals, rows the new flow wrote untouched, the
+  constraint refusing a plaintext write in each column, adopt still
+  handing over an old token, an adopted device still refreshing, a real
+  Better Auth sign-in and mid-adoption Drive link succeeding with the
+  constraint in place, a rotated secret answering 404, and the cron
+  counting 1 before and 0 after.
 - **Do not encrypt these files.** Enforcement: `src/lib/backup-client.ts`,
   `src/lib/drive-client.ts`. Asserts it: privacy `#google-drive-backup`
   (including "our server stores none of your Drive credentials" after
@@ -467,6 +506,22 @@ sign-in also clears any token an earlier sign-in left. Proven by
 the grant leaves `1//refresh-3` in plaintext; now it leaves null.
 Surfaces: privacy `#google-drive-backup`, the "Google Drive backup" row
 above, DESIGN.md.
+
+### 2026-11-12 — every Google token at rest is encrypted, and the database enforces it
+Google sign-ins before 2026-11-11 left their access, refresh, and ID
+tokens in plaintext in the `account` table. They were not deleted,
+because two paths still read them: adoption can hand a leftover refresh
+token to a device with none, and account deletion revokes it at Google.
+`encryptLegacyTokens` (`src/server/token-encryption.ts`) encrypts each
+one in place with Better Auth's own cipher, writes it only after the
+ciphertext decrypts to exactly the original, and then adds the CHECK
+constraint `account_tokens_encrypted`, which refuses any plaintext token
+from then on. It runs once per instance before the first session lookup
+and logs counts only. The account hooks now also null the ID token,
+which Better Auth stores unencrypted and Snippets never reads. A token
+that no longer decrypts reads as absent. The daily cron counts any
+plaintext token and mails the count to the owner. Surfaces: privacy
+`#google-drive-backup`, the "Google Drive backup" row above.
 
 ### 2026-11-11 — a hostile server can no longer rearrange the entries a device holds
 A review found that the pull path trusted the server further than the
