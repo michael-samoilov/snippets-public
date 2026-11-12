@@ -3,7 +3,9 @@
 [Open Pstack](https://github.com/ericlitman/open-pstack) is vendored into
 this repo's agent tooling, the same way `src/vendor/paper-shaders`, the
 shadcn sources, and `.claude/skills/action-first-replies` are vendored: the files
-are ours to edit, and the licenses travel with them.
+are ours to edit, and the licenses travel with them. The upstream
+authors named below are third parties, unrelated to this repository's
+owner.
 
 ## Sync point
 
