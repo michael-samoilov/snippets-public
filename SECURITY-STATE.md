@@ -441,6 +441,15 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
 
+### 2026-11-12 — the privacy page states the Drive-permission lifetime in one sentence
+The Drive paragraph now says the server keeps the Drive permission,
+encrypted, only until a device collects it. That one sentence covers
+both the Drive link and a token left by a Google sign-in before
+2026-11-11, so the separate exception for those tokens is gone. The
+encryption deep dive also drops its note on entries saved before
+2026-07-23. This file's rows keep both details. No behavior change.
+Surfaces: privacy `#google-drive-backup` and the encryption deep dive.
+
 ### 2026-11-11 — a Drive token is exchanged only for the account that adopted it
 `/api/backup/refresh` checked only that some session existed, then
 attached the server's Google client secret to whatever refresh token it
