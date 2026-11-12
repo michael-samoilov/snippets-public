@@ -435,7 +435,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   names only the providers whose API keys are set
   (`activeSpeechProviders()`), so it stays truthful as keys change.
 - **Deferred by decision:** on-device transcription (BACKLOG #16), the
-  ciphertext self-viewer (BACKLOG #15), and open-sourcing (BACKLOG #17).
+  ciphertext self-viewer (BACKLOG #15), and an open-source license
+  (BACKLOG #17). The source itself is readable: a source-available
+  copy is published at github.com/michael-samoilov/snippets-public, all
+  rights reserved.
 
 ---
 

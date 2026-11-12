@@ -48,9 +48,9 @@ low-evidence TypeScript: `unknown` parameters, chained `as` casts,
 `object` as a type, runtime `typeof` where a boundary parse belongs, an
 assertion with no `SAFETY:` comment. It is NOT the build gate — `pnpm
 lint` (eslint) and `pnpm build` are. Five rules the codebase already
-satisfies are set to `error` (0 errors as of 2026-11-11); the other ten
+satisfies are set to `error` (0 errors as of 2026-11-12); the other ten
 are `warn`. `oxlint.config.ts` records each rule's count at the 2026-08
-install (263 in all); a 2026-11-11 run counts 271 warnings, mostly
+install (263 in all); a 2026-11-12 run counts 290 warnings, mostly
 missing `SAFETY:` comments and boundary `typeof`s. Don't bulk-"fix"
 them — the honest move is to clear a rule's backlog while working in
 that area, then promote that rule to `error`. Never silence a finding
@@ -437,8 +437,8 @@ harnesses for correctness, and nothing replaces the on-device pass.
 ## Deploy
 
 **Production branch: `claude/nice-dijkstra-q7d285`** — this repo has no
-`main`/`master`; that branch is the GitHub default and what prod deploys
-from. Merge finished feature branches there without asking. The
+`main`/`master` (the public copy publishes it as `main`); that branch is
+the GitHub default and what prod deploys from. Merge finished feature branches there without asking. The
 owner's permission to merge is standing: a session instruction to
 develop on a feature branch says where the work happens, not that
 finished work waits here.
