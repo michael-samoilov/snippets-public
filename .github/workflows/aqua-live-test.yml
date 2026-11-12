@@ -23,5 +23,5 @@ jobs:
       - name: Probe Aqua Avalon (batch + streamed + realtime)
         env:
           AQUA_API_KEY: ${{ secrets.AQUA_API_KEY }}
-        # a speech clip synthesized with espeak-ng (16k mono)
-        run: node scripts/aqua-live-test.mjs scripts/fixtures/speech-sample.wav fox morning
+        # a synthesized speech clip already in the repo (16k mono)
+        run: node scripts/aqua-live-test.mjs public/scribe-sample.wav fox morning
