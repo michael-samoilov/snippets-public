@@ -13,6 +13,11 @@ Live app: [www.snippets.ink](https://www.snippets.ink)
 
 **Status:** Live, maintained solo; not accepting contributions.
 
+**Source:** [github.com/michael-samoilov/snippets-public](https://github.com/michael-samoilov/snippets-public)
+is the read-only public copy of a private working repository, updated
+weekly. Branch names in the agent docs refer to the private repository.
+Commits arrive in small, verified steps from parallel work sessions.
+
 It follows the **Homework for Life** practice from Matthew Dicks's
 *Storyworthy*: at the end of each day, keep the most storyworthy moment
 that happened. Do it for a month, and you find that an ordinary life is
