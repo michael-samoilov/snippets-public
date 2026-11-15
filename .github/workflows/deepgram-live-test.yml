@@ -11,6 +11,9 @@ on:
   # on demand only: every run spends provider credit, so no push trigger
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   live-transcribe:
     runs-on: ubuntu-latest

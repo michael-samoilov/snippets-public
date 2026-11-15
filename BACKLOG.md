@@ -4,7 +4,8 @@ Accepted future work, in the owner's words, with design notes attached
 so implementation starts warm. Items here are *decided* — don't re-ask
 whether to do them, only how. Check this file before proposing new
 scope. When an item ships, delete it here and amend `DESIGN.md` /
-`.claude/skills/snippets-craft/` if it changes a rule.
+`.claude/skills/snippets-craft/` if it changes a rule. Shipped items
+keep their numbers retired, so the list skips them.
 
 ## 0. Voice: retire the diagnostics once trust is earned
 
@@ -16,8 +17,8 @@ the spoken fixture word-perfect at both chunk sizes. Measured — mint
 ~2s at either chunk size (model-side session warm-up, not our
 buffering — if that lag ever matters, it's an ElevenLabs conversation,
 not a client tune). Remaining chores, whenever convenient:
-- decide /lab/wax-wash's fate after the wash iterations conclude
-  (owner: lab-in-prod is fine short-term)
+- decide /lab/wax-wash's fate after the wash iterations conclude (lab
+  pages answer 404 in production; `src/proxy.ts`)
 
 ## 1. The seal becomes the completion affordance
 
@@ -124,7 +125,7 @@ favicon, etc."):
   — the masthead seal is the letter **"S"** set in italic Fraunces and
   embossed. A new glyph changes the silhouette, so re-tune `SEAL_RATIO`,
   `NUDGE`, the baseline alignment, and `superSample`.
-- `scripts/generate-icons.mjs` — the favicon "S" is a **hard-coded
+- `scripts/bake-icons.mjs` — the favicon "S" is a **hard-coded
   vector outline** (`S_PATH`, with bounds `S_CX` / `S_CY` / `S_H`) traced
   from italic Fraunces at opsz≈22. Re-trace from the new font, recompute
   the centring constants, then `pnpm icons`. And per the script's own

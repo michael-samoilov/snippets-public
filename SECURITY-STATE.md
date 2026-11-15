@@ -53,7 +53,7 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Current state (as of 2026-11-12)
+## Current state (as of 2026-11-15)
 
 ### Can we read your entries?
 - **No.** Signed out: entries live only in this browser's IndexedDB and
@@ -434,6 +434,15 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **Speech providers follow the deployment's keys.** The privacy page
   names only the providers whose API keys are set
   (`activeSpeechProviders()`), so it stays truthful as keys change.
+- **One account can store up to 50 MB, and sign-up is open.** A few
+  accounts at that ceiling would fill the free database tier (512 MB).
+  The daily cron emails the owner at 70% of the tier, before writes are
+  refused, and capture keeps working on every device either way
+  (`src/server/sync-quota.ts`, `STORAGE_ALERT_FRACTION`).
+- **Voice tokens are budgeted per network, not globally.** A caller with
+  many network addresses can mint more tokens than one network's budget
+  allows ("Who can spend the voice providers' credit" above). Spending
+  limits are set in each provider account.
 - **The script policy allows inline scripts.** `script-src` keeps
   `'unsafe-inline'`, which Next.js's inline bootstrap needs without a
   per-request nonce ("What leaves the app, ever" above). A nonce is
@@ -450,6 +459,11 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-15 — "Known limits" names the storage and voice budgets
+Two limits the sections above already described are now listed: the
+per-account storage ceiling against the database tier, and the
+per-network voice budget. No behavior changed. Surfaces: none.
 
 ### 2026-11-15 — account deletion refuses other sites
 `/api/account/delete` now runs the same-origin check that `speechGuard`
