@@ -206,8 +206,10 @@ copy voice) is in [`DESIGN.md`](./DESIGN.md).
 is the read-only public copy of a private working repository, updated
 weekly. Branch names in the contributor docs refer to the private
 repository. Commit IDs cited in the docs refer to the private working
-repository. Commits arrive in small, verified steps. The public copy
-runs lint, the unit tests, and a production build on every update.
+repository. AI coding agents (Claude Code and Cursor) wrote the code
+under my direction. Commits name the agent where the record shows which
+one wrote them. The public copy runs lint, the unit tests, and a
+production build on every update.
 
 ## License
 
