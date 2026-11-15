@@ -434,6 +434,10 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 - **Speech providers follow the deployment's keys.** The privacy page
   names only the providers whose API keys are set
   (`activeSpeechProviders()`), so it stays truthful as keys change.
+- **The script policy allows inline scripts.** `script-src` keeps
+  `'unsafe-inline'`, which Next.js's inline bootstrap needs without a
+  per-request nonce ("What leaves the app, ever" above). A nonce is
+  BACKLOG #18.
 - **Deferred by decision:** on-device transcription (BACKLOG #16), the
   ciphertext self-viewer (BACKLOG #15), and an open-source license
   (BACKLOG #17). The source itself is readable: a source-available
@@ -446,6 +450,20 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-15 — account deletion refuses other sites
+`/api/account/delete` now runs the same-origin check that `speechGuard`
+uses (`src/server/same-origin.ts`) before it reads the session, and
+answers `403 cross_site` otherwise. The session cookie is `SameSite=Lax`,
+which already kept another site's POST from carrying it; the check adds
+a second, explicit gate on the one irreversible route. Proven by
+`src/app/api/account/delete/route.test.ts` (the old route fails 2 of its
+4 cases). Surfaces: none.
+
+### 2026-11-15 — "Known limits" lists the inline-script allowance
+The script policy's `'unsafe-inline'` was described under "What leaves
+the app, ever" but not listed as a limit. No behavior changed.
+Surfaces: none.
 
 ### 2026-11-15 — the privacy page names page-view counting and the sign-in rate limit
 "What we collect" said the email address "is all". It now also names

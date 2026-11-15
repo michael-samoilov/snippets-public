@@ -22,6 +22,7 @@ import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { serverDb, schema } from "@/server/db";
 import { auth, getSession, readStoredToken } from "@/server/auth";
+import { isCrossSite } from "@/server/same-origin";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (isCrossSite(request.headers))
+    return Response.json({ error: "cross_site" }, { status: 403 });
   if (!serverDb || !auth)
     return Response.json(
       { error: "accounts are not configured" },

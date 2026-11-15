@@ -27,10 +27,15 @@ vi.mock("@/server/auth", () => ({
 
 import { POST } from "./route";
 
-function del(body?: { driveToken?: string }): Request {
+const SAME_SITE = { host: "test", origin: "http://test", "sec-fetch-site": "same-origin" };
+
+function del(
+  body?: { driveToken?: string },
+  headers: Record<string, string> = SAME_SITE,
+): Request {
   return new Request("http://test/api/account/delete", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 }
@@ -61,5 +66,22 @@ describe("account deletion — the Drive grant", () => {
     const res = await POST(del());
     expect(res.status).toBe(200);
     expect(calls.log).toEqual(["delete user"]);
+  });
+});
+
+describe("account deletion — other sites", () => {
+  it("refuses a request from another site's page and deletes nothing", async () => {
+    const res = await POST(
+      del(undefined, { host: "test", origin: "https://evil.example", "sec-fetch-site": "cross-site" }),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "cross_site" });
+    expect(calls.log).toEqual([]);
+  });
+
+  it("refuses a POST with no Origin", async () => {
+    const res = await POST(del(undefined, { host: "test" }));
+    expect(res.status).toBe(403);
+    expect(calls.log).toEqual([]);
   });
 });
