@@ -10,4 +10,4 @@ project-wide rules are in [`CLAUDE.md`](../CLAUDE.md) and
 | `skills/` | Playbooks that agents load for a task. For example, `snippets-craft` holds the design rules, `verify-snippets` drives the app the way a reader does, and `harden` turns repeated agent mistakes into build-failing checks. |
 | `agents/` | Subagent definitions for code review and for effort levels. |
 | `vendor/` | A third-party skill pack (pstack, MIT license), kept as its upstream publishes it. |
-| `settings.json` | The session-start hooks and which commands agents may run without asking. |
+| `settings.json` | The hooks that run when an agent session starts. |

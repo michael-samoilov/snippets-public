@@ -31,6 +31,21 @@ full of stories.
 The screenshots show invented sample entries from the app's built-in
 seeder (`src/lib/dev-seed.ts`).
 
+## Highlights
+
+- **End-to-end encrypted sync.** Each entry is encrypted on the device
+  before it leaves. The server cannot read an entry, or change one that
+  a device holds ([`src/lib/crypto.ts`](src/lib/crypto.ts)).
+- **Every privacy claim tied to code and a test.**
+  [`SECURITY-STATE.md`](SECURITY-STATE.md) states what the app does with
+  your data, names the test that proves each claim, and lists the known
+  limits.
+- **Live dictation with fallbacks.** Words appear as you speak. When one
+  speech provider is unavailable, the next one takes over, down to the
+  browser's own engine.
+- **Local-first.** Entries live on the device, and the app works offline
+  and without an account.
+
 ## What it does
 
 - **Speak it or write it.** Tap the wax seal and talk. With a streaming
@@ -69,6 +84,8 @@ These files show how the app works:
 - [`docs/architecture.md`](docs/architecture.md): how the parts fit.
 
 ## Run it locally
+
+You need Node 22 or 24 and pnpm 10 (`corepack enable` installs it).
 
 ```sh
 pnpm install
@@ -208,8 +225,12 @@ weekly. Branch names in the contributor docs refer to the private
 repository. Commit IDs cited in the docs refer to the private working
 repository. AI coding agents (Claude Code and Cursor) wrote the code
 under my direction. Commits name the agent where the record shows which
-one wrote them. The public copy runs lint, the unit tests, and a
-production build on every update.
+one wrote them. About 100 commits name no agent; most are from June
+2026, and agents wrote those too. The [`.claude/`](.claude/README.md)
+folder holds the agents' instructions and tools. Privacy and security
+changes are logged in the [`SECURITY-STATE.md`](SECURITY-STATE.md)
+change log. The public copy runs lint, the unit tests, and a production
+build on every update.
 
 ## License
 

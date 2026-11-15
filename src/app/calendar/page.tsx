@@ -115,6 +115,8 @@ const ARCHIVE_YEAR = 1950;
  * Ungated, every dive/rise/entry move appended marks+measures that nothing
  * read and nothing cleared — an unbounded User Timing buffer growing across a
  * long PWA session, on devices this app has already been jetsam-killed on. */
+// Stays reachable in production on purpose: ?perf is how taps are timed on
+// a real phone, and it changes nothing for a reader who doesn't ask for it.
 const PERF_ON =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).has("perf");
@@ -2865,7 +2867,7 @@ function Calendar() {
     runZoom("schedule", "month", day);
   }, [runZoom]);
 
-  // Back-out alternatives to the dive (behind ?backdebug). A browser back-swipe
+  // Back-out alternatives to the dive. A browser back-swipe
   // on iOS plays its OWN native page-transition first, so the app's dive then
   // runs on top — the book reappears and re-shrinks after you've already left
   // it. These skip the dive and just present the canvas instead.
