@@ -62,7 +62,7 @@ These files show how the app works:
   [`src/lib/merge.ts`](src/lib/merge.ts): the sync engine and the one merge
   rule that the client and the server share.
 - [`SECURITY-STATE.md`](SECURITY-STATE.md): what the app does with user data,
-  each claim tied to the code and test that prove it, and the known gaps.
+  each claim tied to the code and test that prove it, and the known limits.
 - [`src/lib/speech-providers.ts`](src/lib/speech-providers.ts): the one table
   of speech-provider facts that the CSP and the privacy page read.
 - [`DESIGN.md`](DESIGN.md): the design system and the copy voice.
@@ -197,8 +197,8 @@ copy voice) is in [`DESIGN.md`](./DESIGN.md).
   the browser's own engine sends the audio to Google or Apple.
 - **Device-only checks.** Some iOS behavior, such as scroll momentum and
   memory limits, shows only on a real iPhone, so those checks are manual.
-- **Known security gaps.** [`SECURITY-STATE.md`](SECURITY-STATE.md) lists
-  them under "Known gaps".
+- **Known security limits.** [`SECURITY-STATE.md`](SECURITY-STATE.md) lists
+  them under "Known limits".
 
 ## About this repository
 

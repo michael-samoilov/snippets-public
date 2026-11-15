@@ -405,7 +405,43 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 ---
 
-## Known gaps (as of 2026-11-11; do not describe as done)
+## Known limits (as of 2026-11-15)
+
+Every security design has edges. This list states ours, so a reader
+does not have to find them. None of the open items lets our server read
+an entry. The two that are not built yet matter only if the server
+itself turns hostile. Copy elsewhere states these as they are here,
+never as solved.
+
+**Not built yet: defenses against a hostile server**
+
+- **A payload-less deletion carries no proof.** The server can mark any
+  entry deleted; a device that holds it keeps the words for 30 days
+  (see "What can the server do to a sealed entry?"). Proving a deletion
+  would need a proof the cron leaves in place when it clears a deleted
+  entry's words.
+- **A device with no copy trusts the server about which entries exist.**
+  A new device can't tell an omitted entry, or an older version, from
+  the current book. Closing that needs a signed index of the whole book.
+
+**Limits of the design**
+
+- **Revoking the Google grant needs a token.** Account deletion from a
+  device with no Drive token leaves the grant listed in the reader's
+  Google Account. The privacy page says so and links the page that
+  removes it.
+- **Speech providers follow the deployment's keys.** The privacy page
+  names only the providers whose API keys are set
+  (`activeSpeechProviders()`), so it stays truthful as keys change.
+
+**Closes on a date**
+
+- **Drive tokens adopted before the binding shipped are bound on first
+  use.** Until 2026-12-31 the first signed-in account to exchange an
+  unbound token claims it (`CLAIM_UNBOUND_UNTIL`); an active device
+  claims its own on its next delivery.
+
+**Closed, kept for the record**
 
 - **Encryption was optional before 2026-07-23.** Entries an account
   synced without it rested on the server unencrypted. Since then the
@@ -414,31 +450,13 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
   since 2026-11-11 a device also refuses an unencrypted row on pull. The
   privacy page's unqualified "We cannot read your entries" shipped on
   2026-07-24, after those entries were re-encrypted.
-- **A payload-less deletion carries no proof.** The server can mark any
-  entry deleted; a device that holds it keeps the words for 30 days
-  (see "What can the server do to a sealed entry?"). Proving a deletion
-  would need a proof the cron leaves in place when it clears a deleted
-  entry's words. Not built.
-- **A device with no copy trusts the server about which entries exist.**
-  A new device can't tell an omitted entry, or an older version, from
-  the current book. Closing that needs a signed index of the whole book.
-  Not built.
-- **Drive tokens adopted before the binding shipped are bound on first
-  use.** Until 2026-12-31 the first signed-in account to exchange an
-  unbound token claims it (`CLAIM_UNBOUND_UNTIL`); an active device
-  claims its own on its next delivery.
-- **Revoking the Google grant needs a token.** Account deletion from a
-  device with no Drive token leaves the grant listed in the reader's
-  Google Account. The privacy page says so and links the page that
-  removes it.
-- **Speech providers follow the deployment's keys.** The privacy page
-  names only the providers whose API keys are set
-  (`activeSpeechProviders()`), so it stays truthful as keys change.
-- **Deferred by decision:** on-device transcription (BACKLOG #16), the
-  ciphertext self-viewer (BACKLOG #15), and an open-source license
-  (BACKLOG #17). The source itself is readable: a source-available
-  copy is published at github.com/michael-samoilov/snippets-public, all
-  rights reserved.
+
+**Deferred by decision**
+
+- On-device transcription (BACKLOG #16), the ciphertext self-viewer
+  (BACKLOG #15), and an open-source license (BACKLOG #17). The source
+  itself is readable: a source-available copy is published at
+  github.com/michael-samoilov/snippets-public, all rights reserved.
 
 ---
 
@@ -446,6 +464,11 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
+
+### 2026-11-15 — "Known gaps" becomes "Known limits", grouped by status
+The section keeps every item and adds a short preface. Items are grouped
+as not built yet, limits of the design, closing on a date, closed, and
+deferred. No behavior changed. Surfaces: none.
 
 ### 2026-11-12 — the dev-only icon writer refuses other sites
 `/api/lab/bake-icons` writes icon files into the working tree. A
