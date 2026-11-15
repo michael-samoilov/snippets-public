@@ -447,6 +447,13 @@ This doc is prose, so drift is prevented in three tiers — strongest first:
 Newest first. One entry per privacy/security-relevant change; cite the
 commit and note which user-facing surfaces it moved.
 
+### 2026-11-15 — the privacy page names page-view counting and the sign-in rate limit
+"What we collect" said the email address "is all". It now also names
+the cookieless page-view counting through Vercel and Better Auth's
+sign-in rate limit, whose rows key on the raw IP address and are deleted
+after their one-minute window ("Data we collect" above). No behavior
+changed. Surfaces: privacy `#what-we-collect`.
+
 ### 2026-11-15 — "Known gaps" becomes "Known limits"
 The section's name changes; its items do not. No behavior changed.
 Surfaces: none.
